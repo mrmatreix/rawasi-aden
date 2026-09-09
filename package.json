@@ -1,0 +1,35 @@
+{
+  "name": "rawasi-aden-system",
+  "version": "1.0.0",
+  "description": "النظام المحاسبي والإداري المتكامل - شركة رواسي عدن للهندسة والمقاولات",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "seed": "node server/database/seed.js",
+    "android:sync": "powershell -Command \"New-Item -ItemType Directory -Force -Path 'www'; Copy-Item -Path 'index.html', 'manifest.json' -Destination 'www'; Copy-Item -Recurse -Force -Path 'css', 'js', 'images' -Destination 'www'\" && npx cap sync android",
+    "android:open": "npx cap open android"
+  },
+  "keywords": [
+    "rawasi-aden",
+    "contracting",
+    "accounting",
+    "erp",
+    "yemen",
+    "engineering"
+  ],
+  "author": "رواسي عدن للهندسة والمقاولات",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "docx": "^9.7.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^25.10.0"
+  }
+}

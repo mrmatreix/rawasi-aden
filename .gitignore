@@ -1,0 +1,16 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+server/database/backups/*.db
+server/database/*.db-wal
+server/database/*.db-shm
+
+# ملفات مضغوطة وتنفيذية كبيرة
+*.zip
+*.rar
+*.exe
+android/
+
