@@ -5,9 +5,10 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
+    "build": "node build_www.js",
     "dev": "node --watch server/server.js",
     "seed": "node server/database/seed.js",
-    "android:sync": "powershell -Command \"New-Item -ItemType Directory -Force -Path 'www'; Copy-Item -Path 'index.html', 'manifest.json' -Destination 'www'; Copy-Item -Recurse -Force -Path 'css', 'js', 'images' -Destination 'www'\" && npx cap sync android",
+    "android:sync": "node build_www.js && npx cap sync android",
     "android:open": "npx cap open android"
   },
   "keywords": [
