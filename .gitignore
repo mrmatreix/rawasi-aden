@@ -12,5 +12,9 @@ server/database/*.db-shm
 *.zip
 *.rar
 *.exe
-android/
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+cloudflared.exe
 
