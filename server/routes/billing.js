@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../database/db');
+const { query, get, run, transaction } = require('../database/db');
 
 // جلب الفواتير والمستخلصات
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { project_id, client_id, status } = req.query;
     let sql = `
@@ -35,15 +35,15 @@ router.get('/', (req, res) => {
     }
 
     sql += ' ORDER BY b.date DESC, b.id DESC';
-    const bills = query(sql, params);
+    const bills = await query(sql, params);
     res.json({ success: true, data: bills });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب المستخلصات', error: err.message });
   }
 });
 
-// إنشاء مستخلص أو فاتورة أعمال جديدة
-router.post('/', (req, res) => {
+// إنشاء مستخلص أو فاتورة أعمال جديدة داخل Transaction آمنة
+router.post('/', async (req, res) => {
   try {
     const {
       bill_type = 'مستخلص جاري',
@@ -67,43 +67,47 @@ router.post('/', (req, res) => {
     // جلب معرف العميل إن لم يكن محدد
     let finalClientId = client_id;
     if (!finalClientId) {
-      const proj = get('SELECT client_id FROM projects WHERE id = ?', [project_id]);
+      const proj = await get('SELECT client_id FROM projects WHERE id = ?', [project_id]);
       if (proj) finalClientId = proj.client_id;
     }
 
     // توليد رقم المستخلص
-    const countRes = get('SELECT COUNT(*) as cnt FROM bills');
-    const bill_no = `INV-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(4, '0')}`;
+    const countRes = await get('SELECT COUNT(*) as cnt FROM bills');
+    const bill_no = `INV-${new Date().getFullYear()}-${String((countRes ? countRes.cnt : 0) + 1).padStart(4, '0')}`;
 
-    const result = run(`
-      INSERT INTO bills (
-        bill_no, bill_type, project_id, client_id, 
-        amount, deduction, net_amount, status, date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      bill_no, bill_type, project_id, finalClientId || null,
-      parsedAmount, parsedDeduction, net_amount, status, date, notes || ''
-    ]);
+    const txResult = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO bills (
+          bill_no, bill_type, project_id, client_id, 
+          amount, deduction, net_amount, status, date, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        bill_no, bill_type, project_id, finalClientId || null,
+        parsedAmount, parsedDeduction, net_amount, status, date, notes || ''
+      ]);
 
-    // زيادة مستحقات العميل (الذمم المدينة) بصافي المستخلص
-    if (finalClientId && status === 'معتمد') {
-      run(`
-        UPDATE clients SET 
-          total_due = total_due + ?,
-          current_balance = current_balance + ?
-        WHERE id = ?
-      `, [net_amount, net_amount, finalClientId]);
-    }
+      // زيادة مستحقات العميل (الذمم المدينة) بصافي المستخلص
+      if (finalClientId && status === 'معتمد') {
+        await tx.run(`
+          UPDATE clients SET 
+            total_due = total_due + ?,
+            current_balance = current_balance + ?
+          WHERE id = ?
+        `, [net_amount, net_amount, finalClientId]);
+      }
+
+      return result;
+    });
 
     res.json({
       success: true,
-      message: 'تم إنشاء المستخلص بنجاح',
+      message: 'تم إنشاء المستخلص واعتماده بنجاح',
       bill_no,
-      id: result.lastInsertRowid,
+      id: txResult.lastInsertRowid || txResult.insertId,
       net_amount
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إنشاء المستخلص', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ في إنشاء المستخلص: ' + err.message, error: err.message });
   }
 });
 

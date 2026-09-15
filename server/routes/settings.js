@@ -2,16 +2,23 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
-const { query, run, get, backupDatabase, restoreDatabase, listBackups, createLogoutBackup, listLogoutBackups, connectionManager, db, dbPath } = require('../database/db');
+const mysql = require('mysql2/promise');
+const {
+  query, run, get, backupDatabase, restoreDatabase, listBackups,
+  createLogoutBackup, listLogoutBackups, connectionManager,
+  getActiveEngine, getMysqlConfig, dbPath, initializeDatabase
+} = require('../database/db');
+const { runMigration } = require('../database/migrate_to_mysql');
 
 // جلب إعدادات الشركة
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const settingsRows = query('SELECT * FROM settings');
+    const settingsRows = await query('SELECT * FROM settings');
     const settingsObj = {};
     settingsRows.forEach(row => {
       settingsObj[row.key] = row.value;
     });
+    settingsObj.active_db_engine = getActiveEngine();
     res.json({ success: true, data: settingsObj });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب الإعدادات', error: err.message });
@@ -19,18 +26,18 @@ router.get('/', (req, res) => {
 });
 
 // تحديث الإعدادات
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const updates = req.body;
     for (const [key, value] of Object.entries(updates)) {
-      run(`
-        INSERT INTO settings (key, value) VALUES (?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      await run(`
+        INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
       `, [key, String(value)]);
     }
     res.json({ success: true, message: 'تم حفظ الإعدادات بنجاح' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في حفظ الإعدادات', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ في حفظ الإعدادات: ' + err.message, error: err.message });
   }
 });
 
@@ -81,7 +88,7 @@ router.post('/restore-local', (req, res) => {
   }
 });
 
-// استعادة نسخة احتياطية مرفوعة (Raw Binary)
+// استعادة نسخة احتياطية مرفوعة
 router.post('/restore-upload', express.raw({ type: '*/*', limit: '100mb' }), (req, res) => {
   try {
     if (!req.body || req.body.length === 0) {
@@ -98,63 +105,134 @@ router.post('/restore-upload', express.raw({ type: '*/*', limit: '100mb' }), (re
   }
 });
 
-// =================== مسارات الاتصال السحابي والمحلي (Online/Offline) ===================
+// =================== مسارات فحص وضبط MySQL ===================
 
-// جلب حالة الاتصال الحالية بقاعدة البيانات
-router.get('/db-status', async (req, res) => {
+// جلب حالة إعدادات ومحرك MySQL
+router.get('/mysql-status', async (req, res) => {
   try {
-    const status = connectionManager.getStatus();
-    const lastBackupRow = get ? get("SELECT value FROM settings WHERE key = 'last_logout_backup'") : null;
-    let lastLogoutBackup = null;
-    if (lastBackupRow && lastBackupRow.value) {
-      try { lastLogoutBackup = JSON.parse(lastBackupRow.value); } catch {}
+    const activeEngine = getActiveEngine();
+    const mysqlCfg = getMysqlConfig();
+    let isConnected = false;
+    let message = '';
+    let serverVersion = null;
+
+    try {
+      const conn = await mysql.createConnection({
+        host: mysqlCfg.host,
+        port: mysqlCfg.port,
+        user: mysqlCfg.user,
+        password: mysqlCfg.password,
+        connectTimeout: 2000
+      });
+      const [vRows] = await conn.query('SELECT VERSION() as ver;');
+      serverVersion = vRows && vRows[0] ? vRows[0].ver : null;
+      await conn.end();
+      isConnected = true;
+      message = 'خادم MySQL متصل وجاهز للعمل ✅';
+    } catch (e) {
+      isConnected = false;
+      message = `خادم MySQL غير متاح حالياً (${e.message}). النظام يعمل بنمط الاحتياط الذكي.`;
     }
+
     res.json({
       success: true,
       data: {
-        ...status,
-        lastLogoutBackup
+        activeEngine,
+        isConnected,
+        serverVersion,
+        message,
+        mysqlConfig: {
+          host: mysqlCfg.host,
+          port: mysqlCfg.port,
+          user: mysqlCfg.user,
+          database: mysqlCfg.database
+        }
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في قراءة حالة الاتصال', error: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// فحص واختبار الاتصال بالسيرفر السحابي
-router.post('/test-online-db', async (req, res) => {
+// فحص اتصال مخصص بخادم MySQL
+router.post('/test-mysql-conn', async (req, res) => {
   try {
-    const { url } = req.body;
-    const testResult = await connectionManager.verifyOnlineConnection(url);
-    res.json({
-      success: testResult.success,
-      data: testResult
+    const { host = 'localhost', port = 3306, user = 'root', password = '', database = 'rawasi_aden' } = req.body;
+    const startTime = Date.now();
+
+    const conn = await mysql.createConnection({
+      host,
+      port: Number(port) || 3306,
+      user,
+      password,
+      connectTimeout: 3000
     });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في فحص الاتصال', error: err.message });
-  }
-});
 
-// حفظ وتحديث إعدادات الاتصال السحابي
-router.post('/update-db-config', async (req, res) => {
-  try {
-    const { mode, onlineUrl, apiKey } = req.body;
-    connectionManager.updateConfig(db, { mode, onlineUrl, apiKey });
-    const verifyResult = await connectionManager.verifyOnlineConnection();
+    const [vRows] = await conn.query('SELECT VERSION() as ver, CURRENT_USER() as cur_user;');
+    const latencyMs = Date.now() - startTime;
+    await conn.end();
+
     res.json({
       success: true,
-      message: 'تم حفظ إعدادات الاتصال بنجاح',
-      data: {
-        ...connectionManager.getStatus(),
-        verifyResult
-      }
+      message: `تم الاتصال بنجاح بخادم MySQL (${host}:${port}) في ${latencyMs}ms 🚀`,
+      version: vRows[0]?.ver,
+      user: vRows[0]?.cur_user,
+      latencyMs
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في حفظ إعدادات الاتصال', error: err.message });
+    res.status(400).json({
+      success: false,
+      message: `تعذر الاتصال بخادم MySQL: ${err.message}`
+    });
   }
 });
 
-// =================== مسارات النسخ الاحتياطي التلقائي عند تسجيل الخروج ===================
+// حفظ إعدادات MySQL في config.json وإعادة الاتصال
+router.post('/save-mysql-config', async (req, res) => {
+  try {
+    const { host, port, user, password, database } = req.body;
+    const configPath = path.join(__dirname, '..', 'database', 'config.json');
+    let cfg = {};
+    if (fs.existsSync(configPath)) {
+      try { cfg = JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '')); } catch {}
+    }
+
+    cfg.dbEngine = 'mysql';
+    cfg.mysql = Object.assign(cfg.mysql || {}, {
+      host: host || 'localhost',
+      port: Number(port) || 3306,
+      user: user || 'root',
+      password: password !== undefined ? password : '',
+      database: database || 'rawasi_aden'
+    });
+
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
+
+    // إعادة تهيئة المحرك
+    await initializeDatabase();
+
+    res.json({
+      success: true,
+      message: 'تم حفظ إعدادات MySQL بنجاح وتحديث المحرك النشط للنظام.',
+      activeEngine: getActiveEngine()
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حفظ إعدادات MySQL: ' + err.message });
+  }
+});
+
+// ترحيل البيانات الحالية من SQLite إلى MySQL
+router.post('/run-migration', async (req, res) => {
+  try {
+    await runMigration();
+    res.json({
+      success: true,
+      message: 'تم ترحيل كافة الجداول والبيانات إلى MySQL بنجاح وبأعلى دقة.'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء الترحيل: ' + err.message });
+  }
+});
 
 // إنشاء نسخة احتياطية فورية عند تسجيل الخروج
 router.post('/auto-backup-logout', (req, res) => {
@@ -163,93 +241,22 @@ router.post('/auto-backup-logout', (req, res) => {
     const backupItem = createLogoutBackup(username || 'user', { mode, notes });
     res.json({
       success: true,
-      message: 'تم حفظ نسخة احتياطية بنجاح عند تسجيل الخروج وتجميد كافة التعديلات الأخيرة',
+      message: 'تم حفظ نسخة احتياطية بنجاح عند تسجيل الخروج',
       data: backupItem
     });
   } catch (err) {
-    console.error('Error creating logout backup:', err);
-    res.status(500).json({ success: false, message: 'تعذر إنشاء نسخة الخروج الاحتياطية: ' + err.message });
+    res.status(500).json({ success: false, message: 'تعذر إنشاء نسخة الخروج: ' + err.message });
   }
 });
 
-// إغلاق النظام وأخذ نسخة احتياطية عند إغلاق النافذة من X
-router.post('/shutdown-app', (req, res) => {
+// جلب سجل نسخ الخروج الاحتياطية
+router.get('/logout-backups', (req, res) => {
   try {
-    const { username, mode, notes } = req.body || {};
-    const backupItem = createLogoutBackup(username || 'admin', {
-      mode: mode || 'offline',
-      notes: notes || 'نسخة احتياطية تلقائية عند إغلاق النافذة (زر X)'
-    });
-    res.json({
-      success: true,
-      message: 'تم حفظ نسخة احتياطية بنجاح وإغلاق النظام.',
-      data: backupItem
-    });
-
-    // حفظ نسخة احتياطية آمنة دون إيقاف الخادم لمنع تعطل النظام عند تحديث الصفحة في المتصفح (F5 أو إعادة التحميل)
-    if (req.body && req.body.forceExit === true) {
-      setTimeout(() => {
-        process.exit(0);
-      }, 1200);
-    }
+    const list = listLogoutBackups();
+    res.json({ success: true, data: list });
   } catch (err) {
-    console.error('Error in shutdown-app:', err);
-    res.status(500).json({ success: false, message: 'خطأ أثناء الإغلاق: ' + err.message });
-  }
-});
-
-// جلب تفاصيل ومسار ملف قاعدة البيانات
-router.get('/database-path', (req, res) => {
-  try {
-    const configPath = path.join(__dirname, '..', 'database', 'config.json');
-    let cfg = {};
-    if (fs.existsSync(configPath)) {
-      try { cfg = JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '')); } catch {}
-    }
-    const currentPath = dbPath;
-    const exists = fs.existsSync(currentPath);
-    let size = 0;
-    if (exists) {
-      size = fs.statSync(currentPath).size;
-    }
-    res.json({
-      success: true,
-      data: {
-        currentPath,
-        configuredPath: cfg.dbPath || currentPath,
-        exists,
-        sizeKB: (size / 1024).toFixed(1),
-        isOnline: connectionManager.isOnline
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في جلب مسار قاعدة البيانات', error: err.message });
-  }
-});
-
-// حفظ وتعديل مسار ملف قاعدة البيانات
-router.post('/database-path', (req, res) => {
-  try {
-    const { newPath } = req.body;
-    if (!newPath || !newPath.trim()) {
-      return res.status(400).json({ success: false, message: 'مسار قاعدة البيانات مطلوب' });
-    }
-    const configPath = path.join(__dirname, '..', 'database', 'config.json');
-    let cfg = {};
-    if (fs.existsSync(configPath)) {
-      try { cfg = JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '')); } catch {}
-    }
-    cfg.dbPath = newPath.trim();
-    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
-    res.json({
-      success: true,
-      message: 'تم حفظ مسار قاعدة البيانات بنجاح في ملف الإعدادات.',
-      data: cfg
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في حفظ مسار قاعدة البيانات', error: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
 module.exports = router;
-

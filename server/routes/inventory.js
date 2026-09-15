@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../database/db');
+const { query, get, run, transaction } = require('../database/db');
 
 // جلب جميع المواد مع حالة المخزون وتنبيهات النواقص
-router.get('/items', (req, res) => {
+router.get('/items', async (req, res) => {
   try {
-    const items = query(`
+    const items = await query(`
       SELECT *,
         CASE 
           WHEN current_quantity <= min_quantity THEN 1 
@@ -21,18 +21,18 @@ router.get('/items', (req, res) => {
 });
 
 // إضافة صنف جديد للمخزن
-router.post('/items', (req, res) => {
+router.post('/items', async (req, res) => {
   try {
     const { name, category, unit, min_quantity = 10, current_quantity = 0, unit_price = 0, currency = 'ر.ي', notes } = req.body;
     if (!name) {
       return res.status(400).json({ success: false, message: 'اسم المادة مطلوب' });
     }
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM items');
-    const code = `ITM-${String((countRes.cnt || 0) + 1).padStart(2, '0')}`;
+    const countRes = await get('SELECT COUNT(*) as cnt FROM items');
+    const code = `ITM-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(2, '0')}`;
     const selectedCurrency = currency || 'ر.ي';
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO items (code, name, category, unit, min_quantity, current_quantity, unit_price, currency, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [code, name, category || '', unit || '', Number(min_quantity), Number(current_quantity), Number(unit_price), selectedCurrency, notes || '']);
@@ -40,7 +40,7 @@ router.post('/items', (req, res) => {
     res.json({
       success: true,
       message: 'تم إضافة الصنف بنجاح للمخزون',
-      id: result.lastInsertRowid,
+      id: result.lastInsertRowid || result.insertId,
       code
     });
   } catch (err) {
@@ -49,7 +49,7 @@ router.post('/items', (req, res) => {
 });
 
 // جلب حركات المخزون (صرف وتوريد)
-router.get('/transactions', (req, res) => {
+router.get('/transactions', async (req, res) => {
   try {
     const { project_id, item_id, type } = req.query;
     let sql = `
@@ -79,15 +79,15 @@ router.get('/transactions', (req, res) => {
     }
 
     sql += ' ORDER BY it.date DESC, it.id DESC';
-    const txs = query(sql, params);
+    const txs = await query(sql, params);
     res.json({ success: true, data: txs });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب حركات المخزون', error: err.message });
   }
 });
 
-// تسجيل إذن صرف أو إدخال مخزني
-router.post('/transactions', (req, res) => {
+// تسجيل إذن صرف أو إدخال مخزني داخل Transaction ذرية
+router.post('/transactions', async (req, res) => {
   try {
     const {
       item_id,
@@ -104,57 +104,59 @@ router.post('/transactions', (req, res) => {
       return res.status(400).json({ success: false, message: 'يرجى تحديد الصنف والكمية المطلوبة' });
     }
 
-    const item = get('SELECT * FROM items WHERE id = ?', [item_id]);
-    if (!item) {
-      return res.status(404).json({ success: false, message: 'الصنف غير موجود' });
-    }
-
     const parsedQty = Number(quantity);
-    const parsedPrice = unit_price !== undefined ? Number(unit_price) : item.unit_price;
-    const totalAmount = parsedQty * parsedPrice;
-
-    if (type === 'out') {
-      if (item.current_quantity < parsedQty) {
-        return res.status(400).json({
-          success: false,
-          message: `الكمية المتوفرة في المخزن (${item.current_quantity} ${item.unit}) لا تكفي للصرف المطلوب (${parsedQty} ${item.unit})`
-        });
-      }
-      // إنقاص رصيد المخزن
-      run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
-
-      // إذا كان الصرف لمشروع، زيادة التكلفة الفعلية للمشروع
-      if (project_id) {
-        run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [totalAmount, project_id]);
-      }
-    } else if (type === 'in') {
-      // زيادة رصيد المخزن وتحديث السعر إن لزم
-      run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [parsedQty, item_id]);
-    }
 
     const refPrefix = type === 'out' ? 'MAT-OUT' : 'MAT-IN';
-    const countRes = get('SELECT COUNT(*) as cnt FROM inventory_transactions WHERE type = ?', [type]);
-    const reference_no = `${refPrefix}-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(4, '0')}`;
+    const countRes = await get('SELECT COUNT(*) as cnt FROM inventory_transactions WHERE type = ?', [type]);
+    const reference_no = `${refPrefix}-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
-    const result = run(`
-      INSERT INTO inventory_transactions (
-        item_id, project_id, type, quantity, unit_price, total_amount, 
-        reference_no, recipient, date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      item_id, project_id || null, type, parsedQty, parsedPrice, totalAmount,
-      reference_no, recipient || '', date, notes || ''
-    ]);
+    const txResult = await transaction(async (tx) => {
+      const item = await tx.get('SELECT * FROM items WHERE id = ?', [item_id]);
+      if (!item) {
+        throw new Error('الصنف غير موجود في المخزن');
+      }
+
+      const parsedPrice = unit_price !== undefined ? Number(unit_price) : Number(item.unit_price || 0);
+      const totalAmount = parsedQty * parsedPrice;
+
+      if (type === 'out') {
+        if (Number(item.current_quantity) < parsedQty) {
+          throw new Error(`الكمية المتوفرة في المخزن (${item.current_quantity} ${item.unit}) لا تكفي للصرف المطلوب (${parsedQty} ${item.unit})`);
+        }
+        // إنقاص رصيد المخزن
+        await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
+
+        // إذا كان الصرف لمشروع، زيادة التكلفة الفعلية للمشروع
+        if (project_id) {
+          await tx.run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [totalAmount, project_id]);
+        }
+      } else if (type === 'in') {
+        // زيادة رصيد المخزن
+        await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [parsedQty, item_id]);
+      }
+
+      const result = await tx.run(`
+        INSERT INTO inventory_transactions (
+          item_id, project_id, type, quantity, unit_price, total_amount, 
+          reference_no, recipient, date, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        item_id, project_id || null, type, parsedQty, parsedPrice, totalAmount,
+        reference_no, recipient || '', date, notes || ''
+      ]);
+
+      return { result, totalAmount };
+    });
 
     res.json({
       success: true,
-      message: `تم تسجيل حركة المخزون (${type === 'out' ? 'صرف لمشروع' : 'توريد'}) بنجاح`,
+      message: `تم تسجيل حركة المخزون (${type === 'out' ? 'صرف لمشروع' : 'توريد'}) وتحديث الأرصدة بنجاح`,
       reference_no,
-      id: result.lastInsertRowid,
-      total_amount: totalAmount
+      id: txResult.result.lastInsertRowid || txResult.result.insertId,
+      total_amount: txResult.totalAmount
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء تسجيل حركة المخزون', error: err.message });
+    res.status(400).json({ success: false, message: err.message });
   }
 });
 

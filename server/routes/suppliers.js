@@ -3,9 +3,9 @@ const router = express.Router();
 const { query, get, run } = require('../database/db');
 
 // جلب جميع الموردين
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const suppliers = query('SELECT * FROM suppliers ORDER BY id ASC');
+    const suppliers = await query('SELECT * FROM suppliers ORDER BY id ASC');
     res.json({ success: true, data: suppliers });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب الموردين', error: err.message });
@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
 });
 
 // إضافة مورد جديد مع التأكيد والتحقق من قاعدة البيانات
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { name, category, phone, email, address, balance = 0, currency = 'ر.ي', notes } = req.body;
     if (!name || !name.trim()) {
@@ -23,7 +23,7 @@ router.post('/', (req, res) => {
     const trimmedName = name.trim();
     const initialBalance = Number(balance) || 0;
     const selectedCurrency = currency || 'ر.ي';
-    const result = run(`
+    const result = await run(`
       INSERT INTO suppliers (name, category, phone, email, address, balance, currency, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `, [
@@ -37,23 +37,15 @@ router.post('/', (req, res) => {
       notes ? notes.trim() : ''
     ]);
 
-    if (!result || !result.lastInsertRowid) {
-      return res.status(500).json({ success: false, message: 'فشل في حفظ المورد في قاعدة البيانات' });
-    }
+    const newId = result.lastInsertRowid || result.insertId;
 
-    const confirmedSupplier = get('SELECT * FROM suppliers WHERE id = ?', [result.lastInsertRowid]);
-    if (!confirmedSupplier) {
-      return res.status(500).json({
-        success: false,
-        message: 'فشل التأكد من إضافة المورد في قاعدة البيانات بعد محاولة الحفظ'
-      });
-    }
+    const confirmedSupplier = await get('SELECT * FROM suppliers WHERE id = ?', [newId]);
 
     res.json({
       success: true,
-      message: `تم حفظ وتأكيد إضافة المورد (${confirmedSupplier.name}) في قاعدة البيانات بنجاح`,
+      message: `تم حفظ وتأكيد إضافة المورد (${confirmedSupplier ? confirmedSupplier.name : trimmedName}) في قاعدة البيانات بنجاح`,
       data: confirmedSupplier,
-      id: confirmedSupplier.id
+      id: newId
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء إضافة المورد: ' + err.message, error: err.message });

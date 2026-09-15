@@ -5,10 +5,10 @@ const { query, get, run } = require('../database/db');
 // ============================================================================
 // 0. ملخص شامل لجميع المتطلبات الـ 14 للمشروع المحدد
 // ============================================================================
-router.get('/:projectId/overview', (req, res) => {
+router.get('/:projectId/overview', async (req, res) => {
   try {
     const projectId = req.params.projectId;
-    const project = get(`
+    const project = await get(`
       SELECT p.*, c.name as client_name, c.phone as client_phone, c.company as client_company
       FROM projects p
       LEFT JOIN clients c ON p.client_id = c.id
@@ -19,20 +19,20 @@ router.get('/:projectId/overview', (req, res) => {
       return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
     }
 
-    const contract = get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]);
-    const drawings = query('SELECT * FROM project_drawings WHERE project_id = ? ORDER BY id DESC', [projectId]);
-    const boq = query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
-    const quotations = query('SELECT * FROM project_quotations WHERE project_id = ? ORDER BY id DESC', [projectId]);
-    const budgets = query('SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC', [projectId]);
-    const changeOrders = query('SELECT * FROM project_change_orders WHERE project_id = ? ORDER BY id DESC', [projectId]);
-    const purchases = query('SELECT * FROM project_purchases WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
-    const labor = query('SELECT * FROM project_labor_expenses WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
-    const invoices = query('SELECT * FROM project_invoices WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
-    const dailyReports = query('SELECT * FROM project_daily_reports WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
-    const weeklyReports = query('SELECT * FROM project_weekly_reports WHERE project_id = ? ORDER BY date_to DESC, id DESC', [projectId]);
-    const handovers = query('SELECT * FROM project_handover_minutes WHERE project_id = ? ORDER BY inspection_date DESC, id DESC', [projectId]);
-    const correspondence = query('SELECT * FROM project_correspondence WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
-    const settlement = get('SELECT * FROM project_final_settlements WHERE project_id = ?', [projectId]);
+    const contract = await get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]);
+    const drawings = await query('SELECT * FROM project_drawings WHERE project_id = ? ORDER BY id DESC', [projectId]);
+    const boq = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
+    const quotations = await query('SELECT * FROM project_quotations WHERE project_id = ? ORDER BY id DESC', [projectId]);
+    const budgets = await query('SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC', [projectId]);
+    const changeOrders = await query('SELECT * FROM project_change_orders WHERE project_id = ? ORDER BY id DESC', [projectId]);
+    const purchases = await query('SELECT * FROM project_purchases WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const labor = await query('SELECT * FROM project_labor_expenses WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const invoices = await query('SELECT * FROM project_invoices WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const dailyReports = await query('SELECT * FROM project_daily_reports WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const weeklyReports = await query('SELECT * FROM project_weekly_reports WHERE project_id = ? ORDER BY date_to DESC, id DESC', [projectId]);
+    const handovers = await query('SELECT * FROM project_handover_minutes WHERE project_id = ? ORDER BY inspection_date DESC, id DESC', [projectId]);
+    const correspondence = await query('SELECT * FROM project_correspondence WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const settlement = await get('SELECT * FROM project_final_settlements WHERE project_id = ?', [projectId]);
 
     // الإحصائيات التراكمية المباشرة
     const totalApprovedChangeOrders = changeOrders.filter(c => c.status === 'معتمد').reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
@@ -88,16 +88,16 @@ router.get('/:projectId/overview', (req, res) => {
 // ============================================================================
 // 1. عقد المشروع (Project Contract)
 // ============================================================================
-router.get('/:projectId/contract', (req, res) => {
+router.get('/:projectId/contract', async (req, res) => {
   try {
-    const contract = get('SELECT * FROM project_contracts WHERE project_id = ?', [req.params.projectId]);
+    const contract = await get('SELECT * FROM project_contracts WHERE project_id = ?', [req.params.projectId]);
     res.json({ success: true, data: contract });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/contract', (req, res) => {
+router.post('/:projectId/contract', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -108,10 +108,10 @@ router.post('/:projectId/contract', (req, res) => {
       status, notes
     } = req.body;
 
-    const existing = get('SELECT id FROM project_contracts WHERE project_id = ?', [projectId]);
+    const existing = await get('SELECT id FROM project_contracts WHERE project_id = ?', [projectId]);
 
     if (existing) {
-      run(`
+      await run(`
         UPDATE project_contracts SET
           contract_no = ?, title = ?, first_party = ?, second_party = ?,
           contract_date = ?, start_date = ?, end_date = ?, duration_days = ?,
@@ -128,7 +128,7 @@ router.post('/:projectId/contract', (req, res) => {
         payment_terms, scope_of_work, status || 'ساري', notes, projectId
       ]);
     } else {
-      run(`
+      await run(`
         INSERT INTO project_contracts (
           project_id, contract_no, title, first_party, second_party,
           contract_date, start_date, end_date, duration_days,
@@ -148,7 +148,7 @@ router.post('/:projectId/contract', (req, res) => {
 
     // تحديث قيمة العقد وتواريخ المشروع في جدول المشاريع الأساسي
     if (contract_value) {
-      run(`
+      await run(`
         UPDATE projects SET 
           contract_value = ?,
           start_date = COALESCE(?, start_date),
@@ -157,7 +157,7 @@ router.post('/:projectId/contract', (req, res) => {
       `, [Number(contract_value), start_date, end_date, projectId]);
     }
 
-    const saved = get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]);
+    const saved = await get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]);
     res.json({ success: true, message: 'تم حفظ عقد المشروع وتحديث بياناته بنجاح', data: saved });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء حفظ العقد', error: err.message });
@@ -167,16 +167,16 @@ router.post('/:projectId/contract', (req, res) => {
 // ============================================================================
 // 2. المخططات الهندسية (Engineering Drawings)
 // ============================================================================
-router.get('/:projectId/drawings', (req, res) => {
+router.get('/:projectId/drawings', async (req, res) => {
   try {
-    const drawings = query('SELECT * FROM project_drawings WHERE project_id = ? ORDER BY id DESC', [req.params.projectId]);
+    const drawings = await query('SELECT * FROM project_drawings WHERE project_id = ? ORDER BY id DESC', [req.params.projectId]);
     res.json({ success: true, data: drawings });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/drawings', (req, res) => {
+router.post('/:projectId/drawings', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -188,7 +188,7 @@ router.post('/:projectId/drawings', (req, res) => {
       return res.status(400).json({ success: false, message: 'رقم المخطط وعنوانه مطلوبان' });
     }
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_drawings (
         project_id, drawing_no, title, category, scale, revision,
         submission_date, approval_date, status, engineer_name, file_name, notes
@@ -198,21 +198,21 @@ router.post('/:projectId/drawings', (req, res) => {
       submission_date, approval_date, status, engineer_name, file_name, notes
     ]);
 
-    const created = get('SELECT * FROM project_drawings WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_drawings WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تمت إضافة المخطط الهندسي بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء إضافة المخطط', error: err.message });
   }
 });
 
-router.put('/:projectId/drawings/:id', (req, res) => {
+router.put('/:projectId/drawings/:id', async (req, res) => {
   try {
     const {
       drawing_no, title, category, scale, revision,
       submission_date, approval_date, status, engineer_name, file_name, notes
     } = req.body;
 
-    run(`
+    await run(`
       UPDATE project_drawings SET
         drawing_no = COALESCE(?, drawing_no),
         title = COALESCE(?, title),
@@ -238,9 +238,9 @@ router.put('/:projectId/drawings/:id', (req, res) => {
   }
 });
 
-router.delete('/:projectId/drawings/:id', (req, res) => {
+router.delete('/:projectId/drawings/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_drawings WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_drawings WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف المخطط بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -250,16 +250,16 @@ router.delete('/:projectId/drawings/:id', (req, res) => {
 // ============================================================================
 // 3. جدول الكميات BOQ (Bill of Quantities)
 // ============================================================================
-router.get('/:projectId/boq', (req, res) => {
+router.get('/:projectId/boq', async (req, res) => {
   try {
-    const boq = query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [req.params.projectId]);
+    const boq = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [req.params.projectId]);
     res.json({ success: true, data: boq });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/boq', (req, res) => {
+router.post('/:projectId/boq', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -275,7 +275,7 @@ router.post('/:projectId/boq', (req, res) => {
     const rate = Number(unit_rate) || 0;
     const total = cQty * rate;
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_boq (
         project_id, item_no, description, category, unit,
         contract_qty, executed_qty, unit_rate, total_amount, status, notes
@@ -285,28 +285,28 @@ router.post('/:projectId/boq', (req, res) => {
       cQty, Number(executed_qty) || 0, rate, total, status, notes
     ]);
 
-    const created = get('SELECT * FROM project_boq WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_boq WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تمت إضافة بند جدول الكميات بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء إضافة بند BOQ', error: err.message });
   }
 });
 
-router.put('/:projectId/boq/:id', (req, res) => {
+router.put('/:projectId/boq/:id', async (req, res) => {
   try {
     const {
       item_no, description, category, unit,
       contract_qty, executed_qty, unit_rate, status, notes
     } = req.body;
 
-    const existing = get('SELECT * FROM project_boq WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    const existing = await get('SELECT * FROM project_boq WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     if (!existing) return res.status(404).json({ success: false, message: 'البند غير موجود' });
 
     const cQty = contract_qty !== undefined ? Number(contract_qty) : existing.contract_qty;
     const rate = unit_rate !== undefined ? Number(unit_rate) : existing.unit_rate;
     const total = cQty * rate;
 
-    run(`
+    await run(`
       UPDATE project_boq SET
         item_no = COALESCE(?, item_no),
         description = COALESCE(?, description),
@@ -331,9 +331,9 @@ router.put('/:projectId/boq/:id', (req, res) => {
   }
 });
 
-router.delete('/:projectId/boq/:id', (req, res) => {
+router.delete('/:projectId/boq/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_boq WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_boq WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف البند بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -343,9 +343,9 @@ router.delete('/:projectId/boq/:id', (req, res) => {
 // ============================================================================
 // 4. عروض الأسعار (Quotations & Price Offers)
 // ============================================================================
-router.get('/:projectId/quotations', (req, res) => {
+router.get('/:projectId/quotations', async (req, res) => {
   try {
-    const quotations = query(`
+    const quotations = await query(`
       SELECT q.*, c.name as client_name, c.company as client_company
       FROM project_quotations q
       LEFT JOIN clients c ON q.client_id = c.id
@@ -358,7 +358,7 @@ router.get('/:projectId/quotations', (req, res) => {
   }
 });
 
-router.post('/:projectId/quotations', (req, res) => {
+router.post('/:projectId/quotations', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -367,10 +367,10 @@ router.post('/:projectId/quotations', (req, res) => {
       currency = 'ر.ي', payment_terms, delivery_period, status = 'مسودة', notes
     } = req.body;
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM project_quotations');
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
     const autoNo = quotation_no || `QUO-2024-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_quotations (
         project_id, client_id, quotation_no, title, date, valid_until,
         items_json, subtotal, discount, tax_vat, total_amount,
@@ -383,14 +383,14 @@ router.post('/:projectId/quotations', (req, res) => {
       currency, payment_terms, delivery_period, status, notes
     ]);
 
-    const created = get('SELECT * FROM project_quotations WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_quotations WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم حفظ عرض السعر بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء إنشاء عرض السعر', error: err.message });
   }
 });
 
-router.put('/:projectId/quotations/:id', (req, res) => {
+router.put('/:projectId/quotations/:id', async (req, res) => {
   try {
     const {
       title, client_id, date, valid_until, items_json,
@@ -398,7 +398,7 @@ router.put('/:projectId/quotations/:id', (req, res) => {
       payment_terms, delivery_period, status, notes
     } = req.body;
 
-    run(`
+    await run(`
       UPDATE project_quotations SET
         title = COALESCE(?, title),
         client_id = COALESCE(?, client_id),
@@ -428,9 +428,9 @@ router.put('/:projectId/quotations/:id', (req, res) => {
   }
 });
 
-router.delete('/:projectId/quotations/:id', (req, res) => {
+router.delete('/:projectId/quotations/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_quotations WHERE id = ?', [req.params.id]);
+    await run('DELETE FROM project_quotations WHERE id = ?', [req.params.id]);
     res.json({ success: true, message: 'تم حذف عرض السعر بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -440,39 +440,39 @@ router.delete('/:projectId/quotations/:id', (req, res) => {
 // ============================================================================
 // 5. الميزانية والتكلفة المستهدفة (Budget & Target Cost)
 // ============================================================================
-router.get('/:projectId/budgets', (req, res) => {
+router.get('/:projectId/budgets', async (req, res) => {
   try {
     const projectId = req.params.projectId;
-    const budgets = query('SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC', [projectId]);
+    const budgets = await query('SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC', [projectId]);
     res.json({ success: true, data: budgets });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/budgets', (req, res) => {
+router.post('/:projectId/budgets', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const { category, planned_cost = 0, actual_cost = 0, notes } = req.body;
 
     if (!category) return res.status(400).json({ success: false, message: 'تصنيف الميزانية مطلوب' });
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_budgets (project_id, category, planned_cost, actual_cost, notes)
       VALUES (?, ?, ?, ?, ?)
     `, [projectId, category, Number(planned_cost) || 0, Number(actual_cost) || 0, notes]);
 
-    const created = get('SELECT * FROM project_budgets WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_budgets WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تمت إضافة مركز الميزانية بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.put('/:projectId/budgets/:id', (req, res) => {
+router.put('/:projectId/budgets/:id', async (req, res) => {
   try {
     const { category, planned_cost, actual_cost, notes } = req.body;
-    run(`
+    await run(`
       UPDATE project_budgets SET
         category = COALESCE(?, category),
         planned_cost = COALESCE(?, planned_cost),
@@ -487,9 +487,9 @@ router.put('/:projectId/budgets/:id', (req, res) => {
   }
 });
 
-router.delete('/:projectId/budgets/:id', (req, res) => {
+router.delete('/:projectId/budgets/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_budgets WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_budgets WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف بند الميزانية بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -499,16 +499,16 @@ router.delete('/:projectId/budgets/:id', (req, res) => {
 // ============================================================================
 // 6. أوامر التغيير والإضافيات (Change Orders & Variations)
 // ============================================================================
-router.get('/:projectId/change-orders', (req, res) => {
+router.get('/:projectId/change-orders', async (req, res) => {
   try {
-    const orders = query('SELECT * FROM project_change_orders WHERE project_id = ? ORDER BY id DESC', [req.params.projectId]);
+    const orders = await query('SELECT * FROM project_change_orders WHERE project_id = ? ORDER BY id DESC', [req.params.projectId]);
     res.json({ success: true, data: orders });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/change-orders', (req, res) => {
+router.post('/:projectId/change-orders', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -519,10 +519,10 @@ router.post('/:projectId/change-orders', (req, res) => {
 
     if (!title) return res.status(400).json({ success: false, message: 'عنوان أمر التغيير مطلوب' });
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM project_change_orders WHERE project_id = ?', [projectId]);
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_change_orders WHERE project_id = ?', [projectId]);
     const autoNo = change_no || `CO-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_change_orders (
         project_id, change_no, title, type, request_date, approval_date,
         amount, time_extension_days, reason, status, requested_by, approved_by, notes
@@ -533,21 +533,21 @@ router.post('/:projectId/change-orders', (req, res) => {
       reason, status, requested_by, approved_by, notes
     ]);
 
-    const created = get('SELECT * FROM project_change_orders WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_change_orders WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم حفظ أمر التغيير بنجاح وتحديث حسابات المشروع', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.put('/:projectId/change-orders/:id', (req, res) => {
+router.put('/:projectId/change-orders/:id', async (req, res) => {
   try {
     const {
       change_no, title, type, request_date, approval_date,
       amount, time_extension_days, reason, status, requested_by, approved_by, notes
     } = req.body;
 
-    run(`
+    await run(`
       UPDATE project_change_orders SET
         change_no = COALESCE(?, change_no),
         title = COALESCE(?, title),
@@ -574,9 +574,9 @@ router.put('/:projectId/change-orders/:id', (req, res) => {
   }
 });
 
-router.delete('/:projectId/change-orders/:id', (req, res) => {
+router.delete('/:projectId/change-orders/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_change_orders WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_change_orders WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف أمر التغيير بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -586,9 +586,9 @@ router.delete('/:projectId/change-orders/:id', (req, res) => {
 // ============================================================================
 // 7. مشتريات وفواتير المشروع (Project Purchases)
 // ============================================================================
-router.get('/:projectId/purchases', (req, res) => {
+router.get('/:projectId/purchases', async (req, res) => {
   try {
-    const purchases = query(`
+    const purchases = await query(`
       SELECT pp.*, s.name as supplier_full_name, s.phone as supplier_phone
       FROM project_purchases pp
       LEFT JOIN suppliers s ON pp.supplier_id = s.id
@@ -601,7 +601,7 @@ router.get('/:projectId/purchases', (req, res) => {
   }
 });
 
-router.post('/:projectId/purchases', (req, res) => {
+router.post('/:projectId/purchases', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -616,7 +616,7 @@ router.post('/:projectId/purchases', (req, res) => {
     const price = Number(unit_price) || 0;
     const total = total_amount ? Number(total_amount) : (qty * price);
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_purchases (
         project_id, invoice_no, supplier_id, supplier_name, item_description,
         quantity, unit, unit_price, total_amount, paid_amount,
@@ -631,22 +631,22 @@ router.post('/:projectId/purchases', (req, res) => {
     // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
     if (Number(paid_amount) > 0) {
       const expReceipt = receipt_no || `EXP-PUR-${result.lastInsertRowid}`;
-      run(`
+      await run(`
         INSERT INTO expenses (receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes)
         VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?)
       `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, Number(paid_amount), payment_method, date || new Date().toISOString().split('T')[0], `فاتورة مشتريات: ${item_description}`]);
     }
 
-    const created = get('SELECT * FROM project_purchases WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_purchases WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.delete('/:projectId/purchases/:id', (req, res) => {
+router.delete('/:projectId/purchases/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف الفاتورة بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -656,16 +656,16 @@ router.delete('/:projectId/purchases/:id', (req, res) => {
 // ============================================================================
 // 8. العمالة والمصروفات الميدانية (Labor & Site Expenses)
 // ============================================================================
-router.get('/:projectId/labor', (req, res) => {
+router.get('/:projectId/labor', async (req, res) => {
   try {
-    const labor = query('SELECT * FROM project_labor_expenses WHERE project_id = ? ORDER BY date DESC, id DESC', [req.params.projectId]);
+    const labor = await query('SELECT * FROM project_labor_expenses WHERE project_id = ? ORDER BY date DESC, id DESC', [req.params.projectId]);
     res.json({ success: true, data: labor });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/labor', (req, res) => {
+router.post('/:projectId/labor', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -681,7 +681,7 @@ router.post('/:projectId/labor', (req, res) => {
     const days = Number(days_or_hours) || 1;
     const total = total_amount ? Number(total_amount) : (count * rate * days);
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_labor_expenses (
         project_id, date, worker_name_or_team, trade, workers_count,
         daily_rate, days_or_hours, total_amount, expense_category,
@@ -695,22 +695,22 @@ router.post('/:projectId/labor', (req, res) => {
     // تسجيل مصروف آلي في جدول المصروفات العام
     if (payment_status === 'مدفوع' && total > 0) {
       const expReceipt = `EXP-LAB-${result.lastInsertRowid}`;
-      run(`
+      await run(`
         INSERT INTO expenses (receipt_no, expense_type, project_id, amount, payment_method, date, notes)
         VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?)
       `, [expReceipt, projectId, total, date || new Date().toISOString().split('T')[0], `أجور ${trade}: ${worker_name_or_team}`]);
     }
 
-    const created = get('SELECT * FROM project_labor_expenses WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.delete('/:projectId/labor/:id', (req, res) => {
+router.delete('/:projectId/labor/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف السجل بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -720,9 +720,9 @@ router.delete('/:projectId/labor/:id', (req, res) => {
 // ============================================================================
 // 9. مستخلصات وشهادات دفع المشروع (Project Invoices & IPCs)
 // ============================================================================
-router.get('/:projectId/invoices', (req, res) => {
+router.get('/:projectId/invoices', async (req, res) => {
   try {
-    const invoices = query(`
+    const invoices = await query(`
       SELECT pi.*, c.name as client_name, c.phone as client_phone
       FROM project_invoices pi
       LEFT JOIN clients c ON pi.client_id = c.id
@@ -735,7 +735,7 @@ router.get('/:projectId/invoices', (req, res) => {
   }
 });
 
-router.post('/:projectId/invoices', (req, res) => {
+router.post('/:projectId/invoices', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -745,14 +745,14 @@ router.post('/:projectId/invoices', (req, res) => {
       net_amount, status = 'معتمد للصرف', date, approval_date, notes
     } = req.body;
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM project_invoices WHERE project_id = ?', [projectId]);
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_invoices WHERE project_id = ?', [projectId]);
     const autoNo = invoice_no || `IPC-${String((countRes.cnt || 0) + 1).padStart(2, '0')}`;
 
     const gross = Number(current_gross_amount) || (Number(cumulative_work_done) - Number(previous_bills_amount));
     const deductions = (Number(advance_deduction) || 0) + (Number(retention_deduction) || 0) + (Number(other_deductions) || 0);
     const calculatedNet = net_amount !== undefined ? Number(net_amount) : Math.max(0, gross - deductions);
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_invoices (
         project_id, client_id, invoice_no, invoice_type, period_from, period_to,
         cumulative_work_done, previous_bills_amount, current_gross_amount,
@@ -767,7 +767,7 @@ router.post('/:projectId/invoices', (req, res) => {
     ]);
 
     // مزامنة مع جدول bills العام
-    run(`
+    await run(`
       INSERT INTO bills (bill_no, bill_type, project_id, client_id, amount, deduction, net_amount, status, date, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
@@ -775,16 +775,16 @@ router.post('/:projectId/invoices', (req, res) => {
       gross, deductions, calculatedNet, status, date || new Date().toISOString().split('T')[0], notes
     ]);
 
-    const created = get('SELECT * FROM project_invoices WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_invoices WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم إصدار واعتماد المستخلص بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.delete('/:projectId/invoices/:id', (req, res) => {
+router.delete('/:projectId/invoices/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_invoices WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_invoices WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف المستخلص بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -794,16 +794,16 @@ router.delete('/:projectId/invoices/:id', (req, res) => {
 // ============================================================================
 // 10. التقارير اليومية للموقع (Daily Site Reports)
 // ============================================================================
-router.get('/:projectId/daily-reports', (req, res) => {
+router.get('/:projectId/daily-reports', async (req, res) => {
   try {
-    const reports = query('SELECT * FROM project_daily_reports WHERE project_id = ? ORDER BY date DESC, id DESC', [req.params.projectId]);
+    const reports = await query('SELECT * FROM project_daily_reports WHERE project_id = ? ORDER BY date DESC, id DESC', [req.params.projectId]);
     res.json({ success: true, data: reports });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/daily-reports', (req, res) => {
+router.post('/:projectId/daily-reports', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -814,10 +814,10 @@ router.post('/:projectId/daily-reports', (req, res) => {
 
     if (!work_performed) return res.status(400).json({ success: false, message: 'بيان الأعمال المنفذة مطلوب' });
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM project_daily_reports WHERE project_id = ?', [projectId]);
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_daily_reports WHERE project_id = ?', [projectId]);
     const autoNo = report_no || `DR-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_daily_reports (
         project_id, report_no, date, weather, manpower_count,
         equipment_summary, work_performed, materials_received,
@@ -828,16 +828,16 @@ router.post('/:projectId/daily-reports', (req, res) => {
       equipment_summary, work_performed, materials_received, safety_notes, delays_obstacles, site_engineer, notes
     ]);
 
-    const created = get('SELECT * FROM project_daily_reports WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_daily_reports WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم توثيق التقرير اليومي للموقع بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.delete('/:projectId/daily-reports/:id', (req, res) => {
+router.delete('/:projectId/daily-reports/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_daily_reports WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_daily_reports WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف التقرير اليومي بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -847,16 +847,16 @@ router.delete('/:projectId/daily-reports/:id', (req, res) => {
 // ============================================================================
 // 11. التقارير الأسبوعية للموقع (Weekly Site Reports)
 // ============================================================================
-router.get('/:projectId/weekly-reports', (req, res) => {
+router.get('/:projectId/weekly-reports', async (req, res) => {
   try {
-    const reports = query('SELECT * FROM project_weekly_reports WHERE project_id = ? ORDER BY date_to DESC, id DESC', [req.params.projectId]);
+    const reports = await query('SELECT * FROM project_weekly_reports WHERE project_id = ? ORDER BY date_to DESC, id DESC', [req.params.projectId]);
     res.json({ success: true, data: reports });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/weekly-reports', (req, res) => {
+router.post('/:projectId/weekly-reports', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -867,10 +867,10 @@ router.post('/:projectId/weekly-reports', (req, res) => {
 
     if (!achievements_summary) return res.status(400).json({ success: false, message: 'ملخص إنجازات الأسبوع مطلوب' });
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM project_weekly_reports WHERE project_id = ?', [projectId]);
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_weekly_reports WHERE project_id = ?', [projectId]);
     const autoNo = report_no || `WR-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_weekly_reports (
         project_id, report_no, week_no, date_from, date_to,
         planned_progress_pct, actual_progress_pct, achievements_summary,
@@ -885,19 +885,19 @@ router.post('/:projectId/weekly-reports', (req, res) => {
 
     // تحديث نسبة إنجاز المشروع إذا تم إدخالها
     if (actual_progress_pct > 0) {
-      run('UPDATE projects SET progress_percentage = ? WHERE id = ?', [Number(actual_progress_pct), projectId]);
+      await run('UPDATE projects SET progress_percentage = ? WHERE id = ?', [Number(actual_progress_pct), projectId]);
     }
 
-    const created = get('SELECT * FROM project_weekly_reports WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_weekly_reports WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم حفظ واعتماد التقرير الأسبوعي بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.delete('/:projectId/weekly-reports/:id', (req, res) => {
+router.delete('/:projectId/weekly-reports/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_weekly_reports WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_weekly_reports WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف التقرير الأسبوعي بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -907,16 +907,16 @@ router.delete('/:projectId/weekly-reports/:id', (req, res) => {
 // ============================================================================
 // 12. محاضر الاستلام والفحص الهندسي (Handover Minutes)
 // ============================================================================
-router.get('/:projectId/handovers', (req, res) => {
+router.get('/:projectId/handovers', async (req, res) => {
   try {
-    const handovers = query('SELECT * FROM project_handover_minutes WHERE project_id = ? ORDER BY inspection_date DESC, id DESC', [req.params.projectId]);
+    const handovers = await query('SELECT * FROM project_handover_minutes WHERE project_id = ? ORDER BY inspection_date DESC, id DESC', [req.params.projectId]);
     res.json({ success: true, data: handovers });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/handovers', (req, res) => {
+router.post('/:projectId/handovers', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -927,10 +927,10 @@ router.post('/:projectId/handovers', (req, res) => {
 
     if (!type || !inspector_name) return res.status(400).json({ success: false, message: 'نوع الاستلام واسم المهندس الفاحص مطلوبان' });
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM project_handover_minutes WHERE project_id = ?', [projectId]);
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_handover_minutes WHERE project_id = ?', [projectId]);
     const autoNo = minute_no || `IR-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_handover_minutes (
         project_id, minute_no, type, location_axis, inspection_date,
         inspector_name, contractor_rep, status, punch_list, recommendations, notes
@@ -940,16 +940,16 @@ router.post('/:projectId/handovers', (req, res) => {
       inspector_name, contractor_rep, status, punch_list, recommendations, notes
     ]);
 
-    const created = get('SELECT * FROM project_handover_minutes WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_handover_minutes WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم توثيق محضر الاستلام والفحص الهندسي بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.delete('/:projectId/handovers/:id', (req, res) => {
+router.delete('/:projectId/handovers/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_handover_minutes WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_handover_minutes WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف المحضر بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -959,16 +959,16 @@ router.delete('/:projectId/handovers/:id', (req, res) => {
 // ============================================================================
 // 13. المراسلات مع المالك والاستشاري (Correspondence)
 // ============================================================================
-router.get('/:projectId/correspondence', (req, res) => {
+router.get('/:projectId/correspondence', async (req, res) => {
   try {
-    const corr = query('SELECT * FROM project_correspondence WHERE project_id = ? ORDER BY date DESC, id DESC', [req.params.projectId]);
+    const corr = await query('SELECT * FROM project_correspondence WHERE project_id = ? ORDER BY date DESC, id DESC', [req.params.projectId]);
     res.json({ success: true, data: corr });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/correspondence', (req, res) => {
+router.post('/:projectId/correspondence', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -979,11 +979,11 @@ router.post('/:projectId/correspondence', (req, res) => {
 
     if (!subject || !summary_body) return res.status(400).json({ success: false, message: 'موضوع الخطاب ومحتواه مطلوبان' });
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM project_correspondence WHERE project_id = ?', [projectId]);
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_correspondence WHERE project_id = ?', [projectId]);
     const prefix = direction.includes('صادر') ? 'COR-OUT' : 'COR-IN';
     const autoNo = ref_no || `${prefix}-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO project_correspondence (
         project_id, ref_no, direction, subject, date,
         priority, summary_body, required_action, response_status,
@@ -995,16 +995,16 @@ router.post('/:projectId/correspondence', (req, res) => {
       sender, recipient, attachment_name, notes
     ]);
 
-    const created = get('SELECT * FROM project_correspondence WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_correspondence WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم أرشفة المراسلة والخطاب بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.delete('/:projectId/correspondence/:id', (req, res) => {
+router.delete('/:projectId/correspondence/:id', async (req, res) => {
   try {
-    run('DELETE FROM project_correspondence WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    await run('DELETE FROM project_correspondence WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     res.json({ success: true, message: 'تم حذف المراسلة بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1014,17 +1014,17 @@ router.delete('/:projectId/correspondence/:id', (req, res) => {
 // ============================================================================
 // 14. الحساب الختامي وتصفية المشروع (Final Settlement)
 // ============================================================================
-router.get('/:projectId/settlement', (req, res) => {
+router.get('/:projectId/settlement', async (req, res) => {
   try {
     const projectId = req.params.projectId;
-    const settlement = get('SELECT * FROM project_final_settlements WHERE project_id = ?', [projectId]);
+    const settlement = await get('SELECT * FROM project_final_settlements WHERE project_id = ?', [projectId]);
     res.json({ success: true, data: settlement });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-router.post('/:projectId/settlement', (req, res) => {
+router.post('/:projectId/settlement', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
@@ -1036,10 +1036,10 @@ router.post('/:projectId/settlement', (req, res) => {
 
     const autoNo = settlement_no || `SET-PRJ-${String(projectId).padStart(3, '0')}`;
 
-    const existing = get('SELECT id FROM project_final_settlements WHERE project_id = ?', [projectId]);
+    const existing = await get('SELECT id FROM project_final_settlements WHERE project_id = ?', [projectId]);
 
     if (existing) {
-      run(`
+      await run(`
         UPDATE project_final_settlements SET
           settlement_no = ?, date = ?, original_contract_val = ?,
           approved_change_orders_val = ?, revised_contract_val = ?,
@@ -1057,7 +1057,7 @@ router.post('/:projectId/settlement', (req, res) => {
         due_to, status, prepared_by, approved_by, notes, projectId
       ]);
     } else {
-      run(`
+      await run(`
         INSERT INTO project_final_settlements (
           project_id, settlement_no, date, original_contract_val,
           approved_change_orders_val, revised_contract_val, total_executed_work_val,
@@ -1076,10 +1076,10 @@ router.post('/:projectId/settlement', (req, res) => {
 
     // إذا كانت المخالصة معتمدة ومغلقة، نقوم بتحديث حالة المشروع إلى completed
     if (status === 'مغلق ومصفى' || status === 'معتمد وموقع') {
-      run('UPDATE projects SET status = "completed", progress_percentage = 100 WHERE id = ?', [projectId]);
+      await run('UPDATE projects SET status = "completed", progress_percentage = 100 WHERE id = ?', [projectId]);
     }
 
-    const saved = get('SELECT * FROM project_final_settlements WHERE project_id = ?', [projectId]);
+    const saved = await get('SELECT * FROM project_final_settlements WHERE project_id = ?', [projectId]);
     res.json({ success: true, message: 'تم حفظ واعتماد الحساب الختامي والمخالصة بنجاح', data: saved });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

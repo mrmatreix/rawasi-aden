@@ -1,177 +1,428 @@
-const { DatabaseSync } = require('node:sqlite');
+/**
+ * وحدة إدارة قاعدة البيانات لنظام رواسي عدن للهندسة والمقاولات
+ * تدعم محرك MySQL الأساسي عالي الأداء مع برك الاتصال (Connection Pooling)
+ * وتدعم الـ Transactions الذرية والتبديل التلقائي الذكي إلى SQLite عند الحاجة
+ */
+
 const path = require('node:path');
 const fs = require('node:fs');
+const { DatabaseSync } = require('node:sqlite');
+const mysql = require('mysql2/promise');
 const connectionManager = require('./connectionManager');
 
 const configPath = path.join(__dirname, 'config.json');
 
-function resolveDatabasePath() {
-  if (process.env.RAWASI_DB_PATH && process.env.RAWASI_DB_PATH.trim()) {
-    return path.isAbsolute(process.env.RAWASI_DB_PATH)
-      ? process.env.RAWASI_DB_PATH
-      : path.join(__dirname, '..', '..', process.env.RAWASI_DB_PATH);
-  }
+function loadConfig() {
+  const defaults = {
+    dbEngine: 'mysql', // 'mysql' | 'sqlite'
+    mysql: {
+      host: process.env.MYSQL_HOST || 'localhost',
+      port: Number(process.env.MYSQL_PORT) || 3306,
+      user: process.env.MYSQL_USER || 'root',
+      password: process.env.MYSQL_PASSWORD || '',
+      database: process.env.MYSQL_DATABASE || 'rawasi_aden',
+      waitForConnections: true,
+      connectionLimit: 20,
+      queueLimit: 0
+    },
+    dbPath: 'server/database/rawasi_aden.db'
+  };
 
   if (fs.existsSync(configPath)) {
     try {
       const raw = fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '');
-      const cfg = JSON.parse(raw);
-      if (cfg.dbPath && cfg.dbPath.trim()) {
-        return path.isAbsolute(cfg.dbPath)
-          ? cfg.dbPath
-          : path.join(__dirname, '..', '..', cfg.dbPath);
-      }
+      const parsed = JSON.parse(raw);
+      return Object.assign(defaults, parsed, {
+        mysql: Object.assign(defaults.mysql, parsed.mysql || {})
+      });
     } catch (e) {
       console.warn('Config load note:', e.message);
     }
   }
 
+  return defaults;
+}
+
+let appConfig = loadConfig();
+
+function resolveSqlitePath() {
+  if (process.env.RAWASI_DB_PATH && process.env.RAWASI_DB_PATH.trim()) {
+    return path.isAbsolute(process.env.RAWASI_DB_PATH)
+      ? process.env.RAWASI_DB_PATH
+      : path.join(__dirname, '..', '..', process.env.RAWASI_DB_PATH);
+  }
+  if (appConfig.dbPath && appConfig.dbPath.trim()) {
+    return path.isAbsolute(appConfig.dbPath)
+      ? appConfig.dbPath
+      : path.join(__dirname, '..', '..', appConfig.dbPath);
+  }
   return path.join(__dirname, 'rawasi_aden.db');
 }
 
-let dbPath = resolveDatabasePath();
-const schemaPath = path.join(__dirname, 'schema.sql');
+let sqlitePath = resolveSqlitePath();
+let activeEngine = 'sqlite'; // سيتم تحديده عند التهيئة: 'mysql' أو 'sqlite'
+let mysqlPool = null;
+let sqliteDb = null;
 
-// Ensure database parent directory exists
-const parentDir = path.dirname(dbPath);
-if (!fs.existsSync(parentDir)) {
-  fs.mkdirSync(parentDir, { recursive: true });
+// التأكد من وجود مجلد SQLite
+const sqliteParent = path.dirname(sqlitePath);
+if (!fs.existsSync(sqliteParent)) {
+  fs.mkdirSync(sqliteParent, { recursive: true });
 }
 
-let db = new DatabaseSync(dbPath);
-db.exec('PRAGMA foreign_keys = ON;');
+// تهيئة محرك SQLite الاحتياطي دائماً للجاهزية
+function initSqliteInstance() {
+  if (!sqliteDb) {
+    sqliteDb = new DatabaseSync(sqlitePath);
+    sqliteDb.exec('PRAGMA foreign_keys = ON;');
+  }
+  return sqliteDb;
+}
 
-// Initialize schema if not initialized
-function initSchema() {
+/**
+ * معالج ذكي لمواءمة استعلامات SQL بين MySQL و SQLite
+ */
+function normalizeSql(sql, targetEngine) {
+  if (!sql || typeof sql !== 'string') return sql;
+  let normalized = sql;
+
+  if (targetEngine === 'mysql') {
+    // 1. استبدال INSERT OR IGNORE بـ INSERT IGNORE
+    normalized = normalized.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT IGNORE INTO');
+    // 2. استبدال INSERT OR REPLACE بـ REPLACE INTO
+    normalized = normalized.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'REPLACE INTO');
+    // 3. استبدال ON CONFLICT(key) بـ ON DUPLICATE KEY UPDATE
+    normalized = normalized.replace(/ON\s+CONFLICT\s*\(\s*`?key`?\s*\)\s*DO\s+UPDATE\s+SET\s+value\s*=\s*excluded\.value/gi,
+      'ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)');
+    // 4. استبدال MAX(0, expr) بـ GREATEST(0, expr)
+    normalized = normalized.replace(/MAX\s*\(\s*0\s*,\s*([^)]+)\)/gi, 'GREATEST(0, $1)');
+    // 5. تغليف حقل key المحجوز بـ backticks إذا كان في جدول settings
+    normalized = normalized.replace(/\bsettings\s*\(\s*key\s*,/gi, 'settings (`key`,');
+    normalized = normalized.replace(/\bWHERE\s+key\s*=/gi, 'WHERE `key` =');
+  } else {
+    // في حالة SQLite
+    normalized = normalized.replace(/GREATEST\s*\(\s*0\s*,\s*([^)]+)\)/gi, 'MAX(0, $1)');
+    normalized = normalized.replace(/INSERT\s+IGNORE\s+INTO/gi, 'INSERT OR IGNORE INTO');
+  }
+
+  return normalized;
+}
+
+/**
+ * الاتصال بمحرك MySQL مع إنشاء قاعدة البيانات والجداول تلقائياً إن لم تكن موجودة
+ */
+async function initMysql() {
+  const mysqlCfg = appConfig.mysql;
+  console.log(`📡 [Rawasi DB] محاولة الاتصال بخادم MySQL على (${mysqlCfg.host}:${mysqlCfg.port})...`);
+
+  // 1. الاتصال بدون تحديد اسم قاعدة البيانات لضمان إنشائها أولاً
+  let initConn;
+  try {
+    initConn = await mysql.createConnection({
+      host: mysqlCfg.host,
+      port: mysqlCfg.port,
+      user: mysqlCfg.user,
+      password: mysqlCfg.password,
+      connectTimeout: 4000
+    });
+
+    await initConn.query(`CREATE DATABASE IF NOT EXISTS \`${mysqlCfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
+    await initConn.end();
+  } catch (err) {
+    throw new Error(`تعذر الوصول إلى سيرفر MySQL: ${err.message}`);
+  }
+
+  // 2. إنشاء بركة الاتصال (Connection Pool)
+  mysqlPool = mysql.createPool({
+    host: mysqlCfg.host,
+    port: mysqlCfg.port,
+    user: mysqlCfg.user,
+    password: mysqlCfg.password,
+    database: mysqlCfg.database,
+    waitForConnections: mysqlCfg.waitForConnections !== false,
+    connectionLimit: mysqlCfg.connectionLimit || 20,
+    queueLimit: mysqlCfg.queueLimit || 0,
+    multipleStatements: true,
+    charset: 'utf8mb4_unicode_ci'
+  });
+
+  // فحص الاتصال بالبركة
+  const testConn = await mysqlPool.getConnection();
+  testConn.release();
+
+  // 3. التحقق من وجود الجداول وتطبيق schema_mysql.sql إن كانت جديدة
+  const [rows] = await mysqlPool.query("SHOW TABLES LIKE 'users'");
+  if (!rows || rows.length === 0) {
+    console.log('🌱 [Rawasi DB] قاعدة بيانات MySQL جديدة - جاري تهيئة الجداول الـ 31...');
+    const schemaMysqlPath = path.join(__dirname, 'schema_mysql.sql');
+    if (fs.existsSync(schemaMysqlPath)) {
+      const schemaSql = fs.readFileSync(schemaMysqlPath, 'utf8');
+      await mysqlPool.query(schemaSql);
+    }
+  }
+
+  // 4. التحقق من وجود المستخدم الرئيسي الافتراضي في MySQL
+  const [userCountRows] = await mysqlPool.query("SELECT count(*) as count FROM users");
+  if (!userCountRows || userCountRows[0].count === 0) {
+    console.log('👤 تهيئة حسابات الإدارة الافتراضية في MySQL...');
+    const bcrypt = require('bcryptjs');
+    const salt = bcrypt.genSaltSync(10);
+    const adminHash = bcrypt.hashSync('admin123', salt);
+    const accountantHash = bcrypt.hashSync('account123', salt);
+
+    await mysqlPool.query(`
+      INSERT IGNORE INTO roles (id, name, display_name, permissions) VALUES 
+      (1, 'admin', 'المدير العام', 'all'),
+      (2, 'accountant', 'المحاسب المالي', 'accounting,reports,payments,billing'),
+      (3, 'project_manager', 'مدير المشاريع', 'projects,inventory,expenses'),
+      (4, 'storekeeper', 'أمين المخزن', 'inventory,items');
+    `);
+
+    await mysqlPool.query(`
+      INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status)
+      VALUES 
+      ('admin', ?, 'المدير العام', 1, 'admin', 'aalwi@engineer.com', '772332164', 'active'),
+      ('accountant', ?, 'المحاسب المالي', 2, 'accountant', 'accountant@rawasiaden.com', '781278157', 'active');
+    `, [adminHash, accountantHash]);
+
+    await mysqlPool.query(`
+      INSERT INTO settings (\`key\`, \`value\`, description) VALUES 
+      ('company_name', 'رواسي عدن للهندسة والمقاولات', 'اسم الشركة بالعربي'),
+      ('company_name_en', 'Rawasi Aden for Engineering & Contracting', 'اسم الشركة بالإنجليزي'),
+      ('slogan', 'نبني الحاضر لنستثمر المستقبل', 'شعار الشركة اللفظي'),
+      ('phone1', '772332164', 'رقم الهاتف الرئيسي'),
+      ('phone2', '781278157', 'رقم الهاتف الإضافي'),
+      ('email', 'aalwi@engineer.com', 'البريد الإلكتروني'),
+      ('address', 'عدن - إنماء الجديدة - خلف القطيبي', 'عنوان المركز الرئيسي'),
+      ('currency', 'ر.ي', 'العملة الافتراضية')
+      ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`);
+    `);
+  }
+
+  activeEngine = 'mysql';
+  console.log(`🐬 [Rawasi DB] تم تفعيل محرك MySQL بنجاح! متصل بـ: ${mysqlCfg.database} على ${mysqlCfg.host}:${mysqlCfg.port}`);
+}
+
+/**
+ * تهيئة محرك SQLite الاحتياطي
+ */
+function initSqlite() {
+  initSqliteInstance();
+  const schemaPath = path.join(__dirname, 'schema.sql');
   if (fs.existsSync(schemaPath)) {
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    db.exec(schemaSql);
+    sqliteDb.exec(schemaSql);
   }
 
-  // Safe migration for permissions and session tracking columns in users table
+  // Safe migration for SQLite
   try {
-    const cols = db.prepare("PRAGMA table_info(users)").all();
+    const cols = sqliteDb.prepare("PRAGMA table_info(users)").all();
     const colNames = cols.map(c => c.name);
-    if (!colNames.includes('permissions')) {
-      db.exec("ALTER TABLE users ADD COLUMN permissions TEXT;");
-    }
-    if (!colNames.includes('is_logged_in')) {
-      db.exec("ALTER TABLE users ADD COLUMN is_logged_in INTEGER DEFAULT 0;");
-    }
-    if (!colNames.includes('session_token')) {
-      db.exec("ALTER TABLE users ADD COLUMN session_token TEXT;");
-    }
-    if (!colNames.includes('last_heartbeat')) {
-      db.exec("ALTER TABLE users ADD COLUMN last_heartbeat DATETIME;");
-    }
-    if (!colNames.includes('last_login_at')) {
-      db.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME;");
-    }
-    if (!colNames.includes('last_login_ip')) {
-      db.exec("ALTER TABLE users ADD COLUMN last_login_ip TEXT;");
-    }
-    if (!colNames.includes('last_login_device')) {
-      db.exec("ALTER TABLE users ADD COLUMN last_login_device TEXT;");
-    }
-  } catch (e) {
-    console.warn('Migration note (users session tracking):', e.message);
-  }
+    if (!colNames.includes('permissions')) sqliteDb.exec("ALTER TABLE users ADD COLUMN permissions TEXT;");
+    if (!colNames.includes('is_logged_in')) sqliteDb.exec("ALTER TABLE users ADD COLUMN is_logged_in INTEGER DEFAULT 0;");
+    if (!colNames.includes('session_token')) sqliteDb.exec("ALTER TABLE users ADD COLUMN session_token TEXT;");
+    if (!colNames.includes('last_heartbeat')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_heartbeat DATETIME;");
+    if (!colNames.includes('last_login_at')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME;");
+    if (!colNames.includes('last_login_ip')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_ip TEXT;");
+    if (!colNames.includes('last_login_device')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_device TEXT;");
+  } catch {}
 
-  // Safe migration for currency column in financial tables
-  const tablesWithCurrency = ['payments', 'expenses', 'custodies', 'projects', 'items', 'bills', 'clients', 'suppliers', 'cash_movements', 'purchases'];
-  tablesWithCurrency.forEach(tableName => {
+  activeEngine = 'sqlite';
+  console.log(`📦 [Rawasi DB] محرك SQLite المحلي نشط: ${sqlitePath}`);
+}
+
+/**
+ * دالة التهيئة والتشغيل العامة عند بدء الخادم
+ */
+async function initializeDatabase() {
+  appConfig = loadConfig();
+
+  if (appConfig.dbEngine === 'mysql') {
     try {
-      const cols = db.prepare(`PRAGMA table_info(${tableName})`).all();
-      const hasCurrency = cols.some(c => c.name === 'currency');
-      if (!hasCurrency) {
-        db.exec(`ALTER TABLE ${tableName} ADD COLUMN currency TEXT DEFAULT 'ر.ي';`);
-      }
-    } catch (e) {
-      console.warn(`Migration note (${tableName}.currency):`, e.message);
+      await initMysql();
+      return;
+    } catch (err) {
+      console.warn('⚠️ [Rawasi DB] تعذر الاتصال بـ MySQL:', err.message);
+      console.warn('👉 جاري التبديل التلقائي إلى محرك SQLite المحلي لضمان استمرار النظام دون انقطاع.');
     }
-  });
-
-  // Check if database is freshly created (no users) and seed default admin accounts
-  try {
-    const userCountRow = db.prepare("SELECT count(*) as count FROM users").get();
-    if (!userCountRow || userCountRow.count === 0) {
-      console.log('🌱 قاعدة بيانات جديدة تم اكتشافها - جاري تهيئة الحسابات والإعدادات الافتراضية...');
-      const bcrypt = require('bcryptjs');
-      const salt = bcrypt.genSaltSync(10);
-      const adminHash = bcrypt.hashSync('admin123', salt);
-      const accountantHash = bcrypt.hashSync('account123', salt);
-
-      db.exec(`
-        INSERT OR IGNORE INTO roles (id, name, display_name, permissions) VALUES 
-        (1, 'admin', 'المدير العام', 'all'),
-        (2, 'accountant', 'المحاسب المالي', 'accounting,reports,payments,billing'),
-        (3, 'project_manager', 'مدير المشاريع', 'projects,inventory,expenses'),
-        (4, 'storekeeper', 'أمين المخزن', 'inventory,items');
-      `);
-
-      const insertUser = db.prepare('INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-      insertUser.run('admin', adminHash, 'المدير العام', 1, 'admin', 'aalwi@engineer.com', '772332164', 'active');
-      insertUser.run('accountant', accountantHash, 'المحاسب المالي', 2, 'accountant', 'accountant@rawasiaden.com', '781278157', 'active');
-
-      const insertSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value, description) VALUES (?, ?, ?)');
-      insertSetting.run('company_name', 'رواسي عدن للهندسة والمقاولات', 'اسم الشركة بالعربي');
-      insertSetting.run('company_name_en', 'Rawasi Aden for Engineering & Contracting', 'اسم الشركة بالإنجليزي');
-      insertSetting.run('slogan', 'نبني الحاضر لنستثمر المستقبل', 'شعار الشركة اللفظي');
-      insertSetting.run('phone1', '772332164', 'رقم الهاتف الرئيسي');
-      insertSetting.run('phone2', '781278157', 'رقم الهاتف الإضافي');
-      insertSetting.run('email', 'aalwi@engineer.com', 'البريد الإلكتروني');
-      insertSetting.run('address', 'عدن - إنماء الجديدة - خلف القطيبي', 'عنوان المركز الرئيسي');
-      insertSetting.run('currency', 'ر.ي', 'العملة الافتراضية');
-    }
-  } catch (seedErr) {
-    console.warn('Initial seed check note:', seedErr.message);
   }
 
-  // تهيئة إعدادات الاتصال وفحص ما قبل التشغيل
-  connectionManager.initFromDb(db);
-  connectionManager.verifyOnlineConnection().then(status => {
-    console.log(`📡 [Rawasi Aden DB] Status: ${status.isOnline ? '🟢 ONLINE (سحابي متصل)' : '🟠 OFFLINE (محلي نشط)'} - Path: ${dbPath}`);
-  }).catch(e => {
-    console.warn('Startup connection check note:', e.message);
-  });
+  initSqlite();
 }
 
-initSchema();
+// بدء التهيئة الفورية
+initializeDatabase().catch(e => {
+  console.error('Fatal database initialization error:', e);
+});
+
+// =================== دوال الاستعلام العامة (Unified Query Layer) ===================
 
 /**
- * Run a query returning all rows
+ * استعلام يعيد كافة السجلات المطابقة كـ Array
  */
-function query(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.all(...params);
-}
+async function query(sql, params = []) {
+  const targetSql = normalizeSql(sql, activeEngine);
 
-/**
- * Run a query returning a single row
- */
-function get(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.get(...params);
-}
+  if (activeEngine === 'mysql' && mysqlPool) {
+    try {
+      const [rows] = await mysqlPool.query(targetSql, params);
+      return rows;
+    } catch (err) {
+      // محاولة تنفيذ استعلام احتياطي على SQLite إذا فشل اتصال MySQL فجأة
+      if (sqliteDb && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST')) {
+        console.warn('MySQL connection lost, fallback query to SQLite:', err.message);
+        return sqliteDb.prepare(normalizeSql(sql, 'sqlite')).all(...params);
+      }
+      throw err;
+    }
+  }
 
-/**
- * Execute INSERT, UPDATE, DELETE returning { changes, lastInsertRowid }
- */
-function run(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.run(...params);
-}
-
-/**
- * Execute raw SQL script
- */
-function exec(sql) {
-  return db.exec(sql);
+  initSqliteInstance();
+  return sqliteDb.prepare(targetSql).all(...params);
 }
 
 /**
- * Backup the database file
+ * استعلام يعيد سجلاً واحداً (أو null)
  */
+async function get(sql, params = []) {
+  const targetSql = normalizeSql(sql, activeEngine);
+
+  if (activeEngine === 'mysql' && mysqlPool) {
+    try {
+      const [rows] = await mysqlPool.query(targetSql, params);
+      return (rows && rows.length > 0) ? rows[0] : null;
+    } catch (err) {
+      if (sqliteDb && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST')) {
+        return sqliteDb.prepare(normalizeSql(sql, 'sqlite')).get(...params) || null;
+      }
+      throw err;
+    }
+  }
+
+  initSqliteInstance();
+  return sqliteDb.prepare(targetSql).get(...params) || null;
+}
+
+/**
+ * تنفيذ جمل INSERT / UPDATE / DELETE
+ * يعيد كائناً موحداً يحتوي { lastInsertRowid, insertId, changes, affectedRows }
+ */
+async function run(sql, params = []) {
+  const targetSql = normalizeSql(sql, activeEngine);
+
+  if (activeEngine === 'mysql' && mysqlPool) {
+    try {
+      const [result] = await mysqlPool.query(targetSql, params);
+      return {
+        lastInsertRowid: result.insertId,
+        insertId: result.insertId,
+        changes: result.affectedRows,
+        affectedRows: result.affectedRows
+      };
+    } catch (err) {
+      if (sqliteDb && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST')) {
+        const res = sqliteDb.prepare(normalizeSql(sql, 'sqlite')).run(...params);
+        return {
+          lastInsertRowid: res.lastInsertRowid,
+          insertId: res.lastInsertRowid,
+          changes: res.changes,
+          affectedRows: res.changes
+        };
+      }
+      throw err;
+    }
+  }
+
+  initSqliteInstance();
+  const res = sqliteDb.prepare(targetSql).run(...params);
+  return {
+    lastInsertRowid: res.lastInsertRowid,
+    insertId: res.lastInsertRowid,
+    changes: res.changes,
+    affectedRows: res.changes
+  };
+}
+
+/**
+ * تنفيذ سكربت أو مجموعة استعلامات نصية
+ */
+async function exec(sql) {
+  const targetSql = normalizeSql(sql, activeEngine);
+  if (activeEngine === 'mysql' && mysqlPool) {
+    return mysqlPool.query(targetSql);
+  }
+  initSqliteInstance();
+  return sqliteDb.exec(targetSql);
+}
+
+/**
+ * تنفيذ معاملة مالية ذرية (Atomic Transaction) تدعم كلاً من MySQL و SQLite
+ */
+async function transaction(callback) {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    const connection = await mysqlPool.getConnection();
+    await connection.beginTransaction();
+    try {
+      // توفير دوال تنفيذ محلية تابعة لنفس الاتصال المعزول
+      const tx = {
+        query: async (sql, params = []) => {
+          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), params);
+          return rows;
+        },
+        get: async (sql, params = []) => {
+          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), params);
+          return (rows && rows.length > 0) ? rows[0] : null;
+        },
+        run: async (sql, params = []) => {
+          const [res] = await connection.query(normalizeSql(sql, 'mysql'), params);
+          return {
+            lastInsertRowid: res.insertId,
+            insertId: res.insertId,
+            changes: res.affectedRows,
+            affectedRows: res.affectedRows
+          };
+        }
+      };
+
+      const result = await callback(tx);
+      await connection.commit();
+      return result;
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
+  }
+
+  // في حالة SQLite
+  initSqliteInstance();
+  sqliteDb.exec('BEGIN TRANSACTION;');
+  try {
+    const tx = {
+      query: async (sql, params = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).all(...params),
+      get: async (sql, params = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).get(...params) || null,
+      run: async (sql, params = []) => {
+        const res = sqliteDb.prepare(normalizeSql(sql, 'sqlite')).run(...params);
+        return {
+          lastInsertRowid: res.lastInsertRowid,
+          insertId: res.lastInsertRowid,
+          changes: res.changes,
+          affectedRows: res.changes
+        };
+      }
+    };
+    const result = await callback(tx);
+    sqliteDb.exec('COMMIT;');
+    return result;
+  } catch (err) {
+    sqliteDb.exec('ROLLBACK;');
+    throw err;
+  }
+}
+
+// =================== دوال النسخ الاحتياطي وإدارة السيرفر ===================
+
 function backupDatabase() {
   const backupsDir = path.join(__dirname, 'backups');
   if (!fs.existsSync(backupsDir)) {
@@ -180,98 +431,57 @@ function backupDatabase() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFileName = `backup_rawasi_${timestamp}.db`;
   const backupFilePath = path.join(backupsDir, backupFileName);
-  fs.copyFileSync(dbPath, backupFilePath);
+  if (fs.existsSync(sqlitePath)) {
+    fs.copyFileSync(sqlitePath, backupFilePath);
+  }
   return { fileName: backupFileName, filePath: backupFilePath };
 }
 
-/**
- * Restore database from a file path or Buffer
- */
 function restoreDatabase(sourceFilePathOrBuffer) {
   const backupsDir = path.join(__dirname, 'backups');
   if (!fs.existsSync(backupsDir)) {
     fs.mkdirSync(backupsDir, { recursive: true });
   }
 
-  // 1. Create a safety backup of the current database before restoring
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const safetyBackupPath = path.join(backupsDir, `safety_before_restore_${timestamp}.db`);
-  if (fs.existsSync(dbPath)) {
-    fs.copyFileSync(dbPath, safetyBackupPath);
+  if (fs.existsSync(sqlitePath)) {
+    fs.copyFileSync(sqlitePath, safetyBackupPath);
   }
 
   try {
-    // 2. Close current database instance
-    if (db) {
-      try {
-        db.close();
-      } catch (e) {
-        console.warn('DB close note:', e.message);
-      }
+    if (sqliteDb) {
+      try { sqliteDb.close(); } catch {}
+      sqliteDb = null;
     }
 
-    // 3. Remove WAL/SHM auxiliary files if present
-    const walPath = `${dbPath}-wal`;
-    const shmPath = `${dbPath}-shm`;
-    if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
-    if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
-
-    // 4. Overwrite active database file
     if (Buffer.isBuffer(sourceFilePathOrBuffer)) {
-      fs.writeFileSync(dbPath, sourceFilePathOrBuffer);
+      fs.writeFileSync(sqlitePath, sourceFilePathOrBuffer);
     } else if (typeof sourceFilePathOrBuffer === 'string') {
-      fs.copyFileSync(sourceFilePathOrBuffer, dbPath);
-    } else {
-      throw new Error('بيانات النسخة الاحتياطية غير صالحة');
+      fs.copyFileSync(sourceFilePathOrBuffer, sqlitePath);
     }
 
-    // 5. Reopen database connection
-    db = new DatabaseSync(dbPath);
-    db.exec('PRAGMA foreign_keys = ON;');
-
-    // 6. Verify restored database tables
-    const testStmt = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'");
-    const tables = testStmt.all();
-    if (!tables || tables.length === 0) {
-      throw new Error('الملف المستعاد لا يحتوي على جداول صالحة لنظام رواسي عدن');
-    }
-
+    initSqliteInstance();
     return {
       success: true,
-      message: 'تمت استعادة قاعدة البيانات بنجاح',
-      tablesCount: tables.length,
-      safetyBackup: path.basename(safetyBackupPath)
+      message: 'تمت استعادة نسخة قاعدة البيانات بنجاح'
     };
   } catch (err) {
-    console.error('Error during database restore:', err);
-
-    // Rollback to safety backup
-    try {
-      if (fs.existsSync(safetyBackupPath)) {
-        fs.copyFileSync(safetyBackupPath, dbPath);
-        db = new DatabaseSync(dbPath);
-        db.exec('PRAGMA foreign_keys = ON;');
-      }
-    } catch (rbErr) {
-      console.error('Failed to rollback safety backup:', rbErr);
+    if (fs.existsSync(safetyBackupPath)) {
+      fs.copyFileSync(safetyBackupPath, sqlitePath);
+      initSqliteInstance();
     }
-
-    throw new Error('فشلت عملية استعادة النسخة الاحتياطية: ' + err.message);
+    throw err;
   }
 }
 
-/**
- * List all backup files
- */
 function listBackups() {
   const backupsDir = path.join(__dirname, 'backups');
-  if (!fs.existsSync(backupsDir)) {
-    return [];
-  }
+  if (!fs.existsSync(backupsDir)) return [];
   const files = fs.readdirSync(backupsDir);
   const backups = [];
   files.forEach(file => {
-    if (file.endsWith('.db') || file.endsWith('.sqlite')) {
+    if (file.endsWith('.db') || file.endsWith('.sqlite') || file.endsWith('.sql')) {
       const filePath = path.join(backupsDir, file);
       const stat = fs.statSync(filePath);
       backups.push({
@@ -284,24 +494,16 @@ function listBackups() {
   return backups.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-/**
- * إنشاء نسخة احتياطية مخصصة وفورية عند تسجيل الخروج
- * لحفظ وتجميد أحدث تعديلات المشروع بدقة
- */
 function createLogoutBackup(username = 'unknown', meta = {}) {
   const backupsDir = path.join(__dirname, 'backups');
   if (!fs.existsSync(backupsDir)) {
     fs.mkdirSync(backupsDir, { recursive: true });
   }
 
-  // 1. مزامنة وتفريغ الذاكرة المؤقتة (WAL Checkpoint) لضمان كتابة كافة التعديلات على القرص
-  try {
-    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
-  } catch (e) {
-    console.warn('WAL checkpoint note:', e.message);
+  if (sqliteDb) {
+    try { sqliteDb.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch {}
   }
 
-  // 2. توليد اسم ملف فريد ومعبر
   const safeUser = String(username || 'user').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_');
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -309,110 +511,72 @@ function createLogoutBackup(username = 'unknown', meta = {}) {
   const backupFileName = `backup_logout_${safeUser}_${dateStr}.db`;
   const backupFilePath = path.join(backupsDir, backupFileName);
 
-  // 3. نسخ ملف قاعدة البيانات فورياً
-  fs.copyFileSync(dbPath, backupFilePath);
-  const stat = fs.statSync(backupFilePath);
-
-  // 4. تسجيل البيانات الوصفية في ملف المانيفست logout_backups_manifest.json
-  const manifestPath = path.join(backupsDir, 'logout_backups_manifest.json');
-  let manifest = [];
-  if (fs.existsSync(manifestPath)) {
-    try {
-      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      if (!Array.isArray(manifest)) manifest = [];
-    } catch {
-      manifest = [];
-    }
+  if (fs.existsSync(sqlitePath)) {
+    fs.copyFileSync(sqlitePath, backupFilePath);
   }
 
+  const stat = fs.existsSync(backupFilePath) ? fs.statSync(backupFilePath) : { size: 0 };
   const backupItem = {
     fileName: backupFileName,
     filePath: backupFilePath,
     username: username || 'مستخدم',
     timestamp: now.toISOString(),
-    displayTime: now.toLocaleString('ar-YE', { dateStyle: 'medium', timeStyle: 'medium' }),
+    displayTime: now.toLocaleString('ar-YE'),
     size: stat.size,
-    mode: meta.mode || (connectionManager.isOnline ? 'online' : 'offline'),
-    notes: meta.notes || 'نسخة تلقائية تم إنشاؤها فور تسجيل الخروج لحفظ أحدث التعديلات'
+    mode: meta.mode || activeEngine,
+    engine: activeEngine,
+    notes: meta.notes || 'نسخة تلقائية تم إنشاؤها فور تسجيل الخروج'
   };
-
-  manifest.unshift(backupItem);
-  // الاحتفاظ بأحدث 50 نسخة خروج تلقائية
-  if (manifest.length > 50) manifest = manifest.slice(0, 50);
-
-  try {
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-  } catch (err) {
-    console.warn('Failed to write logout_backups_manifest.json:', err.message);
-  }
-
-  // 5. حفظ البيانات في جدول settings لسرعة الرجوع إليها
-  try {
-    const stmt = db.prepare(`
-      INSERT INTO settings (key, value) VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `);
-    stmt.run('last_logout_backup', JSON.stringify(backupItem));
-  } catch (e) {
-    console.warn('Note updating last_logout_backup setting:', e.message);
-  }
 
   return backupItem;
 }
 
-/**
- * جلب قائمة نسخ الخروج الاحتياطية
- */
 function listLogoutBackups() {
   const backupsDir = path.join(__dirname, 'backups');
-  const manifestPath = path.join(backupsDir, 'logout_backups_manifest.json');
-  if (fs.existsSync(manifestPath)) {
-    try {
-      const list = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      if (Array.isArray(list)) {
-        return list.filter(item => fs.existsSync(item.filePath || path.join(backupsDir, item.fileName)));
-      }
-    } catch {
-      // fallback to folder scan
-    }
-  }
-
   if (!fs.existsSync(backupsDir)) return [];
   const files = fs.readdirSync(backupsDir);
   const list = [];
   files.forEach(f => {
-    if (f.startsWith('backup_logout_') && (f.endsWith('.db') || f.endsWith('.sqlite'))) {
+    if (f.startsWith('backup_logout_')) {
       const p = path.join(backupsDir, f);
       const stat = fs.statSync(p);
-      const parts = f.split('_');
       list.push({
         fileName: f,
         filePath: p,
-        username: parts[2] || 'مستخدم',
         timestamp: stat.mtime.toISOString(),
         displayTime: new Date(stat.mtime).toLocaleString('ar-YE'),
         size: stat.size,
-        mode: 'auto',
-        notes: 'نسخة تسجيل خروج محفوظة'
+        engine: activeEngine
       });
     }
   });
-
   return list.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 }
 
+function getActiveEngine() {
+  return activeEngine;
+}
+
+function getMysqlConfig() {
+  return appConfig.mysql;
+}
+
 module.exports = {
-  db,
+  db: sqliteDb,
+  mysqlPool,
   query,
   get,
   run,
   exec,
+  transaction,
+  initializeDatabase,
   backupDatabase,
   restoreDatabase,
   listBackups,
   createLogoutBackup,
   listLogoutBackups,
+  getActiveEngine,
+  getMysqlConfig,
   connectionManager,
-  dbPath
+  dbPath: sqlitePath
 };
-

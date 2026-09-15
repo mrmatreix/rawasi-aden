@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../database/db');
+const { query, get, run, transaction } = require('../database/db');
 
 // جلب فواتير المشتريات
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { supplier_id, project_id } = req.query;
     let sql = `
@@ -31,15 +31,15 @@ router.get('/', (req, res) => {
     }
 
     sql += ' ORDER BY pu.date DESC, pu.id DESC';
-    const purchases = query(sql, params);
+    const purchases = await query(sql, params);
     res.json({ success: true, data: purchases });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب المشتريات', error: err.message });
   }
 });
 
-// إنشاء فاتورة شراء جديدة
-router.post('/', (req, res) => {
+// إنشاء فاتورة شراء جديدة داخل Transaction ذرية
+router.post('/', async (req, res) => {
   try {
     const {
       supplier_id,
@@ -57,48 +57,52 @@ router.post('/', (req, res) => {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المورد والمبلغ الإجمالي' });
     }
 
-    const countRes = get('SELECT COUNT(*) as cnt FROM purchases');
-    const invoice_no = `PO-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(4, '0')}`;
+    const countRes = await get('SELECT COUNT(*) as cnt FROM purchases');
+    const invoice_no = `PO-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
     const parsedTotal = Number(total_amount);
     const parsedPaid = Number(paid_amount);
     const remaining = parsedTotal - parsedPaid;
 
-    const result = run(`
-      INSERT INTO purchases (
-        invoice_no, supplier_id, project_id, total_amount, paid_amount, 
-        payment_status, payment_method, currency, date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      invoice_no, supplier_id, project_id || null, parsedTotal, parsedPaid,
-      remaining === 0 ? 'paid' : (parsedPaid > 0 ? 'partial' : 'pending'),
-      payment_method, currency, date, notes || ''
-    ]);
+    const txResult = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO purchases (
+          invoice_no, supplier_id, project_id, total_amount, paid_amount, 
+          payment_status, payment_method, currency, date, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        invoice_no, supplier_id, project_id || null, parsedTotal, parsedPaid,
+        remaining === 0 ? 'paid' : (parsedPaid > 0 ? 'partial' : 'pending'),
+        payment_method, currency, date, notes || ''
+      ]);
 
-    // زيادة رصيد المورد بالمبلغ المتبقي غير المسدد
-    if (remaining > 0) {
-      run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, supplier_id]);
-    }
+      // زيادة رصيد المورد بالمبلغ المتبقي غير المسدد
+      if (remaining > 0) {
+        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, supplier_id]);
+      }
 
-    // إذا دفعت مبالغ نقداً، تسجيل حركة الصندوق
-    if (parsedPaid > 0) {
-      const lastCash = get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-      const prevBal = lastCash.current_balance;
-      const newBal = prevBal - parsedPaid;
-      run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, date, notes)
-        VALUES (?, 0, ?, 0, ?, ?, ?)
-      `, [prevBal, parsedPaid, newBal, date, `سداد مشتريات: ${invoice_no}`]);
-    }
+      // إذا دفعت مبالغ نقداً، تسجيل حركة الصندوق
+      if (parsedPaid > 0) {
+        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+        const prevBal = Number(lastCash.current_balance) || 0;
+        const newBal = prevBal - parsedPaid;
+        await tx.run(`
+          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
+          VALUES (?, 0, ?, 0, ?, ?, ?, ?)
+        `, [prevBal, parsedPaid, newBal, currency, date, `سداد مشتريات: ${invoice_no}`]);
+      }
+
+      return result;
+    });
 
     res.json({
       success: true,
       message: 'تم تسجيل فاتورة الشراء بنجاح',
       invoice_no,
-      id: result.lastInsertRowid
+      id: txResult.lastInsertRowid || txResult.insertId
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء إنشاء فاتورة المشتريات', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ أثناء إنشاء فاتورة المشتريات: ' + err.message, error: err.message });
   }
 });
 

@@ -81,7 +81,7 @@ router.post('/login', async (req, res) => {
     }
 
     const cleanUsername = String(username).trim();
-    const user = get('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
+    const user = await get('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
     if (!user) {
       return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
@@ -131,11 +131,11 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // تحديث حالة الاتصال وبصمة الجلسة في قاعدة البيانات باستخدام ISO string
-    const nowIso = new Date().toISOString();
+    // تحديث حالة الاتصال وبصمة الجلسة في قاعدة البيانات
+    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     const deviceStr = deviceInfo || req.headers['user-agent'] || 'متصفح النظام';
-    run(`
+    await run(`
       UPDATE users SET 
         is_logged_in = 1,
         session_token = ?,
@@ -146,16 +146,7 @@ router.post('/login', async (req, res) => {
       WHERE id = ?
     `, [sessionId, nowIso, nowIso, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
 
-    // التحقق من حالة الاتصال بقاعدة البيانات عند تسجيل الدخول
     let dbStatus = connectionManager ? connectionManager.getStatus() : { isOnline: false, mode: 'offline' };
-    if (connectionManager && connectionManager.mode !== 'offline_only' && connectionManager.onlineUrl) {
-      try {
-        await connectionManager.verifyOnlineConnection(null, 2500);
-        dbStatus = connectionManager.getStatus();
-      } catch (e) {
-        console.warn('Login connection check note:', e.message);
-      }
-    }
 
     res.json({
       success: true,
@@ -176,12 +167,12 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ success: false, message: 'خطأ في الخادم أثناء تسجيل الدخول', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ في الخادم أثناء تسجيل الدخول: ' + err.message, error: err.message });
   }
 });
 
 // 2. نبض الحفاظ على الجلسة والتحقق من عدم تكرار الدخول
-router.post('/heartbeat', (req, res) => {
+router.post('/heartbeat', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
@@ -190,7 +181,7 @@ router.post('/heartbeat', (req, res) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = get('SELECT id, is_logged_in, session_token, status, full_name, username FROM users WHERE id = ?', [decoded.id]);
+    const user = await get('SELECT id, is_logged_in, session_token, status, full_name, username FROM users WHERE id = ?', [decoded.id]);
     if (!user || user.status === 'inactive') {
       return res.status(401).json({ success: false, session_terminated: true, message: 'الحساب معطل أو غير موجود' });
     }
@@ -204,8 +195,8 @@ router.post('/heartbeat', (req, res) => {
       });
     }
 
-    const nowIso = new Date().toISOString();
-    run("UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?", [nowIso, user.id]);
+    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await run("UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?", [nowIso, user.id]);
     res.json({ success: true, is_logged_in: true });
   } catch (err) {
     res.status(401).json({ success: false, message: 'انتهت صلاحية الجلسة' });
@@ -213,7 +204,7 @@ router.post('/heartbeat', (req, res) => {
 });
 
 // 3. التحقق من صحة الجلسة (Verify Token)
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
@@ -222,7 +213,7 @@ router.get('/me', (req, res) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token FROM users WHERE id = ?', [decoded.id]);
+    const user = await get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token FROM users WHERE id = ?', [decoded.id]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
@@ -240,9 +231,8 @@ router.get('/me', (req, res) => {
       });
     }
 
-    // تحديث نبض النشاط
-    const nowIso = new Date().toISOString();
-    run("UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?", [nowIso, user.id]);
+    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await run("UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?", [nowIso, user.id]);
 
     const permissionsList = parseUserPermissions(user);
 
@@ -265,7 +255,7 @@ router.get('/me', (req, res) => {
 });
 
 // 4. تسجيل الخروج وإنهاء الجلسة فوراً
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     let userId = req.body?.userId;
@@ -280,24 +270,24 @@ router.post('/logout', (req, res) => {
     }
 
     if (userId) {
-      run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE id = ?", [userId]);
+      await run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE id = ?", [userId]);
     } else if (username) {
-      run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE LOWER(username) = LOWER(?)", [username]);
+      await run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE LOWER(username) = LOWER(?)", [username]);
     }
 
     res.json({ success: true, message: 'تم إنهاء الجلسة بنجاح' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء تسجيل الخروج', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ أثناء تسجيل الخروج: ' + err.message, error: err.message });
   }
 });
 
 // 5. جلب قائمة المستخدمين المتصلين حالياً بالنظام
-router.get('/connected-users', (req, res) => {
+router.get('/connected-users', async (req, res) => {
   try {
     const ACTIVE_THRESHOLD_MS = 75 * 1000;
     const now = Date.now();
 
-    const users = query(`
+    const users = await query(`
       SELECT id, username, full_name, role, email, phone, last_heartbeat, last_login_at, last_login_device, last_login_ip, is_logged_in
       FROM users
       WHERE is_logged_in = 1 AND last_heartbeat IS NOT NULL

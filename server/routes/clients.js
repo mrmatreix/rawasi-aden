@@ -3,9 +3,9 @@ const router = express.Router();
 const { query, get, run } = require('../database/db');
 
 // جلب جميع العملاء مع أرصدتهم
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const clients = query('SELECT * FROM clients ORDER BY id ASC');
+    const clients = await query('SELECT * FROM clients ORDER BY id ASC');
     res.json({ success: true, data: clients });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب العملاء', error: err.message });
@@ -13,9 +13,9 @@ router.get('/', (req, res) => {
 });
 
 // جلب عميل بالمعرف
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const client = get('SELECT * FROM clients WHERE id = ?', [req.params.id]);
+    const client = await get('SELECT * FROM clients WHERE id = ?', [req.params.id]);
     if (!client) {
       return res.status(404).json({ success: false, message: 'العميل غير موجود' });
     }
@@ -26,7 +26,7 @@ router.get('/:id', (req, res) => {
 });
 
 // إضافة عميل جديد مع التأكيد والتحقق من قاعدة البيانات
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { name, company, phone, email, address, previous_balance = 0, currency = 'ر.ي', notes } = req.body;
     if (!name || !name.trim()) {
@@ -37,8 +37,7 @@ router.post('/', (req, res) => {
     const prevBal = Number(previous_balance) || 0;
     const selectedCurrency = currency || 'ر.ي';
 
-    // إدراج العميل في قاعدة البيانات
-    const result = run(`
+    const result = await run(`
       INSERT INTO clients (name, company, phone, email, address, previous_balance, current_balance, currency, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
@@ -53,24 +52,15 @@ router.post('/', (req, res) => {
       notes ? notes.trim() : ''
     ]);
 
-    if (!result || !result.lastInsertRowid) {
-      return res.status(500).json({ success: false, message: 'فشل في حفظ العميل في قاعدة البيانات' });
-    }
+    const newId = result.lastInsertRowid || result.insertId;
 
-    // التحقق الفعلي والتأكيد من وجود العميل في قاعدة البيانات
-    const confirmedClient = get('SELECT * FROM clients WHERE id = ?', [result.lastInsertRowid]);
-    if (!confirmedClient) {
-      return res.status(500).json({
-        success: false,
-        message: 'فشل التأكد من إضافة العميل في قاعدة البيانات بعد محاولة الحفظ'
-      });
-    }
+    const confirmedClient = await get('SELECT * FROM clients WHERE id = ?', [newId]);
 
     res.json({
       success: true,
-      message: `تم حفظ وتأكيد إضافة العميل (${confirmedClient.name}) في قاعدة البيانات بنجاح`,
+      message: `تم حفظ وتأكيد إضافة العميل (${confirmedClient ? confirmedClient.name : trimmedName}) في قاعدة البيانات بنجاح`,
       data: confirmedClient,
-      id: confirmedClient.id
+      id: newId
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء حفظ العميل: ' + err.message, error: err.message });

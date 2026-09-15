@@ -4,12 +4,12 @@ const bcrypt = require('bcryptjs');
 const { query, get, run } = require('../database/db');
 
 // جلب المستخدمين والأدوار وحالة الاتصال الحية
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const ACTIVE_THRESHOLD_MS = 75 * 1000;
     const now = Date.now();
 
-    const users = query(`
+    const users = await query(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.created_at,
              u.is_logged_in, u.last_heartbeat, u.last_login_at, u.last_login_ip, u.last_login_device,
              r.display_name as role_name
@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
     `);
 
     // Parse permissions & active status
-    const parsedUsers = users.map(u => {
+    const parsedUsers = (users || []).map(u => {
       let perms = [];
       if (u.permissions) {
         try {
@@ -46,7 +46,7 @@ router.get('/', (req, res) => {
       };
     });
 
-    const roles = query('SELECT * FROM roles ORDER BY id ASC');
+    const roles = await query('SELECT * FROM roles ORDER BY id ASC');
     res.json({ success: true, data: parsedUsers, roles });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب المستخدمين', error: err.message });
@@ -54,7 +54,7 @@ router.get('/', (req, res) => {
 });
 
 // إضافة مستخدم جديد مع الصلاحيات
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { username, password, full_name, role_id, role, email, phone, status = 'active', permissions } = req.body;
     
@@ -63,7 +63,7 @@ router.post('/', (req, res) => {
     }
 
     const cleanUsername = username.trim();
-    const existing = get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
+    const existing = await get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
     if (existing) {
       return res.status(400).json({ success: false, message: `اسم المستخدم (${cleanUsername}) مسجل مسبقاً، يرجى اختيار اسم آخر.` });
     }
@@ -74,26 +74,27 @@ router.post('/', (req, res) => {
     let roleName = role || 'accountant';
     let roleIdVal = role_id;
     if (role_id) {
-      const roleObj = get('SELECT name FROM roles WHERE id = ?', [role_id]);
+      const roleObj = await get('SELECT name FROM roles WHERE id = ?', [role_id]);
       if (roleObj) roleName = roleObj.name;
     } else if (role) {
-      const roleObj = get('SELECT id FROM roles WHERE name = ?', [role]);
+      const roleObj = await get('SELECT id FROM roles WHERE name = ?', [role]);
       if (roleObj) roleIdVal = roleObj.id;
     }
 
     const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions || '');
 
-    const result = run(`
+    const result = await run(`
       INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status, permissions)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, permsString]);
 
-    const insertedUser = get(`
+    const newId = result.insertId || result.lastInsertRowid;
+    const insertedUser = await get(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.created_at, r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
-    `, [result.lastInsertRowid]);
+    `, [newId]);
 
     if (!insertedUser) {
       throw new Error('فشل التحقق من حفظ المستخدم في قاعدة البيانات');
@@ -111,19 +112,19 @@ router.post('/', (req, res) => {
 });
 
 // تعديل بيانات وصلاحيات مستخدم
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const { username, password, full_name, role_id, role, email, phone, status, permissions } = req.body;
 
-    const user = get('SELECT * FROM users WHERE id = ?', [userId]);
+    const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
     // Check username uniqueness if changed
     if (username && username.trim().toLowerCase() !== user.username.toLowerCase()) {
-      const dup = get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?', [username.trim(), userId]);
+      const dup = await get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?', [username.trim(), userId]);
       if (dup) {
         return res.status(400).json({ success: false, message: `اسم المستخدم (${username}) مسجل لمستخدم آخر.` });
       }
@@ -132,7 +133,7 @@ router.put('/:id', (req, res) => {
     let roleName = role || user.role;
     let roleIdVal = role_id !== undefined ? role_id : user.role_id;
     if (role_id) {
-      const roleObj = get('SELECT name FROM roles WHERE id = ?', [role_id]);
+      const roleObj = await get('SELECT name FROM roles WHERE id = ?', [role_id]);
       if (roleObj) roleName = roleObj.name;
     }
 
@@ -141,7 +142,7 @@ router.put('/:id', (req, res) => {
     if (password && password.trim().length > 0) {
       const salt = bcrypt.genSaltSync(10);
       const password_hash = bcrypt.hashSync(password, salt);
-      run(`
+      await run(`
         UPDATE users
         SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?
         WHERE id = ?
@@ -158,7 +159,7 @@ router.put('/:id', (req, res) => {
         userId
       ]);
     } else {
-      run(`
+      await run(`
         UPDATE users
         SET username = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?
         WHERE id = ?
@@ -175,7 +176,7 @@ router.put('/:id', (req, res) => {
       ]);
     }
 
-    const updatedUser = get(`
+    const updatedUser = await get(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.created_at, r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
@@ -194,10 +195,10 @@ router.put('/:id', (req, res) => {
 });
 
 // تبديل حالة المستخدم (نشط / معطل)
-router.patch('/:id/status', (req, res) => {
+router.patch('/:id/status', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    const user = get('SELECT * FROM users WHERE id = ?', [userId]);
+    const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
@@ -207,7 +208,7 @@ router.patch('/:id/status', (req, res) => {
     }
 
     const newStatus = user.status === 'active' ? 'inactive' : 'active';
-    run('UPDATE users SET status = ? WHERE id = ?', [newStatus, userId]);
+    await run('UPDATE users SET status = ? WHERE id = ?', [newStatus, userId]);
 
     const statusLabel = newStatus === 'active' ? 'تنشيط' : 'تعطيل';
     res.json({
@@ -221,10 +222,10 @@ router.patch('/:id/status', (req, res) => {
 });
 
 // حذف مستخدم
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    const user = get('SELECT * FROM users WHERE id = ?', [userId]);
+    const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
@@ -233,7 +234,7 @@ router.delete('/:id', (req, res) => {
       return res.status(400).json({ success: false, message: 'لا يمكن حذف حساب المدير العام الرئيسي للنظام' });
     }
 
-    run('DELETE FROM users WHERE id = ?', [userId]);
+    await run('DELETE FROM users WHERE id = ?', [userId]);
     res.json({
       success: true,
       message: `تم حذف المستخدم (${user.full_name}) بنجاح.`
@@ -244,15 +245,15 @@ router.delete('/:id', (req, res) => {
 });
 
 // إنهاء جلسة مستخدم وفصله عن النظام (Disconnect Active Session)
-router.post('/:id/disconnect', (req, res) => {
+router.post('/:id/disconnect', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    const user = get('SELECT id, username, full_name FROM users WHERE id = ?', [userId]);
+    const user = await get('SELECT id, username, full_name FROM users WHERE id = ?', [userId]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
-    run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE id = ?", [userId]);
+    await run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE id = ?", [userId]);
     res.json({
       success: true,
       message: `تم إنهاء جلسة المستخدم (${user.full_name || user.username}) وفصله عن النظام بنجاح.`
