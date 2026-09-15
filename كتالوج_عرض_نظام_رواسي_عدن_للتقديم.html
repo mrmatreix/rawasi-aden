@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>كتالوج العرض التقديمي الشامل - نظام شركة رواسي عدن للهندسة والمقاولات</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy-dark: #0a1120;
+      --navy-card: #132238;
+      --navy-border: #1e3a5f;
+      --gold-primary: #d4af37;
+      --gold-light: #f59e0b;
+      --gold-gradient: linear-gradient(135deg, #d4af37 0%, #b8911c 100%);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-green: #10b981;
+      --accent-blue: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Cairo', sans-serif;
+    }
+
+    body {
+      background-color: var(--navy-dark);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .catalog-header {
+      text-align: center;
+      padding: 34px 20px;
+      background: linear-gradient(180deg, #132238 0%, #0a1120 100%);
+      border: 1px solid var(--navy-border);
+      border-radius: 18px;
+      margin-bottom: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .catalog-header h1 {
+      font-size: 2.3rem;
+      font-weight: 900;
+      color: #ffffff;
+      margin: 10px 0 6px 0;
+    }
+
+    .catalog-header h1 span {
+      background: var(--gold-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .catalog-header p {
+      color: var(--text-muted);
+      font-size: 1.08rem;
+      max-width: 850px;
+      margin: 0 auto 16px auto;
+    }
+
+    .badge-pill {
+      display: inline-block;
+      background: rgba(212, 175, 55, 0.15);
+      color: var(--gold-primary);
+      border: 1px solid var(--gold-primary);
+      padding: 5px 18px;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .nav-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 30px;
+      position: sticky;
+      top: 10px;
+      z-index: 100;
+      background: rgba(10, 17, 32, 0.95);
+      backdrop-filter: blur(12px);
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid var(--navy-border);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .filter-btn {
+      background: var(--navy-card);
+      color: var(--text-muted);
+      border: 1px solid var(--navy-border);
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.84rem;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .filter-btn:hover {
+      background: var(--gold-gradient);
+      color: #000000;
+      border-color: var(--gold-primary);
+      box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+    }
+
+    .presentation-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+    }
+
+    .card-item {
+      background: var(--navy-card);
+      border: 1px solid var(--navy-border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      transition: border-color 0.2s ease;
+    }
+
+    .card-item:hover {
+      border-color: var(--gold-primary);
+    }
+
+    .card-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: rgba(15, 23, 42, 0.7);
+      border-bottom: 1px solid var(--navy-border);
+    }
+
+    .card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .card-num-badge {
+      padding: 4px 12px;
+      border-radius: 8px;
+      background: var(--gold-gradient);
+      color: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1.05rem;
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    .card-tag {
+      font-size: 0.8rem;
+      background: #1e3a5f;
+      color: #38bdf8;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+
+    .card-content-layout {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 24px;
+      padding: 24px;
+    }
+
+    @media (max-width: 1024px) {
+      .card-content-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .img-frame {
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1.5px solid #1e3a5f;
+      background: #000000;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+      cursor: zoom-in;
+      position: relative;
+    }
+
+    .img-frame img {
+      width: 100%;
+      height: auto;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+
+    .img-frame:hover img {
+      transform: scale(1.02);
+    }
+
+    .img-zoom-hint {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: rgba(0,0,0,0.75);
+      color: #ffffff;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      pointer-events: none;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .info-box {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .info-purpose {
+      margin-bottom: 16px;
+    }
+
+    .info-purpose h4 {
+      color: var(--gold-light);
+      font-size: 1.05rem;
+      margin-bottom: 6px;
+      font-weight: 800;
+    }
+
+    .info-purpose p {
+      color: #cbd5e1;
+      font-size: 0.94rem;
+      line-height: 1.65;
+    }
+
+    .features-list {
+      margin-bottom: 16px;
+    }
+
+    .features-list h4 {
+      color: var(--accent-blue);
+      font-size: 1.05rem;
+      margin-bottom: 8px;
+      font-weight: 800;
+    }
+
+    .features-list ul {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    .features-list li {
+      position: relative;
+      padding-right: 20px;
+      margin-bottom: 7px;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+    }
+
+    .features-list li::before {
+      content: "✔";
+      position: absolute;
+      right: 0;
+      color: var(--accent-green);
+      font-weight: 900;
+      font-size: 0.85rem;
+    }
+
+    .value-box {
+      background: rgba(212, 175, 55, 0.08);
+      border-right: 4px solid var(--gold-primary);
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      color: #f1f5f9;
+      line-height: 1.5;
+    }
+
+    .value-box strong {
+      color: var(--gold-light);
+    }
+
+    .modal-lightbox {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.94);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      cursor: zoom-out;
+    }
+
+    .modal-lightbox.active {
+      display: flex;
+    }
+
+    .modal-lightbox img {
+      max-width: 95%;
+      max-height: 95%;
+      border-radius: 8px;
+      box-shadow: 0 0 50px rgba(0,0,0,0.9);
+      border: 1.5px solid #334155;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <header class="catalog-header">
+    <div class="badge-pill">وثيقة تقديمية رسمية وشاملة لشركة رواسي عدن للهندسة والمقاولات</div>
+    <h1>كتالوج شاشات وتبويبات <span>نظام رواسي عدن</span></h1>
+    <p>ملف عرض تقديمي حيّ مدعوم بالصور عالية الدقة والشرح الوظيفي والهندسي الدقيق لكل شاشة وقائمة وتبويب في النظام لتقديمه للمالك والإدارة ولجان الفحص الهندسي والمالي.</p>
+  </header>
+
+  <div class="nav-filters">
+    <a href="#sec-01" class="filter-btn">01. بوابة الدخول والمصادقة الأمنية</a>
+    <a href="#sec-02" class="filter-btn">02. لوحة المؤشرات والتحكم الرئيسية</a>
+    <a href="#sec-03" class="filter-btn">03. إدارة المشاريع الإنشائية والهندسية</a>
+    <a href="#sec-04" class="filter-btn">04. مركز مستندات المشروع الشامل - 14 قسماً</a>
+    <a href="#sec-04-1" class="filter-btn">04.1. القسم الأول: عقد المشروع الرسمي</a>
+    <a href="#sec-04-2" class="filter-btn">04.2. القسم الثاني: المخططات الهندسية والتصميمية</a>
+    <a href="#sec-04-3" class="filter-btn">04.3. القسم الثالث: جدول الكميات والمواصفات</a>
+    <a href="#sec-04-4" class="filter-btn">04.4. القسم السادس: أوامر التغيير والأعمال الإضافية</a>
+    <a href="#sec-04-5" class="filter-btn">04.5. القسم التاسع: المستخلصات الجارية للمالك</a>
+    <a href="#sec-04-6" class="filter-btn">04.6. القسم العاشر: التقارير الهندسية اليومية للموقع</a>
+    <a href="#sec-04-7" class="filter-btn">04.7. القسم الثاني عشر: محاضر الاستلام والفحص الهندسي</a>
+    <a href="#sec-05" class="filter-btn">05. الإيرادات وسندات القبض ومقبوضات المشاريع</a>
+    <a href="#sec-06" class="filter-btn">06. المصروفات وسندات الصرف المعتمدة</a>
+    <a href="#sec-07" class="filter-btn">07. إدارة النثريات والعهد الميدانية</a>
+    <a href="#sec-08" class="filter-btn">08. إدارة العملاء وكشوفات الحسابات المعتمدة</a>
+    <a href="#sec-09" class="filter-btn">09. الموردون وحسابات التوريد الميداني</a>
+    <a href="#sec-10" class="filter-btn">10. المخزون ومواد البناء وأذونات الصرف</a>
+    <a href="#sec-11" class="filter-btn">11. حركة الصندوق والبنك والخزينة</a>
+    <a href="#sec-12" class="filter-btn">12. التقارير المالية وقوائم الأرباح والخسائر</a>
+    <a href="#sec-13" class="filter-btn">13. تقرير المركز المالي والميزانية العمومية</a>
+    <a href="#sec-14" class="filter-btn">14. تحليل ربحية وكفاءة المشاريع</a>
+    <a href="#sec-15" class="filter-btn">15. إعدادات هوية الشركة والبيانات الرسمية</a>
+    <a href="#sec-16" class="filter-btn">16. محرك إعدادات الطباعة والمعاينة الحية الفورية</a>
+    <a href="#sec-17" class="filter-btn">17. إدارة المستخدمين والصلاحيات وسجل النشاطات</a>
+  </div>
+
+  <div class="presentation-grid">
+    
+    <div class="card-item" id="sec-01">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">01</div>
+          <div class="card-title">بوابة الدخول والمصادقة الأمنية (Login Gateway)</div>
+        </div>
+        <div class="card-tag">الأمان وحماية البيانات</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/01_شاشة_تسجيل_الدخول_Login.png')">
+          <img src="عرض_النظام_للتقديم/01_شاشة_تسجيل_الدخول_Login.png" alt="بوابة الدخول والمصادقة الأمنية (Login Gateway)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>تأمين النظام ضد الدخول غير المصرح به، والتحقق من الجلسات النشطة، ومنع التكرار المتزامن للحسابات، مع توفير أزرار دخول سريع تجريبية وأزرار إغلاق آمن مع حفظ نسخة احتياطية فورية.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تشفير كلمات المرور والربط المباشر مع جدول المستخدمين بقاعدة البيانات SQLite.</li>
+              <li>فحص نبض الجلسة الدورية (Session Heartbeat) كل 25 ثانية لحماية النظام.</li>
+              <li>أزرار دخول سريع للحسابات القيادية (المدير العام، المحاسب، المشرف الهندسي).</li>
+              <li>زر إغلاق النظام مع أخذ نسخة احتياطية مشفرة وفورية للبيانات.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> توفير أعلى معايير الخصوصية والأمان المالي وحماية أسرار ووثائق الشركة.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-02">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">02</div>
+          <div class="card-title">لوحة المؤشرات والتحكم الرئيسية (Live Dashboard & KPIs)</div>
+        </div>
+        <div class="card-tag">الإدارة العليا والرقابة</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/02_لوحة_التحكم_الرئيسية_Dashboard.png')">
+          <img src="عرض_النظام_للتقديم/02_لوحة_التحكم_الرئيسية_Dashboard.png" alt="لوحة المؤشرات والتحكم الرئيسية (Live Dashboard & KPIs)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>إعطاء الإدارة العامة والمدير التنفيذي نظرة بانورامية حية وشاملة لكافة الأرقام التشغيلية والمالية ومؤشرات أداء المشاريع في لمحة بصرية واحدة دون الحاجة للدخول في التفاصيل المعقدة.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>شبكة الـ 8 بطاقات الذكية: (إجمالي الدخل، إجمالي المصروفات، صافي الأرباح، رصيد الصندوق، مستحقات العملاء، مستحقات الموردين، المشاريع النشطة، ونسب الإنجاز).</li>
+              <li>رسم بياني دائري تفاعلي (Donut Chart) يوضح توزيع المصروفات حسب التصنيف والنسبة المئوية.</li>
+              <li>رسم بياني خطي لمسار التدفقات النقدية (الإيرادات والمصروفات) عبر الأشهر السابقة.</li>
+              <li>جدول المعاملات والمستندات الموقعية والمالية الحديثة فور حدوثها في الموقع.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> اتخاذ قرارات إدارية واستثمارية حاسمة مبنية على أرقام حية ودقيقة لحظة بلحظة.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-03">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">03</div>
+          <div class="card-title">إدارة المشاريع الإنشائية والهندسية (Projects Suite)</div>
+        </div>
+        <div class="card-tag">العمليات الهندسية الميدانية</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/03_إدارة_المشاريع_Projects.png')">
+          <img src="عرض_النظام_للتقديم/03_إدارة_المشاريع_Projects.png" alt="إدارة المشاريع الإنشائية والهندسية (Projects Suite)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>المتابعة المركزية للمشاريع الإنشائية المسجلة بالشركة، رصد نسب الإنجاز التراكمية، ومقارنة التكلفة التقديرية بالتكلفة الفعلية وحساب الأرباح المحققة مع الوصول المباشر لمركز مستندات كل مشروع.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>بطاقات ملخص المشاريع النشطة، المكتملة، وإجمالي قيمة العقود التراكمية بالريال السعودي.</li>
+              <li>شريط تقدم الإنجاز لكل مشروع بنسب مئوية ملونة ومحسوبة تلقائياً.</li>
+              <li>زر الوصول الفوري لمركز مستندات المشروع الـ 14 قسماً (زر 📁 14 قسم).</li>
+              <li>إمكانية طباعة تقرير حساب وبيانات المشروع الرسمي بضغطة زر واحدة.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> ضبط الجداول الزمنية والتكاليف ومنع انحراف الميزانيات أو تأخر تسليم الأعمال.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04</div>
+          <div class="card-title">مركز مستندات المشروع الشامل - 14 قسماً (Project Hub Overview)</div>
+        </div>
+        <div class="card-tag">الأرشيف الهندسي والقانوني</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_مركز_مستندات_المشروع_ProjectHub.png')">
+          <img src="عرض_النظام_للتقديم/04_مركز_مستندات_المشروع_ProjectHub.png" alt="مركز مستندات المشروع الشامل - 14 قسماً (Project Hub Overview)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>الأرشيف الهندسي والرقمي المتكامل للمشروع، يجمع كافة المعاملات والمستندات القانونية والفنية والمالية للمشروع تحت مظلة واحدة لضمان عدم ضياع أي مستند وسرعة مراجعة لجان الفحص والمالك.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>14 قسماً تخصصياً يغطي دورة حياة المشروع من توقيع العقد حتى المخالصة والحساب الختامي.</li>
+              <li>عداد حيّ لكل قسم يوضح عدد المستندات والملفات المرفوعة بداخله.</li>
+              <li>إمكانية تصدير تقرير شامل لكافة وثائق ومستندات المشروع بملف واحد.</li>
+              <li>ربط مباشر مع قاعدة بيانات المشاريع لتحديث المعاملات تلقائياً.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> توثيق قانوني وفني متكامل يحمي الشركة في النزاعات والمطالبات ويسرع تسليم المشاريع.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04-1">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04.1</div>
+          <div class="card-title">القسم الأول: عقد المشروع الرسمي (Official Contract & Terms)</div>
+        </div>
+        <div class="card-tag">المركز الهندسي - تبويب 1</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_1_عقد_المشروع_الرسمي_Contract.png')">
+          <img src="عرض_النظام_للتقديم/04_1_عقد_المشروع_الرسمي_Contract.png" alt="القسم الأول: عقد المشروع الرسمي (Official Contract & Terms)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>توثيق العقد الأساسي للمشروع، رقم العقد، تاريخ التوقيع، تاريخ البدء والانتهاء، الشروط الجزائية، وغرامات التأخير، مع رفع نسخة PDF ممسوحة ضوئياً من العقد الأصلي المختوم.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تسجيل القيمة التعاقدية الأصلية للمشروع مع تحديد نسبة ومبلغ الدفعة المقدمة.</li>
+              <li>بيانات المالك، الاستشاري الهندسي المشرف، والممثل القانوني للطرفين.</li>
+              <li>معاينة وتحميل ملف العقد المعتمد بضغطة زر.</li>
+              <li>متابعة التزامات الطرفين القانونية وفترات الضمان والصيانة.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> حماية الحقوق القانونية وتثبيت شروط الدفع وغرامات التأخير وفترات التسليم.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04-2">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04.2</div>
+          <div class="card-title">القسم الثاني: المخططات الهندسية والتصميمية (Engineering Drawings & Revisions)</div>
+        </div>
+        <div class="card-tag">المركز الهندسي - تبويب 2</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_2_المخططات_الهندسية_Drawings.png')">
+          <img src="عرض_النظام_للتقديم/04_2_المخططات_الهندسية_Drawings.png" alt="القسم الثاني: المخططات الهندسية والتصميمية (Engineering Drawings & Revisions)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>أرشفة وتصنيف كافة المخططات الهندسية للمشروع (معمارية، إنشائية، كهربائية، صحية، ميكانيكية، ومخططات As-Built) مع تتبع أرقام الإصدارات والمراجعات المعتمدة من الاستشاري.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تصنيف المخطط حسب التخصص (معماري، إنشائي، كهروميكانيكي MEP).</li>
+              <li>تتبع رقم المراجعة والتعديل (Rev 01, Rev 02) وتاريخ الاعتماد.</li>
+              <li>حفظ وتنزيل المخططات بصيغ PDF و CAD عالية الوضوح.</li>
+              <li>منع استخدام المخططات القديمة والملغاة في الموقع الميداني.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> ضمان دقة التنفيذ الميداني وفق أحدث المخططات المعتمدة ومنع أخطاء الصب وإعادة التكسير.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04-3">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04.3</div>
+          <div class="card-title">القسم الثالث: جدول الكميات والمواصفات (Bill of Quantities - BOQ)</div>
+        </div>
+        <div class="card-tag">المركز الهندسي - تبويب 3</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_3_جدول_الكميات_BOQ.png')">
+          <img src="عرض_النظام_للتقديم/04_3_جدول_الكميات_BOQ.png" alt="القسم الثالث: جدول الكميات والمواصفات (Bill of Quantities - BOQ)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>إدارة ومتابعة بنود جدول الكميات المعتمدة في العقد، حصر الكميات التعاقدية مقابل المنفذة فعلياً، وتتبع سعر الوحدة وإجمالي كل بند مع حساب نسب الإنجاز التراكمية.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>جدول تفصيلي يتضمن: رقم البند، الوصف الدقيق، الوحدة، الكمية التعاقدية، الكمية المنفذة، وسعر الوحدة.</li>
+              <li>حساب تلقائي لقيمة المنجز والمتبقي ونسبة الإنجاز لكل بند على حدة.</li>
+              <li>تصدير واستيراد جدول الكميات من وإلى جداول Excel لسهولة التسعير.</li>
+              <li>الربط التلقائي مع المستخلصات الجارية (IPC) لحساب قيم الأعمال المنجزة.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> التحكم المطلق في بنود المشروع ومنع تجاوز الكميات المعتمدة في العقد.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04-4">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04.4</div>
+          <div class="card-title">القسم السادس: أوامر التغيير والأعمال الإضافية (Change & Variation Orders)</div>
+        </div>
+        <div class="card-tag">المركز الهندسي - تبويب 6</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_4_أوامر_التغيير_ChangeOrders.png')">
+          <img src="عرض_النظام_للتقديم/04_4_أوامر_التغيير_ChangeOrders.png" alt="القسم السادس: أوامر التغيير والأعمال الإضافية (Change & Variation Orders)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>رصد وتوثيق أي طلبات لتعديل الأعمال أو إضافة بنود جديدة خارج نطاق العقد الأصلي، وتحديد الأثر المالي والزمني المترتب عليها، ومتابعة حالة اعتمادها من المالك والاستشاري.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تسجيل وصف أمر التغيير، جهة الطلب (المالك / الاستشاري)، والسبب الفني.</li>
+              <li>تحديد القيمة المالية الإضافية وتمديد المدة الزمنية الممنوحة (بالأيام).</li>
+              <li>متابعة حالة الاعتماد (معتمد Approved، قيد الدراسة Under Review، مرفوض Rejected).</li>
+              <li>إضافة التكلفة المعتمدة تلقائياً إلى القيمة التعاقدية المعدلة للمشروع.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> ضمان عدم تنفيذ أي عمل إضافي دون تغطية مالية وزمنية معتمدة وموثقة قانونياً.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04-5">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04.5</div>
+          <div class="card-title">القسم التاسع: المستخلصات الجارية للمالك (Interim Payment Certificates - IPC)</div>
+        </div>
+        <div class="card-tag">المركز الهندسي - تبويب 9</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_5_المستخلصات_الجارية_InvoicesIPC.png')">
+          <img src="عرض_النظام_للتقديم/04_5_المستخلصات_الجارية_InvoicesIPC.png" alt="القسم التاسع: المستخلصات الجارية للمالك (Interim Payment Certificates - IPC)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>إصدار ومتابعة المستخلصات الدورية عن الأعمال المنفذة بالمشروع، واحتساب الاستقطاعات النظامية (استرداد الدفعة المقدمة، محتجز الضمان 5-10%) وإصدار صافي المبلغ المستحق للصرف.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>إصدار مستخلص دوري تراكمي (سابق، حالي، إجمالي حتى تاريخه).</li>
+              <li>حساب آلي لخصم الدفعة المقدمة ونسبة محتجز حسن التنفيذ (Retention).</li>
+              <li>متابعة تواريخ الإرسال، وتاريخ اعتماد الاستشاري، وحالة السداد الفعلي.</li>
+              <li>الربط المباشر مع حركة المقبوضات وتحديث ذمة العميل تلقائياً.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> تسريع دورة التحصيل المالي وضمان استرداد مستحقات الشركة بالاستناد لمحاضر الحصر.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04-6">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04.6</div>
+          <div class="card-title">القسم العاشر: التقارير الهندسية اليومية للموقع (Daily Site Progress Reports)</div>
+        </div>
+        <div class="card-tag">المركز الهندسي - تبويب 10</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_6_التقارير_اليومية_DailyReports.png')">
+          <img src="عرض_النظام_للتقديم/04_6_التقارير_اليومية_DailyReports.png" alt="القسم العاشر: التقارير الهندسية اليومية للموقع (Daily Site Progress Reports)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>التوثيق اليومي الدقيق لكافة مجريات العمل في الموقع الإنشائي (الطقس، العمالة المداومة، المعدات العاملة والمتعطلة، بنود الأعمال المنجزة، المعوقات والمواد الموردة).</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تسجيل حالة الطقس ودرجات الحرارة وأثرها على صب الخرسانة.</li>
+              <li>حصر كادر الموقع: أعداد المهندسين، الفنيين، والعمالة الحرفية واليومية.</li>
+              <li>رصد حركات تشغيل المعدات وساعات عملها وساعات التوقف والأعطال.</li>
+              <li>توثيق المعوقات الميدانية التي قد تؤدي لطلب تمديد زمني للمشروع.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> بناء سجل يومي غير قابل للطعن يثبت أحداث الموقع ويحمي الشركة في مطالبات التأخير.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-04-7">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">04.7</div>
+          <div class="card-title">القسم الثاني عشر: محاضر الاستلام والفحص الهندسي (Handover & Quality WIR)</div>
+        </div>
+        <div class="card-tag">المركز الهندسي - تبويب 12</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/04_7_محاضر_الاستلام_والفحص_Handovers.png')">
+          <img src="عرض_النظام_للتقديم/04_7_محاضر_الاستلام_والفحص_Handovers.png" alt="القسم الثاني عشر: محاضر الاستلام والفحص الهندسي (Handover & Quality WIR)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>توثيق محاضر استلام الأعمال ومطابقة الجودة (Work Inspection Requests - WIR) المعتمدة من المهندس المشرف، مثل استلام حديد التسليح، استلام النجارة، نتائج كسر مكعبات الخرسانة، ومحاضر الاستلام الابتدائي والنهائي.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تسجيل تاريخ ورقم طلب الفحص مع العنصر الإنشائي وموقعه بالمشروع.</li>
+              <li>حالة الاعتماد وتوقيع المهندس المشرف وملاحظات الاستشاري إن وجدت.</li>
+              <li>أرشفة تقارير المختبر وفحوصات الضغط للخرسانة وقوة الشد للحديد.</li>
+              <li>حفظ محاضر الاستلام الابتدائي والنهائي الرسمية للمشروع.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> تأكيد التزام الشركة بأعلى معايير الجودة العالمية وتفادي رفض الأعمال أو إلغاء الضمان.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-05">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">05</div>
+          <div class="card-title">الإيرادات وسندات القبض ومقبوضات المشاريع (Revenues & Receipts)</div>
+        </div>
+        <div class="card-tag">التحصيل والتدفقات المالية</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/05_الإيرادات_وسندات_القبض_Revenues.png')">
+          <img src="عرض_النظام_للتقديم/05_الإيرادات_وسندات_القبض_Revenues.png" alt="الإيرادات وسندات القبض ومقبوضات المشاريع (Revenues & Receipts)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>تسجيل ومتابعة كافة الدفعات المستلمة من الملاك والعملاء عن مستخلصات وأعمال المشاريع، وإصدار سندات قبض رسمية معتمدة مع تحديث ذمم العملاء ورصيد الخزينة آلياً.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>سجل كامل لسندات القبض يتضمن رقم السند، التاريخ، العميل، المشروع، والمبلغ وطريقة الدفع.</li>
+              <li>دعم تعدد العملات المعتمدة بالمشروع (الريال اليمني، الريال السعودي، والدولار الأمريكي).</li>
+              <li>زر طباعة سند قبض فوري بنموذج رسمي موثق خالي تماماً من الخلفيات المشوهة.</li>
+              <li>تحديث فوري وتلقائي لمديونيات العملاء والمبالغ المتبقية في ذمتهم بقاعدة البيانات.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> تعزيز كفاءة التحصيل المالي وضمان انسيابية التدفقات النقدية للداخل لدعم عمليات الموقع.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-06">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">06</div>
+          <div class="card-title">المصروفات وسندات الصرف المعتمدة (Expenses & Vouchers)</div>
+        </div>
+        <div class="card-tag">الرقابة المالية على التكاليف</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/06_المصروفات_وسندات_الصرف_Expenses.png')">
+          <img src="عرض_النظام_للتقديم/06_المصروفات_وسندات_الصرف_Expenses.png" alt="المصروفات وسندات الصرف المعتمدة (Expenses & Vouchers)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>إدارة وتصنيف كافة النفقات التشغيلية والموقعية، وربط كل مصروف بمشروعه وبنده المحاسبي المحدد، مع طباعة سندات الصرف المعتمدة بالتواقيع والأختام الرسمية.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تصنيف ذكي للمصروفات (مواد بناء، خرسانة، أجور عمالة، تأجير معدات، نثريات، محروقات).</li>
+              <li>الربط المباشر بالتكلفة الفعلية للمشروع فور إصدار سند الصرف واحتسابه ضمن تقرير الربحية.</li>
+              <li>إصدار سند صرف رسمي (Payment Voucher) بالتفقيط التلقائي واسم المستفيد وتوقيع المدير.</li>
+              <li>خصم تلقائي من رصيد الصندوق أو البنك لمنع تسجيل أي عجز نقدي غير برر.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> إحكام الرقابة على المصاريف ومنع الهدر المالي أو تجاوز الميزانيات المخصصة لكل بند.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-07">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">07</div>
+          <div class="card-title">إدارة النثريات والعهد الميدانية (Petty Cash & Custodies)</div>
+        </div>
+        <div class="card-tag">العمليات الميدانية والسيولة</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/07_النثريات_والعهد_الميدانية_Custody.png')">
+          <img src="عرض_النظام_للتقديم/07_النثريات_والعهد_الميدانية_Custody.png" alt="إدارة النثريات والعهد الميدانية (Petty Cash & Custodies)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>متابعة وتصفية العهد النقدية المسلمة لمهندسي المواقع والمشرفين الميدانيين للنفقات اليومية العاجلة، مع حساب المنصرف منها والمتبقي بدقة متناهية لمنع تراكم المعلقات.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>بطاقات ملخص العهدة الميدانية: (إجمالي المسلم، إجمالي المنصرف، والمتبقي الفعلي في حوزة المهندس).</li>
+              <li>سجل تفصيلي لحركات صرف العهد مصنفة حسب المهندس أو المشرف الميداني والمشروع.</li>
+              <li>سهولة إجراء تصفية العهدة وإغلاقها وإعادتها للصندوق أو تدويرها لفترة جديدة.</li>
+              <li>دعم كامل لكافة العملات المتداولة مع إرفاق الفواتير والإيصالات الميدانية.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> تفادي ضياع النثريات الميدانية وإلزام الكادر الفني بتقديم الفواتير المؤيدة للصرف أولاً بأول.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-08">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">08</div>
+          <div class="card-title">إدارة العملاء وكشوفات الحسابات المعتمدة (Clients & Statements)</div>
+        </div>
+        <div class="card-tag">إدارة العلاقات والذمم المدينة</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/08_إدارة_العملاء_وكشوفات_الحساب_Clients.png')">
+          <img src="عرض_النظام_للتقديم/08_إدارة_العملاء_وكشوفات_الحساب_Clients.png" alt="إدارة العملاء وكشوفات الحسابات المعتمدة (Clients & Statements)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>دليل كامل لبيانات الملاك والعملاء، متابعة المبالغ المستحقة عليهم والمسددة، مع إمكانية استخراج كشف حساب عميل تفصيلي رسمي معتمد للمطابقة والتسوية المالية.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>سجل تفصيلي للعملاء مع أرقام الهواتف، العناوين، الشركات، والأرصدة المدينة والدائنة الحالية.</li>
+              <li>كشف حساب عميل ديناميكي برصيد تراكمي مستمر بعد كل دفعة أو فاتورة.</li>
+              <li>إظهار الرصيد الافتتاحي السابق، إجمالي المدفوعات، والمتبقي النهائي بدقة عالية.</li>
+              <li>حقول مخصصة لمطابقة وتوقيع العميل والختم الرسمي للشركة للمصادقات الدورية.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> توثيق الذمم المدينة بدقة وبناء علاقة احترافية شفافة وموثوقة مع ملاك المشاريع.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-09">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">09</div>
+          <div class="card-title">الموردون وحسابات التوريد الميداني (Suppliers Management)</div>
+        </div>
+        <div class="card-tag">سلاسل التوريد والذمم الدائنة</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/09_الموردون_وحسابات_التوريد_Suppliers.png')">
+          <img src="عرض_النظام_للتقديم/09_الموردون_وحسابات_التوريد_Suppliers.png" alt="الموردون وحسابات التوريد الميداني (Suppliers Management)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>إدارة شبكة موردي مواد البناء (حديد، أسمنت، خرسانة جاهزة، أدوات كهربائية، تأجير معدات ثقيلة)، وتتبع فواتير التوريد والأرصدة المستحقة لهم وجدولة السداد.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تصنيف الموردين حسب تخصص المواد وأرقام الهواتف والحسابات البنكية.</li>
+              <li>متابعة دقيقة للأرصدة المستحقة لكل مورد لتجنب تأخير المستحقات أو ازدواجية السداد.</li>
+              <li>كشف حساب مورد يوضح فواتير الشراء وسندات الصرف المسددة والرصيد المتبقي.</li>
+              <li>المساعدة في التفاوض مع الموردين للحصول على أفضل التسهيلات الائتمانية والأسعار التنافسية.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> الحفاظ على استمرارية توريد المواد للمواقع دون توقف العمليات الخرسانية بسبب الديون.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-10">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">10</div>
+          <div class="card-title">المخزون ومواد البناء وأذونات الصرف (Inventory & Materials)</div>
+        </div>
+        <div class="card-tag">إدارة الأصول والمستودعات</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/10_المخزون_ومواد_البناء_Inventory.png')">
+          <img src="عرض_النظام_للتقديم/10_المخزون_ومواد_البناء_Inventory.png" alt="المخزون ومواد البناء وأذونات الصرف (Inventory & Materials)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>متابعة حركة المواد الإنشائية في المستودع المركزي أو الميداني، تسجيل أذونات الصرف للمشاريع، ومراقبة الحدود الدنيا للتنبيه بنواقص المواد قبل نفادها من الموقع.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>سجل أصناف مواد البناء بوحدات القياس المعيارية (طن، كيس، متر مكعب، متر طولي، حبة).</li>
+              <li>نظام تنبيهات تلقائية لنواقص المخزون (Low Stock Alerts) عند وصول الصنف للحد الأدنى.</li>
+              <li>إصدار أذونات صرف مواد مخزنية وتحميل تكلفتها على المشروع فوراً وخصمها من الرصيد.</li>
+              <li>رصد حركات التوريد والصرف والتحويل مع تسجيل اسم المستلم الميداني لكل إرسالية.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> منع هدر وسرقة المواد وضمان توفر المواد الحيوية للصب والتشييد دون أي تأخير.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-11">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">11</div>
+          <div class="card-title">حركة الصندوق والبنك والخزينة (Cash & Bank Movements)</div>
+        </div>
+        <div class="card-tag">الرقابة على الخزينة والسيولة</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/11_حركة_الصندوق_والبنك_Cash.png')">
+          <img src="عرض_النظام_للتقديم/11_حركة_الصندوق_والبنك_Cash.png" alt="حركة الصندوق والبنك والخزينة (Cash & Bank Movements)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>التدقيق اليومي في حركة النقدية الداخلة والخارجة من الخزينة وحسابات البنوك، وإجراء المطابقة الحسابية بين الرصيد الدفتري للنظام والرصيد الفعلي في الدرج أو الحساب البنكي.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>البطاقات الخماسية الحية: (الرصيد الافتتاحي، إجمالي الداخل، إجمالي المنصرف، المسحوبات، والرصيد الحالي).</li>
+              <li>سجل تفصيلي لحركات الصندوق بتسلسل زمني دقيق وأرقام السندات المرتبطة بكل حركة.</li>
+              <li>تسجيل التغذية والسحوبات والتحويلات بين الصندوق والبنوك بكل سهولة.</li>
+              <li>نظام رقابي صارم يمنع أي عجز نقدي أو تلاعب في الأرصدة الحقيقية.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> حماية أموال وسيولة الشركة والتأكد من مطابقة النقد الفعلي لدفاتر الحسابات.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-12">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">12</div>
+          <div class="card-title">التقارير المالية وقوائم الأرباح والخسائر (Profit & Loss Statement)</div>
+        </div>
+        <div class="card-tag">القوائم المالية والتحليل الربحي</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/12_التقارير_المالية_الأرباح_والخسائر_ProfitLoss.png')">
+          <img src="عرض_النظام_للتقديم/12_التقارير_المالية_الأرباح_والخسائر_ProfitLoss.png" alt="التقارير المالية وقوائم الأرباح والخسائر (Profit & Loss Statement)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>استخراج قائمة الدخل الرسمية التفاعلية للشركة خلال فترات زمنية محددة (شهرية، ربع سنوية، سنوية)، مع توزيع المصروفات واحتساب صافي الأرباح التشغيلية المحققة بدقة متناهية.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>تحديد الفترة المالية من تاريخ إلى تاريخ مع احتساب فوري وتلقائي للنتائج.</li>
+              <li>جدول تفصيلي لتحليل نسب بنود المصروفات وتأثير كل بند على صافي هامش الربح.</li>
+              <li>تصدير التقرير المالي إلى ملفات Excel تدعم اللغة العربية (UTF-8) بالكامل.</li>
+              <li>إمكانية طباعة التقرير بنموذج معتمد متعدد الصفحات مع إظهار توقيع المحاسب والمدير العام.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> تزويد الشركاء والمحاسب القانوني والجهات الرسمية بتقارير مالية دورية موثوقة وموثقة.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-13">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">13</div>
+          <div class="card-title">تقرير المركز المالي والميزانية العمومية (Balance Sheet Statement)</div>
+        </div>
+        <div class="card-tag">المتانة والملاءة المالية</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/13_تقرير_المركز_المالي_والميزانية_BalanceSheet.png')">
+          <img src="عرض_النظام_للتقديم/13_تقرير_المركز_المالي_والميزانية_BalanceSheet.png" alt="تقرير المركز المالي والميزانية العمومية (Balance Sheet Statement)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>عرض الميزانية العمومية التفاعلية التي توضح أصول الشركة المتداولة والثابتة مقابل التزاماتها ومستحقات الموردين وحقوق الملكية للوقوف على الملاءة المالية الحقيقية للمؤسسة.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>جدول مقارنة الأصول والالتزامات جنباً إلى جنب (Dual Balance Table) وفق المعايير المحاسبية.</li>
+              <li>رصد النقدية، وقيمة المخزون، والمستحقات على العملاء كأصول متداولة حية.</li>
+              <li>رصد مستحقات الموردين والعهد والالتزامات كديون قائمة واجبة السداد.</li>
+              <li>إمكانية طباعة تقرير المركز المالي بنموذج رسمي معتمد للاستخدام البنكي والتمويلي.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> تقييم القيمة الحقيقية للشركة وجاهزيتها المالية لدخول مناقصات ومشاريع كبرى.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-14">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">14</div>
+          <div class="card-title">تحليل ربحية وكفاءة المشاريع (Projects Profitability & ROI)</div>
+        </div>
+        <div class="card-tag">الجدوى والمردود الاستثماري</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/14_تحليل_ربحية_وكفاءة_المشاريع_ProjectsProfitability.png')">
+          <img src="عرض_النظام_للتقديم/14_تحليل_ربحية_وكفاءة_المشاريع_ProjectsProfitability.png" alt="تحليل ربحية وكفاءة المشاريع (Projects Profitability & ROI)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>مقارنة ومفاضلة الجدوى والأرباح المحققة بين المشاريع الـ 16 المختلفة، وتحديد أي المشاريع تحقق أعلى هامش ربح وأيها يستهلك تكاليف إضافية خارج المخطط المالي.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>جدول مقارنة تفصيلي يتضمن: (قيمة العقد، التكلفة الفعلية، الربح المحقق، وهامش الربح %).</li>
+              <li>تقييم كفاءة مهندسي المواقع وإدارتهم الذكية لميزانية المشروع المعتمدة.</li>
+              <li>تصدير بيانات الكفاءة والربحية إلى ملفات Excel بضغطة زر واحدة.</li>
+              <li>كشف المشاريع المتعثرة أو منخفضة الربح لاتخاذ إجراءات تصحيحية عاجلة.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> تحسين وتطوير آليات تسعير المناقصات المستقبلية بالاستناد لتكاليف المشاريع المنفذة فعلياً.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-15">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">15</div>
+          <div class="card-title">إعدادات هوية الشركة والبيانات الرسمية (Company Settings & Identity)</div>
+        </div>
+        <div class="card-tag">الهوية المؤسسية والتهيئة</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/15_إعدادات_النظام_وهوية_الشركة_CompanySettings.png')">
+          <img src="عرض_النظام_للتقديم/15_إعدادات_النظام_وهوية_الشركة_CompanySettings.png" alt="إعدادات هوية الشركة والبيانات الرسمية (Company Settings & Identity)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>إدارة وضبط البيانات الرسمية لشركة رواسي عدن للهندسة والمقاولات (اسم الشركة باللغتين العربية والإنجليزية، السجل التجاري، الرقم الضريبي، أرقام التواصل، وشعار الشركة الرسمي).</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>رفع وتعديل شعار الشركة (Logo) ليظهر تلقائياً في كافة الترويسات والسندات المطبوعة.</li>
+              <li>تعديل العنوان، أرقام الهاتف، والبريد الإلكتروني ومقر الشركة الرئيسي في عدن.</li>
+              <li>حفظ إعدادات العملة الافتراضية للنظام والنسب الضريبية المعمول بها.</li>
+              <li>الحفظ الفوري للإعدادات في قاعدة البيانات مع انعكاسها الفوري على كل شاشات النظام.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> ترسيخ الهوية المؤسسية للشركة وإظهار مظهر موحد وراقٍ في كافة الخطابات والوثائق.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-16">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">16</div>
+          <div class="card-title">محرك إعدادات الطباعة والمعاينة الحية الفورية (Print Designer & Live Preview)</div>
+        </div>
+        <div class="card-tag">محرك الطباعة والتصميم</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/16_محرك_إعدادات_الطباعة_والمعاينة_الحية_PrintDesigner.png')">
+          <img src="عرض_النظام_للتقديم/16_محرك_إعدادات_الطباعة_والمعاينة_الحية_PrintDesigner.png" alt="محرك إعدادات الطباعة والمعاينة الحية الفورية (Print Designer & Live Preview)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>التحكم الكامل في تصميم وطباعة السندات والتقارير وكشوف الحسابات عبر شاشة معاينة حية فورية تُظهر شكل المستند كما سيخرج من الطابعة، مع إزالة أي خلفيات مشوهة وضمان دقة المحاذاة.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>شاشة معاينة تفاعلية حية تتبدل بين سندات القبض، وسندات الصرف، وكشوف الحسابات والتقارير.</li>
+              <li>التحكم في قياس الهوامش، نمط الحدود، الخطوط الرسمية، والألوان الملكية المتناسقة.</li>
+              <li>إدراج اسم المستخدم المسجل بالمشروع وتوقيت الطباعة الدقيق في ترويسة وتذييل كل ورقة.</li>
+              <li>التحكم الكامل بمواقع التواقيع والأختام الرسمية المعتمدة لشركة رواسي عدن.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> إخراج وثائق ومطبوعات رسمية فائقة الفخامة تليق باسم ومكانة الشركة أمام الملاك والبنوك.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="card-item" id="sec-17">
+      <div class="card-header-bar">
+        <div class="card-title-group">
+          <div class="card-num-badge">17</div>
+          <div class="card-title">إدارة المستخدمين والصلاحيات وسجل النشاطات (Users, Roles & Security)</div>
+        </div>
+        <div class="card-tag">الأمان وإدارة الكادر</div>
+      </div>
+      <div class="card-content-layout">
+        <div class="img-frame" onclick="openZoom('عرض_النظام_للتقديم/17_إدارة_المستخدمين_والصلاحيات_UsersRoles.png')">
+          <img src="عرض_النظام_للتقديم/17_إدارة_المستخدمين_والصلاحيات_UsersRoles.png" alt="إدارة المستخدمين والصلاحيات وسجل النشاطات (Users, Roles & Security)">
+          <div class="img-zoom-hint">🔍 انقر للتكبير بالحجم الكامل</div>
+        </div>
+        <div class="info-box">
+          <div class="info-purpose">
+            <h4>🎯 الهدف الوظيفي من الشاشة:</h4>
+            <p>التحكم في كادر العمل، إنشاء حسابات الموظفين (مهندس، محاسب، مدير مشروع، مدير عام)، وتخصيص صلاحيات الوصول لكل شاشة وقسم لمنع أي تجاوزات إدارية أو مالية.</p>
+          </div>
+          <div class="features-list">
+            <h4>✨ أبرز المزايا المعروضة:</h4>
+            <ul>
+              <li>جدول المستخدمين مع بيان المسمى الوظيفي، الحالة (نشط / معطل)، وآخر موعد دخول.</li>
+              <li>تحديد صلاحيات دقيقة: صلاحية العرض، الإضافة، التعديل، والحذف لكل شاشة وقائمة.</li>
+              <li>تغيير وتشفير كلمات المرور وإعادة ضبطها بأمان تام.</li>
+              <li>سجل التدقيق الداخلي (Audit Log) لتتبع من قام بإدخال أو تعديل أي حركة مالية أو هندسية.</li>
+            </ul>
+          </div>
+          <div class="value-box">
+            <strong>القيمة التشغيلية:</strong> فصل السلطات والمسؤوليات وحماية بيانات الشركة من التعديلات غير المصرح بها.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+
+</div>
+
+<div class="modal-lightbox" id="modalLightbox" onclick="closeZoom()">
+  <img id="lightboxImg" src="" alt="عرض مكبر">
+</div>
+
+<script>
+  function openZoom(src) {
+    const m = document.getElementById('modalLightbox');
+    const img = document.getElementById('lightboxImg');
+    img.src = src;
+    m.classList.add('active');
+  }
+
+  function closeZoom() {
+    document.getElementById('modalLightbox').classList.remove('active');
+  }
+</script>
+
+</body>
+</html>
