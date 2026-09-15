@@ -2748,5 +2748,144 @@ const ProjectHub = {
         this.openProjectFolderInExplorer();
       }
     }
+  },
+
+  // =================== إدارة وتخصيص مسار مجلد المشاريع في ويندوز ===================
+
+  defaultBaseFolder: null,
+  currentBaseFolder: null,
+
+  /**
+   * فتح نافذة ضبط مسار مجلد حفظ ملفات المشاريع
+   */
+  async openBaseFolderModal() {
+    try {
+      App.openModal('baseFolderSettingsModal');
+      const displayEl = document.getElementById('baseFolderCurrentPathDisplay');
+      const inputEl = document.getElementById('baseFolderPathInput');
+      const badgeEl = document.getElementById('baseFolderStatusBadge');
+
+      if (displayEl) displayEl.innerText = 'جاري التحقق من مسار المجلد الحالي...';
+
+      const res = await fetch('/api/project-files/settings/base-folder');
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.currentBaseFolder = json.data.currentPath;
+        this.defaultBaseFolder = json.data.defaultPath;
+
+        if (displayEl) displayEl.innerText = json.data.currentPath;
+        if (inputEl) inputEl.value = json.data.currentPath;
+        if (badgeEl) {
+          if (json.data.isCustom) {
+            badgeEl.className = 'drawing-badge-status under-review';
+            badgeEl.innerText = 'مسار مخصص يدوي';
+          } else {
+            badgeEl.className = 'drawing-badge-status approved';
+            badgeEl.innerText = 'المسار الافتراضي للنظام';
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error loading base folder settings:', err);
+      App.showToast('تعذر جلب إعدادات مسار المجلد', 'error');
+    }
+  },
+
+  /**
+   * تعيين مسار سريع في حقل الإدخال
+   */
+  setQuickPath(pathStr) {
+    const inputEl = document.getElementById('baseFolderPathInput');
+    if (inputEl && pathStr) {
+      inputEl.value = pathStr;
+      inputEl.focus();
+    }
+  },
+
+  /**
+   * لصق المسار من الحافظة مباشرة
+   */
+  async pasteBaseFolderFromClipboard() {
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim()) {
+          const inputEl = document.getElementById('baseFolderPathInput');
+          if (inputEl) {
+            inputEl.value = text.trim();
+            App.showToast('تم لصق المسار من الحافظة بنجاح', 'success');
+          }
+          return;
+        }
+      }
+      App.showToast('لم يتم العثور على نص داخل الحافظة', 'info');
+    } catch (e) {
+      App.showToast('يرجى لصق المسار يدوياً بالضغط على Ctrl+V داخل الحقل', 'info');
+    }
+  },
+
+  /**
+   * حفظ واعتماد مسار المجلد الجديد أو استعادة الافتراضي
+   */
+  async saveBaseFolder(reset = false) {
+    try {
+      let bodyData = {};
+      if (reset) {
+        if (!confirm('هل أنت متأكد من استعادة المسار الافتراضي لملفات المشاريع داخل مجلد البرنامج؟')) {
+          return;
+        }
+        bodyData = { resetToDefault: true };
+      } else {
+        const inputEl = document.getElementById('baseFolderPathInput');
+        const folderPath = inputEl ? inputEl.value.trim() : '';
+        if (!folderPath) {
+          App.showToast('يرجى كتابة أو لصق مسار المجلد', 'warning');
+          return;
+        }
+        bodyData = { folderPath };
+      }
+
+      App.showToast('جاري حفظ واعتماد المسار...', 'info');
+      const res = await fetch('/api/project-files/settings/base-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyData)
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم تحديث مسار حفظ ملفات المشاريع بنجاح', 'success');
+        App.closeModal('baseFolderSettingsModal');
+        // تحديث مسار مجلد المشروع الحالي في الواجهة فوراً
+        await this.syncProjectFolder(true);
+        if (this.activeTab === 'project-files') {
+          this.renderProjectFiles();
+        }
+      } else {
+        App.showToast(json.message || 'تعذر اعتماد المسار المحدد', 'error');
+      }
+    } catch (err) {
+      console.error('Save base folder error:', err);
+      App.showToast('خطأ في الاتصال أثناء حفظ المسار', 'error');
+    }
+  },
+
+  /**
+   * فتح المجلد الأساسي لملفات المشاريع في مستكشف ويندوز
+   */
+  async openBaseFolderInWindows() {
+    try {
+      App.showToast('جاري فتح المجلد الأساسي للمشاريع في ويندوز...', 'info');
+      const res = await fetch('/api/project-files/settings/open-base-folder', {
+        method: 'POST'
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم فتح المجلد في ويندوز بنجاح', 'success');
+      } else {
+        App.showToast(json.message || 'تعذر فتح المجلد', 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ في الاتصال أثناء طلب فتح المجلد', 'error');
+    }
   }
 };

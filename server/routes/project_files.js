@@ -3,14 +3,34 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { exec, execFile, spawn } = require('child_process');
-const { get, query } = require('../database/db');
+const { get, query, run } = require('../database/db');
 
-// المجلد الرئيسي لحفظ ملفات وتقارير المشاريع
-const PROJECTS_BASE_DIR = path.resolve(__dirname, '..', '..', 'ملفات_المشاريع');
+// المجلد الرئيسي الافتراضي لحفظ ملفات وتقارير المشاريع
+const DEFAULT_PROJECTS_BASE_DIR = path.resolve(__dirname, '..', '..', 'ملفات_المشاريع');
 
-// التأكد من وجود المجلد الرئيسي
-if (!fs.existsSync(PROJECTS_BASE_DIR)) {
-  fs.mkdirSync(PROJECTS_BASE_DIR, { recursive: true });
+// التأكد من وجود المجلد الافتراضي
+if (!fs.existsSync(DEFAULT_PROJECTS_BASE_DIR)) {
+  fs.mkdirSync(DEFAULT_PROJECTS_BASE_DIR, { recursive: true });
+}
+
+/**
+ * جلب المسار الأساسي الحالي المعتمد لمجلد حفظ ملفات المشاريع
+ * يفحص جدول الإعدادات أولاً، وإن لم يوجد مسار مخصص يعتمد المسار الافتراضي
+ */
+async function getProjectsBaseDir() {
+  try {
+    const row = await get("SELECT value FROM settings WHERE `key` = 'projects_base_folder'");
+    if (row && row.value && row.value.trim()) {
+      const customPath = path.resolve(row.value.trim());
+      if (!fs.existsSync(customPath)) {
+        fs.mkdirSync(customPath, { recursive: true });
+      }
+      return customPath;
+    }
+  } catch (err) {
+    console.warn('[getProjectsBaseDir] Warning reading custom path:', err.message);
+  }
+  return DEFAULT_PROJECTS_BASE_DIR;
 }
 
 // قائمة المجلدات الفرعية النموذجية لكل مشروع
@@ -47,10 +67,11 @@ async function ensureProjectFolder(projectId) {
     throw new Error(`المشروع رقم (${projectId}) غير موجود`);
   }
 
+  const baseDir = await getProjectsBaseDir();
   const safeCode = (project.code || `PRJ-${project.id}`).replace(/[\\/:*?"<>|]/g, '_').trim();
   const safeName = sanitizeFolderName(project.name);
   const folderName = `[${safeCode}] ${safeName}`;
-  const projectFolderPath = path.join(PROJECTS_BASE_DIR, folderName);
+  const projectFolderPath = path.join(baseDir, folderName);
 
   // إنشاء المجلد الرئيسي للمشروع
   if (!fs.existsSync(projectFolderPath)) {
@@ -71,16 +92,18 @@ async function ensureProjectFolder(projectId) {
     projectName: project.name,
     folderName,
     folderPath: projectFolderPath,
-    relativePath: path.relative(path.resolve(__dirname, '..', '..'), projectFolderPath)
+    baseDir,
+    relativePath: path.relative(baseDir, projectFolderPath)
   };
 }
 
 /**
  * استخراج قائمة الملفات داخل مجلد المشروع
  */
-function scanProjectFiles(folderPath) {
+function scanProjectFiles(folderPath, baseDir) {
   const filesList = [];
   if (!fs.existsSync(folderPath)) return filesList;
+  const rootDir = baseDir || folderPath;
 
   function traverse(currentDir, currentSubfolder = '') {
     const entries = fs.readdirSync(currentDir, { withFileTypes: true });
@@ -96,7 +119,7 @@ function scanProjectFiles(folderPath) {
           name: entry.name,
           subfolder: currentSubfolder || 'المجلد الرئيسي',
           fullPath: full,
-          relativePath: path.relative(PROJECTS_BASE_DIR, full),
+          relativePath: path.relative(rootDir, full),
           sizeBytes: stat.size,
           sizeFormatted: stat.size > 1048576 ? `${(stat.size / 1048576).toFixed(2)} MB` : `${sizeKB} KB`,
           createdAt: stat.birthtime,
@@ -113,12 +136,94 @@ function scanProjectFiles(folderPath) {
 
 // =================== المسارات البرمجية (API Routes) ===================
 
+// 0. إدارة وتحديد مسار حفظ ملفات المشاريع على الجهاز
+router.get('/settings/base-folder', async (req, res) => {
+  try {
+    const baseDir = await getProjectsBaseDir();
+    const row = await get("SELECT value FROM settings WHERE `key` = 'projects_base_folder'");
+    res.json({
+      success: true,
+      data: {
+        currentPath: baseDir,
+        defaultPath: DEFAULT_PROJECTS_BASE_DIR,
+        isCustom: !!(row && row.value && row.value.trim() && path.resolve(row.value.trim()) !== DEFAULT_PROJECTS_BASE_DIR)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في قراءة مسار المجلد: ' + err.message });
+  }
+});
+
+router.post('/settings/base-folder', async (req, res) => {
+  try {
+    let { folderPath, resetToDefault } = req.body;
+
+    if (resetToDefault) {
+      await run("DELETE FROM settings WHERE `key` = 'projects_base_folder'");
+      return res.json({
+        success: true,
+        message: 'تمت استعادة المسار الافتراضي لملفات المشاريع بنجاح',
+        currentPath: DEFAULT_PROJECTS_BASE_DIR
+      });
+    }
+
+    if (!folderPath || !folderPath.trim()) {
+      return res.status(400).json({ success: false, message: 'يرجى إدخال مسار المجلد' });
+    }
+
+    const targetPath = path.resolve(folderPath.trim());
+
+    // التأكد من إمكانية إنشاء المجلد وصلاحية الكتابة فيه
+    if (!fs.existsSync(targetPath)) {
+      fs.mkdirSync(targetPath, { recursive: true });
+    }
+
+    // فحص كتابة تجريبي
+    const testFile = path.join(targetPath, `.rawasi_write_test_${Date.now()}.tmp`);
+    fs.writeFileSync(testFile, 'ok');
+    fs.unlinkSync(testFile);
+
+    // حفظ المسار في جدول الإعدادات بتوافق كامل مع SQLite و MySQL
+    const existing = await get("SELECT `key` FROM settings WHERE `key` = 'projects_base_folder'");
+    if (existing) {
+      await run("UPDATE settings SET `value` = ? WHERE `key` = 'projects_base_folder'", [targetPath]);
+    } else {
+      await run("INSERT INTO settings (`key`, `value`) VALUES ('projects_base_folder', ?)", [targetPath]);
+    }
+
+    res.json({
+      success: true,
+      message: 'تم حفظ وتعيين مسار مجلد المشاريع الجديد بنجاح',
+      currentPath: targetPath
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر اعتماد المسار المحدد: ' + err.message });
+  }
+});
+
+router.post('/settings/open-base-folder', async (req, res) => {
+  try {
+    const baseDir = await getProjectsBaseDir();
+    if (!fs.existsSync(baseDir)) {
+      fs.mkdirSync(baseDir, { recursive: true });
+    }
+    openInWindows(baseDir, true);
+    res.json({
+      success: true,
+      message: 'تم فتح المجلد الأساسي لملفات المشاريع في ويندوز',
+      folderPath: baseDir
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر فتح المجلد: ' + err.message });
+  }
+});
+
 // 1. جلب وتأكيد إنشاء مجلد المشروع ومساره
 router.get('/:projectId/folder', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const folderInfo = await ensureProjectFolder(projectId);
-    const files = scanProjectFiles(folderInfo.folderPath);
+    const files = scanProjectFiles(folderInfo.folderPath, folderInfo.baseDir);
 
     res.json({
       success: true,
@@ -212,14 +317,15 @@ router.post('/open-file', (req, res) => {
 });
 
 // 3.1 تنزيل أو استعراض الملف مباشرة في المتصفح
-router.get('/download', (req, res) => {
+router.get('/download', async (req, res) => {
   try {
     const filePath = req.query.path;
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(404).send('الملف غير موجود');
     }
     const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(PROJECTS_BASE_DIR)) {
+    const baseDir = await getProjectsBaseDir();
+    if (!resolved.startsWith(baseDir) && !resolved.startsWith(DEFAULT_PROJECTS_BASE_DIR)) {
       return res.status(403).send('غير مصرح بالوصول لهذا المسار');
     }
     res.download(resolved);
