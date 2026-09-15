@@ -19,6 +19,7 @@ const App = {
     await Accounting.init();
     await Reports.init();
     await Inventory.init();
+    if (typeof HR !== 'undefined') HR.init();
     await Settings.init();
 
     this.bindEvents();
@@ -132,6 +133,8 @@ const App = {
       Projects.loadProjects();
     } else if (viewId === 'reports') {
       Reports.switchReportTab(Reports.activeReportTab || 'profit-loss');
+    } else if (viewId === 'hr') {
+      HR.load();
     } else if (viewId === 'projects') {
       Projects.loadProjects();
     } else if (viewId === 'projectHub') {

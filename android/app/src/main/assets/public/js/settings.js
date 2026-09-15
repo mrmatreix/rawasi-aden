@@ -35,6 +35,7 @@ const Settings = {
     } else if (tab === 'backup') {
       this.loadDbConfig();
       this.loadLogoutBackups();
+      this.loadMysqlStatus();
     }
   },
 
@@ -2022,5 +2023,204 @@ const Settings = {
     }
     this.selectServerBackup(fileName);
     this.executeRestore();
+  },
+
+  // ================== إدارة ومزامنة خادم MySQL ==================
+  async loadMysqlStatus() {
+    try {
+      const res = await fetch('/api/settings/mysql-status');
+      const json = await res.json();
+      if (json && json.success) {
+        const d = json.data;
+        const statusBox = document.getElementById('mysqlStatusBox');
+        const hostInput = document.getElementById('mysqlHost');
+        const portInput = document.getElementById('mysqlPort');
+        const userInput = document.getElementById('mysqlUser');
+        const dbInput = document.getElementById('mysqlDatabase');
+
+        if (d.mysqlConfig) {
+          if (hostInput && !hostInput.value) hostInput.value = d.mysqlConfig.host || 'localhost';
+          if (portInput && !portInput.value) portInput.value = d.mysqlConfig.port || 3306;
+          if (userInput && !userInput.value) userInput.value = d.mysqlConfig.user || 'root';
+          if (dbInput && !dbInput.value) dbInput.value = d.mysqlConfig.database || 'rawasi_aden';
+        }
+
+        if (statusBox) {
+          const isMySqlActive = d.activeEngine === 'mysql';
+          const isConnected = d.isConnected;
+          let badgeClass = 'badge-warning';
+          let badgeText = 'محرك SQLite المحلي نشط (نمط الطوارئ / أوفلاين)';
+
+          if (isMySqlActive && isConnected) {
+            badgeClass = 'badge-active';
+            badgeText = `خادم MySQL نشط ومتصل بنجاح (${d.serverVersion || 'v8.x'}) 🟢`;
+          } else if (isConnected) {
+            badgeClass = 'badge-info';
+            badgeText = 'خادم MySQL متصل وجاهز للتبديل ✅';
+          }
+
+          statusBox.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+              <span>المحرك النشط حالياً: <strong class="badge ${badgeClass}">${badgeText}</strong></span>
+              <span>الإصدار: <strong>${d.serverVersion || 'SQLite 3.x'}</strong></span>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;">${d.message}</div>
+          `;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading MySQL status:', e);
+    }
+  },
+
+  async testMysqlConnection() {
+    const host = document.getElementById('mysqlHost')?.value.trim() || 'localhost';
+    const port = document.getElementById('mysqlPort')?.value.trim() || 3306;
+    const user = document.getElementById('mysqlUser')?.value.trim() || 'root';
+    const password = document.getElementById('mysqlPassword')?.value || '';
+    const database = document.getElementById('mysqlDatabase')?.value.trim() || 'rawasi_aden';
+    const resultBox = document.getElementById('mysqlTestResult');
+    const btn = document.getElementById('btnTestMysql');
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'جاري اختبار الاتصال بقاعدة MySQL... ⏳';
+    }
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = '<span style="color: var(--text-secondary);">جاري محاولة الاتصال بـ MySQL عبر المنفذ ' + port + '...</span>';
+    }
+
+    try {
+      const res = await fetch('/api/settings/test-mysql-conn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, port, user, password, database })
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        App.showToast('تم الاتصال بنجاح بخادم MySQL 🚀', 'success');
+        if (resultBox) {
+          resultBox.innerHTML = `
+            <div style="color: var(--accent-green); font-weight: 700; margin-bottom: 4px;">✅ تم الاتصال بنجاح بخادم MySQL (${json.latencyMs} ms)</div>
+            <div style="font-size: 0.82rem; color: var(--text-secondary);">${json.message} | إصدار الخادم: ${json.version || 'غير محدد'} | المستخدم: ${json.user || user}</div>
+          `;
+        }
+      } else {
+        App.showToast('تعذر الاتصال بـ MySQL: ' + json.message, 'error');
+        if (resultBox) {
+          resultBox.innerHTML = `
+            <div style="color: var(--accent-red); font-weight: 700; margin-bottom: 4px;">⚠️ فشل الاتصال بخادم MySQL</div>
+            <div style="font-size: 0.82rem; color: var(--text-secondary);">${json.message}</div>
+            <div style="font-size: 0.78rem; color: var(--gold-light); margin-top: 6px;">💡 تلميح: تأكد من تشغيل خادم MySQL (مثل XAMPP أو WampServer أو خدمة MySQL)، أو فحص كلمة المرور واسم المستخدم.</div>
+          `;
+        }
+      }
+    } catch (e) {
+      if (resultBox) {
+        resultBox.innerHTML = `<div style="color: var(--accent-red);">خطأ أثناء محاولة الفحص: ${e.message}</div>`;
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'اختبار الاتصال بـ MySQL 🔍';
+      }
+    }
+  },
+
+  async saveMysqlSettings(e) {
+    if (e) e.preventDefault();
+    const host = document.getElementById('mysqlHost')?.value.trim() || 'localhost';
+    const port = document.getElementById('mysqlPort')?.value.trim() || 3306;
+    const user = document.getElementById('mysqlUser')?.value.trim() || 'root';
+    const password = document.getElementById('mysqlPassword')?.value || '';
+    const database = document.getElementById('mysqlDatabase')?.value.trim() || 'rawasi_aden';
+    const btn = document.getElementById('btnSaveMysql');
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'جاري الحفظ والتطبيق... ⏳';
+    }
+
+    try {
+      const res = await fetch('/api/settings/save-mysql-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, port, user, password, database })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم حفظ إعدادات MySQL بنجاح ✅', 'success');
+        await this.loadMysqlStatus();
+      } else {
+        App.showToast(json.message || 'حدث خطأ أثناء حفظ الإعدادات', 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ في حفظ الإعدادات: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'حفظ الإعدادات وتفعيل المحرك 💾';
+      }
+    }
+  },
+
+  async runMysqlMigration() {
+    const isConfirmed = confirm(
+      "هل أنت متأكد من رغبتك في بدء ترحيل كافة الجداول والبيانات من SQLite إلى MySQL الآن؟\n\n" +
+      "• سيتم نسخ كافة المشاريع، الفواتير، السندات، الحسابات، والعملاء.\n" +
+      "• لن يتم حذف بياناتك القديمة من SQLite بل ستبقى محفوظة بأمان كنسخة احتياطية."
+    );
+    if (!isConfirmed) return;
+
+    const resultBox = document.getElementById('mysqlMigrationResult');
+    const btn = document.getElementById('btnRunMigration');
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'جاري الترحيل الشامل للجداول والبيانات... ⏳';
+    }
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = '<div style="color: var(--gold-light);">جاري قراءة الجداول من SQLite وتحويلها إلى MySQL، يرجى الانتظار بضع ثوانٍ... ⏳</div>';
+    }
+
+    try {
+      const res = await fetch('/api/settings/run-migration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast('تم ترحيل كافة البيانات إلى MySQL بنجاح باهر! 🎉', 'success');
+        if (resultBox) {
+          resultBox.innerHTML = `
+            <div style="color: var(--accent-green); font-weight: 700; margin-bottom: 4px;">🎉 اكتملت عملية الترحيل بنجاح تام!</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">${json.message}</div>
+          `;
+        }
+        await this.loadMysqlStatus();
+      } else {
+        App.showToast('فشل الترحيل: ' + json.message, 'error');
+        if (resultBox) {
+          resultBox.innerHTML = `
+            <div style="color: var(--accent-red); font-weight: 700; margin-bottom: 4px;">⚠️ تعذر إتمام الترحيل</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">${json.message}</div>
+          `;
+        }
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء عملية الترحيل: ' + err.message, 'error');
+      if (resultBox) {
+        resultBox.innerHTML = `<div style="color: var(--accent-red);">خطأ غير متوقع: ${err.message}</div>`;
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'بدء ترحيل البيانات الآن (Migrate SQLite to MySQL) 🚀';
+      }
+    }
   }
 };
+

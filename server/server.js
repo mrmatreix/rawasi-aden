@@ -8,9 +8,11 @@ const PORT = process.env.PORT || 5500;
 
 // البرمجيات الوسيطة (Middleware)
 app.use(cors());
-app.use(express.json());
-app.use(express.text({ type: ['text/plain', 'application/json'] }));
-app.use(express.urlencoded({ extended: true }));
+// أرشفة الماسح الضوئي ترسل PDF/صورة بصيغة Base64 (حتى 25MB)،
+// لذلك نحتاج هامشاً فوق الحجم الأصلي بسبب زيادة Base64 بنحو الثلث.
+app.use(express.json({ limit: '40mb' }));
+app.use(express.text({ type: ['text/plain', 'application/json'], limit: '40mb' }));
+app.use(express.urlencoded({ extended: true, limit: '40mb' }));
 app.use((req, res, next) => {
   if (typeof req.body === 'string') {
     try { req.body = JSON.parse(req.body); } catch {}
@@ -36,7 +38,9 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/hr', require('./routes/hr'));
 app.use('/api/project-hub', require('./routes/project_management'));
+app.use('/api/project-files', require('./routes/project_files'));
 
 // نقطة فحص صحة النظام
 app.get('/api/health', (req, res) => {
@@ -55,6 +59,14 @@ app.get('*', (req, res) => {
 
 // معالجة الأخطاء غير المتوقعة لضمان استمرار الخادم دائماً
 process.on('uncaughtException', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('===========================================================');
+    console.error(`⚠️  [Port Conflict] Port ${PORT} is already in use!`);
+    console.error(`👉 Another instance of Rawasi Aden is already running.`);
+    console.error(`🌐 Access your system directly at: http://localhost:${PORT}`);
+    console.error('===========================================================');
+    process.exit(0);
+  }
   console.error('⚠️ [Server] Uncaught Exception:', err);
 });
 
@@ -67,10 +79,21 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('===========================================================');
   console.log(`🚀 Rawasi Aden System Server is Running!`);
   console.log(`🌐 System URL: http://localhost:${PORT}`);
-  console.log(`💼 Port: ${PORT}`);
+  console.log(`💼 Port:       ${PORT}`);
   console.log('===========================================================');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('===========================================================');
+    console.error(`⚠️  [Port Conflict] Port ${PORT} is already running!`);
+    console.error(`🌐 The system is ready at: http://localhost:${PORT}`);
+    console.error('===========================================================');
+    process.exit(0);
+  } else {
+    console.error('⚠️ [Server] Listen error:', err.message);
+  }
 });
 
 // مؤقت للحفاظ على حيوية الخادم ومنع الإغلاق التلقائي
 setInterval(() => {}, 1000 * 60 * 60);
-

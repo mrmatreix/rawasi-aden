@@ -769,30 +769,97 @@ const Reports = {
     window.print();
   },
 
-  // تصدير جدول الأرباح والخسائر إلى ملف Excel
+  // تصدير التقرير النشط حالياً إلى ملف Excel بتنسيق رسمي مرتب
+  exportActiveReportToExcel() {
+    const tab = this.activeReportTab || 'profit-loss';
+    if (typeof ExcelExporter !== 'undefined') {
+      if (tab === 'profit-loss') {
+        ExcelExporter.exportProfitLoss();
+      } else if (tab === 'projects-profitability') {
+        ExcelExporter.exportProjectsProfitability();
+      } else if (tab === 'balance-sheet') {
+        ExcelExporter.exportBalanceSheet();
+      } else if (tab === 'client-statement') {
+        ExcelExporter.exportClientStatement();
+      } else if (tab === 'supplier-statement') {
+        ExcelExporter.exportSupplierStatement();
+      } else {
+        ExcelExporter.exportProfitLoss();
+      }
+    } else {
+      this.exportProfitLossToExcel();
+    }
+  },
+
+  // تصدير جدول الأرباح والخسائر إلى ملف Excel المنسق
   exportProfitLossToExcel() {
-    const fromDate = document.getElementById('plFromDate')?.value || '2024-01-01';
-    const toDate = document.getElementById('plToDate')?.value || '2024-05-20';
-    const income = document.getElementById('plTotalIncome')?.textContent || '1,250,000';
-    const expense = document.getElementById('plTotalExpenses')?.textContent || '850,000';
-    const profit = document.getElementById('plNetProfit')?.textContent || '400,000';
+    if (typeof ExcelExporter !== 'undefined') {
+      ExcelExporter.exportProfitLoss();
+    } else {
+      // احتياط داخلي لتوليد Excel بتنسيق XLS حقيقي مرتب
+      const fromDate = document.getElementById('repPlFromDate')?.value || document.getElementById('plFromDate')?.value || '2024-01-01';
+      const toDate = document.getElementById('repPlToDate')?.value || document.getElementById('plToDate')?.value || '2024-05-20';
+      const income = document.getElementById('fullPlIncome')?.textContent || document.getElementById('plTotalIncome')?.textContent || '1,250,000';
+      const expense = document.getElementById('fullPlExpense')?.textContent || document.getElementById('plTotalExpenses')?.textContent || '850,000';
+      const profit = document.getElementById('fullPlProfit')?.textContent || document.getElementById('plNetProfit')?.textContent || '400,000';
 
-    let csvContent = "\uFEFF";
-    csvContent += "شركة رواسي عدن للهندسة والمقاولات\r\n";
-    csvContent += `تقرير الأرباح والخسائر للفترة من ${fromDate} إلى ${toDate}\r\n\r\n`;
-    csvContent += "البند,المبلغ (ريال يمني)\r\n";
-    csvContent += `إجمالي الإيرادات والدخل,"${income}"\r\n`;
-    csvContent += `إجمالي المصروفات وتكاليف المشاريع,"${expense}"\r\n`;
-    csvContent += `صافي الأرباح التشغيلية,"${profit}"\r\n`;
+      const tableHtml = `
+        <table border="1" style="direction: rtl; font-family: Tahoma, Arial; width: 100%;">
+          <tr style="background-color: #0f2744; color: #d4af37; font-weight: bold; font-size: 14pt; text-align: center;">
+            <td colspan="3">شركة رواسي عدن للهندسة والمقاولات</td>
+          </tr>
+          <tr style="background-color: #1e3a5f; color: #fff; font-weight: bold; text-align: center;">
+            <td colspan="3">تقرير الأرباح والخسائر للفترة من ${fromDate} إلى ${toDate}</td>
+          </tr>
+          <tr style="background-color: #1e293b; color: #fff; font-weight: bold;">
+            <th style="padding: 8px;">م</th>
+            <th style="padding: 8px;">البيان المحاسبي</th>
+            <th style="padding: 8px;">المبلغ (ريال يمني)</th>
+          </tr>
+          <tr style="background-color: #ecfdf5; font-weight: bold;">
+            <td align="center">1</td>
+            <td>إجمالي الإيرادات والدخل</td>
+            <td align="left">${income}</td>
+          </tr>
+          <tr style="background-color: #fef2f2; font-weight: bold;">
+            <td align="center">2</td>
+            <td>إجمالي المصروفات وتكاليف المشاريع</td>
+            <td align="left">${expense}</td>
+          </tr>
+          <tr style="background-color: #fffbeb; font-weight: bold; font-size: 11pt;">
+            <td align="center">★</td>
+            <td>صافي الأرباح التشغيلية</td>
+            <td align="left" style="color: #b45309;">${profit}</td>
+          </tr>
+        </table>
+      `;
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `تقرير_الأرباح_والخسائر_${fromDate}_إلى_${toDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    App.showToast('تم تصدير ملف Excel بنجاح', 'success');
+      const excelEnvelope = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+          <!--[if gte mso 9]>
+          <xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+          <x:Name>الأرباح والخسائر</x:Name>
+          <x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>
+          </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml>
+          <![endif]-->
+        </head>
+        <body style="direction: rtl;">
+          ${tableHtml}
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob(["\uFEFF", excelEnvelope], { type: 'application/vnd.ms-excel;charset=utf-8' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `تقرير_الأرباح_والخسائر_${fromDate}_إلى_${toDate}.xls`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      App.showToast('تم تصدير ملف Excel بنجاح', 'success');
+    }
   }
 };

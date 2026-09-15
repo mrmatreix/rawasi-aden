@@ -113,7 +113,7 @@ function normalizeSql(sql, targetEngine) {
  */
 async function initMysql() {
   const mysqlCfg = appConfig.mysql;
-  console.log(`📡 [Rawasi DB] محاولة الاتصال بخادم MySQL على (${mysqlCfg.host}:${mysqlCfg.port})...`);
+  console.log(`📡 [Rawasi DB] Checking MySQL connection on ${mysqlCfg.host}:${mysqlCfg.port}...`);
 
   // 1. الاتصال بدون تحديد اسم قاعدة البيانات لضمان إنشائها أولاً
   let initConn;
@@ -129,7 +129,7 @@ async function initMysql() {
     await initConn.query(`CREATE DATABASE IF NOT EXISTS \`${mysqlCfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
     await initConn.end();
   } catch (err) {
-    throw new Error(`تعذر الوصول إلى سيرفر MySQL: ${err.message}`);
+    throw new Error(`MySQL connection failed: ${err.message}`);
   }
 
   // 2. إنشاء بركة الاتصال (Connection Pool)
@@ -153,7 +153,7 @@ async function initMysql() {
   // 3. التحقق من وجود الجداول وتطبيق schema_mysql.sql إن كانت جديدة
   const [rows] = await mysqlPool.query("SHOW TABLES LIKE 'users'");
   if (!rows || rows.length === 0) {
-    console.log('🌱 [Rawasi DB] قاعدة بيانات MySQL جديدة - جاري تهيئة الجداول الـ 31...');
+    console.log('🌱 [Rawasi DB] New MySQL database detected - Initializing 31 tables...');
     const schemaMysqlPath = path.join(__dirname, 'schema_mysql.sql');
     if (fs.existsSync(schemaMysqlPath)) {
       const schemaSql = fs.readFileSync(schemaMysqlPath, 'utf8');
@@ -200,7 +200,7 @@ async function initMysql() {
   }
 
   activeEngine = 'mysql';
-  console.log(`🐬 [Rawasi DB] تم تفعيل محرك MySQL بنجاح! متصل بـ: ${mysqlCfg.database} على ${mysqlCfg.host}:${mysqlCfg.port}`);
+  console.log(`🐬 [Rawasi DB] MySQL engine active! Connected to [${mysqlCfg.database}] on ${mysqlCfg.host}:${mysqlCfg.port}`);
 }
 
 /**
@@ -228,7 +228,7 @@ function initSqlite() {
   } catch {}
 
   activeEngine = 'sqlite';
-  console.log(`📦 [Rawasi DB] محرك SQLite المحلي نشط: ${sqlitePath}`);
+  console.log(`📦 [Rawasi DB] SQLite engine active -> rawasi_aden.db`);
 }
 
 /**
@@ -242,8 +242,9 @@ async function initializeDatabase() {
       await initMysql();
       return;
     } catch (err) {
-      console.warn('⚠️ [Rawasi DB] تعذر الاتصال بـ MySQL:', err.message);
-      console.warn('👉 جاري التبديل التلقائي إلى محرك SQLite المحلي لضمان استمرار النظام دون انقطاع.');
+      const isRefused = err.message.includes('ECONNREFUSED');
+      console.warn(`⚠️  [Rawasi DB] MySQL server is offline (${isRefused ? 'Connection refused on port ' + (appConfig.mysql?.port || 3306) : err.message})`);
+      console.warn('👉 [Rawasi DB] Fallback active: Automatically running on local SQLite.');
     }
   }
 

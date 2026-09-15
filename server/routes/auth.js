@@ -20,6 +20,7 @@ function getRoleDefaultPermissions(role) {
         'suppliers:view', 'suppliers:manage', 'suppliers:statement',
         'inventory:view', 'inventory:manage', 'inventory:issue',
         'cash:view',
+        'hr:view', 'hr:manage', 'hr:payroll',
         'reports:view',
         'settings:company', 'settings:users', 'settings:backup'
       ];
@@ -32,7 +33,9 @@ function getRoleDefaultPermissions(role) {
         'clients:view', 'clients:manage', 'clients:statement',
         'suppliers:view', 'suppliers:manage', 'suppliers:statement',
         'cash:view',
+        'hr:view', 'hr:manage', 'hr:payroll',
         'reports:view'
+        ,'hr:view'
       ];
     case 'project_manager':
       return [

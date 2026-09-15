@@ -17,4 +17,5 @@ android/app/build/
 android/build/
 android/captures/
 cloudflared.exe
-
+# مجلد حفظ ملفات وتقارير المشاريع المنشأة محلياً
+ملفات_المشاريع/

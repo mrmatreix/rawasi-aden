@@ -72,6 +72,9 @@ const Projects = {
               <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
               </button>
+              <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 3px;">
+                <span>📦</span><span>تصدير</span>
+              </button>
               <button class="btn btn-danger btn-sm" onclick="Projects.deleteProject(${p.id})" title="حذف المشروع">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
               </button>
@@ -531,6 +534,39 @@ const Projects = {
       setTimeout(() => { document.title = orig; }, 2500);
     }
     window.print();
+  },
+
+  async exportFullProjectPackage(projectId) {
+    if (!projectId) return;
+    try {
+      App.showToast('جاري تصدير وتجهيز كافة ملفات وبيانات المشروع في مجلده الخاص...', 'info');
+      const res = await fetch(`/api/project-files/${projectId}/export-package`, {
+        method: 'POST'
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        App.showToast(`تم تصدير حزمة ملفات المشروع بنجاح (${json.data.filesGenerated} ملف) 📦✨`, 'success');
+        
+        // رسالة تأكيد للمستخدم مع إمكانية فتح المجلد في ويندوز مباشرة
+        const confirmOpen = confirm(
+          `تم تصدير وتفريغ ملفات المشروع بنجاح!\n` +
+          `• المشروع: ${json.data.projectName}\n` +
+          `• عدد الملفات: ${json.data.filesGenerated} ملفاً رسمياً (Excel + HTML + JSON)\n` +
+          `• تشمل: الإيرادات، المصروفات، النثريات والعهد، الموردين، المخازن والمواد، الصندوق والبنك، والملف الشامل.\n` +
+          `• المسار في ويندوز:\n${json.data.folderPath}\n\n` +
+          `هل تريد فتح مجلد المشروع الآن في نظام ويندوز؟`
+        );
+        
+        if (confirmOpen) {
+          fetch(`/api/project-files/${projectId}/open-folder`, { method: 'POST' });
+        }
+      } else {
+        App.showToast(json.message || 'تعذر تصدير حزمة ملفات المشروع', 'error');
+      }
+    } catch (e) {
+      console.error('Export project package error:', e);
+      App.showToast('خطأ في الاتصال بالخادم أثناء تصدير المشروع', 'error');
+    }
   },
 
   async deleteProject(id) {

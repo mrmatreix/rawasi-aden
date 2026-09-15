@@ -270,6 +270,37 @@ CREATE TABLE IF NOT EXISTS settings (
     description TEXT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- الموارد البشرية
+CREATE TABLE IF NOT EXISTS employees (
+    id INT AUTO_INCREMENT PRIMARY KEY, employee_no VARCHAR(50) NOT NULL UNIQUE, full_name VARCHAR(200) NOT NULL,
+    national_id VARCHAR(100) NULL, phone VARCHAR(50) NULL, job_title VARCHAR(150) NULL, department VARCHAR(150) NULL,
+    project_id INT NULL, employment_type VARCHAR(50) DEFAULT 'دوام كامل', hire_date DATE NULL,
+    basic_salary DECIMAL(15,2) DEFAULT 0, currency VARCHAR(20) DEFAULT 'ر.ي', status VARCHAR(30) DEFAULT 'active',
+    bank_name VARCHAR(150) NULL, bank_account VARCHAR(150) NULL, notes TEXT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS attendance (
+    id INT AUTO_INCREMENT PRIMARY KEY, employee_id INT NOT NULL, date DATE NOT NULL, status VARCHAR(30) DEFAULT 'present',
+    check_in VARCHAR(20) NULL, check_out VARCHAR(20) NULL, overtime_hours DECIMAL(8,2) DEFAULT 0, notes TEXT NULL,
+    UNIQUE KEY uq_attendance_employee_date (employee_id, date), FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS employee_leaves (
+    id INT AUTO_INCREMENT PRIMARY KEY, employee_id INT NOT NULL, leave_type VARCHAR(50) DEFAULT 'سنوية', start_date DATE NOT NULL, end_date DATE NOT NULL,
+    days_count DECIMAL(8,2) DEFAULT 1, status VARCHAR(30) DEFAULT 'pending', notes TEXT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS employee_advances (
+    id INT AUTO_INCREMENT PRIMARY KEY, employee_id INT NOT NULL, amount DECIMAL(15,2) NOT NULL, recovered_amount DECIMAL(15,2) DEFAULT 0,
+    installment_amount DECIMAL(15,2) DEFAULT 0, date DATE NOT NULL, status VARCHAR(30) DEFAULT 'active', notes TEXT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS payroll (
+    id INT AUTO_INCREMENT PRIMARY KEY, employee_id INT NOT NULL, payroll_month VARCHAR(7) NOT NULL, basic_salary DECIMAL(15,2) DEFAULT 0,
+    overtime_amount DECIMAL(15,2) DEFAULT 0, deductions DECIMAL(15,2) DEFAULT 0, net_salary DECIMAL(15,2) DEFAULT 0,
+    status VARCHAR(30) DEFAULT 'draft', paid_date DATE NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_payroll_employee_month (employee_id, payroll_month), FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================================
 -- جداول إدارة المشاريع الهندسية والمقاولات الـ 14 (Project Management Suite)
 -- ============================================================================

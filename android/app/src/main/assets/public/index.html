@@ -241,6 +241,12 @@
             <span>الصندوق والبنك</span>
           </a>
         </li>
+        <li data-perm="hr:view">
+          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('hr', this)">
+            <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C22 14.17 18.33 13 16 13z"/></svg>
+            <span>الموارد البشرية</span>
+          </a>
+        </li>
         <li data-perm="reports:view">
           <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('reports', this)">
             <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
@@ -799,6 +805,30 @@
             </div>
           </div>
 
+          <!-- شريط مسار مجلد المشروع الفعلي في الويندوز -->
+          <div class="hub-folder-bar" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 10px 16px; margin: 12px 0 14px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 280px;">
+              <span style="font-size: 1.4rem;">📁</span>
+              <div style="flex: 1;">
+                <div style="font-size: 0.75rem; color: var(--gold-light); font-weight: bold; margin-bottom: 2px;">مجلد المشروع الفعلي على جهازك (Windows):</div>
+                <div id="hubProjectFolderPath" style="font-size: 0.82rem; font-family: monospace; color: #f1f5f9; direction: ltr; text-align: right; word-break: break-all;">
+                  جاري جلب وتأكيد مسار المجلد...
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.copyProjectFolderPath()" title="نسخ المسار الكامل للحافظة" style="display: flex; align-items: center; gap: 4px;">
+                📋 نسخ المسار
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="ProjectHub.openProjectFolderInExplorer()" title="فتح المجلد مباشرة في مستكشف ويندوز" style="display: flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border-color: #3b82f6;">
+                📂 فتح المجلد في ويندوز
+              </button>
+              <button type="button" class="btn btn-success btn-sm" onclick="ProjectHub.exportAndSaveProjectSummary()" title="حفظ نسخة كاملة من تقرير المشروع في مجلده" style="display: flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #059669, #10b981); border-color: #10b981;">
+                💾 حفظ التقرير الشامل في المجلد
+              </button>
+            </div>
+          </div>
+
           <!-- شريط الـ 6 مؤشرات KPIs المالية والهندسية للمشروع -->
           <div class="hub-kpi-bar">
             <div class="hub-kpi-item">
@@ -884,6 +914,10 @@
             <button class="hub-tab-btn" id="hubTabBtn_settlement" onclick="ProjectHub.switchTab('settlement')">
               <span>⚖️ 14. الحساب الختامي</span>
               <span class="tab-count-badge" id="cnt_settlement">0</span>
+            </button>
+            <button class="hub-tab-btn" id="hubTabBtn_project-files" onclick="ProjectHub.switchTab('project-files')" style="border: 1px solid rgba(59, 130, 246, 0.4); background: rgba(37, 99, 235, 0.1);">
+              <span>🗄️ 15. أرشفة التقارير الممسوحة</span>
+              <span class="tab-count-badge" id="cnt_project_files" style="background: #2563eb;">0</span>
             </button>
           </div>
         </div>
@@ -1244,6 +1278,63 @@
             <div id="hubSettlementContent"></div>
           </div>
         </div>
+
+        <!-- 15. أرشيف ملفات وتقارير المشروع الفعلي على القرص -->
+        <div id="hubPane_project-files" class="hub-pane-view" style="display: none;">
+          <div class="panel-card">
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 class="panel-title">📁 مستكشف وأرشيف ملفات وتقارير المشروع على جهازك</h3>
+                <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">استعراض وفتح الملفات والتقارير المخرجة المحفوظة في مجلد المشروع في نظام ويندوز</p>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.refreshProjectFiles()">🔄 تحديث الملفات</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnOpenProjectFolderExplorer" onclick="ProjectHub.openProjectFolderInExplorer()" title="فتح مجلد المشروع مباشرة في مستكشف ويندوز (Windows Explorer)" style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 1.05rem;">📁</span>
+                  <span>فتح المجلد في ويندوز</span>
+                </button>
+              </div>
+            </div>
+            <div style="margin: 14px 0; padding: 14px; border: 1px dashed rgba(212,175,55,.55); border-radius: var(--radius-sm); background: rgba(212,175,55,.04);">
+              <div style="font-weight:700;color:var(--gold-light);margin-bottom:5px;">🖨️ أرشفة تقرير ممسوح ضوئياً</div>
+              <div style="font-size:.78rem;color:var(--text-secondary);margin-bottom:10px;">امسح المستند إلى PDF أو صورة، ثم ارفعه هنا ليحفظ داخل مجلد المشروع الحالي: <b>10_أرشيف_التقارير_الممسوحة</b>.</div>
+              <div class="form-grid"><div class="form-group"><label>عنوان التقرير</label><input id="scanArchiveTitle" class="form-control" placeholder="مثال: تقرير فحص الخرسانة"></div><div class="form-group"><label>نوع التقرير</label><select id="scanArchiveCategory" class="form-control"><option>تقرير ممسوح</option><option>تقرير فحص</option><option>مستند استلام</option><option>مراسلة رسمية</option><option>مستند مالي</option></select></div><div class="form-group"><label>ملف PDF أو صورة</label><input id="scanArchiveFile" class="form-control" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div><div class="form-group" style="align-self:end;"><button type="button" class="btn btn-primary" onclick="ProjectHub.archiveScannedReport()">رفع وأرشفة التقرير</button></div></div>
+            </div>
+
+            <!-- معلومات المجلد والمسار الكامل -->
+            <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div>
+                  <span style="color: var(--gold-light); font-weight: bold; font-size: 0.85rem;">المسار الفعلي على القرص:</span>
+                  <div id="hubFilesCurrentPath" style="font-family: monospace; direction: ltr; text-align: right; color: #cbd5e1; font-size: 0.82rem; margin-top: 4px; word-break: break-all;">-</div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.copyProjectFolderPath()">📋 نسخ المسار الكامل</button>
+              </div>
+            </div>
+
+            <!-- جدول ملفات المشروع -->
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>اسم الملف</th>
+                    <th>المجلد الفرعي / التصنيف</th>
+                    <th>حجم الملف</th>
+                    <th>تاريخ الحفظ والتعديل</th>
+                    <th>الإجراء</th>
+                  </tr>
+                </thead>
+                <tbody id="hubProjectFilesTableBody">
+                  <tr>
+                    <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 30px;">
+                      جاري فحص مجلد المشروع...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ================== شاشة المخزون والمواد ================== -->
@@ -1272,6 +1363,18 @@
         </div>
       </section>
 
+      <!-- ================== الموارد البشرية ================== -->
+      <section id="hrView" class="app-view-section" style="display:none;">
+        <div class="page-header-row"><div><h2 class="page-title">إدارة الموارد البشرية</h2><p style="color:var(--text-secondary);font-size:.85rem;margin-top:4px;">الموظفون، الحضور، الإجازات، السلف ومسيرات الرواتب</p></div><div class="page-actions"><button class="btn btn-secondary" onclick="HR.load()">تحديث</button><button class="btn btn-primary" onclick="HR.openEmployeeModal()">+ موظف جديد</button></div></div>
+        <div class="kpi-grid"><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">الموظفون النشطون</span><span class="kpi-value" id="hrActiveEmployees">0</span></div><div class="kpi-icon-wrap">👥</div></div><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">حضور اليوم</span><span class="kpi-value" id="hrPresentToday">0</span></div><div class="kpi-icon-wrap">✓</div></div><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">رواتب بانتظار الصرف</span><span class="kpi-value" id="hrUnpaidPayroll">0</span></div><div class="kpi-icon-wrap">💰</div></div><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">رصيد السلف</span><span class="kpi-value" id="hrActiveAdvances">0</span></div><div class="kpi-icon-wrap">📌</div></div></div>
+        <div class="report-tabs-bar" style="margin-bottom:20px;"><button class="report-tab-btn active" onclick="HR.showPane('employees',this)">الموظفون</button><button class="report-tab-btn" onclick="HR.showPane('attendance',this)">الحضور والانصراف</button><button class="report-tab-btn" onclick="HR.showPane('leaves',this)">الإجازات</button><button class="report-tab-btn" onclick="HR.showPane('advances',this)">السلف</button><button class="report-tab-btn" onclick="HR.showPane('payroll',this)">الرواتب</button></div>
+        <div id="hrPane_employees" class="hr-pane"><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الرقم</th><th>الموظف</th><th>المسمى</th><th>القسم</th><th>المشروع</th><th>الراتب</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="hrEmployeesTableBody"></tbody></table></div></div></div>
+        <div id="hrPane_attendance" class="hr-pane" style="display:none;"><div class="panel-card"><form onsubmit="HR.submitAttendance(event)" class="form-grid"><div class="form-group"><label>التاريخ</label><input id="hrAttendanceDate" class="form-control" type="date" onchange="HR.loadAttendance()"></div><div class="form-group"><label>الموظف</label><select id="hrAttendanceEmployee" class="form-control" required></select></div><div class="form-group"><label>الحالة</label><select id="hrAttendanceStatus" class="form-control"><option value="present">حاضر</option><option value="late">متأخر</option><option value="absent">غائب</option><option value="leave">إجازة</option></select></div><div class="form-group"><label>دخول</label><input id="hrCheckIn" class="form-control" type="time"></div><div class="form-group"><label>خروج</label><input id="hrCheckOut" class="form-control" type="time"></div><div class="form-group"><label>إضافي</label><input id="hrOvertime" class="form-control" type="number" value="0"></div><div class="form-group"><label>ملاحظات</label><input id="hrAttendanceNotes" class="form-control"></div><button class="btn btn-primary" type="submit">حفظ</button></form></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الرقم</th><th>الموظف</th><th>الحالة</th><th>الدخول</th><th>الخروج</th><th>إضافي</th><th>ملاحظات</th></tr></thead><tbody id="hrAttendanceTableBody"></tbody></table></div></div></div>
+        <div id="hrPane_leaves" class="hr-pane" style="display:none;"><div class="panel-card"><form onsubmit="HR.submitLeave(event)" class="form-grid"><div class="form-group"><label>الموظف</label><select id="hrLeaveEmployee" class="form-control" required></select></div><div class="form-group"><label>النوع</label><select id="hrLeaveType" class="form-control"><option>سنوية</option><option>مرضية</option><option>طارئة</option><option>بدون راتب</option></select></div><div class="form-group"><label>من</label><input id="hrLeaveStart" class="form-control" type="date" required></div><div class="form-group"><label>إلى</label><input id="hrLeaveEnd" class="form-control" type="date" required></div><div class="form-group"><label>الأيام</label><input id="hrLeaveDays" class="form-control" type="number" value="1"></div><button class="btn btn-primary">تسجيل الطلب</button></form></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الموظف</th><th>النوع</th><th>الفترة</th><th>الأيام</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="hrLeavesTableBody"></tbody></table></div></div></div>
+        <div id="hrPane_advances" class="hr-pane" style="display:none;"><div class="panel-card"><form onsubmit="HR.submitAdvance(event)" class="form-grid"><div class="form-group"><label>الموظف</label><select id="hrAdvanceEmployee" class="form-control" required></select></div><div class="form-group"><label>المبلغ</label><input id="hrAdvanceAmount" class="form-control" type="number" required></div><div class="form-group"><label>التاريخ</label><input id="hrAdvanceDate" class="form-control" type="date" required></div><div class="form-group"><label>القسط الشهري</label><input id="hrAdvanceInstallment" class="form-control" type="number" value="0"></div><button class="btn btn-primary">تسجيل السلفة</button></form></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الموظف</th><th>التاريخ</th><th>السلفة</th><th>المسدد</th><th>المتبقي</th><th>القسط</th><th>الحالة</th></tr></thead><tbody id="hrAdvancesTableBody"></tbody></table></div></div></div>
+        <div id="hrPane_payroll" class="hr-pane" style="display:none;"><div class="panel-card" style="display:flex;gap:10px;align-items:end;margin-bottom:14px;"><div class="form-group" style="margin:0;"><label>شهر المسير</label><input id="hrPayrollMonth" class="form-control" type="month" onchange="HR.loadPayroll()"></div><button class="btn btn-primary" onclick="HR.generatePayroll()">إنشاء مسير الرواتب</button></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الموظف</th><th>الشهر</th><th>الأساسي</th><th>الإضافي</th><th>الاستقطاعات</th><th>الصافي</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="hrPayrollTableBody"></tbody></table></div></div></div>
+      </section>
+
       <!-- ================== شاشة مركز التقارير الشاملة ================== -->
       <section id="reportsView" class="app-view-section" style="display: none;">
         <div class="page-header-row">
@@ -1281,7 +1384,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
               <span>طباعة التقرير (PDF)</span>
             </button>
-            <button class="btn btn-primary" onclick="Reports.exportProfitLossToExcel()">
+            <button class="btn btn-primary" onclick="Reports.exportActiveReportToExcel()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               <span>تصدير إلى Excel</span>
             </button>
@@ -2276,6 +2379,79 @@
             </form>
           </div>
 
+          <!-- بطاقة مميزة: إدارة وترحيل قاعدة بيانات MySQL (MySQL Enterprise & Migration) -->
+          <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold); background: linear-gradient(135deg, rgba(212, 175, 55, 0.04) 0%, rgba(26, 38, 57, 0.3) 100%);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+              <h3 style="color: var(--gold-light); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 4.02 2 6.5s4.48 4.5 10 4.5 10-2.02 10-4.5S17.52 2 12 2zm0 6c-3.86 0-7-1.34-7-3s3.14-3 7-3 7 1.34 7 3-3.14 3-7 3zm0 4.5c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5zm0 6c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5z"/></svg>
+                <span>إدارة وترحيل قاعدة بيانات MySQL الاحترافية (Enterprise MySQL Database)</span>
+              </h3>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadMysqlStatus()">تحديث حالة MySQL 🔄</button>
+            </div>
+
+            <!-- مربع حالة اتصال ومحرك MySQL النشط -->
+            <div id="mysqlStatusBox" style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px;">
+              <!-- يتم تحديثه ديناميكياً عبر Settings.loadMysqlStatus() -->
+              <div style="color: var(--text-secondary); font-size: 0.85rem;">جاري فحص حالة خادم ومحرك MySQL...</div>
+            </div>
+
+            <!-- نموذج ضبط بيانات الاتصال بـ MySQL -->
+            <form onsubmit="Settings.saveMysqlSettings(event)">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="mysqlHost">خادم MySQL (Host)</label>
+                  <input type="text" id="mysqlHost" class="form-control" placeholder="localhost" value="localhost" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="mysqlPort">المنفذ (Port)</label>
+                  <input type="number" id="mysqlPort" class="form-control" placeholder="3306" value="3306" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="mysqlUser">المستخدم (Username)</label>
+                  <input type="text" id="mysqlUser" class="form-control" placeholder="root" value="root" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="mysqlPassword">كلمة المرور (Password)</label>
+                  <input type="password" id="mysqlPassword" class="form-control" placeholder="اتركه فارغاً إن لم توجد">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="mysqlDatabase">اسم قاعدة البيانات</label>
+                  <input type="text" id="mysqlDatabase" class="form-control" placeholder="rawasi_aden" value="rawasi_aden" required>
+                </div>
+              </div>
+
+              <!-- مربع نتيجة فحص الاتصال -->
+              <div id="mysqlTestResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); margin-bottom: 16px;"></div>
+
+              <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 20px;">
+                <button type="button" id="btnTestMysql" class="btn btn-secondary" onclick="Settings.testMysqlConnection()">
+                  <span>اختبار الاتصال بـ MySQL 🔍</span>
+                </button>
+                <button type="submit" id="btnSaveMysql" class="btn btn-primary">
+                  <span>حفظ الإعدادات وتفعيل المحرك 💾</span>
+                </button>
+              </div>
+            </form>
+
+            <hr style="border: 0; border-top: 1px dashed var(--border-light); margin: 20px 0;">
+
+            <!-- قسم ترحيل البيانات من SQLite إلى MySQL -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: rgba(255, 255, 255, 0.02); padding: 16px; border-radius: var(--radius-sm); border: 1px solid rgba(212, 175, 55, 0.2);">
+              <div style="max-width: 650px;">
+                <h4 style="color: var(--gold-light); margin: 0 0 6px 0; font-size: 0.95rem;">ترحيل شامل للبيانات من SQLite إلى MySQL (Data Migration Tool)</h4>
+                <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0; line-height: 1.5;">
+                  ينقل هذا الخيار كافة الجداول الـ 31 (المشاريع، المستخلصات، العقود، قيود اليومية، السندات المالية، المخزون، والمستخدمين) من قاعدة SQLite إلى خادم MySQL المنشأ، مع الحفاظ الكامل على المفاتيح الأجنبية وأرصدة الحسابات دون المساس بالبيانات القديمة.
+                </p>
+              </div>
+              <button type="button" id="btnRunMigration" class="btn btn-primary" onclick="Settings.runMysqlMigration()" style="white-space: nowrap;">
+                <span>بدء ترحيل البيانات الآن (Migrate to MySQL) 🚀</span>
+              </button>
+            </div>
+
+            <div id="mysqlMigrationResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); margin-top: 16px;"></div>
+          </div>
+
+
           <!-- بطاقة 2: تحميل واستعادة النسخ العامة -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
             <div class="panel-card" style="text-align: center; padding: 25px;">
@@ -2405,6 +2581,8 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-overlay" id="hrEmployeeModal"><div class="modal-box"><div class="modal-header"><h3 id="hrEmployeeModalTitle">إضافة موظف جديد</h3><button class="modal-close-btn" onclick="HR.closeModal('hrEmployeeModal')">&times;</button></div><form id="hrEmployeeForm" onsubmit="HR.submitEmployee(event)"><input id="hrEmployeeId" type="hidden"><div class="form-grid"><div class="form-group"><label>اسم الموظف *</label><input id="hrEmp_full_name" class="form-control" required></div><div class="form-group"><label>رقم الهوية</label><input id="hrEmp_national_id" class="form-control"></div><div class="form-group"><label>الهاتف</label><input id="hrEmp_phone" class="form-control"></div><div class="form-group"><label>المسمى الوظيفي</label><input id="hrEmp_job_title" class="form-control"></div><div class="form-group"><label>القسم</label><input id="hrEmp_department" class="form-control" placeholder="تنفيذ، مالية، إدارة..."></div><div class="form-group"><label>نوع التعاقد</label><select id="hrEmp_employment_type" class="form-control"><option>دوام كامل</option><option>دوام جزئي</option><option>يومية</option><option>مقاول باطن</option></select></div><div class="form-group"><label>تاريخ التعيين</label><input id="hrEmp_hire_date" type="date" class="form-control"></div><div class="form-group"><label>الراتب الأساسي</label><input id="hrEmp_basic_salary" type="number" value="0" class="form-control"></div><div class="form-group"><label>الحالة</label><select id="hrEmp_status" class="form-control"><option value="active">نشط</option><option value="inactive">موقوف</option></select></div><div class="form-group"><label>البنك</label><input id="hrEmp_bank_name" class="form-control"></div><div class="form-group"><label>رقم الحساب</label><input id="hrEmp_bank_account" class="form-control"></div><div class="form-group"><label>ملاحظات</label><input id="hrEmp_notes" class="form-control"></div></div><div class="modal-footer"><button class="btn btn-primary" type="submit">حفظ الموظف</button><button class="btn btn-secondary" type="button" onclick="HR.closeModal('hrEmployeeModal')">إلغاء</button></div></form></div></div>
 
   <!-- نافذة إضافة مشروع جديد -->
   <div class="modal-overlay" id="newProjectModal">
@@ -4377,8 +4555,10 @@
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/auth.js?v=5.1"></script>
   <script src="js/projects.js?v=5.1"></script>
-  <script src="js/project_hub.js?v=5.1"></script>
+  <script src="js/project_hub.js?v=5.2"></script>
   <script src="js/accounting.js?v=5.1"></script>
+  <script src="js/hr.js?v=5.2"></script>
+  <script src="js/excel-export.js?v=5.1"></script>
   <script src="js/reports.js?v=5.1"></script>
   <script src="js/inventory.js?v=5.1"></script>
   <script src="js/settings.js?v=5.1"></script>

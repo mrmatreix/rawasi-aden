@@ -240,6 +240,33 @@ CREATE TABLE IF NOT EXISTS settings (
     description TEXT
 );
 
+-- الموارد البشرية: الموظفون، الحضور، الإجازات، السلف ومسيرات الرواتب
+CREATE TABLE IF NOT EXISTS employees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, employee_no TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL,
+    national_id TEXT, phone TEXT, job_title TEXT, department TEXT, project_id INTEGER REFERENCES projects(id),
+    employment_type TEXT DEFAULT 'دوام كامل', hire_date DATE, basic_salary REAL DEFAULT 0, currency TEXT DEFAULT 'ر.ي',
+    status TEXT DEFAULT 'active', bank_name TEXT, bank_account TEXT, notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    date DATE NOT NULL, status TEXT DEFAULT 'present', check_in TEXT, check_out TEXT, overtime_hours REAL DEFAULT 0, notes TEXT,
+    UNIQUE(employee_id, date)
+);
+CREATE TABLE IF NOT EXISTS employee_leaves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    leave_type TEXT DEFAULT 'سنوية', start_date DATE NOT NULL, end_date DATE NOT NULL, days_count REAL DEFAULT 1, status TEXT DEFAULT 'pending', notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS employee_advances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    amount REAL NOT NULL, recovered_amount REAL DEFAULT 0, installment_amount REAL DEFAULT 0, date DATE NOT NULL, status TEXT DEFAULT 'active', notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS payroll (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    payroll_month TEXT NOT NULL, basic_salary REAL DEFAULT 0, overtime_amount REAL DEFAULT 0, deductions REAL DEFAULT 0,
+    net_salary REAL DEFAULT 0, status TEXT DEFAULT 'draft', paid_date DATE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(employee_id, payroll_month)
+);
+
 -- ============================================================================
 -- جداول إدارة المشاريع الهندسية والمقاولات الـ 14 (Project Management Suite)
 -- ============================================================================
