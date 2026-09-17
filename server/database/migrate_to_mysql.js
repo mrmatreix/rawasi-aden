@@ -76,7 +76,7 @@ async function runMigration() {
 
   if (!fs.existsSync(sqlitePath)) {
     console.error('❌ ملف SQLite غير موجود:', sqlitePath);
-    process.exit(1);
+    throw new Error('ملف SQLite غير موجود: ' + sqlitePath);
   }
 
   const sqlite = new DatabaseSync(sqlitePath);
@@ -95,7 +95,7 @@ async function runMigration() {
   } catch (connErr) {
     console.error('❌ فشل الاتصال بخادم MySQL:', connErr.message);
     console.error('تأكد من تشغيل خادم MySQL (مثل XAMPP أو خدمة MySQL) وصحة بيانات الاتصال.');
-    process.exit(1);
+    throw new Error('فشل الاتصال بخادم MySQL: ' + connErr.message + ' (يرجى تشغيل XAMPP أو خدمة MySQL أولاً)');
   }
 
   try {
