@@ -75,7 +75,91 @@ function parseUserPermissions(user) {
   return permissionsList;
 }
 
-// 1. تسجيل الدخول (Login) مع فحص عدم تكرار اتصال نفس المستخدم بالتزامن
+// دالة لمعالجة وتوحيد التوقيت الزمني لـ Heartbeat بدون التباس المناطق الزمنية
+function getHeartbeatTimestamp(hb) {
+  if (!hb) return 0;
+  if (typeof hb === 'number') return hb;
+  const str = String(hb).trim();
+  if (!str) return 0;
+  if (str.endsWith('Z') || str.includes('+')) return new Date(str).getTime();
+  return new Date(str.replace(' ', 'T') + 'Z').getTime();
+}
+
+// دالة مساعدة لجلب إعدادات الأمان وسياسة الجلسات والتوكن
+async function getSecuritySettings() {
+  const defaults = {
+    session_mode: 'multi', // 'multi' | 'single'
+    session_device_limit: 3, // 2 | 3 | 5
+    session_overflow_action: 'kick_oldest', // 'kick_oldest' | 'block_new'
+    jwt_token_expiry: '8h', // '1h' | '4h' | '8h' | '24h' | '7d' | '30d' | 'custom'
+    jwt_custom_minutes: 480
+  };
+  try {
+    const rows = await query("SELECT `key`, `value` FROM settings WHERE `key` IN ('session_mode', 'session_device_limit', 'session_overflow_action', 'jwt_token_expiry', 'jwt_custom_minutes')");
+    if (rows && rows.length > 0) {
+      rows.forEach(r => {
+        if (r.key === 'session_device_limit' || r.key === 'jwt_custom_minutes') {
+          defaults[r.key] = Number(r.value) || defaults[r.key];
+        } else if (r.value) {
+          defaults[r.key] = r.value;
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Could not read security settings from DB, using defaults:', e.message);
+  }
+  return defaults;
+}
+
+// 0. جلب إعدادات الأمان وسياسة الجلسات والتوكن
+router.get('/security-settings', async (req, res) => {
+  try {
+    const settings = await getSecuritySettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب إعدادات الأمان: ' + err.message });
+  }
+});
+
+// 0. حفظ وتطبيق إعدادات الأمان وسياسة الجلسات والتوكن
+router.post('/security-settings', async (req, res) => {
+  try {
+    const { session_mode, session_device_limit, session_overflow_action, jwt_token_expiry, jwt_custom_minutes } = req.body || {};
+
+    const validModes = ['multi', 'single'];
+    const validLimits = [2, 3, 5];
+    const validOverflow = ['kick_oldest', 'block_new'];
+    const validExpiries = ['1h', '4h', '8h', '24h', '7d', '30d', 'custom'];
+
+    const updates = {};
+    if (session_mode && validModes.includes(session_mode)) {
+      updates['session_mode'] = session_mode;
+    }
+    if (session_device_limit && (validLimits.includes(Number(session_device_limit)) || Number(session_device_limit) > 0)) {
+      updates['session_device_limit'] = String(Number(session_device_limit));
+    }
+    if (session_overflow_action && validOverflow.includes(session_overflow_action)) {
+      updates['session_overflow_action'] = session_overflow_action;
+    }
+    if (jwt_token_expiry && validExpiries.includes(jwt_token_expiry)) {
+      updates['jwt_token_expiry'] = jwt_token_expiry;
+    }
+    if (jwt_custom_minutes && Number(jwt_custom_minutes) > 0) {
+      updates['jwt_custom_minutes'] = String(Number(jwt_custom_minutes));
+    }
+
+    for (const [k, v] of Object.entries(updates)) {
+      await run(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`, [k, String(v)]);
+    }
+
+    const current = await getSecuritySettings();
+    res.json({ success: true, message: 'تم حفظ وتطبيق إعدادات الأمان وسياسة الجلسات بنجاح 🛡️', settings: current });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حفظ إعدادات الأمان: ' + err.message });
+  }
+});
+
+// 1. تسجيل الدخول (Login) مع فحص عدم تكرار اتصال نفس المستخدم بالتزامن وسقف الجلسات
 router.post('/login', async (req, res) => {
   try {
     const { username, password, force, deviceInfo } = req.body;
@@ -98,56 +182,116 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
 
-    // فحص ما إذا كان المستخدم متصلاً حالياً لمنع تكرار تسجيل الدخول لنفس المستخدم
-    const ACTIVE_THRESHOLD_MS = 60 * 1000; // مهلة النشاط 60 ثانية
-    let isCurrentlyActive = false;
-    if (user.is_logged_in === 1 && user.last_heartbeat) {
-      const lastHbTime = new Date(user.last_heartbeat).getTime();
-      const diff = Date.now() - lastHbTime;
-      if (!isNaN(diff) && diff < ACTIVE_THRESHOLD_MS) {
-        isCurrentlyActive = true;
+    // قراءة إعدادات الأمان الحالية
+    const secSettings = await getSecuritySettings();
+    
+    // حساب مدة صلاحية التوكن (JWT)
+    let tokenExpiry = secSettings.jwt_token_expiry || '8h';
+    if (tokenExpiry === 'custom') {
+      const mins = Number(secSettings.jwt_custom_minutes) || 480;
+      tokenExpiry = `${mins}m`;
+    }
+
+    // استخراج الجلسات النشطة المخزنة لهذا المستخدم
+    const ACTIVE_THRESHOLD_MS = 75 * 1000; // مهلة النشاط 75 ثانية
+    const nowMs = Date.now();
+    let activeSessions = [];
+    try {
+      activeSessions = user.active_sessions ? JSON.parse(user.active_sessions) : [];
+    } catch (e) {
+      activeSessions = [];
+    }
+    if (!Array.isArray(activeSessions)) activeSessions = [];
+
+    // تنقية الجلسات غير النشطة
+    activeSessions = activeSessions.filter(s => {
+      const hb = s.lastHeartbeatMs || getHeartbeatTimestamp(s.lastHeartbeat);
+      return (nowMs - hb) < ACTIVE_THRESHOLD_MS;
+    });
+
+    // توافقية مع الحقول القديمة إذا لم تكن مسجلة في active_sessions
+    if (activeSessions.length === 0 && user.is_logged_in === 1 && user.session_token && user.last_heartbeat) {
+      const lastHb = getHeartbeatTimestamp(user.last_heartbeat);
+      if ((nowMs - lastHb) < ACTIVE_THRESHOLD_MS) {
+        activeSessions.push({
+          sessionId: user.session_token,
+          device: user.last_login_device || 'متصفح النظام',
+          ip: user.last_login_ip || '',
+          loginAt: user.last_login_at || user.last_heartbeat,
+          lastHeartbeat: user.last_heartbeat,
+          lastHeartbeatMs: lastHb
+        });
       }
     }
 
-    // إذا كان المستخدم متصلاً بالفعل ولم يطلب إنهاء الجلسة السابقة (Force Takeover)
-    if (isCurrentlyActive && !force) {
-      return res.status(409).json({
-        success: false,
-        already_logged_in: true,
-        message: `المستخدم (${user.full_name || user.username}) متصل بالنظام حالياً من جهاز أو جلسة أخرى. لمنع التكرار والحفاظ على أمان البيانات، لا يمكن تسجيل الدخول بنفس المستخدم بالتزامن.`,
-        last_active: user.last_heartbeat,
-        last_login_device: user.last_login_device,
-        user: {
-          id: user.id,
-          username: user.username,
-          full_name: user.full_name
+    // فحص سقف الأجهزة حسب السياسة المحددة (جلسة واحدة صارمة أو جلسات متعددة)
+    const isSingleMode = secSettings.session_mode === 'single';
+    const maxDevices = isSingleMode ? 1 : (Number(secSettings.session_device_limit) || 3);
+    const overflowAction = secSettings.session_overflow_action || 'kick_oldest';
+
+    if (activeSessions.length >= maxDevices) {
+      if (overflowAction === 'block_new' && !force) {
+        const policyDesc = isSingleMode ? 'جلسة واحدة صارمة' : `سقف الجلسات المتعددة (${maxDevices} أجهزة)`;
+        return res.status(409).json({
+          success: false,
+          already_logged_in: true,
+          limit_exceeded: true,
+          message: `المستخدم (${user.full_name || user.username}) متصل حالياً وبلغ الحد الأقصى للجلسات المسموح بها (${policyDesc}). لمنع التكرار والحفاظ على سرية البيانات، لا يمكن فتح جلسة جديدة. يرجى تسجيل الخروج أولاً أو استخدام الدخول الإجباري لطرد الجلسات القديمة.`,
+          last_active: user.last_heartbeat,
+          last_login_device: user.last_login_device,
+          user: {
+            id: user.id,
+            username: user.username,
+            full_name: user.full_name
+          }
+        });
+      } else {
+        // طرد الجلسات الأقدم حتى يقل العدد عن السقف المسموح
+        activeSessions.sort((a, b) => {
+          const tA = a.lastHeartbeatMs || getHeartbeatTimestamp(a.lastHeartbeat || a.loginAt);
+          const tB = b.lastHeartbeatMs || getHeartbeatTimestamp(b.lastHeartbeat || b.loginAt);
+          return tA - tB;
+        });
+        while (activeSessions.length >= maxDevices) {
+          activeSessions.shift();
         }
-      });
+      }
     }
 
     const permissionsList = parseUserPermissions(user);
     const sessionId = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).substring(2));
+    const nowIsoDb = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const nowIsoFull = new Date().toISOString();
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const deviceStr = deviceInfo || req.headers['user-agent'] || 'متصفح النظام';
+
+    activeSessions.push({
+      sessionId,
+      ip: String(clientIp),
+      device: String(deviceStr).substring(0, 200),
+      loginAt: nowIsoDb,
+      lastHeartbeat: nowIsoFull,
+      lastHeartbeatMs: nowMs
+    });
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, full_name: user.full_name, sessionId },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: tokenExpiry }
     );
 
     // تحديث حالة الاتصال وبصمة الجلسة في قاعدة البيانات
-    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-    const deviceStr = deviceInfo || req.headers['user-agent'] || 'متصفح النظام';
     await run(`
       UPDATE users SET 
         is_logged_in = 1,
         session_token = ?,
+        active_sessions = ?,
         last_heartbeat = ?,
         last_login_at = ?,
         last_login_ip = ?,
         last_login_device = ?
       WHERE id = ?
-    `, [sessionId, nowIso, nowIso, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
+    `, [sessionId, JSON.stringify(activeSessions), nowIsoDb, nowIsoDb, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
 
     let dbStatus = connectionManager ? connectionManager.getStatus() : { isOnline: false, mode: 'offline' };
 
@@ -184,22 +328,50 @@ router.post('/heartbeat', async (req, res) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await get('SELECT id, is_logged_in, session_token, status, full_name, username FROM users WHERE id = ?', [decoded.id]);
+    const user = await get('SELECT id, is_logged_in, session_token, active_sessions, status, full_name, username FROM users WHERE id = ?', [decoded.id]);
     if (!user || user.status === 'inactive') {
       return res.status(401).json({ success: false, session_terminated: true, message: 'الحساب معطل أو غير موجود' });
     }
 
-    // إذا تغير معرف الجلسة في قاعدة البيانات (تم تسجيل الدخول من مكان آخر)
-    if (decoded.sessionId && user.session_token && decoded.sessionId !== user.session_token) {
-      return res.status(401).json({
-        success: false,
-        session_terminated: true,
-        message: 'تم تسجيل الدخول بحسابك من جهاز أو متصفح آخر. تم إنهاء هذه الجلسة تلقائياً منعاً لتكرار نفس المستخدم.'
-      });
+    let activeSessions = [];
+    try {
+      activeSessions = user.active_sessions ? JSON.parse(user.active_sessions) : [];
+    } catch (e) {
+      activeSessions = [];
+    }
+    if (!Array.isArray(activeSessions)) activeSessions = [];
+
+    const nowIsoDb = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const nowIsoFull = new Date().toISOString();
+    const nowMs = Date.now();
+
+    // إذا كانت هناك مصفوفة جلسات نشطة مسجلة
+    if (activeSessions.length > 0) {
+      const currentSess = activeSessions.find(s => s.sessionId === decoded.sessionId);
+      if (!currentSess) {
+        return res.status(401).json({
+          success: false,
+          session_terminated: true,
+          message: 'تم إنهاء هذه الجلسة تلقائياً نظراً لتسجيل الدخول من جهاز آخر تجاوز سقف الأجهزة أو تم إنهاء الجلسة القديمة.'
+        });
+      }
+      currentSess.lastHeartbeat = nowIsoFull;
+      currentSess.lastHeartbeatMs = nowMs;
+    } else {
+      // فحص الجلسة المفردة
+      if (decoded.sessionId && user.session_token && decoded.sessionId !== user.session_token) {
+        return res.status(401).json({
+          success: false,
+          session_terminated: true,
+          message: 'تم تسجيل الدخول بحسابك من جهاز أو متصفح آخر. تم إنهاء هذه الجلسة تلقائياً منعاً لتكرار نفس المستخدم.'
+        });
+      }
+      if (decoded.sessionId) {
+        activeSessions.push({ sessionId: decoded.sessionId, lastHeartbeat: nowIsoFull, lastHeartbeatMs: nowMs });
+      }
     }
 
-    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    await run("UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?", [nowIso, user.id]);
+    await run("UPDATE users SET last_heartbeat = ?, active_sessions = ?, is_logged_in = 1 WHERE id = ?", [nowIsoDb, JSON.stringify(activeSessions), user.id]);
     res.json({ success: true, is_logged_in: true });
   } catch (err) {
     res.status(401).json({ success: false, message: 'انتهت صلاحية الجلسة' });
@@ -216,7 +388,7 @@ router.get('/me', async (req, res) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token FROM users WHERE id = ?', [decoded.id]);
+    const user = await get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token, active_sessions FROM users WHERE id = ?', [decoded.id]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
@@ -225,8 +397,24 @@ router.get('/me', async (req, res) => {
       return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً' });
     }
 
-    // التحقق من تطابق معرف الجلسة
-    if (decoded.sessionId && user.session_token && decoded.sessionId !== user.session_token) {
+    let activeSessions = [];
+    try {
+      activeSessions = user.active_sessions ? JSON.parse(user.active_sessions) : [];
+    } catch (e) {
+      activeSessions = [];
+    }
+    if (!Array.isArray(activeSessions)) activeSessions = [];
+
+    if (activeSessions.length > 0) {
+      const currentSess = activeSessions.find(s => s.sessionId === decoded.sessionId);
+      if (!currentSess) {
+        return res.status(401).json({
+          success: false,
+          session_terminated: true,
+          message: 'تم إنهاء هذه الجلسة تلقائياً نظراً لتسجيل الدخول من جهاز آخر تجاوز سقف الأجهزة المسموح بها.'
+        });
+      }
+    } else if (decoded.sessionId && user.session_token && decoded.sessionId !== user.session_token) {
       return res.status(401).json({
         success: false,
         session_terminated: true,
@@ -263,19 +451,43 @@ router.post('/logout', async (req, res) => {
     const authHeader = req.headers.authorization;
     let userId = req.body?.userId;
     let username = req.body?.username;
+    let currentSessionId = null;
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
         userId = userId || decoded.id;
         username = username || decoded.username;
+        currentSessionId = decoded.sessionId;
       } catch {}
     }
 
-    if (userId) {
-      await run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE id = ?", [userId]);
-    } else if (username) {
-      await run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE LOWER(username) = LOWER(?)", [username]);
+    if (userId || username) {
+      const targetUser = userId 
+        ? await get("SELECT id, active_sessions, session_token FROM users WHERE id = ?", [userId])
+        : await get("SELECT id, active_sessions, session_token FROM users WHERE LOWER(username) = LOWER(?)", [username]);
+
+      if (targetUser) {
+        let activeSessions = [];
+        try {
+          activeSessions = targetUser.active_sessions ? JSON.parse(targetUser.active_sessions) : [];
+        } catch (e) {}
+
+        if (currentSessionId && Array.isArray(activeSessions)) {
+          activeSessions = activeSessions.filter(s => s.sessionId !== currentSessionId);
+        } else {
+          activeSessions = [];
+        }
+
+        const isLogged = activeSessions.length > 0 ? 1 : 0;
+        const lastToken = activeSessions.length > 0 ? activeSessions[activeSessions.length - 1].sessionId : null;
+        await run("UPDATE users SET is_logged_in = ?, active_sessions = ?, session_token = ? WHERE id = ?", [
+          isLogged,
+          JSON.stringify(activeSessions),
+          lastToken,
+          targetUser.id
+        ]);
+      }
     }
 
     res.json({ success: true, message: 'تم إنهاء الجلسة بنجاح' });

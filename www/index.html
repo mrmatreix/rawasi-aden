@@ -2110,6 +2110,9 @@
                 <span>قائمة المستخدمين وصلاحيات الوصول</span>
               </h3>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btnSecuritySessions" onclick="Auth.openSecuritySessionsModal()" title="إعدادات الأمان وسياسة الجلسات والأجهزة وصلاحية التوكن" style="border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.08); font-weight: 700;">
+                  🛡️ الأمان والجلسات <span id="currentSessionModeBadge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; margin-right: 4px;">متعددة (3)</span>
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnLockTimeoutSettings" onclick="Auth.openLockTimeoutModal()" title="تحديد مهلة فترة القفل التلقائي وقفل الشاشة">
                   ⏱️ مهلة فترة القفل <span id="currentLockTimeoutBadge" class="badge" style="background: rgba(212, 175, 55, 0.2); color: #d4af37; margin-right: 4px;">15 دقيقة</span>
                 </button>
@@ -3346,6 +3349,121 @@
             <button type="button" class="btn btn-secondary btn-sm" onclick="App.closeModal('lockTimeoutModal')">إلغاء</button>
             <button type="button" class="btn btn-primary btn-sm" onclick="Auth.saveLockTimeoutSettings()">حفظ الإعداد</button>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة إعدادات الأمان وسياسة الجلسات والتوكن -->
+  <div class="modal-overlay" id="securitySessionsModal">
+    <div class="modal-box" style="max-width: 860px; padding: 20px;">
+      <div class="modal-header" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light);">
+        <h3 style="display: flex; align-items: center; gap: 8px; margin: 0; color: #f1f5f9; font-size: 1.15rem;">
+          <span style="color: #10b981;">🛡️</span>
+          <span>إعدادات الأمان والجلسات وصلاحية التوكن</span>
+        </h3>
+        <button class="modal-close-btn" onclick="App.closeModal('securitySessionsModal')">&times;</button>
+      </div>
+
+      <div class="security-modal-grid">
+        <!-- البطاقة 1: سياسة تسجيل الدخول والأجهزة (مطابقة للصورة 2) -->
+        <div class="security-card">
+          <div>
+            <div class="security-card-header">
+              <span class="session-help-btn" onclick="Auth.showSecurityHelp()" title="معلومات توضيحية حول سياسة الجلسات والأجهزة">?</span>
+              <span class="security-card-title">سياسة تسجيل الدخول والأجهزة</span>
+            </div>
+
+            <!-- أزرار التبديل الرئيسية: جلسة واحدة صارمة | الجلسات المتعددة -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+              <button type="button" class="session-mode-toggle-btn" id="btnModeSingle" onclick="Auth.setSessionMode('single')">
+                <span>جلسة واحدة صارمة</span>
+              </button>
+              <button type="button" class="session-mode-toggle-btn active" id="btnModeMulti" onclick="Auth.setSessionMode('multi')">
+                <span>الجلسات المتعددة</span>
+              </button>
+            </div>
+
+            <!-- صندوق خيارات الجلسات المتعددة وسقف الأجهزة -->
+            <div id="multiSessionControlsBox" style="background: rgba(15, 23, 42, 0.5); border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <!-- سقف الأجهزة -->
+              <div style="display: flex; align-items: center; gap: 8px;" id="boxDeviceLimit">
+                <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">سقف الأجهزة:</span>
+                <div style="display: flex; gap: 6px;" id="deviceLimitButtons">
+                  <button type="button" class="device-limit-btn" data-limit="2" onclick="Auth.setDeviceLimit(2)">2</button>
+                  <button type="button" class="device-limit-btn active" data-limit="3" onclick="Auth.setDeviceLimit(3)">3</button>
+                  <button type="button" class="device-limit-btn" data-limit="5" onclick="Auth.setDeviceLimit(5)">5</button>
+                </div>
+              </div>
+
+              <!-- عند التجاوز -->
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">عند التجاوز:</span>
+                <div style="display: flex; gap: 6px;" id="overflowActionButtons">
+                  <button type="button" class="overflow-action-btn active" data-action="kick_oldest" onclick="Auth.setOverflowAction('kick_oldest')">طرد الأقدم</button>
+                  <button type="button" class="overflow-action-btn" data-action="block_new" onclick="Auth.setOverflowAction('block_new')">منع الجديد</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 14px; font-size: 0.78rem; color: #64748b; line-height: 1.5;" id="sessionPolicyHelpNote">
+            💡 <strong>الجلسات المتعددة:</strong> تتيح فتح النظام من المتصفح والموبايل في وقت واحد حتى سقف الأجهزة المحدد، وعند التجاوز يتم تطبيق الإجراء المختار.
+          </div>
+        </div>
+
+        <!-- البطاقة 2: مدة صلاحية التوكن (JWT) (مطابقة للصورة 2) -->
+        <div class="security-card">
+          <div>
+            <div class="security-card-header">
+              <span id="badgeCurrentTokenExpiry" style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; font-family: monospace; font-size: 0.88rem; padding: 2px 8px; border-radius: 6px; font-weight: 700;">8h</span>
+              <span class="security-card-title">مدة صلاحية التوكن (JWT)</span>
+            </div>
+
+            <!-- شبكة أزرار مدد الصلاحية المحددة مسبقاً (3 أعمدة) -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;" id="tokenPresetGrid">
+              <button type="button" class="token-expiry-btn" data-exp="1h" onclick="Auth.setTokenExpiry('1h')">1 ساعة</button>
+              <button type="button" class="token-expiry-btn" data-exp="4h" onclick="Auth.setTokenExpiry('4h')">4 ساعات</button>
+              <button type="button" class="token-expiry-btn active" data-exp="8h" onclick="Auth.setTokenExpiry('8h')">8 ساعات (افتراضي)</button>
+              <button type="button" class="token-expiry-btn" data-exp="24h" onclick="Auth.setTokenExpiry('24h')">24 ساعة (يوم)</button>
+              <button type="button" class="token-expiry-btn" data-exp="7d" onclick="Auth.setTokenExpiry('7d')">7 أيام</button>
+              <button type="button" class="token-expiry-btn" data-exp="30d" onclick="Auth.setTokenExpiry('30d')">30 يوماً</button>
+            </div>
+
+            <!-- زر مخصص -->
+            <div>
+              <button type="button" class="token-expiry-btn" data-exp="custom" id="btnExpiryCustom" onclick="Auth.setTokenExpiry('custom')" style="width: 100%;">مخصص</button>
+              <div id="customExpiryBox" style="display: none; margin-top: 8px; padding: 8px 12px; background: rgba(15, 23, 42, 0.6); border: 1px dashed #334155; border-radius: 8px; align-items: center; gap: 8px; justify-content: center;">
+                <span style="font-size: 0.82rem; color: #94a3b8;">المدة:</span>
+                <input type="number" id="inputCustomVal" min="5" max="43200" value="12" style="width: 75px; padding: 4px 8px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; text-align: center; font-weight: bold;" oninput="Auth.onCustomInputChange()">
+                <select id="selectCustomUnit" style="padding: 4px 8px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px;" onchange="Auth.onCustomInputChange()">
+                  <option value="m">دقيقة</option>
+                  <option value="h" selected>ساعة</option>
+                  <option value="d">يوم</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- تذييل البطاقة 2: تاريخ ووقت انتهاء الجلسة الحالية -->
+          <div style="margin-top: 14px; text-align: right; color: #94a3b8; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; justify-content: flex-start; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+            <span>⏱️</span>
+            <span>تنتهي جلستك الحالية في:</span>
+            <span id="currentSessionExpiryFormatted" style="color: #10b981; font-weight: 700;">...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- أزرار الإجراءات بالأسفل -->
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--border-light); flex-wrap: wrap;">
+        <div style="font-size: 0.82rem; color: #64748b;">
+          🛡️ تسري هذه الإعدادات على جميع مستخدمي نظام رواسي عدن لحماية بيانات المؤسسة.
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="App.closeModal('securitySessionsModal')">إلغاء</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="Auth.saveSecuritySessionsSettings()" style="background: #10b981; border-color: #059669; color: #ffffff; font-weight: 700; padding: 6px 16px;">
+            💾 حفظ وتطبيق الإعدادات
+          </button>
         </div>
       </div>
     </div>

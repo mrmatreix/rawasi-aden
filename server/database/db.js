@@ -199,6 +199,14 @@ async function initMysql() {
     `);
   }
 
+  // فحص حقل active_sessions في جدول users في MySQL
+  try {
+    const [cols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'active_sessions'");
+    if (!cols || cols.length === 0) {
+      await mysqlPool.query("ALTER TABLE users ADD COLUMN active_sessions TEXT NULL");
+    }
+  } catch {}
+
   activeEngine = 'mysql';
   console.log(`🐬 [Rawasi DB] MySQL engine active! Connected to [${mysqlCfg.database}] on ${mysqlCfg.host}:${mysqlCfg.port}`);
 }
@@ -225,6 +233,7 @@ function initSqlite() {
     if (!colNames.includes('last_login_at')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME;");
     if (!colNames.includes('last_login_ip')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_ip TEXT;");
     if (!colNames.includes('last_login_device')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_device TEXT;");
+    if (!colNames.includes('active_sessions')) sqliteDb.exec("ALTER TABLE users ADD COLUMN active_sessions TEXT;");
   } catch {}
 
   activeEngine = 'sqlite';

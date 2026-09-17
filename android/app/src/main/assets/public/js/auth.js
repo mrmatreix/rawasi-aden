@@ -15,10 +15,18 @@ const Auth = {
   lastActivityTime: Date.now(),
   _activityCheckInterval: null,
   _activityListenersBound: false,
+  securitySettings: {
+    session_mode: 'multi',
+    session_device_limit: 3,
+    session_overflow_action: 'kick_oldest',
+    jwt_token_expiry: '8h',
+    jwt_custom_minutes: 480
+  },
 
   // تهيئة نظام الدخول والمصادقة
   async init() {
     this.initLockEngine();
+    this.fetchSecuritySettings();
 
     // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها في هذه النافذة الحالية
     const isSessionActive = sessionStorage.getItem('rawasi_session_active') === 'true';
@@ -467,6 +475,9 @@ const Auth = {
     // تحديث شارة مهلة القفل
     this.updateLockTimeoutBadge();
 
+    // تحديث شارة سياسة الجلسات والأمان
+    this.updateSessionModeBadge();
+
     // تحديث مؤشر وشارة الاتصال عند اسم المستخدم أيضاً
     if (typeof App !== 'undefined' && App.updateConnectionUI && App.dbStatus) {
       App.updateConnectionUI(App.dbStatus);
@@ -783,6 +794,267 @@ const Auth = {
           : `تم ضبط مهلة فترة القفل التلقائي إلى ${val} دقيقة بنجاح ⏱️`;
         App.showToast(msg, 'success');
       }
+    }
+  },
+
+  // =================== إعدادات الأمان وسياسة الجلسات والتوكن ===================
+
+  // جلب إعدادات الأمان وسياسة الجلسات من الخادم
+  async fetchSecuritySettings() {
+    try {
+      const res = await fetch('/api/auth/security-settings');
+      const data = await res.json();
+      if (data && data.success && data.settings) {
+        this.securitySettings = Object.assign(this.securitySettings, data.settings);
+        this.updateSessionModeBadge();
+      }
+    } catch (e) {
+      console.warn('Could not load security settings:', e);
+    }
+  },
+
+  // تحديث نص ولون شارة وضع الجلسات في الزر العلوي
+  updateSessionModeBadge() {
+    const badge = document.getElementById('currentSessionModeBadge');
+    if (!badge) return;
+    const isMulti = this.securitySettings?.session_mode === 'multi';
+    const limit = this.securitySettings?.session_device_limit || 3;
+    if (isMulti) {
+      badge.textContent = `متعددة (${limit})`;
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.color = '#10b981';
+    } else {
+      badge.textContent = 'جلسة واحدة';
+      badge.style.background = 'rgba(59, 130, 246, 0.2)';
+      badge.style.color = '#60a5fa';
+    }
+  },
+
+  // حساب وتنسيق تاريخ ووقت انتهاء الجلسة الحالية من التوكن (JWT)
+  getCurrentSessionExpiryFormatted() {
+    const token = this.token || localStorage.getItem('rawasi_token') || localStorage.getItem('token');
+    if (!token) return 'غير متوفر (يرجى تسجيل الدخول)';
+    try {
+      const parts = token.split('.');
+      if (parts.length < 2) return 'غير محدد';
+      const payload = JSON.parse(atob(parts[1]));
+      if (!payload.exp) return 'جلسة دائمة (بدون انتهاء)';
+      const expDate = new Date(payload.exp * 1000);
+      
+      const dateStr = expDate.toLocaleDateString('ar-YE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const timeStr = expDate.toLocaleTimeString('ar-YE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+      return `${dateStr} ${timeStr}`;
+    } catch (e) {
+      return 'خطأ في قراءة التوكن';
+    }
+  },
+
+  // فتح نافذة إعدادات الأمان وسياسة الجلسات والتوكن
+  openSecuritySessionsModal() {
+    this.fetchSecuritySettings().finally(() => {
+      this.renderSecurityModalState();
+      if (typeof App !== 'undefined' && App.openModal) {
+        App.openModal('securitySessionsModal');
+      }
+    });
+  },
+
+  // رسم وتحديث حالة العناصر داخل نافذة الأمان لتطابق التصميم
+  renderSecurityModalState() {
+    const s = this.securitySettings || {};
+
+    // 1. سياسة الجلسة (جلسة واحدة صارمة أو جلسات متعددة)
+    const btnSingle = document.getElementById('btnModeSingle');
+    const btnMulti = document.getElementById('btnModeMulti');
+    const boxLimit = document.getElementById('boxDeviceLimit');
+    const note = document.getElementById('sessionPolicyHelpNote');
+
+    if (s.session_mode === 'single') {
+      if (btnSingle) btnSingle.classList.add('active');
+      if (btnMulti) btnMulti.classList.remove('active');
+      if (boxLimit) {
+        boxLimit.style.opacity = '0.35';
+        boxLimit.style.pointerEvents = 'none';
+      }
+      if (note) {
+        note.innerHTML = '🔒 <strong>جلسة واحدة صارمة:</strong> مسموح بجهاز واحد فقط لكل حساب. في حال فتح جلسة جديدة، يتم تطبيق الإجراء المختار إما بطرد الجلسة السابقة أو رفض الدخول الجديد.';
+      }
+    } else {
+      if (btnSingle) btnSingle.classList.remove('active');
+      if (btnMulti) btnMulti.classList.add('active');
+      if (boxLimit) {
+        boxLimit.style.opacity = '1';
+        boxLimit.style.pointerEvents = 'auto';
+      }
+      if (note) {
+        note.innerHTML = '💡 <strong>الجلسات المتعددة:</strong> تتيح فتح النظام من المتصفح والموبايل في وقت واحد حتى سقف الأجهزة المحدد، وعند التجاوز يتم تطبيق الإجراء المختار.';
+      }
+    }
+
+    // 2. سقف الأجهزة (2, 3, 5)
+    const limit = Number(s.session_device_limit) || 3;
+    document.querySelectorAll('.device-limit-btn').forEach(btn => {
+      const bLimit = Number(btn.getAttribute('data-limit'));
+      btn.classList.toggle('active', bLimit === limit);
+    });
+
+    // 3. عند التجاوز (kick_oldest, block_new)
+    const action = s.session_overflow_action || 'kick_oldest';
+    document.querySelectorAll('.overflow-action-btn').forEach(btn => {
+      const bAction = btn.getAttribute('data-action');
+      btn.classList.toggle('active', bAction === action);
+    });
+
+    // 4. مدة صلاحية التوكن (JWT)
+    const exp = s.jwt_token_expiry || '8h';
+    document.querySelectorAll('.token-expiry-btn').forEach(btn => {
+      const bExp = btn.getAttribute('data-exp');
+      btn.classList.toggle('active', bExp === exp);
+    });
+
+    // الشارة الخضراء أعلى بطاقة التوكن
+    const badge = document.getElementById('badgeCurrentTokenExpiry');
+    if (badge) {
+      if (exp === 'custom') {
+        const mins = s.jwt_custom_minutes || 480;
+        badge.textContent = mins >= 60 ? `${Math.round(mins/60)}h` : `${mins}m`;
+      } else {
+        badge.textContent = exp;
+      }
+    }
+
+    // صندوق الإدخال المخصص
+    const customBox = document.getElementById('customExpiryBox');
+    if (customBox) {
+      customBox.style.display = (exp === 'custom') ? 'flex' : 'none';
+      if (exp === 'custom' && s.jwt_custom_minutes) {
+        const mins = Number(s.jwt_custom_minutes);
+        const inputVal = document.getElementById('inputCustomVal');
+        const selectUnit = document.getElementById('selectCustomUnit');
+        if (inputVal && selectUnit) {
+          if (mins % 1440 === 0) {
+            inputVal.value = mins / 1440;
+            selectUnit.value = 'd';
+          } else if (mins % 60 === 0) {
+            inputVal.value = mins / 60;
+            selectUnit.value = 'h';
+          } else {
+            inputVal.value = mins;
+            selectUnit.value = 'm';
+          }
+        }
+      }
+    }
+
+    // 5. تذييل انتهاء الجلسة
+    const expiryFooter = document.getElementById('currentSessionExpiryFormatted');
+    if (expiryFooter) {
+      expiryFooter.textContent = this.getCurrentSessionExpiryFormatted();
+    }
+  },
+
+  // تبديل وضع الجلسة
+  setSessionMode(mode) {
+    this.securitySettings.session_mode = mode;
+    this.renderSecurityModalState();
+  },
+
+  // تحديد سقف الأجهزة
+  setDeviceLimit(limit) {
+    this.securitySettings.session_device_limit = Number(limit);
+    this.renderSecurityModalState();
+  },
+
+  // تحديد إجراء التجاوز
+  setOverflowAction(action) {
+    this.securitySettings.session_overflow_action = action;
+    this.renderSecurityModalState();
+  },
+
+  // تحديد مدة صلاحية التوكن
+  setTokenExpiry(exp) {
+    this.securitySettings.jwt_token_expiry = exp;
+    this.renderSecurityModalState();
+  },
+
+  // عند تغيير قيمة المدة المخصصة
+  onCustomInputChange() {
+    const inputVal = document.getElementById('inputCustomVal');
+    const selectUnit = document.getElementById('selectCustomUnit');
+    const val = Number(inputVal?.value) || 1;
+    const unit = selectUnit?.value || 'h';
+
+    let totalMinutes = val;
+    if (unit === 'h') totalMinutes = val * 60;
+    else if (unit === 'd') totalMinutes = val * 1440;
+
+    this.securitySettings.jwt_custom_minutes = totalMinutes;
+
+    const badge = document.getElementById('badgeCurrentTokenExpiry');
+    if (badge) {
+      badge.textContent = `${val}${unit}`;
+    }
+  },
+
+  // إظهار نافذة التلميحات والمساعدة
+  showSecurityHelp() {
+    alert(
+      "🛡️ سياسة تسجيل الدخول والأجهزة:\n\n" +
+      "1. جلسة واحدة صارمة:\n" +
+      "يُسمح باتصال جهاز واحد فقط لكل حساب. يفيد عند الرغبة في منع مشاركة الحساب أو استخدامه بالتزامن من عدة متصفحات.\n\n" +
+      "2. الجلسات المتعددة:\n" +
+      "تتيح للمستخدم فتح النظام من أكثر من جهاز (مثلاً: كمبيوتر المكتب والهاتف الذكي) حتى سقف الأجهزة المحدد (2، 3، أو 5).\n\n" +
+      "3. عند التجاوز:\n" +
+      "• طرد الأقدم: عند تسجيل الدخول من جهاز جديد يتم إنهاء أقدم جلسة تلقائياً.\n" +
+      "• منع الجديد: يتم رفض الدخول الجديد ومطالبة المستخدم بالخروج من أحد الأجهزة السابقة أولاً.\n\n" +
+      "4. مدة صلاحية التوكن (JWT):\n" +
+      "تحدد فترة بقاء تسجيل الدخول نشطاً قبل الحاجة لإعادة كتابة كلمة المرور."
+    );
+  },
+
+  // حفظ وتطبيق إعدادات الأمان
+  async saveSecuritySessionsSettings() {
+    try {
+      if (this.securitySettings.jwt_token_expiry === 'custom') {
+        this.onCustomInputChange();
+      }
+
+      const res = await fetch('/api/auth/security-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': this.token ? `Bearer ${this.token}` : ''
+        },
+        body: JSON.stringify(this.securitySettings)
+      });
+
+      const data = await res.json();
+      if (data && data.success) {
+        if (data.settings) {
+          this.securitySettings = Object.assign(this.securitySettings, data.settings);
+        }
+        this.updateSessionModeBadge();
+        if (typeof App !== 'undefined') {
+          if (App.closeModal) App.closeModal('securitySessionsModal');
+          if (App.showToast) {
+            const modeName = this.securitySettings.session_mode === 'single' ? 'جلسة واحدة صارمة' : `جلسات متعددة (${this.securitySettings.session_device_limit} أجهزة)`;
+            App.showToast(`تم حفظ وتطبيق إعدادات الأمان: [${modeName}] وصلاحية [${this.securitySettings.jwt_token_expiry}] بنجاح 🛡️`, 'success');
+          }
+        }
+      } else {
+        alert(data?.message || 'حدث خطأ أثناء حفظ إعدادات الأمان');
+      }
+    } catch (e) {
+      console.error('Save security settings error:', e);
+      alert('خطأ في الاتصال بالخادم لحفظ الإعدادات: ' + e.message);
     }
   },
 
