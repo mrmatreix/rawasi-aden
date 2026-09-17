@@ -1086,4 +1086,439 @@ router.post('/:projectId/settlement', async (req, res) => {
   }
 });
 
+// دالة تفقيط المبالغ المالية باللغة العربية
+function tafqeetArabic(num, currency = 'ر.ي') {
+  if (!num || isNaN(num) || num <= 0) return 'صفر';
+  num = Math.floor(Number(num));
+  const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
+  const teens = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+  const tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+  const hundreds = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+
+  function convertGroup(n) {
+    let res = [];
+    const h = Math.floor(n / 100);
+    const remainder = n % 100;
+    if (h > 0) res.push(hundreds[h]);
+    if (remainder > 0) {
+      if (remainder < 10) res.push(ones[remainder]);
+      else if (remainder < 20) res.push(teens[remainder - 10]);
+      else {
+        const o = remainder % 10;
+        const t = Math.floor(remainder / 10);
+        if (o > 0) res.push(ones[o] + ' و' + tens[t]);
+        else res.push(tens[t]);
+      }
+    }
+    return res.join(' و');
+  }
+
+  let parts = [];
+  const billions = Math.floor(num / 1000000000);
+  num %= 1000000000;
+  const millions = Math.floor(num / 1000000);
+  num %= 1000000;
+  const thousands = Math.floor(num / 1000);
+  const units = num % 1000;
+
+  if (billions > 0) parts.push(convertGroup(billions) + (billions === 1 ? ' مليار' : (billions === 2 ? ' ملياران' : (billions <= 10 ? ' مليارات' : ' مليار'))));
+  if (millions > 0) parts.push(convertGroup(millions) + (millions === 1 ? ' مليون' : (millions === 2 ? ' مليونان' : (millions <= 10 ? ' ملايين' : ' مليون'))));
+  if (thousands > 0) {
+    if (thousands === 1) parts.push('ألف');
+    else if (thousands === 2) parts.push('ألفان');
+    else if (thousands <= 10) parts.push(convertGroup(thousands) + ' آلاف');
+    else parts.push(convertGroup(thousands) + ' ألف');
+  }
+  if (units > 0) parts.push(convertGroup(units));
+
+  let currName = 'ريال يمني';
+  if (currency === 'ر.س') currName = 'ريال سعودي';
+  else if (currency === '$' || currency === 'USD') currName = 'دولار أمريكي';
+
+  return 'فقط ' + (parts.join(' و') || 'صفر') + ' ' + currName + ' لا غير';
+}
+
+// ============================================================================
+// 16. عرض السعر والتسعير المتكامل (المخازن، المواد، الكميات، والموردين)
+// ============================================================================
+router.get('/:projectId/integrated-quotation', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    let project = await get(`
+      SELECT p.*, c.name as client_name, c.phone as client_phone, c.company as client_company
+      FROM projects p
+      LEFT JOIN clients c ON p.client_id = c.id
+      WHERE p.id = ?
+    `, [projectId]);
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
+    }
+
+    const requestedQuoNo = req.query.quotation_no;
+    let quotation = null;
+
+    if (requestedQuoNo) {
+      quotation = await get('SELECT * FROM project_quotations WHERE quotation_no = ? AND (project_id = ? OR project_id IS NULL)', [requestedQuoNo, projectId]);
+    }
+
+    // البحث عن أحدث عرض سعر خاص بهذا المشروع أولاً
+    if (!quotation) {
+      quotation = await get('SELECT * FROM project_quotations WHERE project_id = ? ORDER BY id DESC LIMIT 1', [projectId]);
+    }
+
+    // جلب بيانات العقد لتحديد صاحب العقد الموقع على المشروع (السادة)
+    const contract = await get(`
+      SELECT * FROM project_contracts
+      WHERE project_id = ?
+      ORDER BY id DESC LIMIT 1
+    `, [projectId]);
+
+    let contractOwner = project?.client_name || 'العميل المعتمد';
+    if (contract) {
+      if (contract.first_party && !contract.first_party.includes('رواسي')) {
+        contractOwner = contract.first_party;
+      } else if (contract.second_party && !contract.second_party.includes('رواسي')) {
+        contractOwner = contract.second_party;
+      }
+    }
+
+    // جلب بنود BOQ الخاصة بهذا المشروع
+    const allBoq = await query('SELECT id, item_no, description, unit, contract_qty, unit_rate, total_amount FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
+
+    // استخراج البنود إما من عرض السعر أو من جدول كميات المشروع BOQ أو بند افتراضي من العقد
+    let items = [];
+    if (quotation && quotation.items_json) {
+      try {
+        items = typeof quotation.items_json === 'string' ? JSON.parse(quotation.items_json) : quotation.items_json;
+      } catch (e) {
+        items = [];
+      }
+    } else if (allBoq && allBoq.length > 0) {
+      items = allBoq.map((b, idx) => ({
+        item_no: idx + 1,
+        description: b.description || 'بند أعمال',
+        unit: b.unit || 'وحدة',
+        quantity: Number(b.contract_qty) || 1,
+        unit_price: Number(b.unit_rate) || 0,
+        total: Number(b.total_amount) || ((Number(b.contract_qty) || 1) * (Number(b.unit_rate) || 0)),
+        boq_item_no: b.item_no || `BOQ-${String(idx + 1).padStart(2, '0')}`,
+        category: 'أعمال تعاقدية',
+        boq_linked: true
+      }));
+    } else {
+      const contractVal = Number(contract?.contract_value || project.contract_value || 0);
+      items = [{
+        item_no: 1,
+        description: contract?.title || `تنفيذ أعمال ومقاولات ${project.name}`,
+        unit: 'مقطوع',
+        quantity: 1,
+        unit_price: contractVal,
+        total: contractVal,
+        boq_item_no: 'BOQ-01',
+        category: 'أعمال تعاقدية',
+        boq_linked: false
+      }];
+    }
+
+    // جلب المخزون والموردين للربط الفوري والتأكد من أحدث الأرصدة
+    const allMaterials = await query('SELECT id, code, name, category, unit, current_quantity, min_quantity, unit_price FROM items');
+    const allSuppliers = await query('SELECT id, name, phone, category FROM suppliers');
+
+    const materialsMap = {};
+    allMaterials.forEach(m => {
+      materialsMap[m.name] = m;
+      materialsMap[m.id] = m;
+    });
+
+    const suppliersMap = {};
+    allSuppliers.forEach(s => {
+      suppliersMap[s.name] = s;
+      suppliersMap[s.id] = s;
+    });
+
+    const boqMap = {};
+    allBoq.forEach(b => {
+      boqMap[b.item_no] = b;
+    });
+
+    // تحديث بيانات البنود بروابط المخزن والموردين و BOQ الحية
+    const enrichedItems = items.map((it, idx) => {
+      const itemNo = it.item_no || (idx + 1);
+      const boqCode = it.boq_item_no || `BOQ-${String(itemNo).padStart(2, '0')}`;
+      const boqMatch = boqMap[boqCode];
+
+      const mat = materialsMap[it.material_id] || materialsMap[it.material_name] || null;
+      let stockQty = mat ? mat.current_quantity : (it.stock_quantity || 10);
+      let stockUnit = mat ? mat.unit : (it.stock_unit || it.unit);
+      let stockStatus = 'متوفر بالمخزن 🟢';
+      if (mat) {
+        if (mat.current_quantity <= 0) stockStatus = 'نفذ من المخزن 🔴';
+        else if (mat.current_quantity <= (mat.min_quantity || 5)) stockStatus = 'مخزون منخفض 🟡';
+        else stockStatus = 'متوفر بالمخزن 🟢';
+      }
+
+      const supp = suppliersMap[it.supplier_id] || suppliersMap[it.supplier_name] || null;
+      const suppPhone = supp ? supp.phone : (it.supplier_phone || '775566778');
+      const suppName = supp ? supp.name : (it.supplier_name || 'مورد معتمد');
+
+      const qty = Number(it.quantity) || 1;
+      const price = Number(it.unit_price) || 0;
+      const total = Number(it.total) || (qty * price);
+
+      return {
+        ...it,
+        item_no: itemNo,
+        description: it.description || 'بند أعمال',
+        unit: it.unit || 'وحدة',
+        quantity: qty,
+        unit_price: price,
+        total: total,
+        boq_item_no: boqCode,
+        boq_linked: !!boqMatch,
+        material_id: mat ? mat.id : it.material_id,
+        material_name: mat ? mat.name : (it.material_name || it.description),
+        stock_quantity: stockQty,
+        stock_unit: stockUnit,
+        stock_status: stockStatus,
+        supplier_id: supp ? supp.id : it.supplier_id,
+        supplier_name: suppName,
+        supplier_phone: suppPhone
+      };
+    });
+
+    const activeCurrency = quotation?.currency || contract?.currency || project.currency || 'ر.ي';
+    const totalAmount = enrichedItems.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0) || (quotation ? Number(quotation.total_amount) : Number(contract?.contract_value || project.contract_value || 0));
+
+    if (!quotation) {
+      quotation = {
+        id: null,
+        project_id: Number(projectId),
+        quotation_no: `QT-${project.code || 'PRJ'}-${new Date().getFullYear()}`,
+        title: `عرض سعر ${project.name}`,
+        date: contract?.contract_date || project.start_date || new Date().toISOString().split('T')[0],
+        valid_until: contract?.end_date || project.end_date || null,
+        currency: activeCurrency,
+        total_amount: totalAmount,
+        subtotal: totalAmount,
+        notes: contract?.notes || project.notes || `عرض سعر رسمي خاص بمشروع ${project.name}`,
+        payment_terms: contract?.payment_terms || 'دفعات مرحلية حسب المستخلصات والتقدم الميداني',
+        delivery_period: contract?.duration_days ? `${contract.duration_days} يوماً` : '30 يوماً من استلام الموقع',
+        status: 'معتمد'
+      };
+    }
+
+    const words = tafqeetArabic(totalAmount, activeCurrency);
+
+    // جلب قائمة كافة عروض الأسعار المسجلة للاختيار منها مع إبراز عروض هذا المشروع
+    const allQuotations = await query(`
+      SELECT q.id, q.project_id, q.quotation_no, q.title, q.date, q.total_amount, q.currency,
+             p.name as project_name, c.name as client_name, c.phone as client_phone
+      FROM project_quotations q
+      LEFT JOIN projects p ON q.project_id = p.id
+      LEFT JOIN clients c ON q.client_id = c.id
+      ORDER BY CASE WHEN q.project_id = ? THEN 0 ELSE 1 END, q.id DESC
+    `, [projectId]);
+
+    res.json({
+      success: true,
+      data: {
+        project: {
+          ...project,
+          contract_owner: contractOwner,
+          contract_no: contract?.contract_no || null
+        },
+        quotation,
+        items: enrichedItems,
+        summary: {
+          totalItems: enrichedItems.length,
+          page1Count: Math.min(19, enrichedItems.length),
+          page2Count: Math.max(0, enrichedItems.length - 19),
+          totalAmount: totalAmount,
+          currency: activeCurrency,
+          notes: quotation.notes || contract?.notes || project.notes || `عرض سعر خاص بمشروع ${project.name}`,
+          amountWords: `${words} (${activeCurrency} ${totalAmount.toLocaleString()})`
+        },
+        allMaterials,
+        allSuppliers,
+        allQuotations
+      }
+    });
+  } catch (err) {
+    console.error('Error in integrated-quotation:', err);
+    res.status(500).json({ success: false, message: 'خطأ في جلب بيانات عرض السعر المتكامل', error: err.message });
+  }
+});
+
+// حفظ وتحديث بنود عرض السعر المتكامل
+router.post('/:projectId/integrated-quotation', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const { quotation_no, date, valid_until, currency, notes, items, client_id, title } = req.body;
+
+    const totalAmount = (items || []).reduce((acc, it) => acc + (Number(it.total) || ((Number(it.quantity) || 1) * (Number(it.unit_price) || 0))), 0);
+    const itemsJsonStr = JSON.stringify(items || []);
+
+    let existing = null;
+    if (quotation_no) {
+      existing = await get('SELECT id, project_id FROM project_quotations WHERE quotation_no = ?', [quotation_no]);
+    }
+    if (!existing) {
+      existing = await get('SELECT id, project_id FROM project_quotations WHERE project_id = ? ORDER BY id DESC LIMIT 1', [projectId]);
+    }
+
+    if (existing) {
+      await run(`
+        UPDATE project_quotations SET
+          title = ?, date = ?, valid_until = ?, items_json = ?,
+          subtotal = ?, total_amount = ?, currency = ?, notes = ?
+        WHERE id = ?
+      `, [
+        title || 'عرض سعر معتمد',
+        date || new Date().toISOString().split('T')[0],
+        valid_until || null,
+        itemsJsonStr,
+        totalAmount,
+        totalAmount,
+        currency || '$',
+        notes || '',
+        existing.id
+      ]);
+    } else {
+      const qNo = quotation_no || `QUO-${projectId}-${Date.now().toString().slice(-4)}`;
+      await run(`
+        INSERT INTO project_quotations (
+          project_id, client_id, quotation_no, title, date, valid_until,
+          items_json, subtotal, discount, tax_vat, total_amount, currency,
+          status, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        projectId,
+        client_id || null,
+        qNo,
+        title || 'عرض سعر معتمد',
+        date || new Date().toISOString().split('T')[0],
+        valid_until || null,
+        itemsJsonStr,
+        totalAmount,
+        0,
+        0,
+        totalAmount,
+        currency || '$',
+        'معتمد',
+        notes || ''
+      ]);
+    }
+
+    res.json({ success: true, message: 'تم حفظ وتحديث عرض السعر والبنود بنجاح', total_amount: totalAmount });
+  } catch (err) {
+    console.error('Error saving integrated-quotation:', err);
+    res.status(500).json({ success: false, message: 'خطأ في حفظ عرض السعر المتكامل', error: err.message });
+  }
+});
+
+// تصدير بنود عرض السعر إلى جدول الكميات التعاقدي BOQ
+router.post('/:projectId/integrated-quotation/export-boq', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const { items } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'لا توجد بنود للتصدير' });
+    }
+
+    let insertedCount = 0;
+    let updatedCount = 0;
+
+    for (const item of items) {
+      const boqCode = item.boq_item_no || `BOQ-${String(item.item_no).padStart(2, '0')}`;
+      const existing = await get('SELECT id FROM project_boq WHERE project_id = ? AND item_no = ?', [projectId, boqCode]);
+
+      if (existing) {
+        await run(`
+          UPDATE project_boq SET
+            description = ?, unit = ?, contract_qty = ?, unit_rate = ?, total_amount = ?,
+            notes = ?
+          WHERE id = ?
+        `, [
+          item.description || 'بند أعمال',
+          item.unit || 'وحدة',
+          Number(item.quantity) || 1,
+          Number(item.unit_price) || 0,
+          Number(item.total) || 0,
+          `مربوط بعرض السعر - مخزن: ${item.material_name || item.description || ''} - مورد: ${item.supplier_name || 'عام'}`,
+          existing.id
+        ]);
+        updatedCount++;
+      } else {
+        await run(`
+          INSERT INTO project_boq (
+            project_id, item_no, description, category, unit,
+            contract_qty, executed_qty, unit_rate, total_amount, status, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          projectId,
+          boqCode,
+          item.description || 'بند أعمال',
+          item.category || 'بنود عامة',
+          item.unit || 'وحدة',
+          Number(item.quantity) || 1,
+          0,
+          Number(item.unit_price) || 0,
+          Number(item.total) || 0,
+          'جاري التنفيذ',
+          `مربوط بعرض السعر - مخزن: ${item.material_name || item.description || ''} - مورد: ${item.supplier_name || 'عام'}`
+        ]);
+        insertedCount++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `تم تصدير البنود بنجاح إلى جدول الكميات BOQ (أضيف ${insertedCount} وتم تحديث ${updatedCount} بند)`
+    });
+  } catch (err) {
+    console.error('Error exporting quotation to BOQ:', err);
+    res.status(500).json({ success: false, message: 'خطأ في تصدير البنود لجدول الكميات', error: err.message });
+  }
+});
+
+// استيراد بنود جدول الكميات BOQ إلى عرض السعر
+router.post('/:projectId/integrated-quotation/import-boq', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const boqItems = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
+
+    if (!boqItems || boqItems.length === 0) {
+      return res.status(404).json({ success: false, message: 'لا توجد بنود مسجلة في جدول الكميات BOQ لهذا المشروع' });
+    }
+
+    const transformedItems = boqItems.map((b, idx) => ({
+      item_no: idx + 1,
+      description: b.description,
+      unit: b.unit || 'وحدة',
+      quantity: Number(b.contract_qty) || 1,
+      unit_price: Number(b.unit_rate) || 0,
+      total: Number(b.total_amount) || ((Number(b.contract_qty) || 1) * (Number(b.unit_rate) || 0)),
+      category: b.category || 'تشطيبات وتجهيزات',
+      boq_item_no: b.item_no || `BOQ-${String(idx + 1).padStart(2, '0')}`,
+      material_name: b.description,
+      stock_quantity: 10,
+      stock_unit: b.unit || 'وحدة',
+      stock_status: 'متوفر بالمخزن 🟢',
+      supplier_name: 'مورد معتمد',
+      supplier_phone: '772332164'
+    }));
+
+    res.json({
+      success: true,
+      message: `تم استيراد ${transformedItems.length} بند من جدول الكميات BOQ بنجاح`,
+      items: transformedItems
+    });
+  } catch (err) {
+    console.error('Error importing BOQ to quotation:', err);
+    res.status(500).json({ success: false, message: 'خطأ في استيراد بنود جدول الكميات', error: err.message });
+  }
+});
+
 module.exports = router;

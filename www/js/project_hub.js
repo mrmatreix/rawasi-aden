@@ -84,6 +84,8 @@ const ProjectHub = {
   async openProject(projectId, tab = 'contract') {
     this.currentProjectId = Number(projectId);
     this.activeTab = tab;
+    this.selectedQuotationNo = null;
+    this.integratedQuotationData = null;
 
     // التنقل إلى شاشة مساحة عمل المشروع
     App.navigate('projectHub');
@@ -99,6 +101,8 @@ const ProjectHub = {
     const newId = e.target.value;
     if (newId) {
       this.currentProjectId = Number(newId);
+      this.selectedQuotationNo = null;
+      this.integratedQuotationData = null;
       await this.loadProjectData();
     }
   },
@@ -183,6 +187,20 @@ const ProjectHub = {
     if (this.folderInfo && this.folderInfo.filesCount !== undefined) {
       this.setCountBadge('cnt_project_files', this.folderInfo.filesCount);
     }
+    let quoCount = 0;
+    if (this.integratedQuotationData && this.integratedQuotationData.items) {
+      quoCount = this.integratedQuotationData.items.length;
+    } else if (quotations && quotations.length > 0 && quotations[0].items_json) {
+      try {
+        const parsed = JSON.parse(quotations[0].items_json);
+        quoCount = Array.isArray(parsed) ? parsed.length : (boq?.length || 1);
+      } catch (e) {
+        quoCount = boq?.length || 1;
+      }
+    } else {
+      quoCount = boq?.length || 1;
+    }
+    this.setCountBadge('cnt_integrated_quotation', quoCount);
   },
 
   setCountBadge(elementId, count) {
@@ -203,6 +221,16 @@ const ProjectHub = {
     const activePane = document.getElementById(`hubPane_${tabId}`);
     if (activePane) activePane.style.display = 'block';
 
+    // التبويبات المستقلة التي تجلب بياناتها ذاتياً
+    if (tabId === 'integrated-quotation') {
+      this.renderIntegratedQuotation();
+      return;
+    }
+    if (tabId === 'project-files') {
+      this.renderProjectFiles();
+      return;
+    }
+
     if (!this.data) return;
 
     // استدعاء دالة العرض المناسبة
@@ -221,7 +249,6 @@ const ProjectHub = {
       case 'handovers': this.renderHandovers(); break;
       case 'correspondence': this.renderCorrespondence(); break;
       case 'settlement': this.renderSettlement(); break;
-      case 'project-files': this.renderProjectFiles(); break;
     }
   },
 
@@ -2018,9 +2045,47 @@ const ProjectHub = {
     const q = (this.data.quotations || []).find(item => item.id == id);
     if (!q) return;
 
+    // إذا كان عرض السعر هو عرض السعر المتكامل الشامل (QT-2026-0001)، قم باستدعاء الطباعة المتكاملة طبق الأصل مباشرة
+    if (q.quotation_no === 'QT-2026-0001') {
+      this.selectedQuotationNo = q.quotation_no;
+      this.printIntegratedQuotationOfficialDoc();
+      return;
+    }
+
+    let items = [];
+    if (q.items_json) {
+      try {
+        items = typeof q.items_json === 'string' ? JSON.parse(q.items_json) : q.items_json;
+      } catch (e) {
+        console.error('Error parsing quotation items:', e);
+      }
+    }
+
     const { project } = this.data;
     const { headerHtml, sigHtml, footerHtml } = this.getPrintBaseConfig(`عرض سعر رسمي (${q.quotation_no})`, q.quotation_no);
     const curr = q.currency || 'ر.ي';
+
+    const itemsRows = items.length > 0
+      ? items.map((it, idx) => `
+          <tr>
+            <td style="text-align: center; font-weight: bold;">${it.item_no || (idx + 1)}</td>
+            <td style="font-weight: 600;">${it.description || it.item || 'بند أعمال'}</td>
+            <td style="text-align: center;">${it.unit || 'وحدة'}</td>
+            <td style="text-align: center; font-weight: bold;">${it.quantity || it.qty || 1}</td>
+            <td style="text-align: center; font-family: monospace;">${App.formatNumber(it.unit_price || it.rate || 0)}</td>
+            <td style="text-align: left; font-weight: bold; font-family: monospace;">${App.formatNumber(it.total || (Number(it.quantity || it.qty || 1) * Number(it.unit_price || it.rate || 0)))}</td>
+          </tr>
+        `).join('')
+      : `
+          <tr>
+            <td style="text-align: center;">1</td>
+            <td>${q.title || 'تنفيذ أعمال المقاولات والتشطيبات طبقاً للمواصفات المعمارية والهندسية'}</td>
+            <td style="text-align: center;">مقطوع</td>
+            <td style="text-align: center;">1</td>
+            <td style="text-align: center;">${App.formatNumber(q.total_amount)}</td>
+            <td style="text-align: left; font-weight: bold;">${App.formatNumber(q.total_amount)}</td>
+          </tr>
+        `;
 
     printArea.innerHTML = `
       <div class="multi-page-report-document border-classic density-medium margins-normal">
@@ -2044,23 +2109,16 @@ const ProjectHub = {
           <table class="official-report-table" style="margin-bottom: 16px;">
             <thead>
               <tr>
-                <th>م</th>
+                <th style="width: 40px; text-align: center;">م</th>
                 <th>بيان الأعمال والمواصفات</th>
-                <th>الوحدة</th>
-                <th>الكمية</th>
-                <th>سعر الوحدة</th>
-                <th style="text-align: left;">الإجمالي (${curr})</th>
+                <th style="width: 70px; text-align: center;">الوحدة</th>
+                <th style="width: 65px; text-align: center;">الكمية</th>
+                <th style="width: 100px; text-align: center;">سعر الوحدة</th>
+                <th style="width: 110px; text-align: left;">الإجمالي (${curr})</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>1</td>
-                <td>تنفيذ أعمال المقاولات والتشطيبات طبقاً للمواصفات المعمارية والهندسية</td>
-                <td>مقطوع</td>
-                <td>1</td>
-                <td>${App.formatNumber(q.total_amount)}</td>
-                <td style="text-align: left; font-weight: bold;">${App.formatNumber(q.total_amount)}</td>
-              </tr>
+              ${itemsRows}
               <tr style="background: #f8fafc; font-weight: 900;">
                 <td colspan="5" style="text-align: right; color: #0f2744;">إجمالي القيمة المقترحة:</td>
                 <td style="text-align: left; color: #b8911c;">${App.formatNumber(q.total_amount)} ${curr}</td>
@@ -2887,5 +2945,1035 @@ const ProjectHub = {
     } catch (err) {
       App.showToast('خطأ في الاتصال أثناء طلب فتح المجلد', 'error');
     }
+  },
+
+  // =========================================================================
+  // 16. عرض السعر والتسعير المتكامل (المخازن والمواد والكميات والموردين)
+  // =========================================================================
+  integratedQuotationData: null,
+  selectedQuotationNo: null,
+
+  async loadIntegratedQuotation(forceRefresh = false) {
+    if (!this.currentProjectId) {
+      const select = document.getElementById('hubProjectSelect');
+      if (select && select.value) {
+        this.currentProjectId = Number(select.value);
+      } else {
+        this.currentProjectId = 1;
+      }
+    }
+    if (this.integratedQuotationData && !forceRefresh) {
+      return this.integratedQuotationData;
+    }
+
+    try {
+      const qNo = this.selectedQuotationNo ? `?quotation_no=${encodeURIComponent(this.selectedQuotationNo)}` : '';
+      const res = await fetch(`/api/project-hub/${this.currentProjectId}/integrated-quotation${qNo}`);
+      const json = await res.json().catch(() => ({ success: false, message: 'فشل في الاتصال' }));
+      if (json.success && json.data) {
+        this.integratedQuotationData = json.data;
+        this.selectedQuotationNo = json.data.quotation?.quotation_no || null;
+        this.setCountBadge('cnt_integrated_quotation', json.data.items?.length || 0);
+        return this.integratedQuotationData;
+      }
+    } catch (e) {
+      console.error('Error loading integrated quotation:', e);
+    }
+    return null;
+  },
+
+  async switchIntegratedQuotation(quoNo) {
+    if (!quoNo) return;
+    this.selectedQuotationNo = quoNo;
+    await this.renderIntegratedQuotation();
+  },
+
+  async renderIntegratedQuotation() {
+    const pane = document.getElementById('hubPane_integrated-quotation');
+    if (pane) pane.style.display = 'block';
+
+    const tbody = document.getElementById('hubIntegratedQuotationTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="11" style="text-align:center; padding: 25px; color: var(--text-secondary);">
+          جاري تحميل عرض السعر المتكامل وربط المخازن والموردين...
+        </td>
+      </tr>
+    `;
+
+    const data = await this.loadIntegratedQuotation(true);
+    if (!data || !data.items || data.items.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="11" style="text-align:center; padding: 30px; color: var(--text-secondary);">
+            لا توجد بنود مسجلة في عرض السعر الحالي. اضغط على "+ إضافة بند" أو "استيراد من BOQ".
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const { project, quotation, items, summary } = data;
+    const curr = quotation?.currency || '$';
+
+    // تحديث قائمة اختيار عروض الأسعار
+    const quoSelect = document.getElementById('intQuoSelect');
+    if (quoSelect) {
+      if (data.allQuotations && data.allQuotations.length > 0) {
+        quoSelect.innerHTML = data.allQuotations.map(q => {
+          const isSel = (q.quotation_no === (quotation?.quotation_no || this.selectedQuotationNo));
+          const isCurrent = (q.project_id == this.currentProjectId);
+          return `<option value="${q.quotation_no}" ${isSel ? 'selected' : ''}>
+            ${isCurrent ? '⭐ [لهذا المشروع] ' : ''}${q.quotation_no} - ${q.project_name || q.title} (${App.formatNumber(q.total_amount)} ${q.currency || '$'})
+          </option>`;
+        }).join('');
+      } else {
+        quoSelect.innerHTML = `<option value="${quotation?.quotation_no || ''}">${quotation?.quotation_no || 'عرض سعر جديد'} - ${project?.name || ''}</option>`;
+      }
+    }
+
+    // تحديث البطاقات العلوية
+    const badgeNo = document.getElementById('intQuoBadgeNo');
+    if (badgeNo) badgeNo.innerText = quotation?.quotation_no || 'QT-2026-0001';
+
+    const contractOwner = project?.contract_owner || project?.client_name || 'العميل المعتمد';
+    const projName = project?.name || 'مشروع هندسي';
+
+    const clientName = document.getElementById('intQuoClientName');
+    if (clientName) clientName.innerText = contractOwner;
+
+    const clientPhone = document.getElementById('intQuoClientPhone');
+    if (clientPhone) clientPhone.innerText = project?.client_phone || 'غير مسجل';
+
+    const projNameEl = document.getElementById('intQuoProjectName');
+    if (projNameEl) projNameEl.innerText = projName;
+
+    const projCode = document.getElementById('intQuoProjectCode');
+    if (projCode) projCode.innerText = project?.code || 'PRJ';
+
+    const dateRange = document.getElementById('intQuoDateRange');
+    if (dateRange) dateRange.innerText = `${quotation?.date || '12-09-2026'} إلى ${quotation?.valid_until || 'حسب الاتفاق'}`;
+
+    const currEl = document.getElementById('intQuoCurrency');
+    if (currEl) {
+      const currName = curr === 'ر.ي' ? 'ريال يمني' : (curr === '$' ? 'دولار أمريكي' : (curr === 'ر.س' ? 'ريال سعودي' : curr));
+      currEl.innerText = `${curr} (${currName})`;
+    }
+
+    const totalEl = document.getElementById('intQuoTotalDisplay');
+    if (totalEl) totalEl.innerText = `${App.formatNumber(summary.totalAmount)} ${curr}`;
+
+    const footerTotal = document.getElementById('intQuoFooterTotal');
+    if (footerTotal) footerTotal.innerText = `${App.formatNumber(summary.totalAmount)} ${curr}`;
+
+    const footerNotes = document.getElementById('intQuoFooterNotes');
+    if (footerNotes) footerNotes.innerText = `ملاحظة: ${summary.notes || quotation?.notes || 'عرض سعر رسمي معتمد'}`;
+
+    const amountWords = document.getElementById('intQuoAmountWords');
+    if (amountWords) {
+      const words = summary.amountWords || ((typeof Accounting !== 'undefined' && Accounting.tafqeet) ? Accounting.tafqeet(summary.totalAmount, curr) : `${App.formatNumber(summary.totalAmount)} ${curr}`);
+      amountWords.innerText = words;
+    }
+
+    // تعبئة الجدول الرئيسي
+    tbody.innerHTML = items.map((it, idx) => {
+      let stockBadgeColor = '#10b981';
+      let stockBadgeBg = 'rgba(16, 185, 129, 0.15)';
+      if (it.stock_status && it.stock_status.includes('🔴')) {
+        stockBadgeColor = '#ef4444';
+        stockBadgeBg = 'rgba(239, 68, 68, 0.15)';
+      } else if (it.stock_status && it.stock_status.includes('🟡')) {
+        stockBadgeColor = '#f59e0b';
+        stockBadgeBg = 'rgba(245, 158, 11, 0.15)';
+      }
+
+      return `
+        <tr style="transition: background 0.15s ease;">
+          <td style="text-align: center; font-weight: bold; color: var(--gold-light);">${it.item_no || (idx + 1)}</td>
+          <td style="font-weight: 600; color: #f8fafc;">
+            ${it.description}
+            ${it.category ? `<span style="display:block; font-size:0.72rem; color:var(--text-secondary);">${it.category}</span>` : ''}
+          </td>
+          <td style="text-align: center;"><span class="badge" style="background: rgba(255,255,255,0.06);">${it.unit}</span></td>
+          <td style="text-align: center; font-weight: bold;">${it.quantity}</td>
+          <td style="text-align: center; font-family: monospace;">${App.formatNumber(it.unit_price)}</td>
+          <td style="text-align: center; font-weight: bold; font-family: monospace; color: #34d399;">${App.formatNumber(it.total)}</td>
+          <td style="text-align: center;">
+            <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 0.74rem;">
+              ${it.boq_item_no || 'BOQ'}
+            </span>
+          </td>
+          <td>
+            <div style="font-size: 0.8rem; color: #cbd5e1; font-weight: 500;">
+              📦 ${it.material_name || it.description}
+            </div>
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">
+              الرصيد: <b style="color:#e2e8f0;">${it.stock_quantity || 0}</b> ${it.stock_unit || it.unit}
+            </div>
+          </td>
+          <td style="text-align: center;">
+            <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.74rem; font-weight: 600; background: ${stockBadgeBg}; color: ${stockBadgeColor}; border: 1px solid ${stockBadgeColor}40;">
+              ${it.stock_status || 'متوفر بالمخزن 🟢'}
+            </span>
+          </td>
+          <td>
+            <div style="font-size: 0.8rem; color: #f1f5f9; font-weight: 500;">
+              🏢 ${it.supplier_name || 'مورد معتمد'}
+            </div>
+            <div style="font-size: 0.74rem; color: var(--gold-light); font-family: monospace; margin-top: 1px;">
+              📞 <a href="tel:${it.supplier_phone}" style="color: inherit; text-decoration: none;">${it.supplier_phone || '775566778'}</a>
+            </div>
+          </td>
+          <td style="text-align: center;">
+            <div style="display: flex; gap: 4px; justify-content: center;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.openEditQuotationItemModal(${idx})" title="تعديل هذا البند" style="padding: 3px 7px;">
+                ✏️
+              </button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="ProjectHub.deleteQuotationItem(${idx})" title="حذف البند" style="padding: 3px 7px;">
+                🗑️
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  calcQuoItemTotal() {
+    const qty = Number(document.getElementById('quoItemQty')?.value || 1);
+    const price = Number(document.getElementById('quoItemPrice')?.value || 0);
+    const totalEl = document.getElementById('quoItemTotal');
+    if (totalEl) totalEl.value = (qty * price).toFixed(2);
+  },
+
+  populateQuoItemMaterialsAndSuppliers() {
+    if (!this.integratedQuotationData) return;
+    const { allMaterials, allSuppliers } = this.integratedQuotationData;
+
+    const matSel = document.getElementById('quoItemMaterialSelect');
+    if (matSel && allMaterials) {
+      matSel.innerHTML = '<option value="">-- ربط بمادة جديدة / غير محدد --</option>' +
+        allMaterials.map(m => `<option value="${m.id}" data-unit="${m.unit}" data-price="${m.unit_price}" data-qty="${m.current_quantity}" data-name="${m.name}">${m.name} (رصيد: ${m.current_quantity} ${m.unit})</option>`).join('');
+    }
+
+    const suppSel = document.getElementById('quoItemSupplierSelect');
+    if (suppSel && allSuppliers) {
+      suppSel.innerHTML = '<option value="">-- اختر من قائمة الموردين --</option>' +
+        allSuppliers.map(s => `<option value="${s.id}" data-phone="${s.phone}" data-name="${s.name}">${s.name} (${s.phone || ''})</option>`).join('');
+    }
+  },
+
+  onQuoItemMaterialChange(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const stockInfo = document.getElementById('quoItemStockInfo');
+    if (opt && opt.value) {
+      const qty = opt.getAttribute('data-qty');
+      const unit = opt.getAttribute('data-unit');
+      const price = opt.getAttribute('data-price');
+      if (stockInfo) stockInfo.value = `${qty} ${unit}`;
+      const priceInput = document.getElementById('quoItemPrice');
+      if (priceInput && (!priceInput.value || priceInput.value == '0')) {
+        priceInput.value = price;
+        this.calcQuoItemTotal();
+      }
+      const unitInput = document.getElementById('quoItemUnit');
+      if (unitInput && !unitInput.value) unitInput.value = unit;
+    } else {
+      if (stockInfo) stockInfo.value = 'غير محدد';
+    }
+  },
+
+  onQuoItemSupplierChange(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const phoneInput = document.getElementById('quoItemSupplierPhone');
+    if (opt && opt.value) {
+      const phone = opt.getAttribute('data-phone');
+      if (phoneInput) phoneInput.value = phone || '';
+    }
+  },
+
+  openNewQuotationItemModal() {
+    this.populateQuoItemMaterialsAndSuppliers();
+    const nextNo = (this.integratedQuotationData?.items?.length || 0) + 1;
+
+    document.getElementById('modalQuoItemTitle').innerText = '🏷️ إضافة بند جديد لعرض السعر';
+    document.getElementById('quoItemIndex').value = '-1';
+    document.getElementById('quoItemNo').value = nextNo;
+    document.getElementById('quoItemBoqNo').value = `BOQ-${String(nextNo).padStart(2, '0')}`;
+    document.getElementById('quoItemCategory').value = 'تشطيبات وتجهيزات';
+    document.getElementById('quoItemDesc').value = '';
+    document.getElementById('quoItemUnit').value = 'M2';
+    document.getElementById('quoItemQty').value = '1';
+    document.getElementById('quoItemPrice').value = '0';
+    document.getElementById('quoItemTotal').value = '0';
+    document.getElementById('quoItemStockInfo').value = '';
+    document.getElementById('quoItemMaterialSelect').value = '';
+    document.getElementById('quoItemSupplierSelect').value = '';
+    document.getElementById('quoItemSupplierPhone').value = '';
+
+    App.openModal('editQuotationItemModal');
+  },
+
+  openEditQuotationItemModal(idx) {
+    if (!this.integratedQuotationData || !this.integratedQuotationData.items) return;
+    const it = this.integratedQuotationData.items[idx];
+    if (!it) return;
+
+    this.populateQuoItemMaterialsAndSuppliers();
+
+    document.getElementById('modalQuoItemTitle').innerText = `🏷️ تعديل البند رقم (${it.item_no || (idx + 1)})`;
+    document.getElementById('quoItemIndex').value = idx;
+    document.getElementById('quoItemNo').value = it.item_no || (idx + 1);
+    document.getElementById('quoItemBoqNo').value = it.boq_item_no || `BOQ-${String(idx + 1).padStart(2, '0')}`;
+    document.getElementById('quoItemCategory').value = it.category || '';
+    document.getElementById('quoItemDesc').value = it.description || '';
+    document.getElementById('quoItemUnit').value = it.unit || 'M2';
+    document.getElementById('quoItemQty').value = it.quantity || 1;
+    document.getElementById('quoItemPrice').value = it.unit_price || 0;
+    document.getElementById('quoItemTotal').value = it.total || (Number(it.quantity || 1) * Number(it.unit_price || 0));
+
+    const matSel = document.getElementById('quoItemMaterialSelect');
+    if (matSel) {
+      matSel.value = it.material_id || '';
+      this.onQuoItemMaterialChange(matSel);
+    }
+
+    const suppSel = document.getElementById('quoItemSupplierSelect');
+    if (suppSel) {
+      suppSel.value = it.supplier_id || '';
+      this.onQuoItemSupplierChange(suppSel);
+    }
+    const phoneInput = document.getElementById('quoItemSupplierPhone');
+    if (phoneInput && it.supplier_phone) {
+      phoneInput.value = it.supplier_phone;
+    }
+
+    App.openModal('editQuotationItemModal');
+  },
+
+  async submitQuotationItemForm(e) {
+    if (e) e.preventDefault();
+    if (!this.integratedQuotationData) return;
+
+    const idx = parseInt(document.getElementById('quoItemIndex')?.value || '-1', 10);
+    const itemNo = Number(document.getElementById('quoItemNo')?.value || 1);
+    const boqNo = document.getElementById('quoItemBoqNo')?.value || `BOQ-${String(itemNo).padStart(2, '0')}`;
+    const desc = document.getElementById('quoItemDesc')?.value.trim();
+    const category = document.getElementById('quoItemCategory')?.value.trim() || 'تشطيبات وتجهيزات';
+    const unit = document.getElementById('quoItemUnit')?.value.trim() || 'وحدة';
+    const qty = Number(document.getElementById('quoItemQty')?.value || 1);
+    const price = Number(document.getElementById('quoItemPrice')?.value || 0);
+    const total = Number(document.getElementById('quoItemTotal')?.value || (qty * price));
+
+    const matSel = document.getElementById('quoItemMaterialSelect');
+    const matOpt = matSel?.options[matSel.selectedIndex];
+    const materialId = matSel?.value || null;
+    const materialName = (matOpt && matOpt.value) ? matOpt.getAttribute('data-name') : desc;
+    const stockQty = (matOpt && matOpt.value) ? Number(matOpt.getAttribute('data-qty')) : 10;
+
+    const suppSel = document.getElementById('quoItemSupplierSelect');
+    const suppOpt = suppSel?.options[suppSel.selectedIndex];
+    const supplierId = suppSel?.value || null;
+    const supplierName = (suppOpt && suppOpt.value) ? suppOpt.getAttribute('data-name') : 'مورد معتمد';
+    const supplierPhone = document.getElementById('quoItemSupplierPhone')?.value.trim() || '772332164';
+
+    const itemObj = {
+      item_no: itemNo,
+      description: desc,
+      unit: unit,
+      quantity: qty,
+      unit_price: price,
+      total: total,
+      category: category,
+      boq_item_no: boqNo,
+      material_id: materialId,
+      material_name: materialName,
+      stock_quantity: stockQty,
+      stock_unit: unit,
+      stock_status: stockQty <= 0 ? 'نفذ من المخزن 🔴' : (stockQty <= 5 ? 'مخزون منخفض 🟡' : 'متوفر بالمخزن 🟢'),
+      supplier_id: supplierId,
+      supplier_name: supplierName,
+      supplier_phone: supplierPhone,
+      boq_linked: true
+    };
+
+    if (idx >= 0 && idx < this.integratedQuotationData.items.length) {
+      this.integratedQuotationData.items[idx] = itemObj;
+    } else {
+      this.integratedQuotationData.items.push(itemObj);
+    }
+
+    // إرسال التحديث إلى الخادم
+    try {
+      App.showToast('جاري حفظ البند وتحديث عرض السعر...', 'info');
+      const quo = this.integratedQuotationData.quotation;
+      const payload = {
+        quotation_no: quo?.quotation_no || 'QT-2026-0001',
+        title: quo?.title || `عرض سعر ${this.data?.project?.name || ''}`,
+        date: quo?.date || new Date().toISOString().split('T')[0],
+        valid_until: quo?.valid_until || null,
+        currency: quo?.currency || this.data?.project?.currency || '$',
+        notes: quo?.notes || 'الكهرباء حسب الكشف حق حمدي الكهربائي',
+        items: this.integratedQuotationData.items
+      };
+
+      const res = await fetch(`/api/project-hub/${this.currentProjectId}/integrated-quotation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast('تم حفظ البند وتحديث الحسابات بنجاح 💾', 'success');
+        App.closeModal('editQuotationItemModal');
+        await this.renderIntegratedQuotation();
+      } else {
+        App.showToast(json.message || 'تعذر حفظ البند', 'error');
+      }
+    } catch (err) {
+      console.error('Save item error:', err);
+      App.showToast('خطأ في الاتصال بالخادم أثناء الحفظ', 'error');
+    }
+  },
+
+  async deleteQuotationItem(idx) {
+    if (!this.integratedQuotationData || !this.integratedQuotationData.items) return;
+    const it = this.integratedQuotationData.items[idx];
+    if (!confirm(`هل أنت متأكد من حذف البند (${it.description}) من عرض السعر؟`)) return;
+
+    this.integratedQuotationData.items.splice(idx, 1);
+    // إعادة ترقيم البنود
+    this.integratedQuotationData.items.forEach((item, i) => {
+      item.item_no = i + 1;
+    });
+
+    try {
+      const quo = this.integratedQuotationData.quotation;
+      const res = await fetch(`/api/project-hub/${this.currentProjectId}/integrated-quotation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quotation_no: quo?.quotation_no || 'QT-2026-0001',
+          items: this.integratedQuotationData.items
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast('تم حذف البند وتحديث الإجمالي بنجاح', 'success');
+        await this.renderIntegratedQuotation();
+      }
+    } catch (e) {
+      App.showToast('خطأ في الاتصال أثناء حذف البند', 'error');
+    }
+  },
+
+  async exportQuotationToBoq() {
+    if (!this.integratedQuotationData || !this.integratedQuotationData.items) {
+      await this.loadIntegratedQuotation(true);
+    }
+    const items = this.integratedQuotationData?.items || [];
+    if (items.length === 0) {
+      App.showToast('لا توجد بنود لتصديرها لجدول الكميات', 'warning');
+      return;
+    }
+
+    try {
+      App.showToast('جاري تصدير وتحديث جدول الكميات BOQ...', 'info');
+      const res = await fetch(`/api/project-hub/${this.currentProjectId}/integrated-quotation/export-boq`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم التصدير لجدول الكميات BOQ بنجاح ✅', 'success');
+        // تحديث عدادات المشروع
+        await this.loadProjectData();
+      } else {
+        App.showToast(json.message || 'تعذر التصدير لجدول الكميات', 'error');
+      }
+    } catch (err) {
+      console.error('Export boq error:', err);
+      App.showToast('خطأ في الاتصال أثناء التصدير لـ BOQ', 'error');
+    }
+  },
+
+  async importBoqToQuotation() {
+    if (!confirm('هل تريد استيراد البنود من جدول الكميات BOQ واستبدال بنود عرض السعر الحالية؟')) return;
+    try {
+      App.showToast('جاري استيراد بنود BOQ...', 'info');
+      const res = await fetch(`/api/project-hub/${this.currentProjectId}/integrated-quotation/import-boq`, {
+        method: 'POST'
+      });
+      const json = await res.json();
+      if (json.success && json.items) {
+        this.integratedQuotationData.items = json.items;
+        App.showToast(json.message || 'تم الاستيراد بنجاح ✅', 'success');
+        await this.renderIntegratedQuotation();
+      } else {
+        App.showToast(json.message || 'لا توجد بنود لاستيرادها', 'warning');
+      }
+    } catch (e) {
+      App.showToast('خطأ في الاتصال أثناء الاستيراد من BOQ', 'error');
+    }
+  },
+
+  checkAndReserveInventory() {
+    if (!this.integratedQuotationData || !this.integratedQuotationData.items) return;
+    const items = this.integratedQuotationData.items;
+
+    let availableCount = 0;
+    let lowCount = 0;
+    let outCount = 0;
+
+    items.forEach(it => {
+      if (it.stock_status && it.stock_status.includes('🔴')) outCount++;
+      else if (it.stock_status && it.stock_status.includes('🟡')) lowCount++;
+      else availableCount++;
+    });
+
+    alert(
+      `📊 نتيجة الفحص الميداني لمخازن ومواد عرض السعر:\n` +
+      `--------------------------------------------------\n` +
+      `• إجمالي البنود: ${items.length} بند\n` +
+      `• المواد المتوفرة بالكامل بالمخزن 🟢: ${availableCount} بند\n` +
+      `• المواد بمستوى رصيد منخفض 🟡: ${lowCount} بند\n` +
+      `• المواد المنتهية / يلزم طلب شراء 🔴: ${outCount} بند\n\n` +
+      `جميع المواد تم ربطها تلقائياً بالموردين المعتمدين مع أرقام الاتصال لسرعة التوريد.`
+    );
+  },
+
+  /**
+   * طباعة عرض السعر الرسمي طبق الأصل (صفحتين A4 متطابقتين مع نموذج العرض المعتمد)
+   */
+  async printIntegratedQuotationOfficialDoc() {
+    const printArea = document.getElementById('printArea');
+    if (!printArea) return;
+
+    if (!this.integratedQuotationData || !this.integratedQuotationData.items) {
+      await this.loadIntegratedQuotation(true);
+    }
+
+    const data = this.integratedQuotationData;
+    if (!data || !data.items || data.items.length === 0) {
+      App.showToast('لا توجد بنود لطباعة عرض السعر', 'warning');
+      return;
+    }
+
+    const { project, quotation, items, summary } = data;
+    const curr = quotation?.currency || project?.currency || 'ر.ي';
+    const quoNo = quotation?.quotation_no || 'QT-2026-0001';
+    const quoDate = quotation?.date || new Date().toISOString().split('T')[0];
+    const validUntil = quotation?.valid_until || 'حسب الاتفاق';
+    const contractOwner = project?.contract_owner || project?.client_name || 'العميل المعتمد';
+    const clientPhone = project?.client_phone || 'غير مسجل';
+    const projName = project?.name || 'مشروع هندسي';
+    const notes = summary?.notes || quotation?.notes || 'عرض سعر رسمي معتمد';
+
+    const grandTotal = items.reduce((acc, it) => acc + Number(it.total || 0), 0);
+    const tafqeetWords = summary?.amountWords || ((typeof Accounting !== 'undefined' && Accounting.tafqeet) ? Accounting.tafqeet(grandTotal, curr) : `${App.formatNumber(grandTotal)} ${curr}`);
+
+    const isSinglePage = (items.length <= 16);
+    let pagesHtml = '';
+
+    if (isSinglePage) {
+      pagesHtml = `
+        <div class="quo-print-page">
+          <div>
+            <!-- رأس الصفحة والهوية -->
+            <div class="quo-header-box">
+              <div class="quo-company-row">
+                <div>
+                  <h2 style="margin: 0; color: #0f2744; font-size: 1.15rem; font-weight: 800;">شركة رواسي عدن للهندسة والمقاولات</h2>
+                  <div style="font-size: 0.72rem; color: #475569; font-weight: 600;">Rawasi Aden for Engineering & Contracting</div>
+                </div>
+                <div style="text-align: left; font-size: 0.72rem; color: #475569; line-height: 1.3;">
+                  <div>عدن - الجمهورية اليمنية</div>
+                  <div>هاتف: 773413937 - 772332164</div>
+                  <div>س.ت: 102948 | ر.ض: 3004918</div>
+                </div>
+              </div>
+
+              <!-- شريط العنوان الرئيسي -->
+              <div class="quo-title-badge">
+                عـرض سـعـر وتـسـعـيـر مـتـكـامـل — QUOTATION OFFER
+              </div>
+
+              <!-- تفاصيل المستند والعميل -->
+              <div class="quo-meta-grid">
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">السادة:</span>
+                  <span style="font-weight: 700; color: #0f2744;">${contractOwner}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">رقم العرض:</span>
+                  <span style="font-family: monospace; font-weight: 800; color: #0f2744;">${quoNo}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">التاريخ:</span>
+                  <span>${quoDate}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">المشروع:</span>
+                  <span style="font-weight: 700;">${projName}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">هاتف العميل:</span>
+                  <span style="font-family: monospace;">${clientPhone}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">صالح حتى:</span>
+                  <span>${validUntil}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- جدول البنود -->
+            <table class="quo-official-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px;">م</th>
+                  <th>وصف وبيان البند</th>
+                  <th style="width: 60px;">الوحدة</th>
+                  <th style="width: 55px;">الكمية</th>
+                  <th style="width: 90px;">سعر الوحدة (${curr})</th>
+                  <th style="width: 95px;">الإجمالي (${curr})</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map(it => `
+                  <tr>
+                    <td style="text-align: center; font-weight: bold;">${it.item_no}</td>
+                    <td style="font-weight: 600;">${it.description || 'بند أعمال'}</td>
+                    <td style="text-align: center;">${it.unit || 'وحدة'}</td>
+                    <td style="text-align: center; font-weight: bold;">${it.quantity}</td>
+                    <td style="text-align: center; font-family: monospace;">${App.formatNumber(it.unit_price)}</td>
+                    <td style="text-align: center; font-weight: bold; font-family: monospace;">${App.formatNumber(it.total)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <!-- صندوق الإجماليات والملاحظات والمبلغ كتابة -->
+            <div class="quo-total-box">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 6px; margin-bottom: 6px;">
+                <div style="font-size: 1.05rem; font-weight: 800; color: #0f2744;">
+                  المجموع الكلي النهائي (${items.length} بند):
+                </div>
+                <div style="font-size: 1.28rem; font-weight: 900; color: #059669; font-family: monospace;">
+                  ${App.formatNumber(grandTotal)} ${curr}
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1.8fr 1.2fr; gap: 10px; font-size: 0.82rem;">
+                <div>
+                  <div style="font-weight: 700; color: #0f2744; margin-bottom: 2px;">المبلغ كتابة:</div>
+                  <div style="color: #1e293b; font-weight: 600;">${tafqeetWords}</div>
+                </div>
+                <div>
+                  <div style="font-weight: 700; color: #0f2744; margin-bottom: 2px;">الشروط والملاحظات التعاقدية:</div>
+                  <div style="color: #b91c1c; font-weight: 700;">📌 ${notes}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- قسم التوقيعات والاعتمادات الرسمية -->
+          <div>
+            <div class="quo-sigs-grid">
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">إعداد المهندس المشرف</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">التوقيع والتاريخ</div>
+              </div>
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">التدقيق والمراجعة المالية</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">التوقيع والتاريخ</div>
+              </div>
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">اعتماد شركة رواسي عدن</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">(الختم والتوقيع الرسمي)</div>
+              </div>
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">موافقة واعتماد العميل</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">${contractOwner}</div>
+              </div>
+            </div>
+
+            <div style="text-align: center; font-size: 0.68rem; color: #64748b; margin-top: 8px;">
+              عرض السعر صادر رسمياً عبر نظام شركة رواسي عدن للهندسة والمقاولات — طبع بتاريخ: ${new Date().toLocaleDateString('ar-YE')}
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      const page1Items = items.slice(0, 18);
+      const page2Items = items.slice(18);
+      const page1Subtotal = page1Items.reduce((acc, it) => acc + Number(it.total || 0), 0);
+      const page2Subtotal = page2Items.reduce((acc, it) => acc + Number(it.total || 0), 0);
+
+      pagesHtml = `
+        <!-- ================== الصفحة الأولى (البنود 1 إلى 18) ================== -->
+        <div class="quo-print-page">
+          <div>
+            <!-- رأس الصفحة والهوية -->
+            <div class="quo-header-box">
+              <div class="quo-company-row">
+                <div>
+                  <h2 style="margin: 0; color: #0f2744; font-size: 1.15rem; font-weight: 800;">شركة رواسي عدن للهندسة والمقاولات</h2>
+                  <div style="font-size: 0.72rem; color: #475569; font-weight: 600;">Rawasi Aden for Engineering & Contracting</div>
+                </div>
+                <div style="text-align: left; font-size: 0.72rem; color: #475569; line-height: 1.3;">
+                  <div>عدن - الجمهورية اليمنية</div>
+                  <div>هاتف: 773413937 - 772332164</div>
+                  <div>س.ت: 102948 | ر.ض: 3004918</div>
+                </div>
+              </div>
+
+              <div class="quo-title-badge">
+                عـرض سـعـر — QUOTATION OFFER (صفحة 1 من 2)
+              </div>
+
+              <div class="quo-meta-grid">
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">السادة:</span>
+                  <span style="font-weight: 700; color: #0f2744;">${contractOwner}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">رقم العرض:</span>
+                  <span style="font-family: monospace; font-weight: 800; color: #0f2744;">${quoNo}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">التاريخ:</span>
+                  <span>${quoDate}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">المشروع:</span>
+                  <span style="font-weight: 700;">${projName}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">هاتف العميل:</span>
+                  <span style="font-family: monospace;">${clientPhone}</span>
+                </div>
+                <div class="quo-meta-item">
+                  <span class="quo-meta-label">صالح حتى:</span>
+                  <span>${validUntil}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- جدول البنود (الصفحة الأولى) -->
+            <table class="quo-official-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px;">م</th>
+                  <th>وصف وبيان البند</th>
+                  <th style="width: 55px;">الوحدة</th>
+                  <th style="width: 48px;">الكمية</th>
+                  <th style="width: 80px;">سعر الوحدة (${curr})</th>
+                  <th style="width: 85px;">الإجمالي (${curr})</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${page1Items.map(it => `
+                  <tr>
+                    <td style="text-align: center; font-weight: bold;">${it.item_no}</td>
+                    <td style="font-weight: 600;">${it.description || 'بند أعمال'}</td>
+                    <td style="text-align: center;">${it.unit || 'وحدة'}</td>
+                    <td style="text-align: center; font-weight: bold;">${it.quantity}</td>
+                    <td style="text-align: center; font-family: monospace;">${App.formatNumber(it.unit_price)}</td>
+                    <td style="text-align: center; font-weight: bold; font-family: monospace;">${App.formatNumber(it.total)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- تذييل الصفحة الأولى -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #e2e8f0; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem; font-weight: 800; border: 1px solid #cbd5e1; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+              <div>المجموع الجزئي للصفحة الأولى (${page1Items.length} بند): <span style="font-family: monospace; color: #0f2744; font-size: 0.92rem;">${App.formatNumber(page1Subtotal)} ${curr}</span></div>
+              <div style="color: #475569;">صفحة 1 من 2 — (يتبع في الصفحة التالية ⬅️)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================== الصفحة الثانية (البنود المتبقية) ================== -->
+        <div class="quo-print-page">
+          <div>
+            <!-- رأس الصفحة الثانية المختصر -->
+            <div class="quo-header-box" style="padding: 8px 12px; margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #d4af37; padding-bottom: 4px; margin-bottom: 6px;">
+                <div style="font-weight: 800; color: #0f2744; font-size: 0.95rem;">
+                  شركة رواسي عدن للهندسة والمقاولات — تابع عرض سعر رقم: <span style="font-family: monospace;">${quoNo}</span>
+                </div>
+                <div style="font-size: 0.74rem; color: #475569;">
+                  المشروع: <b>${projName}</b> | السادة (صاحب العقد): <b>${contractOwner}</b>
+                </div>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
+                <div>تاريخ العرض: <b>${quoDate}</b></div>
+                <div>صالح حتى: <b>${validUntil}</b></div>
+                <div style="font-weight: 800; color: #059669;">صفحة 2 من 2 (تتمة البنود والاعتماد النهائي)</div>
+              </div>
+            </div>
+
+            <!-- جدول البنود (الصفحة الثانية) -->
+            <table class="quo-official-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px;">م</th>
+                  <th>وصف وبيان البند</th>
+                  <th style="width: 55px;">الوحدة</th>
+                  <th style="width: 48px;">الكمية</th>
+                  <th style="width: 80px;">سعر الوحدة (${curr})</th>
+                  <th style="width: 85px;">الإجمالي (${curr})</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${page2Items.map(it => `
+                  <tr>
+                    <td style="text-align: center; font-weight: bold;">${it.item_no}</td>
+                    <td style="font-weight: 600;">${it.description || 'بند أعمال'}</td>
+                    <td style="text-align: center;">${it.unit || 'وحدة'}</td>
+                    <td style="text-align: center; font-weight: bold;">${it.quantity}</td>
+                    <td style="text-align: center; font-family: monospace;">${App.formatNumber(it.unit_price)}</td>
+                    <td style="text-align: center; font-weight: bold; font-family: monospace;">${App.formatNumber(it.total)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <!-- صندوق الإجماليات والملاحظات والمبلغ كتابة -->
+            <div class="quo-total-box">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 6px; margin-bottom: 6px;">
+                <div style="font-size: 1.05rem; font-weight: 800; color: #0f2744;">
+                  المجموع الكلي النهائي (${items.length} بند):
+                </div>
+                <div style="font-size: 1.28rem; font-weight: 900; color: #059669; font-family: monospace;">
+                  ${App.formatNumber(grandTotal)} ${curr}
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1.8fr 1.2fr; gap: 10px; font-size: 0.82rem;">
+                <div>
+                  <div style="font-weight: 700; color: #0f2744; margin-bottom: 2px;">المبلغ كتابة:</div>
+                  <div style="color: #1e293b; font-weight: 600;">${tafqeetWords}</div>
+                </div>
+                <div>
+                  <div style="font-weight: 700; color: #0f2744; margin-bottom: 2px;">الشروط والملاحظات التعاقدية:</div>
+                  <div style="color: #b91c1c; font-weight: 700;">📌 ${notes}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- قسم التوقيعات والاعتمادات الرسمية -->
+          <div>
+            <div class="quo-sigs-grid">
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">إعداد المهندس المشرف</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">التوقيع والتاريخ</div>
+              </div>
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">التدقيق والمراجعة المالية</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">التوقيع والتاريخ</div>
+              </div>
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">اعتماد شركة رواسي عدن</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">(الختم والتوقيع الرسمي)</div>
+              </div>
+              <div>
+                <div style="font-weight: 800; color: #0f2744;">موافقة واعتماد العميل</div>
+                <div class="quo-sig-space"></div>
+                <div style="border-top: 1px solid #94a3b8; padding-top: 2px; color: #475569;">${contractOwner}</div>
+              </div>
+            </div>
+
+            <div style="text-align: center; font-size: 0.68rem; color: #64748b; margin-top: 8px;">
+              عرض السعر صادر رسمياً عبر نظام شركة رواسي عدن للهندسة والمقاولات — طبع بتاريخ: ${new Date().toLocaleDateString('ar-YE')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    printArea.innerHTML = `
+      <style>
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 10mm 12mm 10mm 12mm;
+          }
+          body {
+            background: #fff !important;
+            color: #000 !important;
+            font-family: 'Cairo', 'Tajawal', Tahoma, sans-serif !important;
+          }
+          .quo-print-page {
+            page-break-after: always;
+            break-after: page;
+            min-height: 98vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 8px 0;
+            box-sizing: border-box;
+          }
+          .quo-print-page:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
+        }
+
+        .quo-doc-wrapper {
+          width: 100%;
+          max-width: 820px;
+          margin: 0 auto;
+          font-family: 'Cairo', Tahoma, sans-serif;
+          color: #0f172a;
+          direction: rtl;
+        }
+
+        .quo-header-box {
+          border: 2px solid #0f2744;
+          border-radius: 8px;
+          padding: 10px 14px;
+          margin-bottom: 10px;
+          background: #f8fafc;
+        }
+
+        .quo-company-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1.5px solid #d4af37;
+          padding-bottom: 6px;
+          margin-bottom: 8px;
+        }
+
+        .quo-meta-grid {
+          display: grid;
+          grid-template-columns: 1.4fr 1.2fr 1fr;
+          gap: 6px;
+          font-size: 0.82rem;
+          line-height: 1.45;
+        }
+
+        .quo-meta-item {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .quo-meta-label {
+          font-weight: 800;
+          color: #0f2744;
+        }
+
+        .quo-title-badge {
+          background: #0f2744;
+          color: #fff;
+          text-align: center;
+          padding: 4px 10px;
+          border-radius: 4px;
+          font-weight: 800;
+          font-size: 0.95rem;
+          letter-spacing: 0.5px;
+          margin-bottom: 8px;
+          border: 1px solid #d4af37;
+        }
+
+        .quo-official-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.76rem;
+          line-height: 1.2;
+          margin-bottom: 6px;
+        }
+
+        .quo-official-table th {
+          background: #0f2744 !important;
+          color: #fff !important;
+          border: 1px solid #0f2744;
+          padding: 5px 4px;
+          text-align: center;
+          font-weight: 800;
+          font-size: 0.78rem;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .quo-official-table td {
+          border: 1px solid #94a3b8;
+          padding: 4.5px 5px;
+          color: #0f172a;
+          vertical-align: middle;
+        }
+
+        .quo-official-table tr:nth-child(even) td {
+          background: #f8fafc;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .quo-total-box {
+          border: 2px solid #0f2744;
+          border-radius: 6px;
+          background: #f8fafc;
+          padding: 8px 12px;
+          margin-top: 6px;
+          font-size: 0.82rem;
+        }
+
+        .quo-sigs-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+          text-align: center;
+          margin-top: 14px;
+          padding-top: 8px;
+          border-top: 1.5px dashed #94a3b8;
+          font-size: 0.78rem;
+        }
+
+        .quo-sig-space {
+          height: 38px;
+          margin-top: 4px;
+        }
+      </style>
+
+      <div class="quo-doc-wrapper">
+        ${pagesHtml}
+      </div>
+    `;
+
+    // أرشفة نسخة التقرير تلقائياً داخل مجلد المشروع الفعلي على القرص
+    if (this.saveReportToProjectFolder) {
+      this.saveReportToProjectFolder('عرض_سعر', `عرض_سعر_رسمي_${quoNo}`, printArea.innerHTML, 'html', '03_عروض_الأسعار_والمقايسات');
+    }
+
+    printArea.style.display = 'block';
+    printArea.style.visibility = 'visible';
+
+    const cleanup = () => {
+      printArea.style.display = 'none';
+      printArea.style.visibility = 'hidden';
+    };
+
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.print();
+
+    // إخفاء احتياطي بعد دقيقة في حال عدم إطلاق حدث afterprint بالمتصفح
+    setTimeout(cleanup, 60000);
   }
 };
+

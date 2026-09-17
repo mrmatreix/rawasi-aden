@@ -10,24 +10,42 @@ const Auth = {
   _isLoggingIn: false,
   _heartbeatInterval: null,
   _pendingCredentials: null,
+  isLocked: false,
+  lockTimeoutMinutes: 15,
+  lastActivityTime: Date.now(),
+  _activityCheckInterval: null,
+  _activityListenersBound: false,
 
   // تهيئة نظام الدخول والمصادقة
   async init() {
-    const savedToken = localStorage.getItem('rawasi_token');
-    const savedUserStr = localStorage.getItem('rawasi_user');
+    this.initLockEngine();
+
+    // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها في هذه النافذة الحالية
+    const isSessionActive = sessionStorage.getItem('rawasi_session_active') === 'true';
+    const savedToken = isSessionActive ? localStorage.getItem('rawasi_token') : null;
+    const savedUserStr = isSessionActive ? localStorage.getItem('rawasi_user') : null;
 
     if (savedToken && savedUserStr) {
       try {
         this.token = savedToken;
         this.currentUser = JSON.parse(savedUserStr);
 
-        // إظهار واجهة التطبيق فوراً والعمل بسلاسة دون طلب إعادة تسجيل الدخول
+        // إذا كانت الشاشة مقفلة قبل إعادة تحميل الصفحة
+        if (sessionStorage.getItem('rawasi_is_locked') === 'true') {
+          this.showApp();
+          this.updateUserUI();
+          this.applyPermissions();
+          this.lockScreen();
+          return;
+        }
+
         this.showApp();
         this.updateUserUI();
         this.applyPermissions();
 
-        // بدء نبض التحقق الدوري من الجلسة
+        // بدء نبض التحقق الدوري من الجلسة وتتبع النشاط
         this.startHeartbeat();
+        this.startActivityTracker();
 
         // التحقق من صحة وصلاحية الجلسة مع الخادم في الخلفية
         await this.verifySession();
@@ -39,7 +57,10 @@ const Auth = {
       }
     }
 
-    // إذا لم توجد جلسة سابقة صالحة: إظهار شاشة الدخول
+    // عند بداية تشغيل المشروع: تسجيل الدخول إجباري دائماً
+    this.token = null;
+    this.currentUser = null;
+    sessionStorage.removeItem('rawasi_session_active');
     this.showLogin();
   },
 
@@ -233,6 +254,11 @@ const Auth = {
         this.sessionId = data.sessionId;
         this.currentUser = data.user;
 
+        sessionStorage.setItem('rawasi_session_active', 'true');
+        sessionStorage.removeItem('rawasi_is_locked');
+        this.isLocked = false;
+        this.lastActivityTime = Date.now();
+
         localStorage.setItem('rawasi_token', this.token);
         localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         localStorage.setItem('rawasi_last_username', this.currentUser.username || username);
@@ -241,6 +267,7 @@ const Auth = {
         this.updateUserUI();
         this.applyPermissions();
         this.startHeartbeat();
+        this.startActivityTracker();
 
         // التحقق من حالة قاعدة البيانات والاتصال فورياً عند تسجيل الدخول
         if (typeof App !== 'undefined') {
@@ -314,6 +341,12 @@ const Auth = {
   // تسجيل الخروج مع إنشاء نسخة احتياطية تلقائية وفورية لأحدث التعديلات
   async logout(showNotify = true, customMsg = null) {
     this.stopHeartbeat();
+    this.stopActivityTracker();
+    this.hideLockScreen();
+    this.isLocked = false;
+    sessionStorage.removeItem('rawasi_is_locked');
+    sessionStorage.removeItem('rawasi_session_active');
+
     const currentUser = this.currentUser;
     const username = currentUser ? (currentUser.username || currentUser.full_name) : 'user';
 
@@ -324,13 +357,14 @@ const Auth = {
 
     // إشعار المستخدم ببدء النسخ الاحتياطي التلقائي
     if (showNotify && typeof App !== 'undefined' && App.showToast) {
-      App.showToast('جاري حفظ آخر التعديلات وإنشاء نسخة احتياطية آمنة... ⏳', 'warning');
+      App.showToast('جاري حفظ آخر التعديلات وإنشاء نسخة احتياطية آمنة لقاعدة البيانات... ⏳', 'warning');
     }
 
+    let backupFileName = null;
     // إرسال طلب إنشاء النسخة الاحتياطية قبل إنهاء الجلسة
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       const isOnline = (typeof App !== 'undefined' && App.dbStatus) ? App.dbStatus.isOnline : false;
       const res = await fetch('/api/settings/auto-backup-logout', {
         method: 'POST',
@@ -344,9 +378,10 @@ const Auth = {
       });
       clearTimeout(timeoutId);
       const data = await res.json();
-      if (data && data.success) {
+      if (data && data.success && data.data) {
+        backupFileName = data.data.fileName;
         localStorage.setItem('rawasi_last_logout_backup', JSON.stringify(data.data));
-        console.log('✅ Auto backup created upon logout:', data.data.fileName);
+        console.log('✅ Auto backup created upon logout:', backupFileName);
       }
     } catch (e) {
       console.warn('Auto backup note on logout:', e.message);
@@ -372,7 +407,10 @@ const Auth = {
     this.currentUser = null;
 
     if (showNotify && typeof App !== 'undefined' && App.showToast) {
-      App.showToast(customMsg || 'تم تسجيل الخروج بنجاح وتم حفظ أحدث نسخة احتياطية لمشروعك ✅', 'success');
+      const successMsg = backupFileName
+        ? `تم تسجيل الخروج بنجاح وحفظ نسخة احتياطية لقاعدة البيانات: (${backupFileName}) 🛡️`
+        : (customMsg || 'تم تسجيل الخروج بنجاح وتم حفظ أحدث نسخة احتياطية لمشروعك ✅');
+      App.showToast(successMsg, 'success');
     }
 
     const errorBox = document.getElementById('loginErrorMsg');
@@ -391,7 +429,17 @@ const Auth = {
     this.showLogin();
   },
 
-  // تحديث بيانات المستخدم في شريط الرأس العلوي (Header)
+  // جلب المسمى الوظيفي بالعربي
+  getUserRoleTitle(role = null) {
+    const r = role || (this.currentUser ? this.currentUser.role : '');
+    if (r === 'admin') return 'المدير العام';
+    if (r === 'accountant') return 'المحاسب المالي';
+    if (r === 'project_manager') return 'مهندس المشاريع';
+    if (r === 'storekeeper') return 'أمين المخزن';
+    return 'مستخدم النظام';
+  },
+
+  // تحديث بيانات المستخدم في شريط الرأس العلوي (Header) وشاشة القفل
   updateUserUI() {
     if (!this.currentUser) return;
 
@@ -399,23 +447,25 @@ const Auth = {
     const userRoleEl = document.getElementById('headerUserRole');
     const userAvatarEl = document.getElementById('headerUserAvatar');
 
-    if (userNameEl) {
-      userNameEl.textContent = this.currentUser.full_name || this.currentUser.username;
-    }
+    const displayName = this.currentUser.full_name || this.currentUser.username;
+    const roleDisplay = this.getUserRoleTitle(this.currentUser.role);
+    const initialChar = displayName ? displayName.charAt(0).toUpperCase() : 'م';
 
-    if (userRoleEl) {
-      let roleDisplay = 'مستخدم';
-      if (this.currentUser.role === 'admin') roleDisplay = 'المدير العام';
-      else if (this.currentUser.role === 'accountant') roleDisplay = 'المحاسب المالي';
-      else if (this.currentUser.role === 'project_manager') roleDisplay = 'مهندس المشاريع';
-      else if (this.currentUser.role === 'storekeeper') roleDisplay = 'أمين المخزن';
-      userRoleEl.textContent = roleDisplay;
-    }
+    if (userNameEl) userNameEl.textContent = displayName;
+    if (userRoleEl) userRoleEl.textContent = roleDisplay;
+    if (userAvatarEl) userAvatarEl.textContent = initialChar;
 
-    if (userAvatarEl) {
-      const name = this.currentUser.full_name || this.currentUser.username || 'م';
-      userAvatarEl.textContent = name.charAt(0).toUpperCase();
-    }
+    // تحديث بيانات شاشة القفل
+    const lockNameEl = document.getElementById('lockScreenUserName');
+    const lockRoleEl = document.getElementById('lockScreenUserRole');
+    const lockAvatarEl = document.getElementById('lockScreenUserAvatar');
+
+    if (lockNameEl) lockNameEl.textContent = displayName;
+    if (lockRoleEl) lockRoleEl.textContent = roleDisplay;
+    if (lockAvatarEl) lockAvatarEl.textContent = initialChar;
+
+    // تحديث شارة مهلة القفل
+    this.updateLockTimeoutBadge();
 
     // تحديث مؤشر وشارة الاتصال عند اسم المستخدم أيضاً
     if (typeof App !== 'undefined' && App.updateConnectionUI && App.dbStatus) {
@@ -517,6 +567,222 @@ const Auth = {
     const firstAllowed = this.applyPermissions() || 'dashboard';
     if (typeof App !== 'undefined' && App.navigate) {
       App.navigate(firstAllowed);
+    }
+  },
+
+  // =================== محرك قفل النظام التلقائي وشاشة القفل ===================
+
+  // تهيئة إعداد مهلة القفل التلقائي
+  initLockEngine() {
+    const saved = localStorage.getItem('rawasi_lock_timeout');
+    if (saved !== null && saved !== undefined && !isNaN(Number(saved))) {
+      this.lockTimeoutMinutes = Number(saved);
+    } else {
+      this.lockTimeoutMinutes = 15; // 15 دقيقة افتراضياً
+      localStorage.setItem('rawasi_lock_timeout', '15');
+    }
+    this.updateLockTimeoutBadge();
+  },
+
+  // تحديث نص شارة مهلة القفل في الزر
+  updateLockTimeoutBadge() {
+    const badge = document.getElementById('currentLockTimeoutBadge');
+    if (!badge) return;
+    if (this.lockTimeoutMinutes === 0) {
+      badge.textContent = 'معطل';
+      badge.style.background = 'rgba(148, 163, 184, 0.15)';
+      badge.style.color = '#94a3b8';
+    } else if (this.lockTimeoutMinutes === 60) {
+      badge.textContent = '60 دقيقة';
+      badge.style.background = 'rgba(212, 175, 55, 0.2)';
+      badge.style.color = '#d4af37';
+    } else {
+      badge.textContent = `${this.lockTimeoutMinutes} دقيقة`;
+      badge.style.background = 'rgba(212, 175, 55, 0.2)';
+      badge.style.color = '#d4af37';
+    }
+  },
+
+  // بدء تتبع نشاط المستخدم ومؤقت الخمول
+  startActivityTracker() {
+    this.lastActivityTime = Date.now();
+    this.stopActivityTracker();
+
+    if (!this._activityListenersBound) {
+      this._activityListenersBound = true;
+      let lastThrottle = 0;
+      const resetActivity = () => {
+        const now = Date.now();
+        if (now - lastThrottle > 2000) {
+          lastThrottle = now;
+          if (!this.isLocked) {
+            this.lastActivityTime = now;
+          }
+        }
+      };
+
+      window.addEventListener('mousemove', resetActivity, { passive: true });
+      window.addEventListener('mousedown', resetActivity, { passive: true });
+      window.addEventListener('keydown', resetActivity, { passive: true });
+      window.addEventListener('touchstart', resetActivity, { passive: true });
+      window.addEventListener('scroll', resetActivity, { passive: true });
+    }
+
+    // فحص خمول المستخدم كل 5 ثوانٍ
+    this._activityCheckInterval = setInterval(() => {
+      if (!this.token || !this.currentUser || this.isLocked) return;
+      if (this.lockTimeoutMinutes <= 0) return; // معطل
+
+      const idleDurationMs = Date.now() - this.lastActivityTime;
+      const thresholdMs = this.lockTimeoutMinutes * 60 * 1000;
+
+      if (idleDurationMs >= thresholdMs) {
+        console.log(`🔒 Auto lock triggered after ${this.lockTimeoutMinutes} min of inactivity.`);
+        this.lockScreen();
+      }
+    }, 5000);
+  },
+
+  // إيقاف مؤقت فحص النشاط
+  stopActivityTracker() {
+    if (this._activityCheckInterval) {
+      clearInterval(this._activityCheckInterval);
+      this._activityCheckInterval = null;
+    }
+  },
+
+  // قفل شاشة النظام وإظهار واجهة القفل
+  lockScreen() {
+    this.isLocked = true;
+    sessionStorage.setItem('rawasi_is_locked', 'true');
+
+    const lockOverlay = document.getElementById('appLockScreenOverlay');
+    if (lockOverlay) {
+      lockOverlay.style.display = 'flex';
+    }
+
+    // تحديث بيانات المستخدم على شاشة القفل
+    this.updateUserUI();
+
+    const errBox = document.getElementById('lockErrorMsg');
+    if (errBox) {
+      errBox.style.display = 'none';
+      errBox.textContent = '';
+    }
+
+    const pwdInput = document.getElementById('lockScreenPassword');
+    if (pwdInput) {
+      pwdInput.value = '';
+      setTimeout(() => pwdInput.focus(), 150);
+    }
+  },
+
+  // إخفاء شاشة القفل واستئناف العمل
+  hideLockScreen() {
+    this.isLocked = false;
+    sessionStorage.removeItem('rawasi_is_locked');
+    const lockOverlay = document.getElementById('appLockScreenOverlay');
+    if (lockOverlay) {
+      lockOverlay.style.display = 'none';
+    }
+    const pwdInput = document.getElementById('lockScreenPassword');
+    if (pwdInput) pwdInput.value = '';
+  },
+
+  // معالجة إلغاء القفل بالتحقق من كلمة المرور
+  async submitUnlock(e) {
+    if (e) e.preventDefault();
+
+    const pwdInput = document.getElementById('lockScreenPassword');
+    const errBox = document.getElementById('lockErrorMsg');
+    const submitBtn = document.getElementById('btnLockUnlockSubmit');
+
+    const password = pwdInput ? pwdInput.value : '';
+    const username = this.currentUser ? (this.currentUser.username || this.currentUser.full_name) : '';
+
+    if (!password) {
+      if (errBox) {
+        errBox.textContent = 'يرجى إدخال كلمة المرور لإلغاء القفل';
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>جاري التحقق...</span>`;
+    }
+
+    try {
+      const res = await fetch('/api/auth/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (data && data.success) {
+        this.hideLockScreen();
+        this.lastActivityTime = Date.now();
+        if (typeof App !== 'undefined' && App.showToast) {
+          App.showToast(`تم إلغاء القفل بنجاح، مرحباً بعودتك ${this.currentUser?.full_name || ''} ✅`, 'success');
+        }
+      } else {
+        if (errBox) {
+          errBox.textContent = data.message || 'كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى.';
+          errBox.style.display = 'block';
+        }
+        if (pwdInput) {
+          pwdInput.select();
+          pwdInput.focus();
+        }
+      }
+    } catch (err) {
+      console.error('Unlock error:', err);
+      if (errBox) {
+        errBox.textContent = 'تعذر التحقق من الخادم، يرجى التأكد من تشغيل النظام.';
+        errBox.style.display = 'block';
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `
+          <span>إلغاء القفل واستئناف العمل</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z"/></svg>
+        `;
+      }
+    }
+  },
+
+  // فتح نافذة إعداد مهلة فترة القفل التلقائي
+  openLockTimeoutModal() {
+    const radios = document.querySelectorAll('input[name="lockTimeoutOption"]');
+    radios.forEach(r => {
+      r.checked = (Number(r.value) === this.lockTimeoutMinutes);
+    });
+    if (typeof App !== 'undefined' && App.openModal) {
+      App.openModal('lockTimeoutModal');
+    }
+  },
+
+  // حفظ إعداد مهلة فترة القفل
+  saveLockTimeoutSettings() {
+    const selected = document.querySelector('input[name="lockTimeoutOption"]:checked');
+    const val = selected ? Number(selected.value) : 15;
+
+    this.lockTimeoutMinutes = val;
+    localStorage.setItem('rawasi_lock_timeout', String(val));
+    this.updateLockTimeoutBadge();
+    this.lastActivityTime = Date.now();
+
+    if (typeof App !== 'undefined') {
+      if (App.closeModal) App.closeModal('lockTimeoutModal');
+      if (App.showToast) {
+        const msg = val === 0
+          ? 'تم تعطيل القفل التلقائي للشاشة (القفل يدوي فقط) 🛡️'
+          : `تم ضبط مهلة فترة القفل التلقائي إلى ${val} دقيقة بنجاح ⏱️`;
+        App.showToast(msg, 'success');
+      }
     }
   },
 

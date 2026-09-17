@@ -28,6 +28,7 @@ const Settings = {
 
     if (tab === 'users') {
       this.loadUsers();
+      if (typeof Auth !== 'undefined' && Auth.updateLockTimeoutBadge) Auth.updateLockTimeoutBadge();
     } else if (tab === 'company') {
       this.loadCompanySettings();
     } else if (tab === 'print') {

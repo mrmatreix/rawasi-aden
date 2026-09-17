@@ -312,4 +312,47 @@ router.get('/connected-users', async (req, res) => {
   }
 });
 
+// 6. فك قفل الشاشة بالتحقق من كلمة المرور للمستخدم الحالي
+router.post('/unlock', async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'يرجى إدخال كلمة المرور لإلغاء القفل' });
+    }
+
+    const cleanUsername = String(username).trim();
+    const user = await get('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'اسم المستخدم غير موجود' });
+    }
+
+    if (user.status === 'inactive') {
+      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً' });
+    }
+
+    const isMatch = bcrypt.compareSync(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى' });
+    }
+
+    // تحديث نبض الجلسة
+    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await run('UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?', [nowIso, user.id]);
+
+    res.json({
+      success: true,
+      message: 'تم فك القفل واستئناف العمل بنجاح',
+      user: {
+        id: user.id,
+        username: user.username,
+        full_name: user.full_name,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    console.error('Unlock error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في التحقق من كلمة المرور: ' + err.message });
+  }
+});
+
 module.exports = router;
