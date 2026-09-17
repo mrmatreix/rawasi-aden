@@ -3041,6 +3041,16 @@ const ProjectHub = {
     const contractOwner = project?.contract_owner || project?.client_name || 'العميل المعتمد';
     const projName = project?.name || 'مشروع هندسي';
 
+    // تحديث عناوين وشارات رأس التبويب 16
+    const headerProjName = document.getElementById('intQuoHeaderProjName');
+    if (headerProjName) headerProjName.innerText = projName;
+
+    const boqLinkBadge = document.getElementById('intQuoBoqLinkBadge');
+    if (boqLinkBadge) boqLinkBadge.innerText = `🔗 مربوط بالمخازن و BOQ والموردين (${items.length} بند)`;
+
+    const subtitleEl = document.getElementById('intQuoSubtitle');
+    if (subtitleEl) subtitleEl.innerText = `ربط متكامل لـ ${items.length} بند بين الكميات التعاقدية (BOQ)، المواد المخزنية، وأرصدة وأسعار الموردين المعتمدين مع إمكانية الطباعة طبق الأصل للمستند الورقي.`;
+
     const clientName = document.getElementById('intQuoClientName');
     if (clientName) clientName.innerText = contractOwner;
 
