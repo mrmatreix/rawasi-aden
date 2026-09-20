@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at DATETIME NULL,
     last_login_ip VARCHAR(100) NULL,
     last_login_device VARCHAR(255) NULL,
+    active_sessions TEXT NULL,
+    security_settings TEXT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

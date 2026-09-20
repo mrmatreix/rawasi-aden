@@ -3357,12 +3357,25 @@
   <!-- نافذة إعدادات الأمان وسياسة الجلسات والتوكن -->
   <div class="modal-overlay" id="securitySessionsModal">
     <div class="modal-box" style="max-width: 860px; padding: 20px;">
-      <div class="modal-header" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light);">
-        <h3 style="display: flex; align-items: center; gap: 8px; margin: 0; color: #f1f5f9; font-size: 1.15rem;">
+      <div class="modal-header" style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light);">
+        <h3 id="securityModalHeaderTitle" style="display: flex; align-items: center; gap: 8px; margin: 0; color: #f1f5f9; font-size: 1.15rem;">
           <span style="color: #10b981;">🛡️</span>
           <span>إعدادات الأمان والجلسات وصلاحية التوكن</span>
         </h3>
         <button class="modal-close-btn" onclick="App.closeModal('securitySessionsModal')">&times;</button>
+      </div>
+
+      <!-- شريط اختيار وتخصيص المستخدم المستهدف (للمدير العام) -->
+      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 0.88rem; color: #d4af37; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+            <span>👑 تخصيص الأمان للمستخدم:</span>
+          </span>
+          <select id="selectSecurityTargetUser" onchange="Auth.onSecurityTargetUserChange()" style="background: #0f172a; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; padding: 6px 12px; font-weight: 600; font-size: 0.88rem; min-width: 250px;">
+            <option value="global">⚙️ الإعدادات العامة الافتراضية للنظام</option>
+          </select>
+        </div>
+        <div id="securityUserCustomStatusBadge"></div>
       </div>
 
       <div class="security-modal-grid">
@@ -3430,17 +3443,29 @@
               <button type="button" class="token-expiry-btn" data-exp="30d" onclick="Auth.setTokenExpiry('30d')">30 يوماً</button>
             </div>
 
-            <!-- زر مخصص -->
+            <!-- زر مخصص (فترة العمل اليومية) -->
             <div>
-              <button type="button" class="token-expiry-btn" data-exp="custom" id="btnExpiryCustom" onclick="Auth.setTokenExpiry('custom')" style="width: 100%;">مخصص</button>
-              <div id="customExpiryBox" style="display: none; margin-top: 8px; padding: 8px 12px; background: rgba(15, 23, 42, 0.6); border: 1px dashed #334155; border-radius: 8px; align-items: center; gap: 8px; justify-content: center;">
-                <span style="font-size: 0.82rem; color: #94a3b8;">المدة:</span>
-                <input type="number" id="inputCustomVal" min="5" max="43200" value="12" style="width: 75px; padding: 4px 8px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; text-align: center; font-weight: bold;" oninput="Auth.onCustomInputChange()">
-                <select id="selectCustomUnit" style="padding: 4px 8px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px;" onchange="Auth.onCustomInputChange()">
-                  <option value="m">دقيقة</option>
-                  <option value="h" selected>ساعة</option>
-                  <option value="d">يوم</option>
-                </select>
+              <button type="button" class="token-expiry-btn" data-exp="custom" id="btnExpiryCustom" onclick="Auth.setTokenExpiry('custom')" style="width: 100%;">
+                <span>⏰ مخصص (فترة وساعات العمل)</span>
+              </button>
+              <div id="customExpiryBox" style="display: none; margin-top: 8px; padding: 10px 12px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px;">
+                <div style="font-size: 0.78rem; font-weight: 700; color: #34d399; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                  <span>⏰ ساعات العمل المسموحة (خلال 24 ساعة):</span>
+                  <span id="customWorkHoursSummary" style="font-size: 0.74rem; color: #10b981; font-weight: bold; background: rgba(16, 185, 129, 0.15); padding: 1px 6px; border-radius: 4px;">8 ساعات عمل</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px;">
+                  <div style="display: flex; flex-direction: column; gap: 3px;">
+                    <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">من الساعة (وقت البدء):</label>
+                    <input type="time" id="inputWorkStartTime" value="08:00" class="form-control" style="background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 5px 8px; font-weight: 700; font-size: 0.88rem; text-align: center;" onchange="Auth.onWorkHoursChange()">
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 3px;">
+                    <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">إلى الساعة (وقت الانتهاء):</label>
+                    <input type="time" id="inputWorkEndTime" value="16:00" class="form-control" style="background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 5px 8px; font-weight: 700; font-size: 0.88rem; text-align: center;" onchange="Auth.onWorkHoursChange()">
+                  </div>
+                </div>
+                <div style="font-size: 0.72rem; color: #64748b; line-height: 1.4; text-align: center;" id="customWorkHoursNote">
+                  🔒 يُسمح بالدخول والعمل فقط ضمن الفترة المحددة، ويُحظر الدخول خارجها تلقائياً.
+                </div>
               </div>
             </div>
           </div>
@@ -3456,12 +3481,15 @@
 
       <!-- أزرار الإجراءات بالأسفل -->
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--border-light); flex-wrap: wrap;">
-        <div style="font-size: 0.82rem; color: #64748b;">
-          🛡️ تسري هذه الإعدادات على جميع مستخدمي نظام رواسي عدن لحماية بيانات المؤسسة.
+        <div style="font-size: 0.82rem; color: #64748b;" id="securityModalFooterNote">
+          🛡️ تسري هذه الإعدادات على مستخدمي نظام رواسي عدن بحسب صلاحيات المدير العام.
         </div>
         <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnResetUserSecurity" onclick="Auth.resetTargetUserSecurityToDefault()" style="display: none; color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08);" title="إلغاء التخصيص والرجوع للإعداد العام">
+            🔄 استعادة الإعداد الافتراضي
+          </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="App.closeModal('securitySessionsModal')">إلغاء</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="Auth.saveSecuritySessionsSettings()" style="background: #10b981; border-color: #059669; color: #ffffff; font-weight: 700; padding: 6px 16px;">
+          <button type="button" class="btn btn-primary btn-sm" id="btnSaveSecuritySettings" onclick="Auth.saveSecuritySessionsSettings()" style="background: #10b981; border-color: #059669; color: #ffffff; font-weight: 700; padding: 6px 18px;">
             💾 حفظ وتطبيق الإعدادات
           </button>
         </div>
@@ -3694,12 +3722,93 @@
                 <span>النسخ الاحتياطي واستعادة البيانات</span>
               </label>
             </div>
+
+            <!-- 12. الأمان والجلسات المخصصة للمستخدم (المكان الأخضر) -->
+            <div class="perm-group-card" id="userModalSecurityCard" style="border: 1px solid rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.04); border-radius: var(--radius-sm); padding: 10px 12px; transition: var(--transition);">
+              <div class="perm-group-title" style="color: #34d399; border-bottom: 1px solid rgba(16, 185, 129, 0.2); display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="display: flex; align-items: center; gap: 5px; font-size: 0.82rem; font-weight: 700;">
+                  <span>🛡️ الأمان وسياسة الجلسات</span>
+                </span>
+                <span id="userSecBadgeType" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(212, 175, 55, 0.15); color: var(--gold-light); font-weight: 600;">افتراضي النظام</span>
+              </div>
+
+              <!-- نوع السياسة -->
+              <div style="margin-bottom: 8px;">
+                <label style="font-size: 0.74rem; color: #94a3b8; display: block; margin-bottom: 3px; font-weight: 600;">سياسة تسجيل الدخول للجلسة:</label>
+                <select id="userSecPolicyType" class="form-control" style="font-size: 0.78rem; padding: 4px 8px; height: 32px; background: #0b1329; border-color: rgba(16, 185, 129, 0.35); color: #f8fafc;" onchange="Settings.onUserSecurityPolicyChange()">
+                  <option value="inherit">⚙️ افتراضي النظام (وراثة الإعدادات العامة)</option>
+                  <option value="strict_single">🔒 جلسة واحدة صارمة (جهاز واحد فقط)</option>
+                  <option value="multi_device">📱💻 جلسات متعددة (سقف أجهزة محدد)</option>
+                </select>
+              </div>
+
+              <!-- خيارات الجلسات المتعددة -->
+              <div id="userSecMultiControls" style="display: none; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px;">
+                  <label style="font-size: 0.74rem; color: #cbd5e1; font-weight: 600;">سقف الأجهزة:</label>
+                  <select id="userSecDeviceLimit" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 95px; background: #0f172a; color: #f8fafc;">
+                    <option value="2">جهازين (2)</option>
+                    <option value="3" selected>3 أجهزة</option>
+                    <option value="5">5 أجهزة</option>
+                  </select>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+                  <label style="font-size: 0.74rem; color: #cbd5e1; font-weight: 600;">عند التجاوز:</label>
+                  <select id="userSecOverflowAction" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 110px; background: #0f172a; color: #f8fafc;">
+                    <option value="kick_oldest" selected>طرد الأقدم</option>
+                    <option value="block_new">منع الجديد</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- صلاحية التوكن (JWT) -->
+              <div id="userSecTokenBox" style="display: none; margin-bottom: 6px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+                  <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">صلاحية الجلسة:</label>
+                  <select id="userSecTokenExpiry" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 145px; background: #0b1329; color: #f8fafc;" onchange="Settings.onWorkHoursChange()">
+                    <option value="1h">1 ساعة</option>
+                    <option value="4h">4 ساعات</option>
+                    <option value="8h" selected>8 ساعات (افتراضي)</option>
+                    <option value="12h">12 ساعة</option>
+                    <option value="24h">24 ساعة (يوم)</option>
+                    <option value="7d">7 أيام</option>
+                    <option value="30d">30 يوماً</option>
+                    <option value="custom">⏰ مخصص (فترة الدوام)</option>
+                  </select>
+                </div>
+
+                <!-- صندوق فترة وساعات العمل المسموحة -->
+                <div id="userSecWorkHoursBox" style="display: none; background: rgba(15, 23, 42, 0.7); border: 1px dashed rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 6px 8px; margin-top: 6px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 0.72rem; color: #34d399; font-weight: 700;">فترة العمل (24 ساعة):</span>
+                    <span id="userSecWorkDurationBadge" style="font-size: 0.7rem; color: #10b981; font-weight: bold;">8 ساعات</span>
+                  </div>
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                    <div style="flex: 1;">
+                      <label style="font-size: 0.68rem; color: #94a3b8; display: block; margin-bottom: 1px;">من:</label>
+                      <input type="time" id="userSecStartTime" value="08:00" class="form-control" style="font-size: 0.76rem; padding: 2px 4px; height: 24px; background: #0f172a; color: #fff; text-align: center;" onchange="Settings.onWorkHoursChange()">
+                    </div>
+                    <div style="flex: 1;">
+                      <label style="font-size: 0.68rem; color: #94a3b8; display: block; margin-bottom: 1px;">إلى:</label>
+                      <input type="time" id="userSecEndTime" value="16:00" class="form-control" style="font-size: 0.76rem; padding: 2px 4px; height: 24px; background: #0f172a; color: #fff; text-align: center;" onchange="Settings.onWorkHoursChange()">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ملاحظة إرشادية للمدير العام -->
+              <div id="userSecHelpNote" style="font-size: 0.7rem; color: #94a3b8; line-height: 1.4; margin-top: 4px;">
+                💡 يتبع المستخدم إعدادات النظام العامة الافتراضية.
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="modal-footer" style="margin-top: 16px;">
-          <button type="submit" class="btn btn-primary" id="btnSaveUser">حفظ وتأكيد المستخدم</button>
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('newUserModal')">إلغاء</button>
+        <div class="modal-footer" style="margin-top: 16px; display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; gap: 8px;">
+            <button type="submit" class="btn btn-primary" id="btnSaveUser">حفظ وتأكيد المستخدم</button>
+            <button type="button" class="btn btn-secondary" onclick="App.closeModal('newUserModal')">إلغاء</button>
+          </div>
         </div>
       </form>
     </div>

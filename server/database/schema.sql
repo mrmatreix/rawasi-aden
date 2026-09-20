@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at DATETIME,
     last_login_ip TEXT,
     last_login_device TEXT,
+    active_sessions TEXT,
+    security_settings TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

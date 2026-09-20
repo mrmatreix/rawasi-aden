@@ -199,11 +199,17 @@ async function initMysql() {
     `);
   }
 
-  // فحص حقل active_sessions في جدول users في MySQL
+  // فحص حقل active_sessions و security_settings في جدول users في MySQL
   try {
     const [cols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'active_sessions'");
     if (!cols || cols.length === 0) {
       await mysqlPool.query("ALTER TABLE users ADD COLUMN active_sessions TEXT NULL");
+    }
+  } catch {}
+  try {
+    const [secCols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'security_settings'");
+    if (!secCols || secCols.length === 0) {
+      await mysqlPool.query("ALTER TABLE users ADD COLUMN security_settings TEXT NULL");
     }
   } catch {}
 
@@ -234,6 +240,7 @@ function initSqlite() {
     if (!colNames.includes('last_login_ip')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_ip TEXT;");
     if (!colNames.includes('last_login_device')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_device TEXT;");
     if (!colNames.includes('active_sessions')) sqliteDb.exec("ALTER TABLE users ADD COLUMN active_sessions TEXT;");
+    if (!colNames.includes('security_settings')) sqliteDb.exec("ALTER TABLE users ADD COLUMN security_settings TEXT;");
   } catch {}
 
   activeEngine = 'sqlite';

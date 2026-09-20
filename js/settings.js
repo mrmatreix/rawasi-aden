@@ -1353,6 +1353,23 @@ const Settings = {
             permsHtml = `<span class="badge badge-active" title="${perms.join(', ')}">${perms.length} صلاحية مخصصة</span>`;
           }
 
+          // User security & session badge
+          const uSec = u.security_settings;
+          let secBadgeHtml = '';
+          if (uSec && typeof uSec === 'object') {
+            const isSingle = uSec.session_mode === 'single';
+            const devLimit = uSec.session_device_limit || 1;
+            const exp = uSec.jwt_token_expiry || '8h';
+            const label = isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`;
+            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="إعدادات أمان مخصصة لهذا المستخدم - انقر للتعديل">🛡️ ${label} ⭐</span></div>`;
+          } else {
+            const isSingle = Auth.securitySettings?.session_mode === 'single';
+            const devLimit = Auth.securitySettings?.session_device_limit || 3;
+            const exp = Auth.securitySettings?.jwt_token_expiry || '8h';
+            const label = isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`;
+            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="يرث الإعدادات العامة للنظام - انقر لتخصيص هذا المستخدم">⚙️ عام: ${label}</span></div>`;
+          }
+
           // Status Badge & Live Connection Indicator
           const isActive = u.status === 'active';
           const statusBadge = isActive
@@ -1365,6 +1382,7 @@ const Settings = {
             : `<div style="margin-top: 4px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: #94a3b8; font-size: 0.72rem; padding: 2px 8px;">غير متصل ⚪</span></div>`;
 
           const isRootAdmin = u.username === 'admin' || u.id === 1;
+          const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
 
           return `
             <tr>
@@ -1378,7 +1396,10 @@ const Settings = {
                 <div style="font-size: 0.82rem;">${u.phone || '-'}</div>
                 ${u.email ? `<div style="font-size: 0.72rem; color: var(--text-secondary);">${u.email}</div>` : ''}
               </td>
-              <td>${permsHtml}</td>
+              <td>
+                ${permsHtml}
+                ${secBadgeHtml}
+              </td>
               <td>
                 ${statusBadge}
                 ${onlineBadge}
@@ -1388,6 +1409,11 @@ const Settings = {
                   <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.openEditUserModal(${u.id})" title="تعديل المستخدم والصلاحيات">
                     ✏️ تعديل
                   </button>
+                  ${isCurrentUserAdmin ? `
+                    <button type="button" class="btn btn-secondary btn-sm" style="color: #10b981; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); font-weight: 600;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="تخصيص سياسة الأمان والجلسات لهذا المستخدم">
+                      🛡️ أمان وجلسات
+                    </button>
+                  ` : ''}
                   ${isOnline ? `
                     <button type="button" class="btn btn-secondary btn-sm" style="color: #fbbf24; border-color: rgba(245,158,11,0.4);" onclick="Settings.disconnectUser(${u.id}, '${u.full_name || u.username}')" title="إنهاء الجلسة وفصل المستخدم عن النظام لمنع التكرار">
                       🔌 فصل
@@ -1441,6 +1467,14 @@ const Settings = {
       this.applyRolePermissionsPreset('accountant');
     }
 
+    // تجهيز بطاقة الأمان والجلسات المخصصة (المكان الأخضر)
+    const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
+    const secCard = document.getElementById('userModalSecurityCard');
+    if (secCard) {
+      secCard.style.display = isCurrentUserAdmin ? 'block' : 'none';
+    }
+    this.populateUserSecurityCard(null);
+
     App.openModal('newUserModal');
   },
 
@@ -1478,24 +1512,153 @@ const Settings = {
       roleSelect.value = user.role || 'custom';
     }
 
+    // تجهيز بطاقة الأمان والجلسات للمستخدم داخل نافذة التعديل (المكان الأخضر)
+    const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
+    const secCard = document.getElementById('userModalSecurityCard');
+    if (secCard) {
+      secCard.style.display = isCurrentUserAdmin ? 'block' : 'none';
+    }
+    this.populateUserSecurityCard(user.security_settings);
+
     // Uncheck all checkboxes first
     this.selectAllPermissions(false);
 
     // Check user's assigned permissions
     const perms = user.permissions_list || [];
-    if (user.role === 'admin' || perms.includes('all')) {
+    if (user.username === 'admin' || perms.includes('all')) {
       this.selectAllPermissions(true);
     } else if (perms.length > 0) {
       perms.forEach(p => {
         const chk = document.querySelector(`.perm-chk[value="${p}"]`);
         if (chk) chk.checked = true;
       });
+      // إذا كانت الصلاحيات مخصصة، نظهر الدور كـ "مخصص" في القائمة
+      const totalCheckboxes = document.querySelectorAll('.perm-chk').length;
+      if (roleSelect && perms.length < totalCheckboxes) {
+        roleSelect.value = 'custom';
+      }
+    } else if (user.role === 'admin') {
+      this.selectAllPermissions(true);
     } else {
       // If no custom perms, apply role default
       this.applyRolePermissionsPreset(user.role || 'accountant');
     }
 
     App.openModal('newUserModal');
+  },
+
+  // تعبئة وضبط خيارات الأمان والجلسات في البطاقة الخضراء
+  populateUserSecurityCard(secSettings) {
+    const policySelect = document.getElementById('userSecPolicyType');
+    const limitSelect = document.getElementById('userSecDeviceLimit');
+    const overflowSelect = document.getElementById('userSecOverflowAction');
+    const tokenExpSelect = document.getElementById('userSecTokenExpiry');
+    const startInput = document.getElementById('userSecStartTime');
+    const endInput = document.getElementById('userSecEndTime');
+
+    let sec = secSettings;
+    if (typeof sec === 'string') {
+      try { sec = JSON.parse(sec); } catch (e) { sec = null; }
+    }
+
+    if (sec && (sec.sessionMode === 'strict_single' || sec.sessionMode === 'multi_device')) {
+      if (policySelect) policySelect.value = sec.sessionMode;
+      if (limitSelect) limitSelect.value = String(sec.maxSessions || 3);
+      if (overflowSelect) overflowSelect.value = sec.overflowAction || 'kick_oldest';
+      if (tokenExpSelect) {
+        if (sec.jwt_token_expiry === 'custom' || sec.tokenExpiryPreset === 'custom' || sec.work_hours_enabled) {
+          tokenExpSelect.value = 'custom';
+        } else if (sec.tokenExpiryPreset) {
+          tokenExpSelect.value = sec.tokenExpiryPreset;
+        } else if (sec.tokenExpiryHours) {
+          tokenExpSelect.value = sec.tokenExpiryHours + 'h';
+        } else {
+          tokenExpSelect.value = '8h';
+        }
+      }
+      if (startInput) startInput.value = sec.work_start_time || '08:00';
+      if (endInput) endInput.value = sec.work_end_time || '16:00';
+    } else {
+      if (policySelect) policySelect.value = 'inherit';
+      if (limitSelect) limitSelect.value = '3';
+      if (overflowSelect) overflowSelect.value = 'kick_oldest';
+      if (tokenExpSelect) tokenExpSelect.value = '8h';
+      if (startInput) startInput.value = '08:00';
+      if (endInput) endInput.value = '16:00';
+    }
+
+    this.onUserSecurityPolicyChange();
+    this.onWorkHoursChange();
+  },
+
+  // عند تغيير خيار سياسة الأمان داخل نافذة المستخدم
+  onUserSecurityPolicyChange() {
+    const policyType = document.getElementById('userSecPolicyType')?.value || 'inherit';
+    const multiBox = document.getElementById('userSecMultiControls');
+    const tokenBox = document.getElementById('userSecTokenBox');
+    const badge = document.getElementById('userSecBadgeType');
+    const note = document.getElementById('userSecHelpNote');
+
+    if (policyType === 'strict_single') {
+      if (multiBox) multiBox.style.display = 'none';
+      if (tokenBox) tokenBox.style.display = 'block';
+      if (badge) {
+        badge.textContent = 'جلسة واحدة (مخصص)';
+        badge.style.background = 'rgba(239, 68, 68, 0.15)';
+        badge.style.color = '#f87171';
+      }
+      if (note) {
+        note.innerHTML = '🔒 <strong>جلسة واحدة صارمة:</strong> يُسمح بتسجيل الدخول من جهاز واحد فقط، وسيتم طرد أي جلسة أخرى فوراً.';
+      }
+    } else if (policyType === 'multi_device') {
+      if (multiBox) multiBox.style.display = 'block';
+      if (tokenBox) tokenBox.style.display = 'block';
+      if (badge) {
+        badge.textContent = 'متعدد الأجهزة (مخصص)';
+        badge.style.background = 'rgba(16, 185, 129, 0.15)';
+        badge.style.color = '#34d399';
+      }
+      if (note) {
+        note.innerHTML = '📱💻 <strong>أجهزة متعددة:</strong> يُسمح بفتح الحساب من عدة أجهزة في نفس الوقت حتى السقف المحدد.';
+      }
+    } else {
+      // inherit
+      if (multiBox) multiBox.style.display = 'none';
+      if (tokenBox) tokenBox.style.display = 'none';
+      if (badge) {
+        badge.textContent = 'افتراضي النظام';
+        badge.style.background = 'rgba(212, 175, 55, 0.15)';
+        badge.style.color = 'var(--gold-light)';
+      }
+      if (note) {
+        note.innerHTML = '⚙️ <strong>وراثة الافتراضي:</strong> يتبع المستخدم إعدادات الأمان والجلسات العامة المعتمدة في النظام.';
+      }
+    }
+
+    this.onWorkHoursChange();
+  },
+
+  // عند تغيير خيار فترة وساعات العمل المخصصة
+  onWorkHoursChange() {
+    const tokenExpSelect = document.getElementById('userSecTokenExpiry');
+    const workHoursBox = document.getElementById('userSecWorkHoursBox');
+    const startInput = document.getElementById('userSecStartTime');
+    const endInput = document.getElementById('userSecEndTime');
+    const badge = document.getElementById('userSecWorkDurationBadge');
+
+    const isCustom = tokenExpSelect?.value === 'custom';
+    if (workHoursBox) {
+      workHoursBox.style.display = isCustom ? 'block' : 'none';
+    }
+
+    if (isCustom && startInput && endInput && badge) {
+      const [h1, m1] = (startInput.value || '08:00').split(':').map(Number);
+      const [h2, m2] = (endInput.value || '16:00').split(':').map(Number);
+      let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+      if (diff <= 0) diff += 24 * 60;
+      const hours = (diff / 60).toFixed(1).replace('.0', '');
+      badge.textContent = `${hours} ساعات عمل`;
+    }
   },
 
   // ================== تطبيق قوالب الصلاحيات التلقائية ==================
@@ -1585,15 +1748,88 @@ const Settings = {
     // Gather checked permissions
     const checkedPerms = Array.from(document.querySelectorAll('.perm-chk:checked')).map(c => c.value);
 
+    // استخراج وضبط إعدادات الأمان والجلسات من البطاقة المخصصة
+    let userSecuritySettings = undefined;
+    const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
+
+    if (isCurrentUserAdmin) {
+      const policyType = document.getElementById('userSecPolicyType')?.value || 'inherit';
+      const expVal = document.getElementById('userSecTokenExpiry')?.value || '8h';
+      const isCustomWorkHours = (expVal === 'custom');
+      const startWork = document.getElementById('userSecStartTime')?.value || '08:00';
+      const endWork = document.getElementById('userSecEndTime')?.value || '16:00';
+
+      let hours = 8;
+      if (isCustomWorkHours) {
+        const [h1, m1] = startWork.split(':').map(Number);
+        const [h2, m2] = endWork.split(':').map(Number);
+        let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+        if (diff <= 0) diff += 24 * 60;
+        hours = Math.max(1, Math.round(diff / 60));
+      } else if (expVal.endsWith('h')) {
+        hours = parseInt(expVal);
+      } else if (expVal.endsWith('d')) {
+        hours = parseInt(expVal) * 24;
+      }
+
+      if (policyType === 'strict_single') {
+        userSecuritySettings = {
+          sessionMode: 'strict_single',
+          maxSessions: 1,
+          overflowAction: 'kick_oldest',
+          jwt_token_expiry: expVal,
+          tokenExpiryPreset: expVal,
+          tokenExpiryHours: hours,
+          work_start_time: startWork,
+          work_end_time: endWork,
+          work_hours_enabled: isCustomWorkHours,
+          updated_at: new Date().toISOString()
+        };
+      } else if (policyType === 'multi_device') {
+        const limit = parseInt(document.getElementById('userSecDeviceLimit')?.value || '3');
+        const overflow = document.getElementById('userSecOverflowAction')?.value || 'kick_oldest';
+
+        userSecuritySettings = {
+          sessionMode: 'multi_device',
+          maxSessions: limit,
+          overflowAction: overflow,
+          jwt_token_expiry: expVal,
+          tokenExpiryPreset: expVal,
+          tokenExpiryHours: hours,
+          work_start_time: startWork,
+          work_end_time: endWork,
+          work_hours_enabled: isCustomWorkHours,
+          updated_at: new Date().toISOString()
+        };
+      } else {
+        // inherit: نرسل null ليتم وراثة إعدادات النظام العامة
+        userSecuritySettings = null;
+      }
+    }
+
+    let finalPerms = [...checkedPerms];
+    let finalRole = role;
+
+    const totalCheckboxes = document.querySelectorAll('.perm-chk').length;
+    if (finalRole === 'admin' && finalPerms.length >= totalCheckboxes) {
+      if (!finalPerms.includes('all')) finalPerms.unshift('all');
+    } else if (finalPerms.length < totalCheckboxes && finalRole === 'admin' && username !== 'admin') {
+      finalRole = 'custom';
+    }
+
     const payload = {
       full_name,
       username,
-      role,
+      role: finalRole,
       phone,
       email,
       status,
-      permissions: checkedPerms
+      permissions: finalPerms
     };
+
+    if (userSecuritySettings !== undefined) {
+      payload.security_settings = userSecuritySettings;
+    }
 
     if (password && password.trim().length > 0) {
       payload.password = password;
@@ -1610,13 +1846,24 @@ const Settings = {
       const url = id ? `/api/users/${id}` : '/api/users';
       const method = id ? 'PUT' : 'POST';
 
+      const headers = { 'Content-Type': 'application/json' };
+      if (Auth.token) {
+        headers['Authorization'] = `Bearer ${Auth.token}`;
+      }
+
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
+      let data;
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('استجابة غير متوقعة من الخادم (' + res.status + '). يرجى إعادة تشغيل الخادم وتحديث الصفحة.');
+      }
 
       if (res.ok && data.success) {
         App.showToast(data.message || 'تم حفظ المستخدم وتعيين الصلاحيات بنجاح!', 'success');

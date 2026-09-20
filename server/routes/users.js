@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { query, get, run } = require('../database/db');
+const { verifyAdmin, getSecuritySettings } = require('./auth');
 
 // جلب المستخدمين والأدوار وحالة الاتصال الحية
 router.get('/', async (req, res) => {
@@ -10,7 +11,7 @@ router.get('/', async (req, res) => {
     const now = Date.now();
 
     const users = await query(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.created_at,
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.created_at,
              u.is_logged_in, u.last_heartbeat, u.last_login_at, u.last_login_ip, u.last_login_device,
              r.display_name as role_name
       FROM users u
@@ -18,7 +19,7 @@ router.get('/', async (req, res) => {
       ORDER BY u.id ASC
     `);
 
-    // Parse permissions & active status
+    // Parse permissions & active status & security_settings
     const parsedUsers = (users || []).map(u => {
       let perms = [];
       if (u.permissions) {
@@ -29,6 +30,15 @@ router.get('/', async (req, res) => {
         } catch (e) {
           perms = u.permissions.split(',').map(s => s.trim()).filter(Boolean);
         }
+      }
+
+      let secSettings = null;
+      if (u.security_settings) {
+        try {
+          secSettings = typeof u.security_settings === 'string'
+            ? JSON.parse(u.security_settings)
+            : u.security_settings;
+        } catch (e) {}
       }
 
       let isOnline = false;
@@ -42,6 +52,7 @@ router.get('/', async (req, res) => {
       return { 
         ...u, 
         permissions_list: perms,
+        security_settings: secSettings,
         is_currently_online: isOnline
       };
     });
@@ -56,7 +67,7 @@ router.get('/', async (req, res) => {
 // إضافة مستخدم جديد مع الصلاحيات
 router.post('/', async (req, res) => {
   try {
-    const { username, password, full_name, role_id, role, email, phone, status = 'active', permissions } = req.body;
+    const { username, password, full_name, role_id, role, email, phone, status = 'active', permissions, security_settings } = req.body;
     
     if (!username || !password || !full_name) {
       return res.status(400).json({ success: false, message: 'اسم المستخدم وكلمة المرور والاسم الكامل حقول مطلوبة' });
@@ -82,15 +93,16 @@ router.post('/', async (req, res) => {
     }
 
     const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions || '');
+    const secString = security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null;
 
     const result = await run(`
-      INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status, permissions)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, permsString]);
+      INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status, permissions, security_settings)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, permsString, secString]);
 
     const newId = result.insertId || result.lastInsertRowid;
     const insertedUser = await get(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.created_at, r.display_name as role_name
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.created_at, r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
@@ -115,7 +127,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    const { username, password, full_name, role_id, role, email, phone, status, permissions } = req.body;
+    const { username, password, full_name, role_id, role, email, phone, status, permissions, security_settings } = req.body;
 
     const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) {
@@ -139,12 +151,16 @@ router.put('/:id', async (req, res) => {
 
     const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions !== undefined ? permissions : user.permissions);
 
+    const secString = security_settings !== undefined
+      ? (security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null)
+      : user.security_settings;
+
     if (password && password.trim().length > 0) {
       const salt = bcrypt.genSaltSync(10);
       const password_hash = bcrypt.hashSync(password, salt);
       await run(`
         UPDATE users
-        SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?
+        SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -156,12 +172,13 @@ router.put('/:id', async (req, res) => {
         phone !== undefined ? phone : user.phone,
         status || user.status,
         permsString,
+        secString,
         userId
       ]);
     } else {
       await run(`
         UPDATE users
-        SET username = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?
+        SET username = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -172,12 +189,13 @@ router.put('/:id', async (req, res) => {
         phone !== undefined ? phone : user.phone,
         status || user.status,
         permsString,
+        secString,
         userId
       ]);
     }
 
     const updatedUser = await get(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.created_at, r.display_name as role_name
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.created_at, r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
@@ -260,6 +278,114 @@ router.post('/:id/disconnect', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء إنهاء جلسة المستخدم', error: err.message });
+  }
+});
+// جلب إعدادات الأمان وسياسة الجلسات المخصصة لمستخدم محدد
+router.get('/:id/security-settings', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const user = await get('SELECT id, username, full_name, role, security_settings FROM users WHERE id = ?', [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    }
+
+    const defaultSettings = await getSecuritySettings();
+    let userCustom = null;
+    let isCustom = false;
+
+    if (user.security_settings) {
+      try {
+        userCustom = typeof user.security_settings === 'string'
+          ? JSON.parse(user.security_settings)
+          : user.security_settings;
+        isCustom = !!(userCustom && typeof userCustom === 'object');
+      } catch {}
+    }
+
+    const effectiveSettings = Object.assign({}, defaultSettings, userCustom || {});
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        full_name: user.full_name,
+        role: user.role
+      },
+      isCustom,
+      settings: effectiveSettings,
+      defaultSettings
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب إعدادات أمان المستخدم: ' + err.message });
+  }
+});
+
+// حفظ أو إعادة ضبط إعدادات الأمان والجلسات لمستخدم محدد (مقتصرة حصرياً على حساب المدير العام)
+router.post('/:id/security-settings', verifyAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const user = await get('SELECT id, username, full_name, role FROM users WHERE id = ?', [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    }
+
+    const { session_mode, session_device_limit, session_overflow_action, jwt_token_expiry, jwt_custom_minutes, work_start_time, work_end_time, work_hours_enabled, reset_to_default } = req.body || {};
+
+    if (reset_to_default) {
+      await run('UPDATE users SET security_settings = NULL WHERE id = ?', [userId]);
+      const defaults = await getSecuritySettings();
+      return res.json({
+        success: true,
+        message: `تمت استعادة الإعدادات العامة الافتراضية للنظام للمستخدم (${user.full_name}) بنجاح 🛡️`,
+        isCustom: false,
+        settings: defaults
+      });
+    }
+
+    const validModes = ['multi', 'single'];
+    const validOverflow = ['kick_oldest', 'block_new'];
+    const validExpiries = ['1h', '4h', '8h', '24h', '7d', '30d', 'custom'];
+
+    const userSec = {};
+    if (session_mode && validModes.includes(session_mode)) {
+      userSec.session_mode = session_mode;
+    }
+    if (session_device_limit) {
+      userSec.session_device_limit = Number(session_device_limit) || 1;
+    }
+    if (session_overflow_action && validOverflow.includes(session_overflow_action)) {
+      userSec.session_overflow_action = session_overflow_action;
+    }
+    if (jwt_token_expiry && validExpiries.includes(jwt_token_expiry)) {
+      userSec.jwt_token_expiry = jwt_token_expiry;
+    }
+    if (jwt_custom_minutes && Number(jwt_custom_minutes) > 0) {
+      userSec.jwt_custom_minutes = Number(jwt_custom_minutes);
+    }
+    if (work_start_time) {
+      userSec.work_start_time = String(work_start_time);
+    }
+    if (work_end_time) {
+      userSec.work_end_time = String(work_end_time);
+    }
+    if (work_hours_enabled !== undefined) {
+      userSec.work_hours_enabled = !!work_hours_enabled;
+    }
+
+    const secJson = JSON.stringify(userSec);
+    await run('UPDATE users SET security_settings = ? WHERE id = ?', [secJson, userId]);
+
+    const effectiveSettings = await getSecuritySettings({ security_settings: secJson });
+
+    res.json({
+      success: true,
+      message: `تم حفظ وتطبيق خيارات الأمان وسياسة الجلسات المخصصة للمستخدم (${user.full_name}) بنجاح 🛡️`,
+      isCustom: true,
+      settings: effectiveSettings
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حفظ إعدادات أمان المستخدم: ' + err.message });
   }
 });
 

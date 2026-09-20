@@ -85,17 +85,51 @@ function getHeartbeatTimestamp(hb) {
   return new Date(str.replace(' ', 'T') + 'Z').getTime();
 }
 
-// دالة مساعدة لجلب إعدادات الأمان وسياسة الجلسات والتوكن
-async function getSecuritySettings() {
+// التحقق من أن المستخدم المتصل هو المدير العام (Admin Only)
+function verifyAdmin(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'يرجى تسجيل الدخول بحساب المدير العام لتنفيذ هذا الإجراء' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'عذراً! ضبط وتعديل خيارات الأمان والجلسات متاح حصرياً لحساب المدير العام' });
+    }
+    req.adminUser = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'جلسة المدير العام غير صالحة أو منتهية، يرجى إعادة تسجيل الدخول' });
+  }
+}
+
+// دالة مساعدة لتنسيق الوقت بالعربية
+function formatTimeArabic(timeStr) {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'مساءً' : 'صباحاً';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+// دالة مساعدة لجلب إعدادات الأمان وسياسة الجلسات والتوكن (افتراضية أو مخصصة لمستخدم)
+async function getSecuritySettings(user = null) {
   const defaults = {
     session_mode: 'multi', // 'multi' | 'single'
     session_device_limit: 3, // 2 | 3 | 5
     session_overflow_action: 'kick_oldest', // 'kick_oldest' | 'block_new'
     jwt_token_expiry: '8h', // '1h' | '4h' | '8h' | '24h' | '7d' | '30d' | 'custom'
-    jwt_custom_minutes: 480
+    jwt_custom_minutes: 480,
+    work_start_time: '08:00',
+    work_end_time: '16:00',
+    work_hours_enabled: false
   };
   try {
-    const rows = await query("SELECT `key`, `value` FROM settings WHERE `key` IN ('session_mode', 'session_device_limit', 'session_overflow_action', 'jwt_token_expiry', 'jwt_custom_minutes')");
+    const rows = await query("SELECT `key`, `value` FROM settings WHERE `key` IN ('session_mode', 'session_device_limit', 'session_overflow_action', 'jwt_token_expiry', 'jwt_custom_minutes', 'work_start_time', 'work_end_time')");
     if (rows && rows.length > 0) {
       rows.forEach(r => {
         if (r.key === 'session_device_limit' || r.key === 'jwt_custom_minutes') {
@@ -108,10 +142,23 @@ async function getSecuritySettings() {
   } catch (e) {
     console.warn('Could not read security settings from DB, using defaults:', e.message);
   }
+
+  // إذا تم تمرير مستخدم ولديه إعدادات أمان وجلسات مخصصة حددها المدير العام
+  if (user && user.security_settings) {
+    try {
+      const userCustom = typeof user.security_settings === 'string'
+        ? JSON.parse(user.security_settings)
+        : user.security_settings;
+      if (userCustom && typeof userCustom === 'object') {
+        return Object.assign({}, defaults, userCustom, { is_custom: true });
+      }
+    } catch (e) {}
+  }
+
   return defaults;
 }
 
-// 0. جلب إعدادات الأمان وسياسة الجلسات والتوكن
+// 0. جلب إعدادات الأمان وسياسة الجلسات والتوكن العامة
 router.get('/security-settings', async (req, res) => {
   try {
     const settings = await getSecuritySettings();
@@ -121,10 +168,10 @@ router.get('/security-settings', async (req, res) => {
   }
 });
 
-// 0. حفظ وتطبيق إعدادات الأمان وسياسة الجلسات والتوكن
-router.post('/security-settings', async (req, res) => {
+// 0. حفظ وتطبيق إعدادات الأمان وسياسة الجلسات والتوكن العامة (مقتصرة على المدير العام فقط)
+router.post('/security-settings', verifyAdmin, async (req, res) => {
   try {
-    const { session_mode, session_device_limit, session_overflow_action, jwt_token_expiry, jwt_custom_minutes } = req.body || {};
+    const { session_mode, session_device_limit, session_overflow_action, jwt_token_expiry, jwt_custom_minutes, work_start_time, work_end_time } = req.body || {};
 
     const validModes = ['multi', 'single'];
     const validLimits = [2, 3, 5];
@@ -146,6 +193,12 @@ router.post('/security-settings', async (req, res) => {
     }
     if (jwt_custom_minutes && Number(jwt_custom_minutes) > 0) {
       updates['jwt_custom_minutes'] = String(Number(jwt_custom_minutes));
+    }
+    if (work_start_time) {
+      updates['work_start_time'] = String(work_start_time);
+    }
+    if (work_end_time) {
+      updates['work_end_time'] = String(work_end_time);
     }
 
     for (const [k, v] of Object.entries(updates)) {
@@ -182,14 +235,52 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
 
-    // قراءة إعدادات الأمان الحالية
-    const secSettings = await getSecuritySettings();
+    // قراءة إعدادات الأمان المخصصة لهذا المستخدم (أو الافتراضية)
+    const secSettings = await getSecuritySettings(user);
     
+    // فحص فترة وساعات العمل المسموحة إذا كانت مخصصة لهذا المستخدم (من ساعة كذا إلى كذا خلال 24 ساعة)
+    if (user.username !== 'admin' && (secSettings.jwt_token_expiry === 'custom' || secSettings.work_hours_enabled)) {
+      const startTime = secSettings.work_start_time || '08:00';
+      const endTime = secSettings.work_end_time || '16:00';
+
+      const now = new Date();
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+      const currentTimeStr = `${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`;
+
+      let isAllowed = false;
+      if (startTime <= endTime) {
+        isAllowed = (currentTimeStr >= startTime && currentTimeStr <= endTime);
+      } else {
+        // وردية ليلية تمتد عبر منتصف الليل (مثلاً: 22:00 إلى 06:00)
+        isAllowed = (currentTimeStr >= startTime || currentTimeStr <= endTime);
+      }
+
+      if (!isAllowed) {
+        return res.status(403).json({
+          success: false,
+          outside_work_hours: true,
+          message: `عذراً (${user.full_name || user.username})! الحساب مبرمج بفترة عمل محددة من الساعة (${formatTimeArabic(startTime)}) إلى الساعة (${formatTimeArabic(endTime)}). لا يُسمح بتسجيل الدخول خارج أوقات العمل الرسمية المصرح بها.`
+        });
+      }
+    }
+
     // حساب مدة صلاحية التوكن (JWT)
     let tokenExpiry = secSettings.jwt_token_expiry || '8h';
     if (tokenExpiry === 'custom') {
-      const mins = Number(secSettings.jwt_custom_minutes) || 480;
-      tokenExpiry = `${mins}m`;
+      const startTime = secSettings.work_start_time || '08:00';
+      const endTime = secSettings.work_end_time || '16:00';
+      const now = new Date();
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+      const [endH, endM] = endTime.split(':').map(Number);
+
+      let remainingMins = (endH * 60 + endM) - (currentH * 60 + currentM);
+      if (remainingMins <= 0 && startTime > endTime) {
+        remainingMins += 24 * 60;
+      }
+      if (remainingMins <= 0 || isNaN(remainingMins)) remainingMins = 60; // حد أدنى ساعة واحدة
+      tokenExpiry = `${remainingMins}m`;
     }
 
     // استخراج الجلسات النشطة المخزنة لهذا المستخدم
@@ -566,5 +657,9 @@ router.post('/unlock', async (req, res) => {
     res.status(500).json({ success: false, message: 'خطأ في التحقق من كلمة المرور: ' + err.message });
   }
 });
+
+router.verifyAdmin = verifyAdmin;
+router.getSecuritySettings = getSecuritySettings;
+router.JWT_SECRET = JWT_SECRET;
 
 module.exports = router;
