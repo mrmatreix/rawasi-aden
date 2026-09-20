@@ -1357,16 +1357,19 @@ const Settings = {
           const uSec = u.security_settings;
           let secBadgeHtml = '';
           if (uSec && typeof uSec === 'object') {
-            const isSingle = uSec.session_mode === 'single';
+            const isLock = uSec.session_overflow_action === 'lock_device' || uSec.overflowAction === 'lock_device';
+            const isSingle = uSec.session_mode === 'single' || isLock;
             const devLimit = uSec.session_device_limit || 1;
             const exp = uSec.jwt_token_expiry || '8h';
-            const label = isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`;
-            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="إعدادات أمان مخصصة لهذا المستخدم - انقر للتعديل">🛡️ ${label} ⭐</span></div>`;
+            const label = isLock ? `جهاز معتمد واحد (${exp})` : (isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`);
+            const icon = isLock ? '🔒' : '🛡️';
+            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="إعدادات أمان مخصصة لهذا المستخدم - انقر للتعديل">${icon} ${label} ⭐</span></div>`;
           } else {
-            const isSingle = Auth.securitySettings?.session_mode === 'single';
+            const isLock = Auth.securitySettings?.session_overflow_action === 'lock_device';
+            const isSingle = Auth.securitySettings?.session_mode === 'single' || isLock;
             const devLimit = Auth.securitySettings?.session_device_limit || 3;
             const exp = Auth.securitySettings?.jwt_token_expiry || '8h';
-            const label = isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`;
+            const label = isLock ? `جهاز معتمد واحد (${exp})` : (isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`);
             secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="يرث الإعدادات العامة للنظام - انقر لتخصيص هذا المستخدم">⚙️ عام: ${label}</span></div>`;
           }
 
@@ -1561,10 +1564,18 @@ const Settings = {
       try { sec = JSON.parse(sec); } catch (e) { sec = null; }
     }
 
-    if (sec && (sec.sessionMode === 'strict_single' || sec.sessionMode === 'multi_device')) {
-      if (policySelect) policySelect.value = sec.sessionMode;
-      if (limitSelect) limitSelect.value = String(sec.maxSessions || 3);
-      if (overflowSelect) overflowSelect.value = sec.overflowAction || 'kick_oldest';
+    const isLockDevice = (sec?.session_overflow_action === 'lock_device' || sec?.overflowAction === 'lock_device');
+
+    if (sec && (sec.sessionMode === 'strict_single' || sec.sessionMode === 'multi_device' || isLockDevice)) {
+      if (policySelect) {
+        if (isLockDevice) {
+          policySelect.value = 'lock_device';
+        } else {
+          policySelect.value = sec.sessionMode;
+        }
+      }
+      if (limitSelect) limitSelect.value = String(sec.maxSessions || sec.session_device_limit || 3);
+      if (overflowSelect) overflowSelect.value = sec.overflowAction || sec.session_overflow_action || (isLockDevice ? 'lock_device' : 'kick_oldest');
       if (tokenExpSelect) {
         if (sec.jwt_token_expiry === 'custom' || sec.tokenExpiryPreset === 'custom' || sec.work_hours_enabled) {
           tokenExpSelect.value = 'custom';
@@ -1587,6 +1598,25 @@ const Settings = {
       if (endInput) endInput.value = '16:00';
     }
 
+    // شريط الجهاز المعتمد
+    const boundBox = document.getElementById('userSecBoundDeviceBox');
+    const boundText = document.getElementById('userSecBoundDeviceText');
+    const boundResetBtn = document.getElementById('btnUserSecResetBoundDevice');
+    if (boundBox) {
+      if (isLockDevice || sec?.authorized_device_id) {
+        boundBox.style.display = 'flex';
+        if (sec?.authorized_device_id) {
+          boundText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#38bdf8;">${sec.authorized_device_name || 'جهاز مسجل'}</span>`;
+          if (boundResetBtn) boundResetBtn.style.display = 'inline-block';
+        } else {
+          boundText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#94a3b8;">لم يسجل بعد (سيتم قفل أول جهاز).</span>`;
+          if (boundResetBtn) boundResetBtn.style.display = 'none';
+        }
+      } else {
+        boundBox.style.display = 'none';
+      }
+    }
+
     this.onUserSecurityPolicyChange();
     this.onWorkHoursChange();
   },
@@ -1598,21 +1628,40 @@ const Settings = {
     const tokenBox = document.getElementById('userSecTokenBox');
     const badge = document.getElementById('userSecBadgeType');
     const note = document.getElementById('userSecHelpNote');
+    const boundBox = document.getElementById('userSecBoundDeviceBox');
+    const overflowSelect = document.getElementById('userSecOverflowAction');
 
-    if (policyType === 'strict_single') {
+    if (policyType === 'lock_device') {
       if (multiBox) multiBox.style.display = 'none';
       if (tokenBox) tokenBox.style.display = 'block';
+      if (boundBox) boundBox.style.display = 'flex';
+      if (overflowSelect) overflowSelect.value = 'lock_device';
+      if (badge) {
+        badge.textContent = 'منع أي جهاز جديد 🛡️';
+        badge.style.background = 'rgba(16, 185, 129, 0.2)';
+        badge.style.color = '#10b981';
+      }
+      if (note) {
+        note.innerHTML = '🛡️ <strong>قفل على جهاز واحد:</strong> يُسمح للمستخدم بالدخول من جهاز واحد فقط معتمد، ويمنع النظام تماماً الدخول من أي جهاز آخر جديد.';
+      }
+    } else if (policyType === 'strict_single') {
+      if (multiBox) multiBox.style.display = 'none';
+      if (tokenBox) tokenBox.style.display = 'block';
+      if (boundBox) boundBox.style.display = 'none';
+      if (overflowSelect && overflowSelect.value === 'lock_device') overflowSelect.value = 'kick_oldest';
       if (badge) {
         badge.textContent = 'جلسة واحدة (مخصص)';
         badge.style.background = 'rgba(239, 68, 68, 0.15)';
         badge.style.color = '#f87171';
       }
       if (note) {
-        note.innerHTML = '🔒 <strong>جلسة واحدة صارمة:</strong> يُسمح بتسجيل الدخول من جهاز واحد فقط، وسيتم طرد أي جلسة أخرى فوراً.';
+        note.innerHTML = '🔒 <strong>جلسة واحدة صارمة:</strong> يُسمح بتسجيل الدخول من جهاز واحد فقط، وسيتم تطبيق الإجراء المختار فوراً.';
       }
     } else if (policyType === 'multi_device') {
       if (multiBox) multiBox.style.display = 'block';
       if (tokenBox) tokenBox.style.display = 'block';
+      if (boundBox) boundBox.style.display = 'none';
+      if (overflowSelect && overflowSelect.value === 'lock_device') overflowSelect.value = 'kick_oldest';
       if (badge) {
         badge.textContent = 'متعدد الأجهزة (مخصص)';
         badge.style.background = 'rgba(16, 185, 129, 0.15)';
@@ -1625,6 +1674,7 @@ const Settings = {
       // inherit
       if (multiBox) multiBox.style.display = 'none';
       if (tokenBox) tokenBox.style.display = 'none';
+      if (boundBox) boundBox.style.display = 'none';
       if (badge) {
         badge.textContent = 'افتراضي النظام';
         badge.style.background = 'rgba(212, 175, 55, 0.15)';
@@ -1662,6 +1712,48 @@ const Settings = {
   },
 
   // ================== تطبيق قوالب الصلاحيات التلقائية ==================
+
+  // فك قفل الجهاز المعتمد لمستخدم من داخل نافذة تعديل المستخدم
+  async resetUserBoundDevice() {
+    const userId = document.getElementById('userId')?.value;
+    if (!userId) {
+      const boundText = document.getElementById('userSecBoundDeviceText');
+      const boundResetBtn = document.getElementById('btnUserSecResetBoundDevice');
+      if (boundText) boundText.textContent = '📱 الجهاز المعتمد: لم يسجل بعد';
+      if (boundResetBtn) boundResetBtn.style.display = 'none';
+      return;
+    }
+    if (!confirm('هل تريد فك قفل الجهاز المعتمد لهذا المستخدم؟ سيتمكن من تسجيل الدخول من جهاز جديد واعتماده.')) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/users/${userId}/reset-device`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': Auth.token ? `Bearer ${Auth.token}` : ''
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        const boundText = document.getElementById('userSecBoundDeviceText');
+        const boundResetBtn = document.getElementById('btnUserSecResetBoundDevice');
+        if (boundText) boundText.textContent = '📱 الجهاز المعتمد: تم فك الارتباط (سيتم اعتماد الجهاز القادم)';
+        if (boundResetBtn) boundResetBtn.style.display = 'none';
+        if (typeof App !== 'undefined' && App.showToast) {
+          App.showToast(data.message, 'success');
+        } else {
+          alert(data.message);
+        }
+        await this.loadUsers();
+      } else {
+        alert(data.message || 'حدث خطأ أثناء فك الربط');
+      }
+    } catch (e) {
+      alert('خطأ: ' + e.message);
+    }
+  },
+
   onRoleChange() {
     const role = document.getElementById('userRoleVal')?.value;
     if (role && role !== 'custom') {
@@ -1772,11 +1864,31 @@ const Settings = {
         hours = parseInt(expVal) * 24;
       }
 
-      if (policyType === 'strict_single') {
+      if (policyType === 'lock_device') {
         userSecuritySettings = {
           sessionMode: 'strict_single',
           maxSessions: 1,
-          overflowAction: 'kick_oldest',
+          overflowAction: 'lock_device',
+          session_overflow_action: 'lock_device',
+          session_mode: 'single',
+          session_device_limit: 1,
+          jwt_token_expiry: expVal,
+          tokenExpiryPreset: expVal,
+          tokenExpiryHours: hours,
+          work_start_time: startWork,
+          work_end_time: endWork,
+          work_hours_enabled: isCustomWorkHours,
+          updated_at: new Date().toISOString()
+        };
+      } else if (policyType === 'strict_single') {
+        const overflow = document.getElementById('userSecOverflowAction')?.value || 'kick_oldest';
+        userSecuritySettings = {
+          sessionMode: 'strict_single',
+          maxSessions: 1,
+          overflowAction: overflow,
+          session_overflow_action: overflow,
+          session_mode: 'single',
+          session_device_limit: 1,
           jwt_token_expiry: expVal,
           tokenExpiryPreset: expVal,
           tokenExpiryHours: hours,
@@ -1793,6 +1905,9 @@ const Settings = {
           sessionMode: 'multi_device',
           maxSessions: limit,
           overflowAction: overflow,
+          session_overflow_action: overflow,
+          session_mode: 'multi',
+          session_device_limit: limit,
           jwt_token_expiry: expVal,
           tokenExpiryPreset: expVal,
           tokenExpiryHours: hours,
@@ -1804,6 +1919,25 @@ const Settings = {
       } else {
         // inherit: نرسل null ليتم وراثة إعدادات النظام العامة
         userSecuritySettings = null;
+      }
+
+      // إذا كان المستخدم قيد التعديل ولديه جهاز معتمد مسجل، نحافظ على بيانات الجهاز المعتمد
+      const editUserId = document.getElementById('userId')?.value;
+      if (editUserId && userSecuritySettings) {
+        const existingUser = this._cachedUsers?.find(u => String(u.id) === String(editUserId));
+        let prevSec = {};
+        if (existingUser && existingUser.security_settings) {
+          try {
+            prevSec = typeof existingUser.security_settings === 'string'
+              ? JSON.parse(existingUser.security_settings)
+              : existingUser.security_settings;
+          } catch (e) {}
+        }
+        if (prevSec.authorized_device_id) {
+          userSecuritySettings.authorized_device_id = prevSec.authorized_device_id;
+          userSecuritySettings.authorized_device_name = prevSec.authorized_device_name;
+          userSecuritySettings.authorized_device_at = prevSec.authorized_device_at;
+        }
       }
     }
 

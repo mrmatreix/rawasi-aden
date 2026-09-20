@@ -188,7 +188,42 @@ const Auth = {
     this.cancelConflictPrompt();
   },
 
-  // معالجة نموذج تسجيل الدخول (مع دعم خيار إنهاء الجلسة المتزامنة السابقة)
+  // الحصول على المعرف الفريد الثابت للجهاز أو توليده وتخزينه محلياً
+  getDeviceId() {
+    let devId = '';
+    try {
+      devId = localStorage.getItem('rawasi_device_uuid') || '';
+    } catch (e) {}
+    if (!devId) {
+      const rand = Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12);
+      devId = 'dev_' + Date.now().toString(36) + '_' + rand;
+      try {
+        localStorage.setItem('rawasi_device_uuid', devId);
+      } catch (e) {}
+    }
+    return devId;
+  },
+
+  // استخراج اسم ووصف مقروء للجهاز الحالي (الكمبيوتر / الموبايل / المتصفح)
+  getDeviceFriendlyName() {
+    const ua = navigator.userAgent || '';
+    let platform = 'كمبيوتر';
+    if (/android/i.test(ua)) platform = 'هاتف أندرويد';
+    else if (/iphone|ipad|ipod/i.test(ua)) platform = 'جهاز آبل (iOS)';
+    else if (/windows/i.test(ua)) platform = 'كمبيوتر ويندوز';
+    else if (/macintosh|mac os x/i.test(ua)) platform = 'جهاز ماك';
+    else if (/linux/i.test(ua)) platform = 'جهاز لينكس';
+
+    let browser = '';
+    if (/edg/i.test(ua)) browser = 'Edge';
+    else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+    else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+    else if (/safari/i.test(ua)) browser = 'Safari';
+
+    return browser ? `${platform} (${browser})` : platform;
+  },
+
+  // معالجة نموذج تسجيل الدخول (مع دعم خيار إنهاء الجلسة المتزامنة السابقة وقفل الجهاز المعتمد)
   async submitLogin(e, force = false) {
     if (e) e.preventDefault();
 
@@ -228,6 +263,9 @@ const Auth = {
     }
 
     try {
+      const devId = this.getDeviceId();
+      const devName = this.getDeviceFriendlyName();
+
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,11 +273,35 @@ const Auth = {
           username, 
           password, 
           force: !!force,
-          deviceInfo: navigator.userAgent || 'متصفح النظام'
+          deviceId: devId,
+          deviceName: devName,
+          deviceInfo: `${devName} | ${navigator.userAgent || 'متصفح النظام'}`
         })
       });
 
       const data = await res.json();
+
+      // حالة قفل الحساب على جهاز واحد معتمد ومنع أي جهاز جديد
+      if (res.status === 403 && data.device_locked) {
+        if (errorBox) {
+          errorBox.innerHTML = `<strong>⚠️ تنبيه أمان صارم:</strong><br>${data.message}`;
+          errorBox.style.display = 'block';
+        } else {
+          alert(data.message);
+        }
+        return;
+      }
+
+      // حالة خارج فترة وساعات العمل المحددة
+      if (res.status === 403 && data.outside_work_hours) {
+        if (errorBox) {
+          errorBox.innerHTML = `<strong>⏰ خارج أوقات العمل:</strong><br>${data.message}`;
+          errorBox.style.display = 'block';
+        } else {
+          alert(data.message);
+        }
+        return;
+      }
 
       // حالة اكتشاف جلسة نشطة أخرى لنفس المستخدم (Duplicate Active Session)
       if (res.status === 409 || data.already_logged_in) {
@@ -1060,7 +1122,9 @@ const Auth = {
     const boxLimit = document.getElementById('boxDeviceLimit');
     const note = document.getElementById('sessionPolicyHelpNote');
 
-    if (s.session_mode === 'single') {
+    const isLockDevice = (s.session_overflow_action === 'lock_device');
+
+    if (s.session_mode === 'single' || isLockDevice) {
       if (btnSingle) btnSingle.classList.add('active');
       if (btnMulti) btnMulti.classList.remove('active');
       if (boxLimit) {
@@ -1068,7 +1132,11 @@ const Auth = {
         boxLimit.style.pointerEvents = 'none';
       }
       if (note) {
-        note.innerHTML = '🔒 <strong>جلسة واحدة صارمة:</strong> مسموح بجهاز واحد فقط لهذا الحساب. في حال فتح جلسة جديدة، يتم تطبيق الإجراء المختار إما بطرد الجلسة السابقة أو رفض الدخول الجديد.';
+        if (isLockDevice) {
+          note.innerHTML = '🛡️ <strong>منع أي جهاز جديد:</strong> الحساب مصرح له بالدخول من جهاز واحد فقط يتم اعتماده عند أول تسجيل دخول، ويمنع النظام تماماً تسجيل الدخول من أي جهاز جديد آخر لحماية البيانات.';
+        } else {
+          note.innerHTML = '🔒 <strong>جلسة واحدة صارمة:</strong> مسموح بجهاز واحد فقط لهذا الحساب. في حال فتح جلسة جديدة، يتم تطبيق الإجراء المختار إما بطرد الجلسة السابقة أو رفض الدخول الجديد.';
+        }
       }
     } else {
       if (btnSingle) btnSingle.classList.remove('active');
@@ -1089,12 +1157,33 @@ const Auth = {
       btn.classList.toggle('active', bLimit === limit);
     });
 
-    // 3. عند التجاوز (kick_oldest, block_new)
+    // 3. عند التجاوز (kick_oldest, block_new, lock_device)
     const action = s.session_overflow_action || 'kick_oldest';
     document.querySelectorAll('.overflow-action-btn').forEach(btn => {
       const bAction = btn.getAttribute('data-action');
       btn.classList.toggle('active', bAction === action);
     });
+
+    // صندوق وحالة الجهاز المعتمد
+    const devBox = document.getElementById('authorizedDeviceBox');
+    const devText = document.getElementById('authorizedDeviceText');
+    const resetDevBtn = document.getElementById('btnResetAuthorizedDevice');
+    if (devBox) {
+      if (action === 'lock_device' || s.authorized_device_id) {
+        devBox.style.display = 'flex';
+        if (s.authorized_device_id) {
+          const devName = s.authorized_device_name || 'جهاز مسجل';
+          const devDate = s.authorized_device_at ? new Date(s.authorized_device_at).toLocaleDateString('ar-YE') : '';
+          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#38bdf8;">${devName}</span> ${devDate ? `(تاريخ الربط: ${devDate})` : ''}`;
+          if (resetDevBtn) resetDevBtn.style.display = 'inline-block';
+        } else {
+          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#94a3b8;">لم يسجل جهاز بعد (سيتم قفل أول جهاز يسجل منه).</span>`;
+          if (resetDevBtn) resetDevBtn.style.display = 'none';
+        }
+      } else {
+        devBox.style.display = 'none';
+      }
+    }
 
     // 4. مدة صلاحية التوكن (JWT)
     const exp = s.jwt_token_expiry || '8h';
@@ -1138,6 +1227,9 @@ const Auth = {
   // تبديل وضع الجلسة
   setSessionMode(mode) {
     this.securitySettings.session_mode = mode;
+    if (mode === 'multi' && this.securitySettings.session_overflow_action === 'lock_device') {
+      this.securitySettings.session_overflow_action = 'kick_oldest';
+    }
     this.renderSecurityModalState();
   },
 
@@ -1147,10 +1239,53 @@ const Auth = {
     this.renderSecurityModalState();
   },
 
-  // تحديد إجراء التجاوز
+  // تحديد إجراء التجاوز (طرد الأقدم، منع الجديد، منع أي جهاز جديد)
   setOverflowAction(action) {
     this.securitySettings.session_overflow_action = action;
+    if (action === 'lock_device') {
+      this.securitySettings.session_mode = 'single';
+      this.securitySettings.session_device_limit = 1;
+    }
     this.renderSecurityModalState();
+  },
+
+  // فك قفل الجهاز المعتمد لمستخدم محدد
+  async resetAuthorizedDevice() {
+    if (!confirm('هل أنت متأكد من فك قفل الجهاز المعتمد؟ سيتم السماح للمستخدم بتسجيل الدخول من جهاز جديد واعتماده.')) {
+      return;
+    }
+    if (this._targetSecurityUserId) {
+      try {
+        const res = await fetch(`/api/users/${this._targetSecurityUserId}/reset-device`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': this.token ? `Bearer ${this.token}` : ''
+          }
+        });
+        const data = await res.json();
+        if (data.success) {
+          delete this.securitySettings.authorized_device_id;
+          delete this.securitySettings.authorized_device_name;
+          delete this.securitySettings.authorized_device_at;
+          this.renderSecurityModalState();
+          if (typeof App !== 'undefined' && App.showToast) {
+            App.showToast(data.message, 'success');
+          } else {
+            alert(data.message);
+          }
+        } else {
+          alert(data.message || 'حدث خطأ أثناء فك الربط');
+        }
+      } catch (e) {
+        alert('خطأ في الاتصال: ' + e.message);
+      }
+    } else {
+      delete this.securitySettings.authorized_device_id;
+      delete this.securitySettings.authorized_device_name;
+      delete this.securitySettings.authorized_device_at;
+      this.renderSecurityModalState();
+    }
   },
 
   // تحديد مدة صلاحية التوكن

@@ -344,10 +344,22 @@ router.post('/:id/security-settings', verifyAdmin, async (req, res) => {
     }
 
     const validModes = ['multi', 'single'];
-    const validOverflow = ['kick_oldest', 'block_new'];
+    const validOverflow = ['kick_oldest', 'block_new', 'lock_device'];
     const validExpiries = ['1h', '4h', '8h', '24h', '7d', '30d', 'custom'];
 
-    const userSec = {};
+    let existingSec = {};
+    const fullUser = await get('SELECT security_settings FROM users WHERE id = ?', [userId]);
+    if (fullUser && fullUser.security_settings) {
+      try { existingSec = JSON.parse(fullUser.security_settings); } catch (e) {}
+    }
+    const userSec = Object.assign({}, existingSec);
+
+    if (req.body.reset_authorized_device) {
+      delete userSec.authorized_device_id;
+      delete userSec.authorized_device_name;
+      delete userSec.authorized_device_at;
+    }
+
     if (session_mode && validModes.includes(session_mode)) {
       userSec.session_mode = session_mode;
     }
@@ -356,6 +368,10 @@ router.post('/:id/security-settings', verifyAdmin, async (req, res) => {
     }
     if (session_overflow_action && validOverflow.includes(session_overflow_action)) {
       userSec.session_overflow_action = session_overflow_action;
+      if (session_overflow_action === 'lock_device') {
+        userSec.session_mode = 'single';
+        userSec.session_device_limit = 1;
+      }
     }
     if (jwt_token_expiry && validExpiries.includes(jwt_token_expiry)) {
       userSec.jwt_token_expiry = jwt_token_expiry;
@@ -386,6 +402,31 @@ router.post('/:id/security-settings', verifyAdmin, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في حفظ إعدادات أمان المستخدم: ' + err.message });
+  }
+});
+
+// فك قفل الجهاز المعتمد لمستخدم محدد (حصرياً للمدير العام)
+router.post('/:id/reset-device', verifyAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const user = await get('SELECT id, username, full_name, security_settings FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+
+    let sec = {};
+    if (user.security_settings) {
+      try { sec = JSON.parse(user.security_settings); } catch (e) {}
+    }
+    delete sec.authorized_device_id;
+    delete sec.authorized_device_name;
+    delete sec.authorized_device_at;
+
+    await run('UPDATE users SET security_settings = ? WHERE id = ?', [JSON.stringify(sec), userId]);
+    res.json({
+      success: true,
+      message: `تم فك قفل الجهاز للمستخدم (${user.full_name || user.username}) بنجاح. سيتم اعتماد أول جهاز جديد يسجل منه.`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ: ' + err.message });
   }
 });
 

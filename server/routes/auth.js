@@ -175,7 +175,7 @@ router.post('/security-settings', verifyAdmin, async (req, res) => {
 
     const validModes = ['multi', 'single'];
     const validLimits = [2, 3, 5];
-    const validOverflow = ['kick_oldest', 'block_new'];
+    const validOverflow = ['kick_oldest', 'block_new', 'lock_device'];
     const validExpiries = ['1h', '4h', '8h', '24h', '7d', '30d', 'custom'];
 
     const updates = {};
@@ -215,7 +215,7 @@ router.post('/security-settings', verifyAdmin, async (req, res) => {
 // 1. تسجيل الدخول (Login) مع فحص عدم تكرار اتصال نفس المستخدم بالتزامن وسقف الجلسات
 router.post('/login', async (req, res) => {
   try {
-    const { username, password, force, deviceInfo } = req.body;
+    const { username, password, force, deviceInfo, deviceId, deviceName } = req.body;
     if (!username || !password) {
       return res.status(400).json({ success: false, message: 'يرجى إدخال اسم المستخدم وكلمة المرور' });
     }
@@ -316,9 +316,53 @@ router.post('/login', async (req, res) => {
     }
 
     // فحص سقف الأجهزة حسب السياسة المحددة (جلسة واحدة صارمة أو جلسات متعددة)
-    const isSingleMode = secSettings.session_mode === 'single';
+    const isSingleMode = secSettings.session_mode === 'single' || secSettings.session_overflow_action === 'lock_device';
     const maxDevices = isSingleMode ? 1 : (Number(secSettings.session_device_limit) || 3);
     const overflowAction = secSettings.session_overflow_action || 'kick_oldest';
+
+    // فحص سياسة قفل الحساب على جهاز واحد فقط ومنع أي جهاز جديد
+    const incomingDeviceId = String(deviceId || '').trim();
+    const incomingDeviceName = String(deviceName || deviceInfo || 'جهاز النظام').trim();
+
+    if (overflowAction === 'lock_device') {
+      const isSuperAdmin = (user.username === 'admin');
+
+      if (!secSettings.authorized_device_id) {
+        // إذا لم يكن هناك جهاز معتمد مسجل بعد: نعتمد أول جهاز يتم الدخول منه
+        if (incomingDeviceId) {
+          secSettings.authorized_device_id = incomingDeviceId;
+          secSettings.authorized_device_name = incomingDeviceName;
+          secSettings.authorized_device_at = new Date().toISOString();
+
+          let userSecObj = {};
+          try {
+            userSecObj = user.security_settings ? JSON.parse(user.security_settings) : {};
+          } catch (e) { userSecObj = {}; }
+          userSecObj.authorized_device_id = incomingDeviceId;
+          userSecObj.authorized_device_name = incomingDeviceName;
+          userSecObj.authorized_device_at = secSettings.authorized_device_at;
+          userSecObj.session_overflow_action = 'lock_device';
+          userSecObj.session_mode = 'single';
+          userSecObj.session_device_limit = 1;
+
+          await run('UPDATE users SET security_settings = ? WHERE id = ?', [JSON.stringify(userSecObj), user.id]);
+        }
+      } else {
+        // الحساب مقيد بجهاز معتمد مسبقاً: نتحقق هل الجهاز الحالي يطابق الجهاز المسجل
+        if (incomingDeviceId && incomingDeviceId !== secSettings.authorized_device_id) {
+          if (!isSuperAdmin || !force) {
+            return res.status(403).json({
+              success: false,
+              device_locked: true,
+              message: `⛔ تم رفض الدخول: هذا الحساب مقفل ومصرح له بالدخول من جهاز واحد فقط معتمد (${secSettings.authorized_device_name || 'الجهاز المعتمد'}). يمنع النظام تماماً تسجيل الدخول من أي جهاز جديد آخر. يرجى استخدام جهازك المعتمد أو مراجعة المدير العام لفك قفل الجهاز.`
+            });
+          }
+        }
+      }
+
+      // إذا كان الجهاز هو الجهاز المعتمد المصرح له، يتم استبدال أي جلسة سابقة فوراً
+      activeSessions = [];
+    }
 
     if (activeSessions.length >= maxDevices) {
       if (overflowAction === 'block_new' && !force) {

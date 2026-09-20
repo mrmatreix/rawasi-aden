@@ -3412,11 +3412,18 @@
               <!-- عند التجاوز -->
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">عند التجاوز:</span>
-                <div style="display: flex; gap: 6px;" id="overflowActionButtons">
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="overflowActionButtons">
                   <button type="button" class="overflow-action-btn active" data-action="kick_oldest" onclick="Auth.setOverflowAction('kick_oldest')">طرد الأقدم</button>
                   <button type="button" class="overflow-action-btn" data-action="block_new" onclick="Auth.setOverflowAction('block_new')">منع الجديد</button>
+                  <button type="button" class="overflow-action-btn" data-action="lock_device" onclick="Auth.setOverflowAction('lock_device')" title="الدخول من جهاز واحد فقط ويمنع الدخول من أي جهاز آخر نهائياً" style="white-space: nowrap;">منع أي جهاز جديد</button>
                 </div>
               </div>
+            </div>
+
+            <!-- شريط الجهاز المعتمد عند تفعيل منع أي جهاز جديد -->
+            <div id="authorizedDeviceBox" style="display: none; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 6px 10px; margin-top: 8px; justify-content: space-between; align-items: center; gap: 8px;">
+              <span id="authorizedDeviceText" style="font-size: 0.76rem; color: #6ee7b7;">📱 الجهاز المعتمد: لم يسجل أي جهاز بعد (سيتم اعتماد أول جهاز يسجل منه)</span>
+              <button type="button" class="btn btn-sm" id="btnResetAuthorizedDevice" onclick="Auth.resetAuthorizedDevice()" style="font-size: 0.7rem; padding: 2px 8px; color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); display: none;">🔄 فك قفل الجهاز</button>
             </div>
           </div>
 
@@ -3738,8 +3745,15 @@
                 <select id="userSecPolicyType" class="form-control" style="font-size: 0.78rem; padding: 4px 8px; height: 32px; background: #0b1329; border-color: rgba(16, 185, 129, 0.35); color: #f8fafc;" onchange="Settings.onUserSecurityPolicyChange()">
                   <option value="inherit">⚙️ افتراضي النظام (وراثة الإعدادات العامة)</option>
                   <option value="strict_single">🔒 جلسة واحدة صارمة (جهاز واحد فقط)</option>
+                  <option value="lock_device">🛡️ منع أي جهاز جديد (قفل على جهاز واحد)</option>
                   <option value="multi_device">📱💻 جلسات متعددة (سقف أجهزة محدد)</option>
                 </select>
+              </div>
+
+              <!-- شريط الجهاز المعتمد للمستخدم عند تفعيل القفل -->
+              <div id="userSecBoundDeviceBox" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 4px 8px; margin-bottom: 8px; justify-content: space-between; align-items: center; gap: 6px;">
+                <span id="userSecBoundDeviceText" style="font-size: 0.72rem; color: #6ee7b7;">📱 الجهاز المعتمد: لم يسجل بعد</span>
+                <button type="button" class="btn btn-sm" id="btnUserSecResetBoundDevice" onclick="Settings.resetUserBoundDevice()" style="font-size: 0.68rem; padding: 1px 6px; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); background: transparent; display: none;">فك الربط</button>
               </div>
 
               <!-- خيارات الجلسات المتعددة -->
@@ -3754,9 +3768,10 @@
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
                   <label style="font-size: 0.74rem; color: #cbd5e1; font-weight: 600;">عند التجاوز:</label>
-                  <select id="userSecOverflowAction" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 110px; background: #0f172a; color: #f8fafc;">
+                  <select id="userSecOverflowAction" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 125px; background: #0f172a; color: #f8fafc;">
                     <option value="kick_oldest" selected>طرد الأقدم</option>
-                    <option value="block_new">منع الجديد</option>
+                    <option value="block_new">منع الجديد (أثناء الاتصال)</option>
+                    <option value="lock_device">🛡️ منع أي جهاز جديد</option>
                   </select>
                 </div>
               </div>
