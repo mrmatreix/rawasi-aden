@@ -578,11 +578,10 @@ const Auth = {
     const backupTab = document.getElementById('tabBtn_settings_backup');
     if (backupTab) backupTab.style.display = this.hasPermission('settings:backup') ? '' : 'none';
 
-    // حصر زر الأمان وسياسة الجلسات في رأس شاشة المستخدمين بحساب المدير العام فقط
+    // إخفاء زر الأمان وسياسة الجلسات العام من رأس جدول المستخدمين لأنه أصبح داخل كل مستخدم
     const secBtn = document.getElementById('btnSecuritySessions');
-    const isAdmin = this.currentUser?.role === 'admin' || this.currentUser?.username === 'admin';
     if (secBtn) {
-      secBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+      secBtn.style.display = 'none';
     }
 
     return firstAllowed;
