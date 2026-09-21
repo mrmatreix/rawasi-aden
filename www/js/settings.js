@@ -1454,7 +1454,10 @@ const Settings = {
     if (pwdInput) {
       pwdInput.value = '';
       pwdInput.required = true;
-      pwdInput.placeholder = 'كلمة المرور (6 خانات على الأقل)';
+      pwdInput.placeholder = 'كلمة المرور (8 خانات على الأقل)';
+    }
+    if (typeof Auth !== 'undefined' && Auth.checkPasswordStrength) {
+      Auth.checkPasswordStrength('', 'userPasswordStrengthBox');
     }
 
     const pwdHint = document.getElementById('userPasswordHint');
@@ -1501,6 +1504,9 @@ const Settings = {
       pwdInput.value = '';
       pwdInput.required = false;
       pwdInput.placeholder = 'اتركه فارغاً للاحتفاظ بكلمة المرور الحالية';
+    }
+    if (typeof Auth !== 'undefined' && Auth.checkPasswordStrength) {
+      Auth.checkPasswordStrength('', 'userPasswordStrengthBox');
     }
 
     const pwdHint = document.getElementById('userPasswordHint');

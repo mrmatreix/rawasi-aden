@@ -34,6 +34,18 @@
 
       <div id="loginErrorMsg" class="login-error-box"></div>
 
+      <!-- صندوق مؤشر الحظر ومحدد المحاولات المرئي (Rate Limiting Box) -->
+      <div id="loginRateLimitBox" class="login-ratelimit-box" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1.5px solid var(--accent-red); padding: 14px; border-radius: var(--radius-md); margin-bottom: 16px; text-align: center;">
+        <div style="font-size: 1.6rem; margin-bottom: 4px;">🛡️ ⛔</div>
+        <div style="font-weight: 800; color: var(--accent-red); margin-bottom: 4px; font-size: 1rem;">تم حظر تسجيل الدخول مؤقتاً (Rate Limit)</div>
+        <div style="font-size: 0.84rem; color: #e2e8f0; line-height: 1.5;" id="loginRateLimitMsg">
+          تم استنفاد الحد الأقصى للمحاولات المسموح بها (5 محاولات). لحماية الحساب من التخمين تم قفل الدخول مؤقتاً.
+        </div>
+        <div style="margin-top: 10px; font-size: 1.5rem; font-weight: 900; color: var(--gold-light); font-family: monospace; letter-spacing: 2px;" id="loginCooldownTimer">
+          00:60
+        </div>
+      </div>
+
       <!-- تنبيه تكرار دخول نفس المستخدم من جلسة أخرى -->
       <div id="loginConflictBox" class="login-conflict-box">
         <div class="conflict-title">
@@ -53,6 +65,7 @@
       </div>
 
       <form id="loginForm" class="login-form" onsubmit="Auth.submitLogin(event)">
+        <input type="hidden" name="_csrf" id="loginCsrfToken">
         <div class="form-group">
           <label for="loginUsername">اسم المستخدم</label>
           <div class="login-input-wrap">
@@ -83,11 +96,46 @@
       <div class="login-quick-users">
         <div class="login-quick-title">حسابات تجريبية سريعة (انقر للتعبئة):</div>
         <div class="login-pills">
-          <button type="button" class="login-user-pill" onclick="Auth.fillQuickLogin('admin', 'admin123')">المدير العام (admin)</button>
+          <button type="button" class="login-user-pill" onclick="Auth.fillQuickLogin('admin', 'admin')">المدير العام (admin)</button>
           <button type="button" class="login-user-pill" onclick="Auth.fillQuickLogin('accountant', 'account123')">المحاسب (accountant)</button>
           <button type="button" class="login-user-pill" onclick="Auth.fillQuickLogin('علوي', '123456')">م. علوي (علوي)</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ================== نافذة التحقق بخطوتين (2FA) للمدير العام ================== -->
+  <div id="twoFactorModal" class="login-screen-overlay" style="display: none; z-index: 99999; background: rgba(5, 10, 20, 0.94); backdrop-filter: blur(10px);">
+    <div class="login-card" style="max-width: 440px; text-align: center; border: 1.5px solid var(--gold-primary); box-shadow: 0 20px 60px rgba(0,0,0,0.85);">
+      <div style="width: 68px; height: 68px; border-radius: 50%; background: rgba(212,175,55,0.15); border: 2px solid var(--gold-primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 2.2rem;">
+        🛡️
+      </div>
+      <h3 style="color: var(--gold-light); margin-bottom: 6px; font-weight: 800; font-size: 1.25rem;">التحقق بخطوتين (2FA)</h3>
+      <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
+        حساب المدير العام محمي بطبقة أمان مضاعفة. يرجى إدخال رمز الأمان (PIN) المكون من 6 أرقام للمتابعة والدخول للنظام.
+      </p>
+
+      <div id="twoFactorErrorMsg" class="login-error-box" style="display: none; margin-bottom: 16px;"></div>
+
+      <form id="twoFactorForm" class="login-form" onsubmit="Auth.submit2FA(event)">
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label for="twoFactorCodeInput" style="font-weight: 700; margin-bottom: 8px; display: block;">رمز التحقق (PIN)</label>
+          <div class="login-input-wrap">
+            <input type="password" id="twoFactorCodeInput" class="login-input" maxlength="6" placeholder="******" style="text-align: center; font-size: 1.8rem; letter-spacing: 10px; font-family: monospace; font-weight: 900; height: 52px; padding: 0 12px;" required autocomplete="one-time-code">
+          </div>
+        </div>
+
+        <div style="font-size: 0.78rem; color: var(--text-secondary); background: rgba(212,175,55,0.07); border-radius: 6px; padding: 10px 14px; margin-bottom: 20px; line-height: 1.5; border-right: 3px solid var(--gold-primary); text-align: right;">
+          💡 <strong>الرمز الافتراضي:</strong> (<code>123456</code>) أو كود الطوارئ (<code>889900</code>). يمكن تخصيصه من إعدادات الأمان.
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: stretch;">
+          <button type="button" class="btn btn-secondary" onclick="Auth.cancel2FA()" style="flex: 1; padding: 11px;">إلغاء</button>
+          <button type="submit" id="btnSubmit2FA" class="btn btn-primary" style="flex: 2; padding: 11px; background: linear-gradient(135deg, var(--gold-primary), #997825); font-weight: bold;">
+            ✓ تأكيد ودخول
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -4782,8 +4830,28 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div class="form-group">
             <label id="userPasswordLabel">كلمة المرور <span style="color: var(--accent-red);">*</span></label>
-            <input type="password" id="userPasswordVal" class="form-control" placeholder="كلمة المرور (6 خانات على الأقل)">
+            <input type="password" id="userPasswordVal" class="form-control" placeholder="كلمة المرور (8 خانات على الأقل)" oninput="Auth.checkPasswordStrength(this.value, 'userPasswordStrengthBox')">
             <small id="userPasswordHint" style="font-size: 0.72rem; color: var(--text-secondary); display: none;">اترك الحقل فارغاً إذا كنت لا ترغب في تغيير كلمة المرور الحالية.</small>
+            
+            <!-- مؤشر قوة كلمة المرور التفاعلي -->
+            <div id="userPasswordStrengthBox" class="password-strength-box" style="display: none; margin-top: 8px; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">مؤشر الأمان والقوة:</span>
+                <span class="strength-text" style="font-size: 0.78rem; font-weight: bold;"></span>
+              </div>
+              <div class="strength-meter-bar" style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; display: flex; gap: 3px;">
+                <div class="strength-seg seg-1" style="flex: 1; height: 100%; border-radius: 2px; transition: background 0.3s;"></div>
+                <div class="strength-seg seg-2" style="flex: 1; height: 100%; border-radius: 2px; transition: background 0.3s;"></div>
+                <div class="strength-seg seg-3" style="flex: 1; height: 100%; border-radius: 2px; transition: background 0.3s;"></div>
+                <div class="strength-seg seg-4" style="flex: 1; height: 100%; border-radius: 2px; transition: background 0.3s;"></div>
+              </div>
+              <div class="strength-rules" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 0.72rem; color: var(--text-secondary);">
+                <span class="rule-item rule-length">⚪ 8+ خانات</span>
+                <span class="rule-item rule-number">⚪ أرقام</span>
+                <span class="rule-item rule-mixed">⚪ أحرف A-z</span>
+                <span class="rule-item rule-symbol">⚪ رموز خاصة</span>
+              </div>
+            </div>
           </div>
           <div class="form-group">
             <label>الدور الوظيفي / القالب الافتراضي</label>

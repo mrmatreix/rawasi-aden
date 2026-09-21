@@ -4,8 +4,14 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { get, query, run, connectionManager } = require('../database/db');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'rawasi_aden_secret_key_2024';
+const {
+  loginRateLimiter,
+  recordFailedLogin,
+  resetLoginAttempts,
+  generateCsrfToken,
+  requireAuth,
+  JWT_SECRET
+} = require('../middleware/security');
 
 function getRoleDefaultPermissions(role) {
   switch (role) {
@@ -35,7 +41,6 @@ function getRoleDefaultPermissions(role) {
         'cash:view',
         'hr:view', 'hr:manage', 'hr:payroll',
         'reports:view'
-        ,'hr:view'
       ];
     case 'project_manager':
       return [
@@ -94,8 +99,8 @@ function verifyAdmin(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'عذراً! ضبط وتعديل خيارات الأمان والجلسات متاح حصرياً لحساب المدير العام' });
+    if (decoded.role !== 'admin' && decoded.username !== 'admin') {
+      return res.status(403).json({ success: false, message: 'عذراً! ضبط وتعديل خيارات الأمان متاح حصرياً لحساب المدير العام' });
     }
     req.adminUser = decoded;
     next();
@@ -116,13 +121,13 @@ function formatTimeArabic(timeStr) {
   return `${h}:${m} ${ampm}`;
 }
 
-// دالة مساعدة لجلب إعدادات الأمان وسياسة الجلسات والتوكن (افتراضية أو مخصصة لمستخدم)
+// دالة مساعدة لجلب إعدادات الأمان وسياسة الجلسات والتوكن
 async function getSecuritySettings(user = null) {
   const defaults = {
-    session_mode: 'multi', // 'multi' | 'single'
-    session_device_limit: 3, // 2 | 3 | 5
-    session_overflow_action: 'kick_oldest', // 'kick_oldest' | 'block_new'
-    jwt_token_expiry: '8h', // '1h' | '4h' | '8h' | '24h' | '7d' | '30d' | 'custom'
+    session_mode: 'multi',
+    session_device_limit: 3,
+    session_overflow_action: 'kick_oldest',
+    jwt_token_expiry: '8h',
     jwt_custom_minutes: 480,
     work_start_time: '08:00',
     work_end_time: '16:00',
@@ -143,7 +148,6 @@ async function getSecuritySettings(user = null) {
     console.warn('Could not read security settings from DB, using defaults:', e.message);
   }
 
-  // إذا تم تمرير مستخدم ولديه إعدادات أمان وجلسات مخصصة حددها المدير العام
   if (user && user.security_settings) {
     try {
       const userCustom = typeof user.security_settings === 'string'
@@ -158,7 +162,13 @@ async function getSecuritySettings(user = null) {
   return defaults;
 }
 
-// 0. جلب إعدادات الأمان وسياسة الجلسات والتوكن العامة
+// 0.1 توليد والحصول على رمز CSRF للواجهة الأمامية
+router.get('/csrf-token', (req, res) => {
+  const token = generateCsrfToken();
+  res.json({ success: true, csrfToken: token });
+});
+
+// 0.2 جلب إعدادات الأمان وسياسة الجلسات العامة
 router.get('/security-settings', async (req, res) => {
   try {
     const settings = await getSecuritySettings();
@@ -168,7 +178,7 @@ router.get('/security-settings', async (req, res) => {
   }
 });
 
-// 0. حفظ وتطبيق إعدادات الأمان وسياسة الجلسات والتوكن العامة (مقتصرة على المدير العام فقط)
+// 0.3 حفظ وتطبيق إعدادات الأمان وسياسة الجلسات
 router.post('/security-settings', verifyAdmin, async (req, res) => {
   try {
     const { session_mode, session_device_limit, session_overflow_action, jwt_token_expiry, jwt_custom_minutes, work_start_time, work_end_time } = req.body || {};
@@ -212,8 +222,244 @@ router.post('/security-settings', verifyAdmin, async (req, res) => {
   }
 });
 
-// 1. تسجيل الدخول (Login) مع فحص عدم تكرار اتصال نفس المستخدم بالتزامن وسقف الجلسات
-router.post('/login', async (req, res) => {
+// 0.4 جلب حالة وتفاصيل التحقق بخطوتين (2FA) للمدير العام
+router.get('/2fa-status', verifyAdmin, async (req, res) => {
+  try {
+    const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
+    const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
+    const isEnabled = row2fa ? (row2fa.value === '1' || row2fa.value === 'true') : true;
+    const pin = rowPin && rowPin.value ? rowPin.value : '123456';
+    res.json({ success: true, enabled: isEnabled, pin, backupCode: '889900' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 0.5 تحديث إعدادات 2FA للمدير العام
+router.post('/2fa-config', verifyAdmin, async (req, res) => {
+  try {
+    const { enabled, pin } = req.body;
+    if (enabled !== undefined) {
+      await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_enabled', ?)", [enabled ? '1' : '0']);
+    }
+    if (pin && String(pin).trim().length >= 4) {
+      await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_pin', ?)", [String(pin).trim()]);
+    }
+    res.json({ success: true, message: 'تم تحديث إعدادات التحقق بخطوتين (2FA) بنجاح 🛡️' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// دالة مركزية لإكمال جلسة تسجيل الدخول وتوليد التوكنات
+async function completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName } = {}) {
+  const secSettings = await getSecuritySettings(user);
+
+  // فحص فترة وساعات العمل
+  if (user.username !== 'admin' && (secSettings.jwt_token_expiry === 'custom' || secSettings.work_hours_enabled)) {
+    const startTime = secSettings.work_start_time || '08:00';
+    const endTime = secSettings.work_end_time || '16:00';
+    const now = new Date();
+    const currentH = now.getHours();
+    const currentM = now.getMinutes();
+    const currentTimeStr = `${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`;
+
+    let isAllowed = false;
+    if (startTime <= endTime) {
+      isAllowed = (currentTimeStr >= startTime && currentTimeStr <= endTime);
+    } else {
+      isAllowed = (currentTimeStr >= startTime || currentTimeStr <= endTime);
+    }
+
+    if (!isAllowed) {
+      return res.status(403).json({
+        success: false,
+        outside_work_hours: true,
+        message: `عذراً (${user.full_name || user.username})! الحساب مبرمج بفترة عمل محددة من الساعة (${formatTimeArabic(startTime)}) إلى الساعة (${formatTimeArabic(endTime)}). لا يُسمح بتسجيل الدخول خارج أوقات العمل الرسمية.`
+      });
+    }
+  }
+
+  // حساب مدة صلاحية التوكن (JWT)
+  let tokenExpiry = secSettings.jwt_token_expiry || '8h';
+  if (tokenExpiry === 'custom') {
+    const startTime = secSettings.work_start_time || '08:00';
+    const endTime = secSettings.work_end_time || '16:00';
+    const now = new Date();
+    const currentH = now.getHours();
+    const currentM = now.getMinutes();
+    const [endH, endM] = endTime.split(':').map(Number);
+
+    let remainingMins = (endH * 60 + endM) - (currentH * 60 + currentM);
+    if (remainingMins <= 0 && startTime > endTime) {
+      remainingMins += 24 * 60;
+    }
+    if (remainingMins <= 0 || isNaN(remainingMins)) remainingMins = 60;
+    tokenExpiry = `${remainingMins}m`;
+  }
+
+  // استخراج الجلسات النشطة المخزنة
+  const ACTIVE_THRESHOLD_MS = 75 * 1000;
+  const nowMs = Date.now();
+  let activeSessions = [];
+  try {
+    activeSessions = user.active_sessions ? JSON.parse(user.active_sessions) : [];
+  } catch (e) {
+    activeSessions = [];
+  }
+  if (!Array.isArray(activeSessions)) activeSessions = [];
+
+  activeSessions = activeSessions.filter(s => {
+    const hb = s.lastHeartbeatMs || getHeartbeatTimestamp(s.lastHeartbeat);
+    return (nowMs - hb) < ACTIVE_THRESHOLD_MS;
+  });
+
+  if (activeSessions.length === 0 && user.is_logged_in === 1 && user.session_token && user.last_heartbeat) {
+    const lastHb = getHeartbeatTimestamp(user.last_heartbeat);
+    if ((nowMs - lastHb) < ACTIVE_THRESHOLD_MS) {
+      activeSessions.push({
+        sessionId: user.session_token,
+        device: user.last_login_device || 'متصفح النظام',
+        ip: user.last_login_ip || '',
+        loginAt: user.last_login_at || user.last_heartbeat,
+        lastHeartbeat: user.last_heartbeat,
+        lastHeartbeatMs: lastHb
+      });
+    }
+  }
+
+  const isSingleMode = secSettings.session_mode === 'single' || secSettings.session_overflow_action === 'lock_device';
+  const maxDevices = isSingleMode ? 1 : (Number(secSettings.session_device_limit) || 3);
+  const overflowAction = secSettings.session_overflow_action || 'kick_oldest';
+
+  const incomingDeviceId = String(deviceId || '').trim();
+  const incomingDeviceName = String(deviceName || deviceInfo || 'جهاز النظام').trim();
+
+  if (overflowAction === 'lock_device') {
+    const isSuperAdmin = (user.username === 'admin');
+
+    if (!secSettings.authorized_device_id) {
+      if (incomingDeviceId) {
+        secSettings.authorized_device_id = incomingDeviceId;
+        secSettings.authorized_device_name = incomingDeviceName;
+        secSettings.authorized_device_at = new Date().toISOString();
+
+        let userSecObj = {};
+        try {
+          userSecObj = user.security_settings ? JSON.parse(user.security_settings) : {};
+        } catch (e) { userSecObj = {}; }
+        userSecObj.authorized_device_id = incomingDeviceId;
+        userSecObj.authorized_device_name = incomingDeviceName;
+        userSecObj.authorized_device_at = secSettings.authorized_device_at;
+        userSecObj.session_overflow_action = 'lock_device';
+        userSecObj.session_mode = 'single';
+        userSecObj.session_device_limit = 1;
+
+        await run('UPDATE users SET security_settings = ? WHERE id = ?', [JSON.stringify(userSecObj), user.id]);
+      }
+    } else {
+      if (incomingDeviceId && incomingDeviceId !== secSettings.authorized_device_id) {
+        if (!isSuperAdmin || !force) {
+          return res.status(403).json({
+            success: false,
+            device_locked: true,
+            message: `⛔ تم رفض الدخول: هذا الحساب مقفل ومصرح له بالدخول من جهاز واحد فقط معتمد (${secSettings.authorized_device_name || 'الجهاز المعتمد'}). يمنع النظام تماماً تسجيل الدخول من أي جهاز جديد آخر.`
+          });
+        }
+      }
+    }
+    activeSessions = [];
+  }
+
+  if (activeSessions.length >= maxDevices) {
+    if (overflowAction === 'block_new' && !force) {
+      const policyDesc = isSingleMode ? 'جلسة واحدة صارمة' : `سقف الجلسات المتعددة (${maxDevices} أجهزة)`;
+      return res.status(409).json({
+        success: false,
+        already_logged_in: true,
+        limit_exceeded: true,
+        message: `المستخدم (${user.full_name || user.username}) متصل حالياً وبلغ الحد الأقصى للجلسات (${policyDesc}). لمنع التكرار والحفاظ على سرية البيانات، لا يمكن فتح جلسة جديدة.`,
+        last_active: user.last_heartbeat,
+        last_login_device: user.last_login_device,
+        user: {
+          id: user.id,
+          username: user.username,
+          full_name: user.full_name
+        }
+      });
+    } else {
+      activeSessions.sort((a, b) => {
+        const tA = a.lastHeartbeatMs || getHeartbeatTimestamp(a.lastHeartbeat || a.loginAt);
+        const tB = b.lastHeartbeatMs || getHeartbeatTimestamp(b.lastHeartbeat || b.loginAt);
+        return tA - tB;
+      });
+      while (activeSessions.length >= maxDevices) {
+        activeSessions.shift();
+      }
+    }
+  }
+
+  const permissionsList = parseUserPermissions(user);
+  const sessionId = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).substring(2));
+  const nowIsoDb = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const nowIsoFull = new Date().toISOString();
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+  const deviceStr = deviceInfo || req.headers['user-agent'] || 'متصفح النظام';
+
+  activeSessions.push({
+    sessionId,
+    ip: String(clientIp),
+    device: String(deviceStr).substring(0, 200),
+    loginAt: nowIsoDb,
+    lastHeartbeat: nowIsoFull,
+    lastHeartbeatMs: nowMs
+  });
+
+  const token = jwt.sign(
+    { id: user.id, username: user.username, role: user.role, full_name: user.full_name, permissions: permissionsList, sessionId },
+    JWT_SECRET,
+    { expiresIn: tokenExpiry }
+  );
+
+  const csrfToken = generateCsrfToken(sessionId);
+
+  await run(`
+    UPDATE users SET 
+      is_logged_in = 1,
+      session_token = ?,
+      active_sessions = ?,
+      last_heartbeat = ?,
+      last_login_at = ?,
+      last_login_ip = ?,
+      last_login_device = ?
+    WHERE id = ?
+  `, [sessionId, JSON.stringify(activeSessions), nowIsoDb, nowIsoDb, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
+
+  let dbStatus = connectionManager ? connectionManager.getStatus() : { isOnline: false, mode: 'offline' };
+
+  // نجاح الدخول - تصفير محاولات Rate Limit
+  resetLoginAttempts(req);
+
+  return res.json({
+    success: true,
+    message: `مرحباً بك ${user.full_name}! تم تسجيل الدخول بنجاح`,
+    token,
+    csrfToken,
+    sessionId,
+    dbStatus,
+    user: {
+      id: user.id,
+      username: user.username,
+      full_name: user.full_name,
+      role: user.role,
+      status: user.status,
+      permissions: permissionsList
+    }
+  });
+}
+
+// 1. تسجيل الدخول (Login) مع فحص محدد المحاولات Rate Limiter والتحقق بخطوتين 2FA
+router.post('/login', loginRateLimiter, async (req, res) => {
   try {
     const { username, password, force, deviceInfo, deviceId, deviceName } = req.body;
     if (!username || !password) {
@@ -222,8 +468,23 @@ router.post('/login', async (req, res) => {
 
     const cleanUsername = String(username).trim();
     const user = await get('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
+    
     if (!user) {
-      return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+      const failInfo = recordFailedLogin(req);
+      if (failInfo.isLocked) {
+        return res.status(429).json({
+          success: false,
+          rateLimited: true,
+          lockoutSeconds: failInfo.lockoutSeconds,
+          remainingAttempts: 0,
+          message: `⛔ تم تجاوز الحد الأقصى للمحاولات الخاطئة (5 محاولات). تم قفل تسجيل الدخول مؤقتاً لمدة ${failInfo.lockoutSeconds} ثانية لحماية الحساب.`
+        });
+      }
+      return res.status(401).json({
+        success: false,
+        remainingAttempts: failInfo.remainingAttempts,
+        message: `اسم المستخدم أو كلمة المرور غير صحيحة (متبقي ${failInfo.remainingAttempts} محاولات قبل القفل المؤقت)`
+      });
     }
 
     if (user.status === 'inactive') {
@@ -232,224 +493,105 @@ router.post('/login', async (req, res) => {
 
     const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
-    }
-
-    // قراءة إعدادات الأمان المخصصة لهذا المستخدم (أو الافتراضية)
-    const secSettings = await getSecuritySettings(user);
-    
-    // فحص فترة وساعات العمل المسموحة إذا كانت مخصصة لهذا المستخدم (من ساعة كذا إلى كذا خلال 24 ساعة)
-    if (user.username !== 'admin' && (secSettings.jwt_token_expiry === 'custom' || secSettings.work_hours_enabled)) {
-      const startTime = secSettings.work_start_time || '08:00';
-      const endTime = secSettings.work_end_time || '16:00';
-
-      const now = new Date();
-      const currentH = now.getHours();
-      const currentM = now.getMinutes();
-      const currentTimeStr = `${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`;
-
-      let isAllowed = false;
-      if (startTime <= endTime) {
-        isAllowed = (currentTimeStr >= startTime && currentTimeStr <= endTime);
-      } else {
-        // وردية ليلية تمتد عبر منتصف الليل (مثلاً: 22:00 إلى 06:00)
-        isAllowed = (currentTimeStr >= startTime || currentTimeStr <= endTime);
-      }
-
-      if (!isAllowed) {
-        return res.status(403).json({
+      const failInfo = recordFailedLogin(req);
+      if (failInfo.isLocked) {
+        return res.status(429).json({
           success: false,
-          outside_work_hours: true,
-          message: `عذراً (${user.full_name || user.username})! الحساب مبرمج بفترة عمل محددة من الساعة (${formatTimeArabic(startTime)}) إلى الساعة (${formatTimeArabic(endTime)}). لا يُسمح بتسجيل الدخول خارج أوقات العمل الرسمية المصرح بها.`
+          rateLimited: true,
+          lockoutSeconds: failInfo.lockoutSeconds,
+          remainingAttempts: 0,
+          message: `⛔ تم تجاوز الحد الأقصى للمحاولات الخاطئة (5 محاولات). تم قفل تسجيل الدخول مؤقتاً لمدة ${failInfo.lockoutSeconds} ثانية لحماية الحساب.`
         });
       }
+      return res.status(401).json({
+        success: false,
+        remainingAttempts: failInfo.remainingAttempts,
+        message: `اسم المستخدم أو كلمة المرور غير صحيحة (متبقي ${failInfo.remainingAttempts} محاولات قبل القفل المؤقت)`
+      });
     }
 
-    // حساب مدة صلاحية التوكن (JWT)
-    let tokenExpiry = secSettings.jwt_token_expiry || '8h';
-    if (tokenExpiry === 'custom') {
-      const startTime = secSettings.work_start_time || '08:00';
-      const endTime = secSettings.work_end_time || '16:00';
-      const now = new Date();
-      const currentH = now.getHours();
-      const currentM = now.getMinutes();
-      const [endH, endM] = endTime.split(':').map(Number);
+    // التحقق هل الحساب للمدير العام وهل ميزة 2FA مفعلة
+    if (user.role === 'admin' || user.username === 'admin') {
+      let is2FaEnabled = true;
+      try {
+        const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
+        if (row2fa) is2FaEnabled = (row2fa.value === '1' || row2fa.value === 'true');
+      } catch (e) {}
 
-      let remainingMins = (endH * 60 + endM) - (currentH * 60 + currentM);
-      if (remainingMins <= 0 && startTime > endTime) {
-        remainingMins += 24 * 60;
-      }
-      if (remainingMins <= 0 || isNaN(remainingMins)) remainingMins = 60; // حد أدنى ساعة واحدة
-      tokenExpiry = `${remainingMins}m`;
-    }
-
-    // استخراج الجلسات النشطة المخزنة لهذا المستخدم
-    const ACTIVE_THRESHOLD_MS = 75 * 1000; // مهلة النشاط 75 ثانية
-    const nowMs = Date.now();
-    let activeSessions = [];
-    try {
-      activeSessions = user.active_sessions ? JSON.parse(user.active_sessions) : [];
-    } catch (e) {
-      activeSessions = [];
-    }
-    if (!Array.isArray(activeSessions)) activeSessions = [];
-
-    // تنقية الجلسات غير النشطة
-    activeSessions = activeSessions.filter(s => {
-      const hb = s.lastHeartbeatMs || getHeartbeatTimestamp(s.lastHeartbeat);
-      return (nowMs - hb) < ACTIVE_THRESHOLD_MS;
-    });
-
-    // توافقية مع الحقول القديمة إذا لم تكن مسجلة في active_sessions
-    if (activeSessions.length === 0 && user.is_logged_in === 1 && user.session_token && user.last_heartbeat) {
-      const lastHb = getHeartbeatTimestamp(user.last_heartbeat);
-      if ((nowMs - lastHb) < ACTIVE_THRESHOLD_MS) {
-        activeSessions.push({
-          sessionId: user.session_token,
-          device: user.last_login_device || 'متصفح النظام',
-          ip: user.last_login_ip || '',
-          loginAt: user.last_login_at || user.last_heartbeat,
-          lastHeartbeat: user.last_heartbeat,
-          lastHeartbeatMs: lastHb
-        });
-      }
-    }
-
-    // فحص سقف الأجهزة حسب السياسة المحددة (جلسة واحدة صارمة أو جلسات متعددة)
-    const isSingleMode = secSettings.session_mode === 'single' || secSettings.session_overflow_action === 'lock_device';
-    const maxDevices = isSingleMode ? 1 : (Number(secSettings.session_device_limit) || 3);
-    const overflowAction = secSettings.session_overflow_action || 'kick_oldest';
-
-    // فحص سياسة قفل الحساب على جهاز واحد فقط ومنع أي جهاز جديد
-    const incomingDeviceId = String(deviceId || '').trim();
-    const incomingDeviceName = String(deviceName || deviceInfo || 'جهاز النظام').trim();
-
-    if (overflowAction === 'lock_device') {
-      const isSuperAdmin = (user.username === 'admin');
-
-      if (!secSettings.authorized_device_id) {
-        // إذا لم يكن هناك جهاز معتمد مسجل بعد: نعتمد أول جهاز يتم الدخول منه
-        if (incomingDeviceId) {
-          secSettings.authorized_device_id = incomingDeviceId;
-          secSettings.authorized_device_name = incomingDeviceName;
-          secSettings.authorized_device_at = new Date().toISOString();
-
-          let userSecObj = {};
-          try {
-            userSecObj = user.security_settings ? JSON.parse(user.security_settings) : {};
-          } catch (e) { userSecObj = {}; }
-          userSecObj.authorized_device_id = incomingDeviceId;
-          userSecObj.authorized_device_name = incomingDeviceName;
-          userSecObj.authorized_device_at = secSettings.authorized_device_at;
-          userSecObj.session_overflow_action = 'lock_device';
-          userSecObj.session_mode = 'single';
-          userSecObj.session_device_limit = 1;
-
-          await run('UPDATE users SET security_settings = ? WHERE id = ?', [JSON.stringify(userSecObj), user.id]);
-        }
-      } else {
-        // الحساب مقيد بجهاز معتمد مسبقاً: نتحقق هل الجهاز الحالي يطابق الجهاز المسجل
-        if (incomingDeviceId && incomingDeviceId !== secSettings.authorized_device_id) {
-          if (!isSuperAdmin || !force) {
-            return res.status(403).json({
-              success: false,
-              device_locked: true,
-              message: `⛔ تم رفض الدخول: هذا الحساب مقفل ومصرح له بالدخول من جهاز واحد فقط معتمد (${secSettings.authorized_device_name || 'الجهاز المعتمد'}). يمنع النظام تماماً تسجيل الدخول من أي جهاز جديد آخر. يرجى استخدام جهازك المعتمد أو مراجعة المدير العام لفك قفل الجهاز.`
-            });
-          }
-        }
-      }
-
-      // إذا كان الجهاز هو الجهاز المعتمد المصرح له، يتم استبدال أي جلسة سابقة فوراً
-      activeSessions = [];
-    }
-
-    if (activeSessions.length >= maxDevices) {
-      if (overflowAction === 'block_new' && !force) {
-        const policyDesc = isSingleMode ? 'جلسة واحدة صارمة' : `سقف الجلسات المتعددة (${maxDevices} أجهزة)`;
-        return res.status(409).json({
-          success: false,
-          already_logged_in: true,
-          limit_exceeded: true,
-          message: `المستخدم (${user.full_name || user.username}) متصل حالياً وبلغ الحد الأقصى للجلسات المسموح بها (${policyDesc}). لمنع التكرار والحفاظ على سرية البيانات، لا يمكن فتح جلسة جديدة. يرجى تسجيل الخروج أولاً أو استخدام الدخول الإجباري لطرد الجلسات القديمة.`,
-          last_active: user.last_heartbeat,
-          last_login_device: user.last_login_device,
+      if (is2FaEnabled) {
+        const tempToken = jwt.sign(
+          { id: user.id, username: user.username, role: user.role, isPending2FA: true },
+          JWT_SECRET,
+          { expiresIn: '5m' }
+        );
+        return res.json({
+          success: true,
+          requires2FA: true,
+          tempToken,
           user: {
             id: user.id,
             username: user.username,
-            full_name: user.full_name
-          }
+            full_name: user.full_name,
+            role: user.role
+          },
+          message: 'مرحباً بالمدير العام! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️'
         });
-      } else {
-        // طرد الجلسات الأقدم حتى يقل العدد عن السقف المسموح
-        activeSessions.sort((a, b) => {
-          const tA = a.lastHeartbeatMs || getHeartbeatTimestamp(a.lastHeartbeat || a.loginAt);
-          const tB = b.lastHeartbeatMs || getHeartbeatTimestamp(b.lastHeartbeat || b.loginAt);
-          return tA - tB;
-        });
-        while (activeSessions.length >= maxDevices) {
-          activeSessions.shift();
-        }
       }
     }
 
-    const permissionsList = parseUserPermissions(user);
-    const sessionId = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).substring(2));
-    const nowIsoDb = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const nowIsoFull = new Date().toISOString();
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-    const deviceStr = deviceInfo || req.headers['user-agent'] || 'متصفح النظام';
-
-    activeSessions.push({
-      sessionId,
-      ip: String(clientIp),
-      device: String(deviceStr).substring(0, 200),
-      loginAt: nowIsoDb,
-      lastHeartbeat: nowIsoFull,
-      lastHeartbeatMs: nowMs
-    });
-
-    const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, full_name: user.full_name, sessionId },
-      JWT_SECRET,
-      { expiresIn: tokenExpiry }
-    );
-
-    // تحديث حالة الاتصال وبصمة الجلسة في قاعدة البيانات
-    await run(`
-      UPDATE users SET 
-        is_logged_in = 1,
-        session_token = ?,
-        active_sessions = ?,
-        last_heartbeat = ?,
-        last_login_at = ?,
-        last_login_ip = ?,
-        last_login_device = ?
-      WHERE id = ?
-    `, [sessionId, JSON.stringify(activeSessions), nowIsoDb, nowIsoDb, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
-
-    let dbStatus = connectionManager ? connectionManager.getStatus() : { isOnline: false, mode: 'offline' };
-
-    res.json({
-      success: true,
-      message: `مرحباً بك ${user.full_name}! تم تسجيل الدخول بنجاح`,
-      token,
-      sessionId,
-      dbStatus,
-      user: {
-        id: user.id,
-        username: user.username,
-        full_name: user.full_name,
-        role: user.role,
-        email: user.email,
-        phone: user.phone,
-        status: user.status,
-        permissions: permissionsList
-      }
-    });
+    // إكمال تسجيل الدخول الاعتيادي
+    return await completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ success: false, message: 'خطأ في الخادم أثناء تسجيل الدخول: ' + err.message, error: err.message });
+  }
+});
+
+// 1.1 التحقق من رمز التحقق بخطوتين (2FA) للمدير العام
+router.post('/verify-2fa', async (req, res) => {
+  try {
+    const { tempToken, code, force, deviceInfo, deviceId, deviceName } = req.body;
+    if (!tempToken || !code) {
+      return res.status(400).json({ success: false, message: 'يرجى إدخال رمز التحقق بخطوتين' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, JWT_SECRET);
+    } catch (e) {
+      return res.status(401).json({ success: false, message: 'جلسة التحقق المؤقتة منتهية، يرجى إعادة تسجيل الدخول' });
+    }
+
+    if (!decoded || !decoded.isPending2FA || decoded.role !== 'admin') {
+      return res.status(401).json({ success: false, message: 'طلب التحقق غير صالح' });
+    }
+
+    // جلب الرمز السري المعتمد لـ 2FA
+    let admin2FaPin = '123456';
+    try {
+      const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
+      if (rowPin && rowPin.value) admin2FaPin = rowPin.value;
+    } catch (e) {}
+
+    const cleanCode = String(code).trim();
+    // التحقق من الرمز أو رمز الطوارئ الاحتياطي 889900
+    if (cleanCode !== String(admin2FaPin).trim() && cleanCode !== '889900') {
+      return res.status(401).json({
+        success: false,
+        message: 'رمز التحقق بخطوتين (2FA) غير صحيح، يرجى التأكد من الرمز والمحاولة مجدداً'
+      });
+    }
+
+    const user = await get('SELECT * FROM users WHERE id = ?', [decoded.id]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    }
+
+    // اعتماد الجلسة وإصدار التوكن النهائي
+    return await completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName });
+  } catch (err) {
+    console.error('Verify 2FA error:', err);
+    res.status(500).json({ success: false, message: 'خطأ أثناء التحقق بخطوتين: ' + err.message });
   }
 });
 
@@ -480,25 +622,23 @@ router.post('/heartbeat', async (req, res) => {
     const nowIsoFull = new Date().toISOString();
     const nowMs = Date.now();
 
-    // إذا كانت هناك مصفوفة جلسات نشطة مسجلة
     if (activeSessions.length > 0) {
       const currentSess = activeSessions.find(s => s.sessionId === decoded.sessionId);
       if (!currentSess) {
         return res.status(401).json({
           success: false,
           session_terminated: true,
-          message: 'تم إنهاء هذه الجلسة تلقائياً نظراً لتسجيل الدخول من جهاز آخر تجاوز سقف الأجهزة أو تم إنهاء الجلسة القديمة.'
+          message: 'تم إنهاء هذه الجلسة نظراً لتسجيل الدخول من جهاز آخر تجاوز سقف الأجهزة.'
         });
       }
       currentSess.lastHeartbeat = nowIsoFull;
       currentSess.lastHeartbeatMs = nowMs;
     } else {
-      // فحص الجلسة المفردة
       if (decoded.sessionId && user.session_token && decoded.sessionId !== user.session_token) {
         return res.status(401).json({
           success: false,
           session_terminated: true,
-          message: 'تم تسجيل الدخول بحسابك من جهاز أو متصفح آخر. تم إنهاء هذه الجلسة تلقائياً منعاً لتكرار نفس المستخدم.'
+          message: 'تم تسجيل الدخول بحسابك من جهاز أو متصفح آخر. تم إنهاء هذه الجلسة منعاً للتكرار.'
         });
       }
       if (decoded.sessionId) {
@@ -546,14 +686,14 @@ router.get('/me', async (req, res) => {
         return res.status(401).json({
           success: false,
           session_terminated: true,
-          message: 'تم إنهاء هذه الجلسة تلقائياً نظراً لتسجيل الدخول من جهاز آخر تجاوز سقف الأجهزة المسموح بها.'
+          message: 'تم إنهاء هذه الجلسة تلقائياً نظراً لتسجيل الدخول من جهاز آخر.'
         });
       }
     } else if (decoded.sessionId && user.session_token && decoded.sessionId !== user.session_token) {
       return res.status(401).json({
         success: false,
         session_terminated: true,
-        message: 'تم تسجيل الدخول بهذا الحساب من جهاز أو نافذة أخرى. تم إنهاء هذه الجلسة منعاً للتكرار.'
+        message: 'تم تسجيل الدخول بهذا الحساب من جهاز أو نافذة أخرى.'
       });
     }
 
@@ -569,8 +709,6 @@ router.get('/me', async (req, res) => {
         username: user.username,
         full_name: user.full_name,
         role: user.role,
-        email: user.email,
-        phone: user.phone,
         status: user.status,
         permissions: permissionsList
       }
@@ -682,7 +820,6 @@ router.post('/unlock', async (req, res) => {
       return res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى' });
     }
 
-    // تحديث نبض الجلسة
     const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
     await run('UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?', [nowIso, user.id]);
 

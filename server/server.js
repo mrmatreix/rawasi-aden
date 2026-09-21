@@ -20,27 +20,32 @@ app.use((req, res, next) => {
   next();
 });
 
+const { verifyCsrfToken, requireAuth } = require('./middleware/security');
+
 // خدمة الملفات الثابتة للواجهة الأمامية (HTML, CSS, JS, Images)
 const publicDir = path.join(__dirname, '..');
 app.use(express.static(publicDir));
 
-// مسارات واجهات برمجة التطبيقات (API Routes)
+// حماية مسارات الـ API بـ CSRF Token
+app.use('/api', verifyCsrfToken);
+
+// مسارات واجهات برمجة التطبيقات (API Routes) مع التحقق الأمني
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/projects', require('./routes/projects'));
-app.use('/api/inventory', require('./routes/inventory'));
-app.use('/api/purchases', require('./routes/purchases'));
-app.use('/api/expenses', require('./routes/expenses'));
-app.use('/api/billing', require('./routes/billing'));
-app.use('/api/payments', require('./routes/payments'));
-app.use('/api/accounting', require('./routes/accounting'));
-app.use('/api/reports', require('./routes/reports'));
-app.use('/api/clients', require('./routes/clients'));
-app.use('/api/suppliers', require('./routes/suppliers'));
-app.use('/api/settings', require('./routes/settings'));
-app.use('/api/hr', require('./routes/hr'));
-app.use('/api/project-hub', require('./routes/project_management'));
-app.use('/api/project-files', require('./routes/project_files'));
+app.use('/api/users', requireAuth, require('./routes/users'));
+app.use('/api/projects', requireAuth, require('./routes/projects'));
+app.use('/api/inventory', requireAuth, require('./routes/inventory'));
+app.use('/api/purchases', requireAuth, require('./routes/purchases'));
+app.use('/api/expenses', requireAuth, require('./routes/expenses'));
+app.use('/api/billing', requireAuth, require('./routes/billing'));
+app.use('/api/payments', requireAuth, require('./routes/payments'));
+app.use('/api/accounting', requireAuth, require('./routes/accounting'));
+app.use('/api/reports', requireAuth, require('./routes/reports'));
+app.use('/api/clients', requireAuth, require('./routes/clients'));
+app.use('/api/suppliers', requireAuth, require('./routes/suppliers'));
+app.use('/api/settings', requireAuth, require('./routes/settings'));
+app.use('/api/hr', requireAuth, require('./routes/hr'));
+app.use('/api/project-hub', requireAuth, require('./routes/project_management'));
+app.use('/api/project-files', requireAuth, require('./routes/project_files'));
 
 // نقطة فحص صحة النظام
 app.get('/api/health', (req, res) => {

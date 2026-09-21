@@ -184,6 +184,17 @@ const App = {
 
   // التنقل بين الأقسام والشاشات
   navigate(viewId, clickedEl = null) {
+    // التحقق الأمني من صلاحية المستخدم للوصول للشاشة لمنع أي تلاعب عبر الـ DOM أو الكونسول
+    if (typeof Auth !== 'undefined' && typeof Auth.canAccessView === 'function') {
+      if (!Auth.canAccessView(viewId)) {
+        console.warn(`[Security] تم رفض الوصول للشاشة: ${viewId} لعدم كفاية الصلاحيات.`);
+        if (typeof this.showToast === 'function') {
+          this.showToast('⛔ عذراً، لا تملك الصلاحية الكافية للوصول إلى هذا القسم.', 'error');
+        }
+        return false;
+      }
+    }
+
     this.activeView = viewId;
     this.closeMobileSidebar();
 

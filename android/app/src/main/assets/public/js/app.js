@@ -8,7 +8,10 @@ const App = {
 
   async init() {
     console.log('🚀 تهيئة نظام رواسي عدن للهندسة والمقاولات...');
-    
+
+    // تطبيق المظهر المحفوظ فورياً قبل تحميل أي شيء
+    this.initTheme();
+
     // التحقق المسبق من الاتصال بقاعدة البيانات (أونلاين / أوفلاين)
     await this.checkDatabaseStatus();
 
@@ -83,6 +86,40 @@ const App = {
     if (backdrop) backdrop.classList.remove('active');
   },
 
+  // ============================================
+  // 🌙☀️ تبديل الوضع الليلي / النهاري
+  // ============================================
+  initTheme() {
+    // استرجاع الوضع المحفوظ من localStorage
+    const savedTheme = localStorage.getItem('rawasi_theme') || 'dark';
+    this.applyTheme(savedTheme);
+  },
+
+  toggleTheme() {
+    const isLight = document.body.classList.contains('light-mode');
+    const newTheme = isLight ? 'dark' : 'light';
+    localStorage.setItem('rawasi_theme', newTheme);
+    this.applyTheme(newTheme);
+
+    // تلميح مرئي للمستخدم
+    const label = newTheme === 'light' ? 'نهاري' : 'ليلي';
+    this.showToast(`تم التبديل إلى الوضع ${label} ✨`, 'info');
+  },
+
+  applyTheme(theme) {
+    const isLight = theme === 'light';
+    document.body.classList.toggle('light-mode', isLight);
+    document.documentElement.classList.toggle('light-mode', isLight);
+
+    // تحديث نص وأيقونة زر التبديل
+    const label = document.getElementById('themeToggleLabel');
+    if (label) label.textContent = isLight ? 'نهاري' : 'ليلي';
+
+    // تحديث meta theme-color للمتصفح
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', isLight ? '#16304f' : '#0f172a');
+  },
+
   // التحكم بالقوائم الشجرية المنسدلة (Accordion Groups)
   toggleNavGroup(groupId) {
     const groupEl = document.getElementById(groupId);
@@ -147,6 +184,17 @@ const App = {
 
   // التنقل بين الأقسام والشاشات
   navigate(viewId, clickedEl = null) {
+    // التحقق الأمني من صلاحية المستخدم للوصول للشاشة لمنع أي تلاعب عبر الـ DOM أو الكونسول
+    if (typeof Auth !== 'undefined' && typeof Auth.canAccessView === 'function') {
+      if (!Auth.canAccessView(viewId)) {
+        console.warn(`[Security] تم رفض الوصول للشاشة: ${viewId} لعدم كفاية الصلاحيات.`);
+        if (typeof this.showToast === 'function') {
+          this.showToast('⛔ عذراً، لا تملك الصلاحية الكافية للوصول إلى هذا القسم.', 'error');
+        }
+        return false;
+      }
+    }
+
     this.activeView = viewId;
     this.closeMobileSidebar();
 

@@ -3,13 +3,88 @@
  * تتضمن التحقق من عدم تكرار تسجيل الدخول لنفس المستخدم بالتزامن والحفاظ على الجلسة الحية
  */
 
+// ===================================================================
+// حماية وتأمين كافة طلبات fetch تلقائياً مع توكن CSRF وتوكن المصادقة JWT
+// ===================================================================
+(function setupSecureFetch() {
+  if (window._rawasiFetchSetupDone) return;
+  window._rawasiFetchSetupDone = true;
+
+  const originalFetch = window.fetch;
+  window._rawasiOriginalFetch = originalFetch;
+
+  window.fetch = async function (resource, init = {}) {
+    try {
+      const url = typeof resource === 'string' ? resource : (resource?.url || '');
+      const isApiCall = url.startsWith('/api/') || url.includes('/api/');
+
+      if (isApiCall) {
+        init = init || {};
+        let headers = init.headers;
+        if (!headers) {
+          headers = {};
+        } else if (headers instanceof Headers) {
+          const obj = {};
+          for (let [k, v] of headers.entries()) {
+            obj[k] = v;
+          }
+          headers = obj;
+        } else if (typeof headers === 'object') {
+          headers = { ...headers };
+        }
+
+        // 1. إضافة توكن المصادقة Authorization تلقائياً إذا لم يكن مضافاً وكان المستخدم مسجلاً
+        if (!headers['Authorization'] && !headers['authorization']) {
+          const activeToken = (window.Auth && window.Auth.token)
+            || sessionStorage.getItem('rawasi_token')
+            || localStorage.getItem('rawasi_token');
+          if (activeToken) {
+            headers['Authorization'] = `Bearer ${activeToken}`;
+          }
+        }
+
+        // 2. إضافة توكن CSRF للعمليات غير الآمنة (POST, PUT, DELETE, PATCH)
+        const method = (init.method || 'GET').toUpperCase();
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+          const csrfToken = (window.Auth && window.Auth.csrfToken)
+            || sessionStorage.getItem('rawasi_csrf_token');
+          if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+          }
+          headers['X-Requested-With'] = 'XMLHttpRequest';
+        }
+
+        init.headers = headers;
+      }
+    } catch (e) {
+      console.warn('[SecureFetch] Error attaching security headers:', e);
+    }
+
+    const response = await originalFetch(resource, init);
+
+    // قراءة توكن CSRF الجديد من الهيدر إن وُجد لتحديثه دائماً
+    try {
+      const newCsrf = response.headers?.get('x-csrf-token');
+      if (newCsrf && window.Auth && typeof window.Auth.setCsrfToken === 'function') {
+        window.Auth.setCsrfToken(newCsrf);
+      }
+    } catch (e) {}
+
+    return response;
+  };
+})();
+
 const Auth = {
   currentUser: null,
   token: null,
   sessionId: null,
+  csrfToken: null,
   _isLoggingIn: false,
   _heartbeatInterval: null,
   _pendingCredentials: null,
+  _pending2FAToken: null,
+  _pending2FAUser: null,
+  _rateLimitTimer: null,
   isLocked: false,
   lockTimeoutMinutes: 15,
   lastActivityTime: Date.now(),
@@ -23,20 +98,75 @@ const Auth = {
     jwt_custom_minutes: 480
   },
 
+  // تنظيف أي بيانات حساسة قديمة من localStorage ونقل الجلسة للـ sessionStorage
+  purgeSensitiveLocalStorage() {
+    const sensitiveKeys = [
+      'rawasi_last_logout_backup',
+      'rawasi_db_backup',
+      'rawasi_backup_data',
+      'rawasi_cached_credentials'
+    ];
+    sensitiveKeys.forEach(k => {
+      try { localStorage.removeItem(k); } catch(e){}
+    });
+    // ترحيل الجلسة الآمنة تلقائياً
+    try {
+      const legacyToken = localStorage.getItem('rawasi_token');
+      const legacyUser = localStorage.getItem('rawasi_user');
+      if (legacyToken && !sessionStorage.getItem('rawasi_token')) {
+        sessionStorage.setItem('rawasi_token', legacyToken);
+      }
+      if (legacyUser && !sessionStorage.getItem('rawasi_user')) {
+        sessionStorage.setItem('rawasi_user', legacyUser);
+      }
+      localStorage.removeItem('rawasi_token');
+      localStorage.removeItem('rawasi_user');
+    } catch (e) {}
+  },
+
+  // جلب رمز CSRF من الخادم
+  async fetchCsrfToken() {
+    try {
+      const fetchFn = window._rawasiOriginalFetch || window.fetch;
+      const res = await fetchFn('/api/auth/csrf-token');
+      const data = await res.json();
+      if (data && data.csrfToken) {
+        this.setCsrfToken(data.csrfToken);
+      }
+    } catch (e) {
+      console.warn('تعذر جلب توكن CSRF:', e);
+    }
+  },
+
+  // تعيين رمز الـ CSRF في الجلسة والحقول المخفية
+  setCsrfToken(token) {
+    if (!token) return;
+    this.csrfToken = token;
+    try { sessionStorage.setItem('rawasi_csrf_token', token); } catch(e){}
+    const input = document.getElementById('loginCsrfToken');
+    if (input) input.value = token;
+  },
+
   // تهيئة نظام الدخول والمصادقة
   async init() {
+    this.purgeSensitiveLocalStorage();
     this.initLockEngine();
     this.fetchSecuritySettings();
+    this.fetchCsrfToken();
 
     // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها في هذه النافذة الحالية
     const isSessionActive = sessionStorage.getItem('rawasi_session_active') === 'true';
-    const savedToken = isSessionActive ? localStorage.getItem('rawasi_token') : null;
-    const savedUserStr = isSessionActive ? localStorage.getItem('rawasi_user') : null;
+    const savedToken = isSessionActive ? (sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token')) : null;
+    const savedUserStr = isSessionActive ? (sessionStorage.getItem('rawasi_user') || localStorage.getItem('rawasi_user')) : null;
 
     if (savedToken && savedUserStr) {
       try {
         this.token = savedToken;
         this.currentUser = JSON.parse(savedUserStr);
+        sessionStorage.setItem('rawasi_token', savedToken);
+        sessionStorage.setItem('rawasi_user', savedUserStr);
+        localStorage.removeItem('rawasi_token');
+        localStorage.removeItem('rawasi_user');
 
         // إذا كانت الشاشة مقفلة قبل إعادة تحميل الصفحة
         if (sessionStorage.getItem('rawasi_is_locked') === 'true') {
@@ -303,6 +433,20 @@ const Auth = {
         return;
       }
 
+      // حالة قفل الحساب مؤقتاً بسبب استنفاد محاولات الدخول (Rate Limiting)
+      if (res.status === 429 || data.rateLimited) {
+        this.handleRateLimit(data.lockoutSeconds || 60, data.message);
+        return;
+      }
+
+      // حالة طلب التحقق بخطوتين (2FA) لحساب المدير العام
+      if (data.requires2FA) {
+        this._pending2FAToken = data.tempToken;
+        this._pending2FAUser = data.user;
+        this.show2FAModal();
+        return;
+      }
+
       // حالة اكتشاف جلسة نشطة أخرى لنفس المستخدم (Duplicate Active Session)
       if (res.status === 409 || data.already_logged_in) {
         this._pendingCredentials = { username, password };
@@ -319,19 +463,30 @@ const Auth = {
       }
 
       if (data.success && data.token && data.user) {
+        // إيقاف مؤقت الحظر وإخفاء الصندوق عند النجاح
+        if (this._rateLimitTimer) {
+          clearInterval(this._rateLimitTimer);
+          this._rateLimitTimer = null;
+        }
+        const rateLimitBox = document.getElementById('loginRateLimitBox');
+        if (rateLimitBox) rateLimitBox.style.display = 'none';
+
         this._pendingCredentials = null;
         this.token = data.token;
         this.sessionId = data.sessionId;
         this.currentUser = data.user;
 
         sessionStorage.setItem('rawasi_session_active', 'true');
+        sessionStorage.setItem('rawasi_token', this.token);
+        sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         sessionStorage.removeItem('rawasi_is_locked');
+        localStorage.removeItem('rawasi_token');
+        localStorage.removeItem('rawasi_user');
+        localStorage.removeItem('rawasi_last_logout_backup');
+        localStorage.setItem('rawasi_last_username', this.currentUser.username || username);
+
         this.isLocked = false;
         this.lastActivityTime = Date.now();
-
-        localStorage.setItem('rawasi_token', this.token);
-        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
-        localStorage.setItem('rawasi_last_username', this.currentUser.username || username);
 
         this.showApp();
         this.updateUserUI();
@@ -370,8 +525,12 @@ const Auth = {
           this.navigateToFirstAllowed();
         }
       } else {
+        let msg = data.message || 'بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.';
+        if (data.remainingAttempts !== undefined) {
+          msg = `<strong>⚠️ بيانات الدخول غير صحيحة</strong><br>المحاولات المتبقية قبل القفل المؤقت: <span style="font-weight:900;color:#f87171;">(${data.remainingAttempts} من 5)</span>`;
+        }
         if (errorBox) {
-          errorBox.textContent = data.message || 'بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.';
+          errorBox.innerHTML = msg;
           errorBox.style.display = 'block';
         }
         if (typeof App !== 'undefined' && App.showToast) {
@@ -392,6 +551,213 @@ const Auth = {
           <span>تسجيل الدخول</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
         `;
+      }
+    }
+  },
+
+  // إدارة وعرض عداد الحظر المرئي لمحاولات الدخول الخاطئة (Rate Limiting)
+  handleRateLimit(lockoutSeconds, message) {
+    const box = document.getElementById('loginRateLimitBox');
+    const msg = document.getElementById('loginRateLimitMsg');
+    const timer = document.getElementById('loginCooldownTimer');
+    const submitBtn = document.getElementById('btnLoginSubmit');
+    const errorBox = document.getElementById('loginErrorMsg');
+
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+
+    if (box) box.style.display = 'block';
+    if (msg && message) msg.textContent = message;
+
+    if (this._rateLimitTimer) {
+      clearInterval(this._rateLimitTimer);
+      this._rateLimitTimer = null;
+    }
+
+    let remaining = parseInt(lockoutSeconds, 10) || 60;
+
+    const updateDisplay = () => {
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      const str = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      if (timer) timer.textContent = str;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span>محظور مؤقتاً (${str})</span>`;
+      }
+    };
+
+    updateDisplay();
+
+    this._rateLimitTimer = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(this._rateLimitTimer);
+        this._rateLimitTimer = null;
+        if (box) box.style.display = 'none';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = `
+            <span>تسجيل الدخول</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+          `;
+        }
+      } else {
+        updateDisplay();
+      }
+    }, 1000);
+  },
+
+  // فتح نافذة التحقق بخطوتين (2FA) للمدير العام
+  show2FAModal() {
+    const modal = document.getElementById('twoFactorModal');
+    const input = document.getElementById('twoFactorCodeInput');
+    const err = document.getElementById('twoFactorErrorMsg');
+    if (err) {
+      err.style.display = 'none';
+      err.textContent = '';
+    }
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.remove('hidden');
+    }
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 150);
+    }
+  },
+
+  // إلغاء عملية التحقق بخطوتين
+  cancel2FA() {
+    const modal = document.getElementById('twoFactorModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+    this._pending2FAToken = null;
+    this._pending2FAUser = null;
+    const err = document.getElementById('twoFactorErrorMsg');
+    if (err) err.style.display = 'none';
+    const errorBox = document.getElementById('loginErrorMsg');
+    if (errorBox) {
+      errorBox.textContent = 'تم إلغاء عملية التحقق بخطوتين.';
+      errorBox.style.display = 'block';
+    }
+  },
+
+  // تأكيد رمز التحقق بخطوتين والدخول للنظام
+  async submit2FA(e) {
+    if (e) e.preventDefault();
+    const input = document.getElementById('twoFactorCodeInput');
+    const err = document.getElementById('twoFactorErrorMsg');
+    const btn = document.getElementById('btnSubmit2FA');
+    const code = input ? input.value.trim() : '';
+
+    if (!code || code.length !== 6) {
+      if (err) {
+        err.textContent = 'يرجى إدخال رمز التحقق المكون من 6 أرقام (PIN)';
+        err.style.display = 'block';
+      }
+      return;
+    }
+
+    if (!this._pending2FAToken) {
+      if (err) {
+        err.textContent = 'انتهت صلاحية رمز الجلسة المؤقت، يرجى إعادة تسجيل الدخول';
+        err.style.display = 'block';
+      }
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'جاري التحقق...';
+    }
+
+    try {
+      const devId = this.getDeviceId();
+      const devName = this.getDeviceFriendlyName();
+
+      const res = await fetch('/api/auth/verify-2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tempToken: this._pending2FAToken,
+          code: code,
+          deviceId: devId,
+          deviceName: devName,
+          deviceInfo: `${devName} | ${navigator.userAgent || 'متصفح النظام'}`
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.token && data.user) {
+        const modal = document.getElementById('twoFactorModal');
+        if (modal) modal.style.display = 'none';
+
+        this._pending2FAToken = null;
+        this._pending2FAUser = null;
+        this._pendingCredentials = null;
+        this.token = data.token;
+        this.sessionId = data.sessionId;
+        this.currentUser = data.user;
+
+        sessionStorage.setItem('rawasi_session_active', 'true');
+        sessionStorage.setItem('rawasi_token', this.token);
+        sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+        sessionStorage.removeItem('rawasi_is_locked');
+        localStorage.removeItem('rawasi_token');
+        localStorage.removeItem('rawasi_user');
+        localStorage.removeItem('rawasi_last_logout_backup');
+        localStorage.setItem('rawasi_last_username', this.currentUser.username || 'admin');
+
+        this.isLocked = false;
+        this.lastActivityTime = Date.now();
+
+        this.showApp();
+        this.updateUserUI();
+        this.applyPermissions();
+        this.startHeartbeat();
+        this.startActivityTracker();
+
+        // إخفاء مؤقت الحظر إن وجد
+        if (this._rateLimitTimer) {
+          clearInterval(this._rateLimitTimer);
+          this._rateLimitTimer = null;
+        }
+        const rateLimitBox = document.getElementById('loginRateLimitBox');
+        if (rateLimitBox) rateLimitBox.style.display = 'none';
+
+        if (typeof App !== 'undefined' && App.showToast) {
+          App.showToast(`🛡️ تم التحقق بخطوتين بنجاح - مرحباً بك يا ${this.currentUser.full_name}`, 'success');
+        }
+
+        if (this.hasPermission('dashboard:view')) {
+          if (typeof App !== 'undefined' && App.navigate) App.navigate('dashboard');
+        } else {
+          this.navigateToFirstAllowed();
+        }
+      } else {
+        if (err) {
+          err.textContent = data.message || 'رمز التحقق (PIN) غير صحيح، يرجى المحاولة مجدداً';
+          err.style.display = 'block';
+        }
+        if (input) {
+          input.value = '';
+          input.focus();
+        }
+      }
+    } catch (error) {
+      if (err) {
+        err.textContent = 'حدث خطأ أثناء الاتصال بالخادم للتحقق من الرمز';
+        err.style.display = 'block';
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '✓ تأكيد ودخول';
       }
     }
   },
@@ -450,7 +816,7 @@ const Auth = {
       const data = await res.json();
       if (data && data.success && data.data) {
         backupFileName = data.data.fileName;
-        localStorage.setItem('rawasi_last_logout_backup', JSON.stringify(data.data));
+        sessionStorage.setItem('rawasi_last_logout_backup_file', backupFileName || '');
         console.log('✅ Auto backup created upon logout:', backupFileName);
       }
     } catch (e) {
@@ -469,9 +835,16 @@ const Auth = {
       });
     } catch (e) {}
 
-    // مسح بيانات الجلسة الحالية
+    // مسح بيانات الجلسة الحالية من sessionStorage و localStorage
+    sessionStorage.removeItem('rawasi_token');
+    sessionStorage.removeItem('rawasi_user');
+    sessionStorage.removeItem('rawasi_session_active');
+    sessionStorage.removeItem('rawasi_is_locked');
     localStorage.removeItem('rawasi_token');
     localStorage.removeItem('rawasi_user');
+    localStorage.removeItem('rawasi_last_logout_backup');
+    this.purgeSensitiveLocalStorage();
+
     this.token = null;
     this.sessionId = null;
     this.currentUser = null;
@@ -607,6 +980,126 @@ const Auth = {
     // إذا كان المفتاح يحتوي خيارات مفصولة بفواصل
     const keys = permKey.split(',').map(k => k.trim());
     return keys.some(k => perms.includes(k));
+  },
+
+  // التحقق الأمني من صلاحية المستخدم للوصول لشاشة معينة لمنع التلاعب بالـ DOM
+  canAccessView(viewId) {
+    if (!this.currentUser) return false;
+    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') return true;
+
+    const viewPermMap = {
+      'dashboard': 'dashboard:view',
+      'projects': 'projects:view',
+      'projectHub': 'projects:view',
+      'inventory': 'inventory:view',
+      'hr': 'hr:view',
+      'reports': 'reports:view',
+      'revenues': 'revenues:view',
+      'expenses': 'expenses:view',
+      'journal': 'accounting:journal,accounting:view,reports:view',
+      'chartOfAccounts': 'accounting:view,settings:company',
+      'costCenters': 'accounting:view,projects:view',
+      'currencies': 'accounting:view,settings:company',
+      'custody': 'custody:view',
+      'contractors': 'clients:view',
+      'clients': 'clients:view',
+      'suppliers': 'suppliers:view',
+      'cash': 'cash:view',
+      'settings': 'settings:users,settings:company,settings:backup'
+    };
+
+    const perm = viewPermMap[viewId];
+    if (!perm) return true;
+    return this.hasPermission(perm);
+  },
+
+  // تقييم قوة كلمة المرور وحساب درجات الأمان
+  evaluatePasswordStrength(password) {
+    if (!password) {
+      return { score: 0, label: 'فارغة', color: '#64748b', rules: { hasLength: false, hasNumber: false, hasMixed: false, hasSymbol: false } };
+    }
+    const hasLength = password.length >= 8;
+    const hasNumber = /[0-9]/.test(password);
+    const hasMixed = /[a-zA-Z]/.test(password) || /[\u0600-\u06FF]/.test(password);
+    const hasSymbol = /[^a-zA-Z0-9\u0600-\u06FF]/.test(password);
+
+    let score = 0;
+    if (hasLength) score++;
+    if (hasNumber) score++;
+    if (hasMixed) score++;
+    if (hasSymbol) score++;
+
+    if (password.length >= 12 && score >= 3) {
+      score = 4;
+    }
+
+    const levels = [
+      { label: 'ضعيفة جداً', color: '#ef4444' },
+      { label: 'ضعيفة', color: '#f97316' },
+      { label: 'متوسطة', color: '#eab308' },
+      { label: 'جيدة', color: '#3b82f6' },
+      { label: 'قوية وممتازة 🛡️', color: '#10b981' }
+    ];
+
+    const currentLevel = levels[score] || levels[0];
+
+    return {
+      score,
+      label: currentLevel.label,
+      color: currentLevel.color,
+      rules: { hasLength, hasNumber, hasMixed, hasSymbol }
+    };
+  },
+
+  // فحص وتحديث واجهة مؤشر القوة التفاعلي
+  checkPasswordStrength(password, containerId = 'userPasswordStrengthBox') {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+
+    if (!password) {
+      box.style.display = 'none';
+      return;
+    }
+
+    box.style.display = 'block';
+    const evalResult = this.evaluatePasswordStrength(password);
+
+    const txt = box.querySelector('.strength-text');
+    if (txt) {
+      txt.textContent = evalResult.label;
+      txt.style.color = evalResult.color;
+    }
+
+    const segs = box.querySelectorAll('.strength-seg');
+    segs.forEach((seg, idx) => {
+      if (idx < evalResult.score) {
+        seg.style.background = evalResult.color;
+      } else {
+        seg.style.background = 'rgba(255,255,255,0.08)';
+      }
+    });
+
+    const ruleLen = box.querySelector('.rule-length');
+    const ruleNum = box.querySelector('.rule-number');
+    const ruleMix = box.querySelector('.rule-mixed');
+    const ruleSym = box.querySelector('.rule-symbol');
+
+    if (ruleLen) {
+      ruleLen.textContent = (evalResult.rules.hasLength ? '🟢' : '⚪') + ' 8+ خانات';
+      ruleLen.style.color = evalResult.rules.hasLength ? '#10b981' : 'var(--text-secondary)';
+    }
+    if (ruleNum) {
+      ruleNum.textContent = (evalResult.rules.hasNumber ? '🟢' : '⚪') + ' أرقام';
+      ruleNum.style.color = evalResult.rules.hasNumber ? '#10b981' : 'var(--text-secondary)';
+    }
+    if (ruleMix) {
+      ruleMix.textContent = (evalResult.rules.hasMixed ? '🟢' : '⚪') + ' أحرف A-z';
+      ruleMix.style.color = evalResult.rules.hasMixed ? '#10b981' : 'var(--text-secondary)';
+    }
+    if (ruleSym) {
+      ruleSym.textContent = (evalResult.rules.hasSymbol ? '🟢' : '⚪') + ' رموز خاصة';
+      ruleSym.style.color = evalResult.rules.hasSymbol ? '#10b981' : 'var(--text-secondary)';
+    }
   },
 
   // تطبيق الصلاحيات على عناصر القائمة الجانبية والإعدادات
