@@ -15,7 +15,11 @@ const Projects = {
       const json = await res.json();
       if (json.success) {
         this.list = json.data;
-        this.renderProjectsTable();
+        if (this.currentStatusFilter && this.currentStatusFilter !== 'all') {
+          this.filterStatus(this.currentStatusFilter);
+        } else {
+          this.renderProjectsTable();
+        }
       }
     } catch (e) {
       console.error('Error loading projects:', e);
@@ -144,12 +148,13 @@ const Projects = {
 
   filterStatus(status, clickedBtn) {
     this.currentStatusFilter = status;
-    if (clickedBtn) {
-      const parent = clickedBtn.parentElement;
+    const btn = clickedBtn || document.getElementById('tabBtn_proj_' + status) || document.querySelector(`.report-tab-btn[onclick*="'${status}'"]`);
+    if (btn) {
+      const parent = btn.parentElement;
       if (parent) {
         parent.querySelectorAll('.report-tab-btn').forEach(b => b.classList.remove('active'));
       }
-      clickedBtn.classList.add('active');
+      btn.classList.add('active');
     }
 
     if (status === 'all') {

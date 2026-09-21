@@ -196,42 +196,7 @@
         </div>
       </div>
 
-      <!-- بطاقة المستخدم الحالية الأنيقة والمنظمة -->
-      <div class="user-badge" onclick="App.showConnectionModal()" title="ملف المستخدم وتفاصيل النظام">
-        <div class="user-avatar-wrap">
-          <div class="user-avatar" id="headerUserAvatar">م</div>
-          <span class="user-avatar-dot offline" id="userAvatarStatusDot" title="حالة الاتصال"></span>
-        </div>
-        <div class="user-info-text">
-          <span class="user-name" id="headerUserName">المدير العام</span>
-          <span class="user-role" id="headerUserRole">المدير العام</span>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- خلفية معتمة عند فتح القائمة في الهواتف -->
-  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="App.closeMobileSidebar()"></div>
-
-  <div class="app-container" id="appMainContainer">
-    <!-- القائمة الجانبية (Sidebar) -->
-    <aside class="sidebar">
-      <div class="sidebar-logo-card">
-        <img src="images/logo.png" alt="شعار رواسي عدن">
-        <h3>رواسي عدن</h3>
-        <span>للهندسة والمقاولات</span>
-      </div>
-
-      <ul class="sidebar-nav" id="sidebarNavList">
-        <!-- لوحة التحكم العامة -->
-        <li data-perm="dashboard:view">
-          <a class="nav-item active" href="javascript:void(0)" onclick="App.navigate('dashboard', this)">
-            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-            <span>لوحة التحكم الرئيسية</span>
-          </a>
-        </li>
-
-        <!-- 1. إدارة تهيئة النظام -->
+      <!-- بطاقة المستخدم الحالية الأنيقة و�        <!-- 1. تهيئة النظام -->
         <li class="nav-group" id="groupSystemSettings" data-perm="settings:users,settings:company,settings:backup">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupSystemSettings')">
             <div class="nav-group-title">
@@ -248,27 +213,21 @@
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'users', this)">
-                <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-                <span>المستخدمون والصلاحيات</span>
-              </a>
-            </li>
-            <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'backup', this)">
-                <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-                <span>النسخ الاحتياطي والأمان</span>
-              </a>
-            </li>
-            <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'print_templates', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                 <span>أنماط الطباعة والترويسة</span>
               </a>
             </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.showConnectionModal()">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
+                <span>فحص الاتصال وقاعدة البيانات</span>
+              </a>
+            </li>
           </ul>
         </li>
 
-        <!-- 2. إدارة الحسابات والمالية -->
+        <!-- 2. إدارة الحسابات -->
         <li class="nav-group" id="groupAccounting" data-perm="accounting:view,accounting:journal,revenues:view,expenses:view,custody:view,cash:view">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupAccounting')">
             <div class="nav-group-title">
@@ -278,40 +237,43 @@
             <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
           </div>
           <ul class="nav-sub-list">
+            <li class="nav-sub-header"><span>تهيئة الحسابات</span></li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'chartOfAccounts', this)">
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('chartOfAccounts', this)">
                 <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
-                <span>دليل الحسابات الشجري</span>
+                <span>دليل الحسابات</span>
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'costCenters', this)">
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('costCenters', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
                 <span>مراكز التكلفة</span>
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'currencies', this)">
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('currencies', this)">
                 <svg viewBox="0 0 24 24"><path d="M12.89 11.1c-1.78-.59-2.64-.96-2.64-1.9 0-1.02 1.11-1.39 1.81-1.39 1.31 0 1.79.59 1.9 1.4h2.15c-.11-1.49-.97-2.67-2.55-3.05V4h-2.91v2.07c-1.84.41-3.21 1.63-3.21 3.23 0 2.39 1.99 3.27 4.6 3.94 1.94.5 2.5 1.25 2.5 2.06 0 .9-.82 1.55-2.02 1.55-1.57 0-2.22-.72-2.35-1.65H5.97c.15 2.05 1.57 3.09 3.63 3.49V21h2.91v-2.19c1.92-.38 3.39-1.58 3.39-3.41 0-2.45-2.06-3.41-4.61-3.9z"/></svg>
-                <span>تهيئة العملات وأسعار الصرف</span>
+                <span>تهيئة العملات</span>
+              </a>
+            </li>
+
+            <li class="nav-sub-header"><span>سجل الأستاذ</span></li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('expenses', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg>
+                <span>سند صرف</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('revenues', this)">
                 <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
-                <span>سندات القبض</span>
+                <span>سند قبض</span>
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('expenses', this)">
-                <svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg>
-                <span>سندات الصرف</span>
-              </a>
-            </li>
-            <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'journalEntries', this)">
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('journal', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-                <span>القيود اليومية المحاسبية</span>
+                <span>قيود يومية</span>
               </a>
             </li>
             <li>
@@ -326,22 +288,24 @@
                 <span>النثريات والعهد وتصفيتها</span>
               </a>
             </li>
+
+            <li class="nav-sub-header"><span>التقارير المالية</span></li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'trial-balance', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
-                <span>ميزان المراجعة والأرصدة</span>
+                <span>تقرير ميزان المراجعة</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'income-statement', this)">
                 <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
-                <span>تقرير الدخل (3 مصروفات + 4 إيرادات)</span>
+                <span>تقرير الدخل 3+4</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'balance-sheet', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
-                <span>المركز المالي (الميزانية العمومية 1+2)</span>
+                <span>تقرير المركز المالي أو الميزانية العمومية 1+2</span>
               </a>
             </li>
             <li>
@@ -358,21 +322,22 @@
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupHR')">
             <div class="nav-group-title">
               <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C22 14.17 18.33 13 16 13z"/></svg>
-              <span>3. الموارد البشرية</span>
+              <span>3. إدارة الموارد البشرية</span>
             </div>
             <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
           </div>
           <ul class="nav-sub-list">
+            <li class="nav-sub-header"><span>تهيئة الموارد البشرية</span></li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'employees', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                <span>بيانات وملفات الموظفين</span>
+                <span>إدخال بيانات الموظفين</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'leaveTypes', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
-                <span>أنواع وسياسات الإجازات</span>
+                <span>انواع الاجازات</span>
               </a>
             </li>
             <li>
@@ -383,7 +348,7 @@
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'leaves', this)">
-                <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.89 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
                 <span>طلبات الإجازات</span>
               </a>
             </li>
@@ -393,22 +358,38 @@
                 <span>سلف الموظفين</span>
               </a>
             </li>
+
+            <li class="nav-sub-header"><span>المرتبات والأجور</span></li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'payroll', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-                <span>مسير الرواتب والترحيل المالي</span>
+                <span>تهيئة كشف الراتب</span>
               </a>
             </li>
             <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'payroll', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg>
+                <span>احتساب المرتبات والأجور</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'payroll', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                <span>الاستحقاق وترحيل المرتبات والأجور</span>
+              </a>
+            </li>
+
+            <li class="nav-sub-header"><span>تقييم الأداء</span></li>
+            <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'evaluations', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
-                <span>تقييم الأداء والحوافز</span>
+                <span>تقييم أداء الموظفين</span>
               </a>
             </li>
           </ul>
         </li>
 
-        <!-- 4. إدارة المشاريع والمقاولات -->
+        <!-- 4. إدارة المشاريع -->
         <li class="nav-group" id="groupProjects" data-perm="projects:view">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupProjects')">
             <div class="nav-group-title">
@@ -421,7 +402,7 @@
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('projects', 'under_study', this)">
                 <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-                <span>مشاريع تحت الدراسة والعطاءات</span>
+                <span>مشاريع تحت الدراسة</span>
               </a>
             </li>
             <li>
@@ -439,12 +420,12 @@
           </ul>
         </li>
 
-        <!-- 5. إدارة المبيعات والعقود -->
+        <!-- 5. إدارة المبيعات -->
         <li class="nav-group" id="groupSales" data-perm="revenues:view,projects:view">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupSales')">
             <div class="nav-group-title">
               <svg viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
-              <span>5. إدارة المبيعات والعقود</span>
+              <span>5. إدارة المبيعات</span>
             </div>
             <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
           </div>
@@ -481,7 +462,7 @@
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupParties')">
             <div class="nav-group-title">
               <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-              <span>6. العملاء والموردون</span>
+              <span>6. إدارة العملاء والموردين</span>
             </div>
             <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
           </div>
@@ -513,12 +494,12 @@
           </ul>
         </li>
 
-        <!-- 7. إدارة المخزون والمشتريات -->
+        <!-- 7. إدارة المخزون -->
         <li class="nav-group" id="groupInventory" data-perm="inventory:view">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupInventory')">
             <div class="nav-group-title">
               <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm2 4h12v2H6zm2 4h8v2H8z"/></svg>
-              <span>7. المخزون والمشتريات</span>
+              <span>7. إدارة المخزون</span>
             </div>
             <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
           </div>
@@ -539,6 +520,86 @@
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'movements', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
                 <span>أذون الصرف المخزني للمشاريع</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+
+        <!-- 8. التقارير -->
+        <li class="nav-group" id="groupReports" data-perm="reports:view">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupReports')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+              <span>8. التقارير</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'profit-loss', this)">
+                <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+                <span>قائمة الأرباح والخسائر</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'trial-balance', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                <span>ميزان المراجعة والأرصدة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'income-statement', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
+                <span>تقرير الدخل (3+4)</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'balance-sheet', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                <span>المركز المالي والميزانية العمومية</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'cash-flow', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                <span>تقرير التدفقات النقدية</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'projects-profitability', this)">
+                <svg viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+                <span>ربحية المشاريع المنجزة</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+
+        <!-- 9. الإعدادات -->
+        <li class="nav-group" id="groupGeneralSettings" data-perm="settings:users,settings:company,settings:backup">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupGeneralSettings')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>
+              <span>9. الإعدادات</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'users', this)">
+                <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                <span>المستخدمون والصلاحيات</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'backup', this)">
+                <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                <span>النسخ الاحتياطي والأمان</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'company', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+                <span>إعدادات النظام العامة</span>
               </a>
             </li>
           </ul>
@@ -2465,9 +2526,11 @@
                   <th>رقم السند</th>
                   <th>التاريخ</th>
                   <th>العميل</th>
+                  <th>الحساب المالي (الدليل)</th>
+                  <th>مركز التكلفة</th>
                   <th>المشروع المرتبط</th>
                   <th>المبلغ والعملة</th>
-                  <th>طريقة الدفع</th>
+                  <th>طريقة الدفع / الشيك</th>
                   <th>البيان والملاحظات</th>
                   <th style="text-align: center;">الإجراء</th>
                 </tr>
@@ -2527,10 +2590,12 @@
                   <th>رقم السند</th>
                   <th>التاريخ</th>
                   <th>نوع المصروف</th>
+                  <th>الحساب المالي (الدليل)</th>
+                  <th>مركز التكلفة</th>
                   <th>المشروع</th>
                   <th>المورد / الجهة</th>
                   <th>المبلغ والعملة</th>
-                  <th>طريقة الدفع</th>
+                  <th>طريقة الدفع / الشيك</th>
                   <th>البيان والملاحظات</th>
                   <th style="text-align: center;">الإجراء</th>
                 </tr>
@@ -2541,187 +2606,212 @@
         </div>
       </section>
 
-      <!-- ================== شاشة قيود اليومية العامة وإدارة الحسابات ================== -->
+      <!-- ================== شاشة قيود اليومية العامة (سجل الأستاذ بطرفين) ================== -->
       <section id="journalView" class="app-view-section" style="display: none;">
         <div class="page-header-row">
           <div>
-            <h2 class="page-title" id="journalPageTitle">إدارة الحسابات - سجل الأستاذ والتهيئة</h2>
-            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">دليل الحسابات الشجري، مراكز التكلفة، تهيئة العملات، والقيود اليومية المتزنة المزدوجة</p>
+            <h2 class="page-title" id="journalPageTitle">سجل وإدارة قيود اليومية العامة (طرفين مدين ودائن)</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">توثيق العمليات المحاسبية المزدوجة المتزنة، القيود اليدوية والتسويات، وتتبع حركات الأستاذ العام</p>
           </div>
           <div class="page-actions" id="journalHeaderActions">
             <button class="btn btn-primary" id="btnNewJournalAction" onclick="Accounting.openNewJournalModal()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
               <span>تسجيل قيد يومية جديد +</span>
             </button>
-            <button class="btn btn-secondary" onclick="Accounting.refreshCurrentJournalTab()">
+            <button class="btn btn-secondary" onclick="Accounting.loadJournalEntries()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-              <span>تحديث البيانات</span>
+              <span>تحديث</span>
+            </button>
+            <button class="btn btn-secondary" onclick="Accounting.exportJournalToExcel()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              <span>تصدير Excel</span>
             </button>
           </div>
         </div>
 
-        <!-- تبويبات إدارة الحسابات -->
-        <div class="report-tabs-bar" style="margin-bottom: 20px;">
-          <button class="report-tab-btn active" id="tabBtn_journalEntries" onclick="Accounting.switchJournalTab('journalEntries')">سجل القيود اليومية (طرفين مدين ودائن)</button>
-          <button class="report-tab-btn" id="tabBtn_chartOfAccounts" onclick="Accounting.switchJournalTab('chartOfAccounts')">دليل الحسابات الشجري</button>
-          <button class="report-tab-btn" id="tabBtn_costCenters" onclick="Accounting.switchJournalTab('costCenters')">مراكز التكلفة</button>
-          <button class="report-tab-btn" id="tabBtn_currencies" onclick="Accounting.switchJournalTab('currencies')">تهيئة العملات وأسعار الصرف</button>
-        </div>
-
-        <!-- تبويب 1: القيود اليومية -->
-        <div id="pane_journalEntries" class="journal-pane">
-          <!-- بطاقات ملخص القيود اليومية -->
-          <div class="kpi-grid" style="margin-bottom: 20px;">
-            <div class="kpi-card kpi-total-proj">
-              <div class="kpi-content">
-                <span class="kpi-label">إجمالي القيود المسجلة</span>
-                <span class="kpi-value" id="journalKpiCount">0</span>
-              </div>
-              <div class="kpi-icon-wrap">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-              </div>
+        <!-- بطاقات ملخص القيود اليومية والتوازن المحاسبي -->
+        <div class="kpi-grid" style="margin-bottom: 20px;">
+          <div class="kpi-card kpi-total-proj">
+            <div class="kpi-content">
+              <span class="kpi-label">إجمالي القيود المسجلة</span>
+              <span class="kpi-value" id="journalKpiCount">0</span>
             </div>
-            <div class="kpi-card kpi-income">
-              <div class="kpi-content">
-                <span class="kpi-label">إجمالي الحركات المدينة (منه)</span>
-                <span class="kpi-value" id="journalKpiDebit">0</span>
-              </div>
-              <div class="kpi-icon-wrap">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z"/></svg>
-              </div>
-            </div>
-            <div class="kpi-card kpi-expense">
-              <div class="kpi-content">
-                <span class="kpi-label">إجمالي الحركات الدائنة (له)</span>
-                <span class="kpi-value" id="journalKpiCredit">0</span>
-              </div>
-              <div class="kpi-icon-wrap">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
-              </div>
-            </div>
-            <div class="kpi-card kpi-cash">
-              <div class="kpi-content">
-                <span class="kpi-label">حالة التوازن المحاسبي</span>
-                <span class="kpi-value" id="journalKpiBalance" style="color: var(--accent-green); font-size: 1.15rem;">متزن 100%</span>
-              </div>
-              <div class="kpi-icon-wrap">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-              </div>
+            <div class="kpi-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
             </div>
           </div>
-
-          <!-- جدول القيود اليومية -->
-          <div class="panel-card">
-            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
-              <h3 class="panel-title">قائمة القيود المحاسبية اليومية</h3>
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="journalSearchInput" class="form-control" placeholder="بحث برقم القيد أو البيان..." style="max-width: 250px;" oninput="Accounting.filterJournalTable()">
-                <select id="journalRefFilter" class="form-control" style="max-width: 170px;" onchange="Accounting.filterJournalTable()">
-                  <option value="">كافة المراجع...</option>
-                  <option value="قيد يدوي">قيد يدوي</option>
-                  <option value="سند صرف">سند صرف</option>
-                  <option value="سند قبض">سند قبض</option>
-                  <option value="ترحيل رواتب">ترحيل رواتب</option>
-                </select>
-              </div>
+          <div class="kpi-card kpi-income">
+            <div class="kpi-content">
+              <span class="kpi-label">إجمالي الحركات المدينة (منه)</span>
+              <span class="kpi-value" id="journalKpiDebit">0</span>
             </div>
-            <div class="table-responsive">
-              <table class="custom-table">
-                <thead>
-                  <tr>
-                    <th>رقم القيد</th>
-                    <th>التاريخ</th>
-                    <th>البيان العام</th>
-                    <th>نوع المرجع</th>
-                    <th>إجمالي المدين</th>
-                    <th>إجمالي الدائن</th>
-                    <th>الحالة</th>
-                    <th style="text-align: center;">الإجراءات</th>
-                  </tr>
-                </thead>
-                <tbody id="fullJournalTableBody"></tbody>
-              </table>
+            <div class="kpi-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z"/></svg>
+            </div>
+          </div>
+          <div class="kpi-card kpi-expense">
+            <div class="kpi-content">
+              <span class="kpi-label">إجمالي الحركات الدائنة (له)</span>
+              <span class="kpi-value" id="journalKpiCredit">0</span>
+            </div>
+            <div class="kpi-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+            </div>
+          </div>
+          <div class="kpi-card kpi-cash">
+            <div class="kpi-content">
+              <span class="kpi-label">حالة التوازن المحاسبي</span>
+              <span class="kpi-value" id="journalKpiBalance" style="color: var(--accent-green); font-size: 1.15rem;">متزن 100%</span>
+            </div>
+            <div class="kpi-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
             </div>
           </div>
         </div>
 
-        <!-- تبويب 2: دليل الحسابات الشجري -->
-        <div id="pane_chartOfAccounts" class="journal-pane" style="display: none;">
-          <div class="panel-card">
-            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
-              <h3 class="panel-title">دليل الحسابات الشجري الموحد</h3>
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="accountSearchInput" class="form-control" placeholder="بحث برقم الحساب أو الاسم..." style="max-width: 250px;" oninput="Accounting.filterAccountsTable()">
-                <button class="btn btn-primary" onclick="Accounting.openNewAccountModal()">+ إضافة حساب جديد</button>
-              </div>
-            </div>
-            <div class="table-responsive">
-              <table class="custom-table">
-                <thead>
-                  <tr>
-                    <th>رقم الحساب</th>
-                    <th>اسم الحساب</th>
-                    <th>التصنيف المالي</th>
-                    <th>الحساب الرئيسي (الأب)</th>
-                    <th>الرصيد الدفتري</th>
-                    <th style="text-align: center;">الحالة</th>
-                  </tr>
-                </thead>
-                <tbody id="chartOfAccountsTableBody"></tbody>
-              </table>
+        <!-- جدول القيود اليومية والفلترة -->
+        <div class="panel-card">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+            <h3 class="panel-title">قائمة القيود المحاسبية اليومية المزدوجة</h3>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="journalSearchInput" class="form-control" placeholder="بحث برقم القيد أو البيان أو الحساب..." style="max-width: 250px;" oninput="Accounting.filterJournalTable()">
+              <select id="journalRefFilter" class="form-control" style="max-width: 170px;" onchange="Accounting.filterJournalTable()">
+                <option value="">كافة المراجع...</option>
+                <option value="قيد يدوي">قيد يدوي</option>
+                <option value="سند صرف">سند صرف</option>
+                <option value="سند قبض">سند قبض</option>
+                <option value="ترحيل رواتب">ترحيل رواتب</option>
+              </select>
             </div>
           </div>
-        </div>
-
-        <!-- تبويب 3: مراكز التكلفة للمشاريع -->
-        <div id="pane_costCenters" class="journal-pane" style="display: none;">
-          <div class="panel-card">
-            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
-              <h3 class="panel-title">مراكز التكلفة للمشاريع والعمليات</h3>
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="costCenterSearchInput" class="form-control" placeholder="بحث برمز أو اسم المركز..." style="max-width: 250px;" oninput="Accounting.filterCostCentersTable()">
-                <button class="btn btn-primary" onclick="Accounting.openNewCostCenterModal()">+ إضافة مركز تكلفة</button>
-              </div>
-            </div>
-            <div class="table-responsive">
-              <table class="custom-table">
-                <thead>
-                  <tr>
-                    <th>رمز المركز</th>
-                    <th>اسم مركز التكلفة</th>
-                    <th>النوع</th>
-                    <th>المشروع المرتبط</th>
-                    <th>ملاحظات</th>
-                  </tr>
-                </thead>
-                <tbody id="costCentersTableBody"></tbody>
-              </table>
-            </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم القيد</th>
+                  <th>التاريخ</th>
+                  <th>البيان العام</th>
+                  <th>نوع المرجع</th>
+                  <th>إجمالي المدين</th>
+                  <th>إجمالي الدائن</th>
+                  <th>الحالة</th>
+                  <th style="text-align: center;">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="fullJournalTableBody"></tbody>
+            </table>
           </div>
         </div>
+      </section>
 
-        <!-- تبويب 4: تهيئة العملات وأسعار الصرف -->
-        <div id="pane_currencies" class="journal-pane" style="display: none;">
-          <div class="panel-card">
-            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
-              <h3 class="panel-title">تهيئة العملات وأسعار الصرف الرسمية</h3>
-              <button class="btn btn-primary" onclick="Accounting.openNewCurrencyModal()">+ إضافة عملة جديدة</button>
-            </div>
-            <div class="table-responsive">
-              <table class="custom-table">
-                <thead>
-                  <tr>
-                    <th>كود العملة</th>
-                    <th>اسم العملة</th>
-                    <th>الرمز</th>
-                    <th>سعر الصرف مقابل الريال اليمني (YER)</th>
-                    <th>عملة الأساس</th>
-                    <th style="text-align: center;">تعديل السعر</th>
-                  </tr>
-                </thead>
-                <tbody id="currenciesTableBody"></tbody>
-              </table>
-            </div>
+      <!-- ================== شاشة دليل الحسابات الشجري (تهيئة الحسابات) ================== -->
+      <section id="chartOfAccountsView" class="app-view-section" style="display: none;">
+        <div class="page-header-row">
+          <div>
+            <h2 class="page-title">دليل الحسابات الشجري الموحد</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">الهيكل المحاسبي الشجري العام (أصول، خصوم، حقوق ملكية، إيرادات، مصروفات) وأرصدتها</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="Accounting.openNewAccountModal()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <span>إضافة حساب مالي جديد +</span>
+            </button>
+            <button class="btn btn-secondary" onclick="Accounting.loadAccounts()">تحديث</button>
+          </div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+            <h3 class="panel-title">قائمة وشجرة الحسابات المالية</h3>
+            <input type="text" id="accountSearchInput" class="form-control" placeholder="بحث برقم الحساب أو الاسم..." style="max-width: 250px;" oninput="Accounting.filterAccountsTable()">
+          </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم الحساب</th>
+                  <th>اسم الحساب</th>
+                  <th>التصنيف المالي</th>
+                  <th>الحساب الرئيسي (الأب)</th>
+                  <th>الرصيد الدفتري</th>
+                  <th style="text-align: center;">الحالة</th>
+                </tr>
+              </thead>
+              <tbody id="chartOfAccountsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================== شاشة مراكز التكلفة (تهيئة الحسابات) ================== -->
+      <section id="costCentersView" class="app-view-section" style="display: none;">
+        <div class="page-header-row">
+          <div>
+            <h2 class="page-title">مراكز التكلفة للمشاريع والعمليات</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">توزيع وتتبع المصروفات والإيرادات على مراكز التكلفة التشغيلية ومشاريع المقاولات</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="Accounting.openNewCostCenterModal()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <span>إضافة مركز تكلفة جديد +</span>
+            </button>
+            <button class="btn btn-secondary" onclick="Accounting.loadCostCenters()">تحديث</button>
+          </div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+            <h3 class="panel-title">قائمة مراكز التكلفة المعتمدة</h3>
+            <input type="text" id="costCenterSearchInput" class="form-control" placeholder="بحث برمز أو اسم المركز..." style="max-width: 250px;" oninput="Accounting.filterCostCentersTable()">
+          </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رمز المركز</th>
+                  <th>اسم مركز التكلفة</th>
+                  <th>النوع</th>
+                  <th>المشروع المرتبط</th>
+                  <th>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody id="costCentersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================== شاشة تهيئة العملات (تهيئة الحسابات) ================== -->
+      <section id="currenciesView" class="app-view-section" style="display: none;">
+        <div class="page-header-row">
+          <div>
+            <h2 class="page-title">تهيئة العملات وأسعار الصرف الرسمية</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">إدارة سلة العملات وسعر الصرف المعتمد مقابل الريال اليمني والعملات الأجنبية</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="Accounting.openNewCurrencyModal()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <span>إضافة عملة جديدة +</span>
+            </button>
+            <button class="btn btn-secondary" onclick="Accounting.loadCurrencies()">تحديث</button>
+          </div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">سجل العملات وأسعار الصرف</h3>
+          </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>كود العملة</th>
+                  <th>اسم العملة</th>
+                  <th>الرمز</th>
+                  <th>سعر الصرف مقابل الريال اليمني (YER)</th>
+                  <th>عملة الأساس</th>
+                  <th style="text-align: center;">تعديل السعر</th>
+                </tr>
+              </thead>
+              <tbody id="currenciesTableBody"></tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -2782,12 +2872,14 @@
               <thead>
                 <tr>
                   <th>التاريخ</th>
-                  <th>اسم الموظف / المشرف</th>
-                  <th>نوع العملية</th>
+                  <th>اسم ورقم الموظف</th>
+                  <th>نوع العملية / رقم السند</th>
+                  <th>العهدة الأصلية (عند التصفية)</th>
                   <th>إجمالي العهدة</th>
                   <th>المصروف الفعلي</th>
                   <th>الرصيد المتبقي</th>
                   <th>البيان والملاحظات</th>
+                  <th style="text-align: center;">الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="fullCustodyTableBody"></tbody>

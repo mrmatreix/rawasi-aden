@@ -327,11 +327,17 @@ const Accounting = {
         
         // إمكانية الطباعة الفورية
         if (confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
+          const acc = (this.accounts || []).find(a => String(a.id) === String(account_id));
+          const cc = (this.costCenters || []).find(c => String(c.id) === String(cost_center_id));
           this.printReceipt({
             receipt_no: data.receipt_no,
             date,
             client_name: this.clients.find(c => c.id == client_id)?.name || 'العميل',
             project_name: this.projects.find(p => p.id == project_id)?.name || '-',
+            account_code: acc?.code || acc?.account_code || '',
+            account_name: acc?.name || acc?.account_name || '',
+            cost_center_code: cc?.code || '',
+            cost_center_name: cc?.name || '',
             amount,
             currency,
             payment_method,
@@ -401,11 +407,17 @@ const Accounting = {
         this.loadCashMovement();
         // إمكانية الطباعة الفورية
         if (confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
+          const acc = (this.accounts || []).find(a => String(a.id) === String(account_id));
+          const cc = (this.costCenters || []).find(c => String(c.id) === String(cost_center_id));
           this.printReceipt({
             receipt_no: data.receipt_no,
             date,
             client_name: this.clients.find(c => c.id == client_id)?.name || 'العميل',
             project_name: this.projects.find(p => p.id == project_id)?.name || '-',
+            account_code: acc?.code || acc?.account_code || '',
+            account_name: acc?.name || acc?.account_name || '',
+            cost_center_code: cc?.code || '',
+            cost_center_name: cc?.name || '',
             amount,
             currency,
             payment_method,
@@ -560,21 +572,32 @@ const Accounting = {
 
   // فتح نافذة سند صرف جديد
   openNewExpenseModal() {
+    this.loadDropdowns();
     const form = document.getElementById('modalExpenseForm');
     if (form) form.reset();
     const dateInput = document.getElementById('modalExpDate');
     if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 
     // ملء قوائم المشاريع والموردين والحسابات ومراكز التكلفة
-    const projSelect = document.getElementById('modalExpProjectSelect');
-    if (projSelect) {
-      projSelect.innerHTML = `<option value="">اختر المشروع (اختياري)...</option>` +
-        this.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    if (this.projects && this.projects.length) {
+      const projSelect = document.getElementById('modalExpProjectSelect');
+      if (projSelect) {
+        projSelect.innerHTML = `<option value="">اختر المشروع (اختياري)...</option>` +
+          this.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      }
     }
-    const suppSelect = document.getElementById('modalExpSupplierSelect');
-    if (suppSelect) {
-      suppSelect.innerHTML = `<option value="">اختر المورد (اختياري)...</option>` +
-        this.suppliers.map(s => `<option value="${s.id}">${s.name} (${s.category || 'مورد'})</option>`).join('');
+    if (this.suppliers && this.suppliers.length) {
+      const suppSelect = document.getElementById('modalExpSupplierSelect');
+      if (suppSelect) {
+        suppSelect.innerHTML = `<option value="">اختر المورد (اختياري)...</option>` +
+          this.suppliers.map(s => `<option value="${s.id}">${s.name} (${s.category || 'مورد'})</option>`).join('');
+      }
+    }
+    if (this.accounts && this.accounts.length) {
+      this.populateSelectCustom('modalExpAccountSelect', this.accounts, a => `${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || a.account_type || ''})`);
+    }
+    if (this.costCenters && this.costCenters.length) {
+      this.populateSelectCustom('modalExpCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
     }
 
     const checkRow = document.getElementById('modalExpCheckRow');
@@ -643,12 +666,18 @@ const Accounting = {
         this.loadCashMovement();
 
         if (confirm(`تم تسجيل سند الصرف ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
+          const acc = (this.accounts || []).find(a => String(a.id) === String(account_id));
+          const cc = (this.costCenters || []).find(c => String(c.id) === String(cost_center_id));
           this.printExpenseReceipt({
             receipt_no: data.receipt_no,
             date,
             expense_type,
             supplier_name: this.suppliers.find(s => s.id == supplier_id)?.name || '-',
             project_name: this.projects.find(p => p.id == project_id)?.name || '-',
+            account_code: acc?.code || acc?.account_code || '',
+            account_name: acc?.name || acc?.account_name || '',
+            cost_center_code: cc?.code || '',
+            cost_center_name: cc?.name || '',
             amount,
             currency,
             payment_method,
@@ -667,6 +696,7 @@ const Accounting = {
 
   // فتح نافذة تسجيل عهدة جديدة
   openNewCustodyModal() {
+    this.loadDropdowns();
     const form = document.getElementById('modalCustodyForm');
     if (form) form.reset();
     const dateInput = document.getElementById('modalCustodyDate');
@@ -676,6 +706,31 @@ const Accounting = {
     const relRow = document.getElementById('modalCustodyRelatedRow');
     if (relRow) relRow.style.display = 'none';
     App.openModal('newCustodyModal');
+  },
+
+  // فتح نافذة تصفية عهدة محددة مسبقاً
+  async openSettleCustodyModal(custodyId, custodyNo, employeeName, employeeId, remainingAmount, currency) {
+    this.openNewCustodyModal();
+    const typeSelect = document.getElementById('modalCustodyTypeSelect');
+    if (typeSelect) {
+      typeSelect.value = 'تصفية عهدة';
+      this.handleCustodyTypeChange('modalCustodyTypeSelect', 'modalCustodyRelatedRow');
+    }
+    const empSelect = document.getElementById('modalCustodyEmployeeSelect');
+    if (empSelect) {
+      for (let i = 0; i < empSelect.options.length; i++) {
+        if ((employeeName && empSelect.options[i].text.includes(employeeName)) || (employeeId && empSelect.options[i].value == employeeId)) {
+          empSelect.selectedIndex = i;
+          break;
+        }
+      }
+      await this.onCustodyEmployeeChange('modalCustodyEmployeeSelect', 'modalCustodyRelatedSelect');
+      const relSelect = document.getElementById('modalCustodyRelatedSelect');
+      if (relSelect) {
+        relSelect.value = custodyId;
+        this.onRelatedCustodySelect('modalCustodyRelatedSelect', 'modalCustodyTotalAmount', 'modalCustodySpentAmount');
+      }
+    }
   },
 
   calcModalCustodyRemaining() {
@@ -810,6 +865,16 @@ const Accounting = {
               <td class="label-cell" style="border-right-color: #dc2626;">نوع المصروف / البند:</td>
               <td class="val-cell">${info.expense_type || 'مصروفات مشاريع'}</td>
             </tr>
+            ${info.account_name ? `
+            <tr>
+              <td class="label-cell" style="border-right-color: #dc2626;">الحساب المالي (الدليل):</td>
+              <td class="val-cell"><strong>${info.account_code ? info.account_code + ' - ' : ''}${info.account_name}</strong></td>
+            </tr>` : ''}
+            ${info.cost_center_name ? `
+            <tr>
+              <td class="label-cell" style="border-right-color: #dc2626;">مركز التكلفة:</td>
+              <td class="val-cell">${info.cost_center_code ? info.cost_center_code + ' - ' : ''}${info.cost_center_name}</td>
+            </tr>` : ''}
             ${showProject ? `
             <tr>
               <td class="label-cell" style="border-right-color: #dc2626;">المشروع التابع له:</td>
@@ -818,7 +883,7 @@ const Accounting = {
             ${showPaymentMethod ? `
             <tr>
               <td class="label-cell" style="border-right-color: #dc2626;">طريقة الدفع:</td>
-              <td class="val-cell">${info.payment_method || 'نقدي'}${info.check_no ? ` (شيك رقم: ${info.check_no}${info.bank_name ? ' - بنك ' + info.bank_name : ''})` : ''}</td>
+              <td class="val-cell">${info.payment_method || 'نقدي'}${info.check_no ? ` (شيك رقم: <strong>${info.check_no}</strong>${info.bank_name ? ' - بنك ' + info.bank_name : ''})` : ''}</td>
             </tr>` : ''}
             <tr>
               <td class="label-cell" style="border-right-color: #dc2626;">وذلك عن (البيان):</td>
@@ -877,6 +942,109 @@ const Accounting = {
 
     if (typeof Settings !== 'undefined' && Settings.setPrintTitle) {
       Settings.setPrintTitle(`سند صرف - ${info.receipt_no || ''}`);
+    }
+    window.print();
+  },
+
+  // طباعة سند عهدة أو تصفية عهدة رسمي
+  printCustodyReceipt(info) {
+    const printArea = document.getElementById('printArea');
+    if (!printArea) return;
+
+    let currLabel = 'ريال يمني (ر.ي)';
+    if (info.currency === 'ر.س') currLabel = 'ريال سعودي (ر.س)';
+    else if (info.currency === '$' || info.currency === 'USD') currLabel = 'دولار أمريكي ($)';
+
+    const words = this.tafqeet(info.total_amount, info.currency);
+    const cfg = (typeof Settings !== 'undefined' && Settings.getPrintConfig) ? Settings.getPrintConfig() : {
+      sig1: 'المستلم / صاحب العهدة',
+      sig2: 'أمين الصندوق / المحاسب',
+      sig3: 'اعتماد الإدارة',
+      footer_notes: 'تعتبر هذه العهدة في ذمة الموظف لحين تقديم الفواتير الرسمية والتصفية',
+      voucher_layout: 'single_a4'
+    };
+
+    const isDual = (cfg.voucher_layout === 'dual_a4');
+    const isLiquidation = (info.operation_type === 'تصفية عهدة');
+    const accentColor = isLiquidation ? '#059669' : '#2563eb';
+    const titleText = isLiquidation ? 'سـنـد تـصـفـيـة عـهـدة مـالـيـة' : 'سـنـد صـرف عـهـدة مـالـيـة';
+
+    const renderSingleVoucher = (copyLabel = '') => `
+      <div class="letterhead-content-wrap" style="${isDual ? 'min-height: auto; padding: 4px 0;' : ''}">
+        <div>
+          <div class="letterhead-doc-header" style="border-bottom-color: ${accentColor};">
+            <div class="letterhead-doc-title-badge" style="background: linear-gradient(135deg, ${accentColor}, #1e3a8a); border-right-color: ${accentColor};">
+              ${titleText} ${copyLabel ? `<span style="font-size:0.75rem; font-weight:normal;">(${copyLabel})</span>` : ''}
+            </div>
+            <div class="letterhead-doc-meta">
+              <div class="letterhead-doc-meta-item">رقم السند: <strong>${info.custody_no || ('CST-' + (info.id || Date.now().toString().slice(-4)))}</strong></div>
+              <div class="letterhead-doc-meta-item">التاريخ: <strong>${info.date || new Date().toISOString().split('T')[0]}</strong></div>
+              <div class="letterhead-doc-meta-item">نوع العملية: <strong>${info.operation_type || 'صرف عهدة'}</strong></div>
+            </div>
+          </div>
+
+          <div class="voucher-amount-card" style="border-color: ${accentColor}; background: #f8fafc; ${isDual ? 'padding: 6px 12px; margin: 6px 0 8px 0;' : ''}">
+            <div>
+              <span style="font-size: 0.95rem; color: #475569; font-weight: bold; margin-left: 8px;">مبلغ العهدة / التصفية:</span>
+              <span class="voucher-amount-value" style="color: ${accentColor};">${App.formatNumber(info.total_amount)} ${currLabel}</span>
+            </div>
+            ${words ? `<div class="voucher-amount-words">فقط: ${words} لا غير.</div>` : ''}
+          </div>
+
+          <table class="voucher-grid-table" style="${isDual ? 'margin-bottom: 6px;' : ''}">
+            <tr>
+              <td class="label-cell" style="border-right-color: ${accentColor};">الموظف المسؤول:</td>
+              <td class="val-cell"><strong>${info.employee_name || '-'}</strong> ${info.employee_no ? `<span class="badge badge-info" style="margin-right: 8px;">رقم الموظف: ${info.employee_no}</span>` : ''}</td>
+            </tr>
+            ${isLiquidation ? `
+            <tr>
+              <td class="label-cell" style="border-right-color: ${accentColor};">العهدة الأصلية المصفاة:</td>
+              <td class="val-cell"><strong style="color: #2563eb;">${info.related_custody_no || (info.related_custody_id ? 'CST-' + info.related_custody_id : 'سند عهدة سابق')}</strong></td>
+            </tr>
+            <tr>
+              <td class="label-cell" style="border-right-color: ${accentColor};">المصروف الفعلي:</td>
+              <td class="val-cell" style="color: #dc2626; font-weight: bold;">${App.formatNumber(info.spent_amount || 0)} ${currLabel}</td>
+            </tr>
+            <tr>
+              <td class="label-cell" style="border-right-color: ${accentColor};">الرصيد المتبقي:</td>
+              <td class="val-cell" style="color: #059669; font-weight: bold;">${App.formatNumber(info.remaining_amount || 0)} ${currLabel}</td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td class="label-cell" style="border-right-color: ${accentColor};">الغرض والبيان:</td>
+              <td class="val-cell">${info.notes || 'عهدة نثريات ومصروفات ميدانية'}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div>
+          <div class="letterhead-signatures-row">
+            <div class="letterhead-sig-col">
+              <div class="letterhead-sig-label">${cfg.sig1 || 'المستلم / صاحب العهدة'}</div>
+              <div class="letterhead-sig-dots">التوقيع: ........................</div>
+            </div>
+            <div class="letterhead-sig-col">
+              <div class="letterhead-sig-label">${cfg.sig2 || 'أمين الصندوق / المحاسب'}</div>
+              <div class="letterhead-sig-dots">المحاسب: ........................</div>
+            </div>
+            <div class="letterhead-sig-col">
+              <div class="letterhead-sig-label">${cfg.sig3 || 'اعتماد الإدارة'}</div>
+              <div class="letterhead-sig-dots">الاعتماد: ........................</div>
+            </div>
+          </div>
+          ${cfg.footer_notes ? `<div style="margin-top: 15px; padding-top: 6px; border-top: 1px dashed #cbd5e1; font-size: 0.75rem; color: #64748b; text-align: center;">${cfg.footer_notes}</div>` : ''}
+        </div>
+      </div>
+    `;
+
+    printArea.innerHTML = `
+      <div class="official-letterhead-page font-cairo" style="padding: 14mm 16mm !important; background-image: none !important; background-color: #ffffff !important;">
+        ${renderSingleVoucher()}
+      </div>
+    `;
+
+    if (typeof Settings !== 'undefined' && Settings.setPrintTitle) {
+      Settings.setPrintTitle(`سند عهدة - ${info.custody_no || ''}`);
     }
     window.print();
   },
@@ -1002,6 +1170,16 @@ const Accounting = {
               <td class="label-cell" style="border-right-color: ${accentColor};">استلمنا من الأخ/السادة:</td>
               <td class="val-cell">${info.client_name || '-'}</td>
             </tr>
+            ${info.account_name ? `
+            <tr>
+              <td class="label-cell" style="border-right-color: ${accentColor};">الحساب المالي (الدليل):</td>
+              <td class="val-cell"><strong>${info.account_code ? info.account_code + ' - ' : ''}${info.account_name}</strong></td>
+            </tr>` : ''}
+            ${info.cost_center_name ? `
+            <tr>
+              <td class="label-cell" style="border-right-color: ${accentColor};">مركز التكلفة:</td>
+              <td class="val-cell">${info.cost_center_code ? info.cost_center_code + ' - ' : ''}${info.cost_center_name}</td>
+            </tr>` : ''}
             ${showProject ? `
             <tr>
               <td class="label-cell" style="border-right-color: ${accentColor};">المشروع التابع له:</td>
@@ -1010,7 +1188,7 @@ const Accounting = {
             ${showPaymentMethod ? `
             <tr>
               <td class="label-cell" style="border-right-color: ${accentColor};">طريقة الدفع:</td>
-              <td class="val-cell">${info.payment_method || 'نقدي'}${info.check_no ? ` (شيك رقم: ${info.check_no}${info.bank_name ? ' - بنك ' + info.bank_name : ''})` : ''}</td>
+              <td class="val-cell">${info.payment_method || 'نقدي'}${info.check_no ? ` (شيك رقم: <strong>${info.check_no}</strong>${info.bank_name ? ' - بنك ' + info.bank_name : ''})` : ''}</td>
             </tr>` : ''}
             <tr>
               <td class="label-cell" style="border-right-color: ${accentColor};">وذلك عن (البيان):</td>
@@ -1315,7 +1493,10 @@ const Accounting = {
     this.renderJournalTable(filtered);
   },
 
-  openNewJournalModal() {
+  async openNewJournalModal() {
+    if (!this.accounts || !this.accounts.length || !this.costCenters || !this.costCenters.length) {
+      await this.loadDropdowns();
+    }
     const form = document.getElementById('modalJournalForm');
     if (form) form.reset();
     const dateInput = document.getElementById('modalJeDate');
@@ -2116,5 +2297,27 @@ const Accounting = {
       console.error(e);
       App.showToast('خطأ أثناء التحديث', 'error');
     }
+  },
+
+  // أسماء مستعارة لتوافق التنقل والشاشات
+  loadAccounts() {
+    return this.loadChartOfAccounts();
+  },
+
+  loadCostCenters() {
+    return this.loadCostCentersTable();
+  },
+
+  loadCurrencies() {
+    return this.loadCurrenciesTable();
+  },
+
+  exportJournalToExcel() {
+    if (typeof ExcelExporter !== 'undefined' && ExcelExporter.exportTable) {
+      ExcelExporter.exportTable('#journalView table', 'دفتر قيود اليومية العامة', 'قيود_اليومية_رواسي_عدن');
+    } else {
+      App.showToast('ميزة التصدير لـ Excel غير متوفرة حالياً', 'info');
+    }
   }
 };
+
