@@ -4709,3 +4709,63 @@ body.light-mode .pagination-size-select {
   color: #ffffff;
 }
 
+/* 7. Specialized Chart Floating Tooltips */
+.chart-tooltip {
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--gold-primary, #d4af37);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  color: #f8fafc;
+  line-height: 1.5;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+body.light-mode .chart-tooltip {
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+/* 8. Virtual Scrolling Spacer Rows */
+.virtual-spacer {
+  pointer-events: none;
+}
+
+.virtual-spacer td {
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  height: inherit;
+  background: transparent !important;
+}
+
+/* 9. Image Lazy Loading Transitions */
+img.lazy-img {
+  opacity: 0;
+  transition: opacity 0.35s ease-in-out;
+}
+
+img.lazy-img.img-loaded {
+  opacity: 1;
+}
+
+/* 10. SVG Sprite Icons Utility */
+.icon,
+svg.icon {
+  width: 1.15em;
+  height: 1.15em;
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+}
+
+

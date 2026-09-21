@@ -968,12 +968,548 @@
       }
     },
 
+    // ============================================================
+    // 8. محرك الرسوم البيانية المتخصص عالي الأداء (Specialized Chart Engine)
+    // ============================================================
+    Chart: {
+      tooltipEl: null,
+
+      initTooltip() {
+        if (!this.tooltipEl) {
+          this.tooltipEl = document.getElementById('chartTooltip');
+          if (!this.tooltipEl) {
+            this.tooltipEl = document.createElement('div');
+            this.tooltipEl.id = 'chartTooltip';
+            this.tooltipEl.className = 'chart-tooltip';
+            this.tooltipEl.style.display = 'none';
+            document.body.appendChild(this.tooltipEl);
+          }
+        }
+        return this.tooltipEl;
+      },
+
+      showTooltip(x, y, html) {
+        const tt = this.initTooltip();
+        tt.innerHTML = html;
+        tt.style.display = 'block';
+
+        const ttWidth = tt.offsetWidth || 160;
+        const ttHeight = tt.offsetHeight || 60;
+        let left = x + 15;
+        let top = y - ttHeight / 2;
+
+        if (left + ttWidth > window.innerWidth - 15) {
+          left = x - ttWidth - 15;
+        }
+        if (top < 10) top = 10;
+
+        tt.style.left = `${left}px`;
+        tt.style.top = `${top}px`;
+      },
+
+      hideTooltip() {
+        if (this.tooltipEl) {
+          this.tooltipEl.style.display = 'none';
+        }
+      },
+
+      /**
+       * رسم المخطط الدائري (Donut Chart) التفاعلي عالي الدقة مع التلميحات
+       */
+      Donut(canvasId, options = {}) {
+        const canvas = typeof canvasId === 'string' ? document.getElementById(canvasId) : canvasId;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const data = options.data || [];
+        const colors = options.colors || ['#38bdf8', '#f59e0b', '#10b981', '#ef4444', '#a855f7', '#ec4899', '#64748b'];
+        const donutRatio = options.donutRatio || 0.58;
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width || canvas.width || 280;
+        const height = rect.height || canvas.height || 220;
+
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        ctx.scale(dpr, dpr);
+
+        const total = data.reduce((sum, item) => sum + (Number(item.total || item.amount || item.percentage) || 0), 0) || 1;
+        const centerX = width * 0.42;
+        const centerY = height / 2;
+        const outerRadius = Math.min(centerX, centerY) - 14;
+        const innerRadius = outerRadius * donutRatio;
+
+        let hoveredIndex = -1;
+
+        const draw = () => {
+          ctx.clearRect(0, 0, width, height);
+
+          let startAngle = -0.5 * Math.PI;
+
+          data.forEach((item, index) => {
+            const val = Number(item.total || item.amount || item.percentage) || 0;
+            const sliceAngle = (val / total) * 2 * Math.PI;
+            const endAngle = startAngle + sliceAngle;
+            const isHovered = index === hoveredIndex;
+            const color = colors[index % colors.length];
+
+            const currentOuter = isHovered ? outerRadius + 6 : outerRadius;
+            const currentInner = isHovered ? innerRadius - 2 : innerRadius;
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, currentOuter, startAngle, endAngle);
+            ctx.arc(centerX, centerY, currentInner, endAngle, startAngle, true);
+            ctx.closePath();
+
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = isHovered ? 3 : 2;
+            ctx.stroke();
+
+            // حفظ زوايا الشريحة للتفاعل مع الفأرة
+            item._startAngle = startAngle;
+            item._endAngle = endAngle;
+
+            startAngle = endAngle;
+          });
+
+          // نص وسطي يوضح الإجمالي
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '11px Cairo, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('الإجمالي', centerX, centerY - 8);
+
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = 'bold 13px Cairo, sans-serif';
+          ctx.fillText(App.formatNumber(total), centerX, centerY + 12);
+        };
+
+        draw();
+
+        // تحديث وسيلة الإيضاح (Legend)
+        const legendContainer = options.legendId ? document.getElementById(options.legendId) : document.getElementById('expensesDonutLegend');
+        if (legendContainer) {
+          legendContainer.innerHTML = data.map((item, idx) => {
+            const val = Number(item.total || item.amount || item.percentage) || 0;
+            const pct = item.percentage !== undefined ? item.percentage : Math.round((val / total) * 100);
+            return `
+              <div class="chart-legend-row" data-index="${idx}" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.76rem; margin-bottom: 5px; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="width: 10px; height: 10px; background: ${colors[idx % colors.length]}; border-radius: 3px; display: inline-block;"></span>
+                  <span style="color: var(--text-secondary);">${item.type || item.label}</span>
+                </div>
+                <strong style="color: #f8fafc; font-family: monospace;">${pct}%</strong>
+              </div>
+            `;
+          }).join('');
+
+          legendContainer.querySelectorAll('.chart-legend-row').forEach(row => {
+            row.onmouseenter = () => {
+              hoveredIndex = Number(row.getAttribute('data-index'));
+              draw();
+            };
+            row.onmouseleave = () => {
+              hoveredIndex = -1;
+              draw();
+            };
+          });
+        }
+
+        // تفاعل حركة الماوس داخل الـ Canvas
+        canvas.onmousemove = (e) => {
+          const cRect = canvas.getBoundingClientRect();
+          const mx = e.clientX - cRect.left;
+          const my = e.clientY - cRect.top;
+
+          const dx = mx - centerX;
+          const dy = my - centerY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          let newHover = -1;
+          if (dist >= innerRadius - 4 && dist <= outerRadius + 8) {
+            let angle = Math.atan2(dy, dx);
+            if (angle < -0.5 * Math.PI) angle += 2 * Math.PI;
+
+            for (let i = 0; i < data.length; i++) {
+              if (angle >= data[i]._startAngle && angle <= data[i]._endAngle) {
+                newHover = i;
+                break;
+              }
+            }
+          }
+
+          if (newHover !== hoveredIndex) {
+            hoveredIndex = newHover;
+            draw();
+          }
+
+          if (hoveredIndex >= 0) {
+            const item = data[hoveredIndex];
+            const val = Number(item.total || item.amount || item.percentage) || 0;
+            const pct = item.percentage !== undefined ? item.percentage : Math.round((val / total) * 100);
+            UI.Chart.showTooltip(
+              e.clientX,
+              e.clientY,
+              `
+                <div style="font-weight: 700; color: var(--gold-light); margin-bottom: 2px;">${item.type || item.label}</div>
+                <div style="font-size: 0.78rem; color: #e2e8f0;">المبلغ: <strong>${App.formatNumber(val)}</strong></div>
+                <div style="font-size: 0.74rem; color: #94a3b8;">النسبة: <strong>${pct}%</strong></div>
+              `
+            );
+          } else {
+            UI.Chart.hideTooltip();
+          }
+        };
+
+        canvas.onmouseleave = () => {
+          hoveredIndex = -1;
+          draw();
+          UI.Chart.hideTooltip();
+        };
+      },
+
+      /**
+       * رسم المخطط البياني الخطي لمنحنى الاتجاهات التفاعلي (Trend Chart)
+       */
+      TrendLine(canvasId, options = {}) {
+        const canvas = typeof canvasId === 'string' ? document.getElementById(canvasId) : canvasId;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const trendData = options.data || [];
+
+        if (trendData.length === 0) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width || canvas.width || 480;
+        const height = rect.height || canvas.height || 230;
+
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        ctx.scale(dpr, dpr);
+
+        const padding = { top: 25, right: 25, bottom: 35, left: 55 };
+        const chartW = width - padding.left - padding.right;
+        const chartH = height - padding.top - padding.bottom;
+
+        // احتساب القيمة القصوى تلقائياً بدون أرقام ثابتة
+        let maxVal = 0;
+        trendData.forEach(d => {
+          if (d.income > maxVal) maxVal = d.income;
+          if (d.expense > maxVal) maxVal = d.expense;
+        });
+
+        // تقريب سقف المحور إلى أقرب وحدة مريحة للعين
+        if (maxVal === 0) maxVal = 100000;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
+        const factor = maxVal / magnitude;
+        let niceFactor = 1;
+        if (factor <= 1.5) niceFactor = 2;
+        else if (factor <= 3) niceFactor = 4;
+        else if (factor <= 6) niceFactor = 8;
+        else niceFactor = 10;
+        const yMax = niceFactor * magnitude;
+
+        const getX = (idx) => padding.left + (chartW / Math.max(1, trendData.length - 1)) * idx;
+        const getY = (val) => padding.top + chartH - (val / yMax) * chartH;
+
+        let activeIndex = -1;
+
+        const draw = () => {
+          ctx.clearRect(0, 0, width, height);
+
+          // 1. رسم خطوط الشبكة وقيم المحور الرأسي
+          const gridSteps = 4;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+          ctx.lineWidth = 1;
+
+          for (let i = 0; i <= gridSteps; i++) {
+            const y = padding.top + (chartH / gridSteps) * i;
+            const val = yMax - (yMax / gridSteps) * i;
+
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(width - padding.right, y);
+            ctx.stroke();
+
+            // تسمية المحور
+            ctx.fillStyle = '#64748b';
+            ctx.font = '10px Cairo, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            let labelText = val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : (val >= 1000 ? `${Math.round(val / 1000)}k` : `${val}`);
+            ctx.fillText(labelText, padding.left - 8, y);
+          }
+
+          // 2. رسم خطوط الشبكة الرأسية ومحور الأشهر
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '11px Cairo, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+
+          trendData.forEach((d, i) => {
+            const x = getX(i);
+            ctx.fillText(d.month, x, height - padding.bottom + 10);
+          });
+
+          // 3. رسم منحنى الإيرادات (أخضر) مع التعبئة المتدرجة
+          const drawCurve = (propName, strokeColor, gradStart, gradEnd) => {
+            ctx.beginPath();
+            trendData.forEach((d, i) => {
+              const x = getX(i);
+              const y = getY(d[propName] || 0);
+              if (i === 0) {
+                ctx.moveTo(x, y);
+              } else {
+                const prevX = getX(i - 1);
+                const prevY = getY(trendData[i - 1][propName] || 0);
+                const cpX = (prevX + x) / 2;
+                ctx.bezierCurveTo(cpX, prevY, cpX, y, x, y);
+              }
+            });
+
+            // تعبئة المنطقة أسفل المنحنى
+            const fillPath = new Path2D();
+            trendData.forEach((d, i) => {
+              const x = getX(i);
+              const y = getY(d[propName] || 0);
+              if (i === 0) fillPath.moveTo(x, y);
+              else {
+                const prevX = getX(i - 1);
+                const prevY = getY(trendData[i - 1][propName] || 0);
+                const cpX = (prevX + x) / 2;
+                fillPath.bezierCurveTo(cpX, prevY, cpX, y, x, y);
+              }
+            });
+            fillPath.lineTo(getX(trendData.length - 1), padding.top + chartH);
+            fillPath.lineTo(getX(0), padding.top + chartH);
+            fillPath.closePath();
+
+            const grad = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
+            grad.addColorStop(0, gradStart);
+            grad.addColorStop(1, gradEnd);
+            ctx.fillStyle = grad;
+            ctx.fill(fillPath);
+
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            // رسم النقاط
+            trendData.forEach((d, i) => {
+              const x = getX(i);
+              const y = getY(d[propName] || 0);
+              ctx.beginPath();
+              ctx.arc(x, y, i === activeIndex ? 5.5 : 3.5, 0, 2 * Math.PI);
+              ctx.fillStyle = strokeColor;
+              ctx.fill();
+              ctx.strokeStyle = '#0f172a';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            });
+          };
+
+          drawCurve('income', '#10b981', 'rgba(16, 185, 129, 0.25)', 'rgba(16, 185, 129, 0.01)');
+          drawCurve('expense', '#ef4444', 'rgba(239, 68, 68, 0.20)', 'rgba(239, 68, 68, 0.01)');
+
+          // 4. رسم خط التتبع التفاعلي عند المؤشر
+          if (activeIndex >= 0 && activeIndex < trendData.length) {
+            const curX = getX(activeIndex);
+            ctx.save();
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(212, 175, 55, 0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.moveTo(curX, padding.top);
+            ctx.lineTo(curX, padding.top + chartH);
+            ctx.stroke();
+            ctx.restore();
+          }
+        };
+
+        draw();
+
+        // تفاعل التمرير بالفأرة
+        canvas.onmousemove = (e) => {
+          const cRect = canvas.getBoundingClientRect();
+          const mx = e.clientX - cRect.left;
+
+          // العثور على أقرب شهر لموضع المؤشر
+          let closestIdx = -1;
+          let minDist = Infinity;
+
+          trendData.forEach((d, i) => {
+            const dist = Math.abs(getX(i) - mx);
+            if (dist < minDist) {
+              minDist = dist;
+              closestIdx = i;
+            }
+          });
+
+          if (closestIdx !== activeIndex) {
+            activeIndex = closestIdx;
+            draw();
+          }
+
+          if (activeIndex >= 0) {
+            const d = trendData[activeIndex];
+            const net = (d.income || 0) - (d.expense || 0);
+            const netColor = net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+            UI.Chart.showTooltip(
+              e.clientX,
+              e.clientY,
+              `
+                <div style="font-weight: 800; color: var(--gold-light); margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 3px;">
+                  📅 شهر: ${d.month}
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;">
+                  <span style="color: var(--accent-green);">● الإيرادات:</span>
+                  <strong style="color: #f8fafc;">${App.formatNumber(d.income || 0)}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;">
+                  <span style="color: var(--accent-red);">● المصروفات:</span>
+                  <strong style="color: #f8fafc;">${App.formatNumber(d.expense || 0)}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 3px; margin-top: 2px;">
+                  <span>صافي الشهر:</span>
+                  <strong style="color: ${netColor};">${App.formatNumber(net)}</strong>
+                </div>
+              `
+            );
+          }
+        };
+
+        canvas.onmouseleave = () => {
+          activeIndex = -1;
+          draw();
+          UI.Chart.hideTooltip();
+        };
+      }
+    },
+
+    // ============================================================
+    // 9. محرك التمرير الافتراضي للجداول الضخمة (Virtual Scrolling)
+    // ============================================================
+    VirtualTable: {
+      /**
+       * ربط جدول ضخم بمحرك التمرير الافتراضي لتخفيض عدد عناصر الـ DOM
+       */
+      attach({ tableBodyId, data = [], rowHeight = 46, renderRow, overscan = 5 }) {
+        const tbody = document.getElementById(tableBodyId);
+        if (!tbody) return null;
+
+        const scrollContainer = tbody.closest('.table-responsive') || tbody.parentElement;
+        let isTicking = false;
+
+        const render = () => {
+          const totalItems = data.length;
+          const containerHeight = scrollContainer.clientHeight || 450;
+          const scrollTop = scrollContainer.scrollTop || 0;
+
+          const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+          const endIndex = Math.min(totalItems, Math.ceil((scrollTop + containerHeight) / rowHeight) + overscan);
+
+          const topSpacerHeight = startIndex * rowHeight;
+          const bottomSpacerHeight = Math.max(0, (totalItems - endIndex) * rowHeight);
+
+          const visibleItems = data.slice(startIndex, endIndex);
+
+          let rowsHtml = '';
+          if (topSpacerHeight > 0) {
+            rowsHtml += `<tr class="virtual-spacer" style="height: ${topSpacerHeight}px;"><td colspan="100" style="padding:0; border:none;"></td></tr>`;
+          }
+
+          rowsHtml += visibleItems.map((item, idx) => renderRow(item, startIndex + idx)).join('');
+
+          if (bottomSpacerHeight > 0) {
+            rowsHtml += `<tr class="virtual-spacer" style="height: ${bottomSpacerHeight}px;"><td colspan="100" style="padding:0; border:none;"></td></tr>`;
+          }
+
+          tbody.innerHTML = rowsHtml;
+          isTicking = false;
+        };
+
+        const onScroll = () => {
+          if (!isTicking) {
+            window.requestAnimationFrame(render);
+            isTicking = true;
+          }
+        };
+
+        scrollContainer.addEventListener('scroll', onScroll, { passive: true });
+        render();
+
+        return {
+          updateData(newData) {
+            data = newData;
+            render();
+          },
+          destroy() {
+            scrollContainer.removeEventListener('scroll', onScroll);
+          }
+        };
+      }
+    },
+
+    // ============================================================
+    // 10. محرك التحميل الكسول للصور (Lazy Image Loader)
+    // ============================================================
+    LazyLoader: {
+      observer: null,
+
+      init() {
+        if ('IntersectionObserver' in window) {
+          this.observer = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                const img = entry.target;
+                if (img.dataset.src) {
+                  img.src = img.dataset.src;
+                  img.removeAttribute('data-src');
+                }
+                img.classList.add('img-loaded');
+                obs.unobserve(img);
+              }
+            });
+          }, { rootMargin: '120px 0px' });
+
+          this.scanAndObserve();
+        } else {
+          // Fallback للمتصفحات القديمة
+          document.querySelectorAll('img[data-src]').forEach(img => {
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+          });
+        }
+      },
+
+      scanAndObserve(container = document) {
+        if (!this.observer) return;
+        const lazyImgs = container.querySelectorAll('img[data-src], img.lazy-img');
+        lazyImgs.forEach(img => this.observer.observe(img));
+      },
+
+      observe(imgElement) {
+        if (this.observer && imgElement) {
+          this.observer.observe(imgElement);
+        }
+      }
+    },
+
     // تهيئة الوحدة الشاملة
     init() {
       this.Toast.initContainer();
       this.Breadcrumbs.init();
       this.DraftManager.init();
       this.GlobalSearch.init();
+      this.LazyLoader.init();
     }
   };
 

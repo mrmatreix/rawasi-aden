@@ -64,121 +64,39 @@ const Reports = {
     }
   },
 
-  // رسم المخطط الدائري (Donut Chart) للمصروفات حسب النوع
+  // رسم المخطط الدائري (Donut Chart) للمصروفات عبر محرك الرسوم البيانية المتخصص
   renderExpensesDonutChart(data) {
+    if (window.UI && UI.Chart && typeof UI.Chart.Donut === 'function') {
+      UI.Chart.Donut('expensesDonutCanvas', {
+        data: data || [],
+        legendId: 'expensesDonutLegend'
+      });
+      return;
+    }
+
     const canvas = document.getElementById('expensesDonutCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const width = canvas.width = 280;
     const height = canvas.height = 220;
-
     ctx.clearRect(0, 0, width, height);
-
-    const colors = ['#38bdf8', '#f59e0b', '#10b981', '#ef4444', '#a855f7', '#64748b'];
-    const centerX = 110;
-    const centerY = height / 2;
-    const outerRadius = 75;
-    const innerRadius = 45;
-
-    const total = data.reduce((sum, item) => sum + (item.total || item.percentage || 1), 0);
-    let startAngle = -0.5 * Math.PI;
-
-    data.forEach((item, index) => {
-      const sliceAngle = ((item.total || item.percentage || 1) / total) * 2 * Math.PI;
-      const color = colors[index % colors.length];
-
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, outerRadius, startAngle, startAngle + sliceAngle);
-      ctx.arc(centerX, centerY, innerRadius, startAngle + sliceAngle, startAngle, true);
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-
-      startAngle += sliceAngle;
-    });
-
-    const legendContainer = document.getElementById('expensesDonutLegend');
-    if (legendContainer) {
-      legendContainer.innerHTML = data.map((item, idx) => `
-        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.76rem; margin-bottom: 4px;">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="width: 10px; height: 10px; background: ${colors[idx % colors.length]}; border-radius: 2px;"></span>
-            <span style="color: var(--text-secondary);">${item.type}</span>
-          </div>
-          <strong style="color: #fff;">${item.percentage}%</strong>
-        </div>
-      `).join('');
-    }
   },
 
-  // رسم المخطط الخطي لمسار 6 أشهر
+  // رسم المخطط الخطي لمسار 6 أشهر عبر محرك الرسوم البيانية المتخصص عالي الدقة
   renderMonthlyTrendChart(trendData) {
+    if (window.UI && UI.Chart && typeof UI.Chart.TrendLine === 'function') {
+      UI.Chart.TrendLine('monthlyTrendCanvas', {
+        data: trendData || []
+      });
+      return;
+    }
+
     const canvas = document.getElementById('monthlyTrendCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const width = canvas.width = 460;
     const height = canvas.height = 220;
-
     ctx.clearRect(0, 0, width, height);
-
-    const padding = { top: 25, right: 30, bottom: 35, left: 45 };
-    const chartW = width - padding.left - padding.right;
-    const chartH = height - padding.top - padding.bottom;
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-      const y = padding.top + (chartH / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(width - padding.right, y);
-      ctx.stroke();
-
-      ctx.fillStyle = '#64748b';
-      ctx.font = '10px Cairo';
-      ctx.textAlign = 'right';
-      const labelVal = 400 - (100 * i);
-      ctx.fillText(`${labelVal}k`, padding.left - 8, y + 4);
-    }
-
-    const maxVal = 450000;
-    const getX = (idx) => padding.left + (chartW / (trendData.length - 1)) * idx;
-    const getY = (val) => padding.top + chartH - (val / maxVal) * chartH;
-
-    this.drawLine(ctx, trendData, getX, (d) => getY(d.income), '#10b981', 'rgba(16, 185, 129, 0.15)');
-    this.drawLine(ctx, trendData, getX, (d) => getY(d.expense), '#ef4444', 'rgba(239, 68, 68, 0.1)');
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px Cairo';
-    ctx.textAlign = 'center';
-    trendData.forEach((d, i) => {
-      ctx.fillText(d.month, getX(i), height - 10);
-    });
-  },
-
-  drawLine(ctx, data, getX, getY, color, areaBg) {
-    ctx.beginPath();
-    data.forEach((d, i) => {
-      const x = getX(i);
-      const y = getY(d);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    data.forEach((d, i) => {
-      const x = getX(i);
-      const y = getY(d);
-      ctx.beginPath();
-      ctx.arc(x, y, 4, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = '#0f1c30';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    });
   },
 
   // جدول آخر العمليات في لوحة التحكم

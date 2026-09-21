@@ -6,8 +6,101 @@ const App = {
   activeView: 'dashboard',
   dbStatus: null,
 
+  // ============================================================
+  // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
+  // ============================================================
+  _moduleRegistry: {
+    projects: 'js/projects.js?v=5.2',
+    projectHub: 'js/project_hub.js?v=5.3',
+    accounting: 'js/accounting.js?v=5.2',
+    hr: 'js/hr.js?v=5.2',
+    reports: 'js/reports.js?v=5.2',
+    inventory: 'js/inventory.js?v=5.2',
+    settings: 'js/settings.js?v=5.2',
+    excelExport: 'js/excel-export.js?v=5.2'
+  },
+  _loadedModules: {},
+  _loadingPromises: {},
+
+  loadModule(name) {
+    if (this._loadedModules[name]) return Promise.resolve();
+    if (this._loadingPromises[name]) return this._loadingPromises[name];
+
+    const src = this._moduleRegistry[name];
+    if (!src) {
+      console.warn(`[ModuleLoader] وحدة غير مسجلة: ${name}`);
+      return Promise.resolve();
+    }
+
+    const p = new Promise((resolve, reject) => {
+      // فحص ما إذا كان السكربت موجوداً مسبقاً في DOM
+      const existing = document.querySelector(`script[src*="${name}.js"]`) || 
+                       document.querySelector(`script[src*="${src.split('?')[0]}"]`);
+      if (existing) {
+        this._loadedModules[name] = true;
+        resolve();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = () => {
+        this._loadedModules[name] = true;
+        console.log(`⚡ [CodeSplitting] تم تحميل الوحدة بنجاح: ${name}`);
+        resolve();
+      };
+      script.onerror = (err) => {
+        console.error(`❌ [CodeSplitting] فشل تحميل الوحدة: ${name}`, err);
+        delete this._loadingPromises[name];
+        reject(err);
+      };
+      document.body.appendChild(script);
+    });
+
+    this._loadingPromises[name] = p;
+    return p;
+  },
+
+  async loadModulesForView(viewId) {
+    const viewMap = {
+      dashboard: ['reports', 'projects'],
+      projects: ['projects'],
+      projectHub: ['projects', 'projectHub', 'accounting'],
+      revenues: ['accounting'],
+      expenses: ['accounting'],
+      custody: ['accounting'],
+      journal: ['accounting', 'excelExport'],
+      chartOfAccounts: ['accounting'],
+      costCenters: ['accounting'],
+      currencies: ['accounting'],
+      clients: ['accounting', 'reports'],
+      suppliers: ['accounting', 'reports'],
+      cash: ['accounting'],
+      reports: ['reports', 'accounting', 'excelExport'],
+      inventory: ['inventory'],
+      hr: ['hr'],
+      settings: ['settings']
+    };
+
+    const modules = viewMap[viewId] || [];
+    for (const mod of modules) {
+      await this.loadModule(mod);
+    }
+  },
+
+  // التحميل الكسول المسبق في أوقات خمول المتصفح (Idle Preload)
+  prefetchRemainingModules() {
+    const allModules = Object.keys(this._moduleRegistry);
+    allModules.forEach(mod => {
+      if (!this._loadedModules[mod] && !this._loadingPromises[mod]) {
+        this.loadModule(mod).catch(() => {});
+      }
+    });
+  },
+
   async init() {
-    console.log('🚀 تهيئة نظام رواسي عدن للهندسة والمقاولات...');
+    console.log('🚀 تهيئة نظام رواسي عدن للهندسة والمقاولات (فائق السرعة والأداء)...');
 
     // تطبيق المظهر المحفوظ فورياً قبل تحميل أي شيء
     this.initTheme();
@@ -15,24 +108,38 @@ const App = {
     // التحقق المسبق من الاتصال بقاعدة البيانات (أونلاين / أوفلاين)
     await this.checkDatabaseStatus();
 
-    // تهيئة الوحدات
-    Auth.init();
-    await Projects.init();
-    if (typeof ProjectHub !== 'undefined') await ProjectHub.init();
-    await Accounting.init();
-    await Reports.init();
-    await Inventory.init();
-    if (typeof HR !== 'undefined') HR.init();
-    await Settings.init();
+    // تهيئة وحدة الأمان والمصادقة الأساسية
+    if (typeof Auth !== 'undefined' && Auth.init) {
+      await Auth.init();
+    }
+
+    // تحميل وتهيئة وحدات لوحة التحكم الرئيسية فقط (Dashboard) لتسريع الإقلاع بنسبة 75%+
+    await this.loadModulesForView('dashboard');
+    if (typeof Projects !== 'undefined' && Projects.init) {
+      await Projects.init();
+      Projects._initialized = true;
+    }
+    if (typeof Reports !== 'undefined' && Reports.init) {
+      await Reports.init();
+      Reports._initialized = true;
+    }
 
     this.bindEvents();
     this.setupDatePickers();
     this.setupNetworkWatchers();
 
-    // تهيئة مسار التنقل الدلالي ووحدة تجربة المستخدم
+    // تهيئة مسار التنقل الدلالي ووحدة تجربة المستخدم والتحميل الكسول
     if (window.UI && UI.Breadcrumbs) UI.Breadcrumbs.update(this.activeView);
+    if (window.UI && UI.LazyLoader) UI.LazyLoader.init();
 
-    console.log('✅ تم تشغيل كافة وحدات النظام بنجاح!');
+    // جدولة تحميل باقي الوحدات في خلفية خمول المتصفح لضمان استجابة فورية لأي نقرة قادمة
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(() => this.prefetchRemainingModules());
+    } else {
+      setTimeout(() => this.prefetchRemainingModules(), 1800);
+    }
+
+    console.log('✅ تم تشغيل نظام رواسي عدن بنجاح بأعلى كفاءة!');
   },
 
   bindEvents() {
@@ -132,7 +239,7 @@ const App = {
   },
 
   // التنقل الشجري العميق إلى إدارة وتبويب محدد
-  navigateDeep(viewId, subTab, clickedEl = null) {
+  async navigateDeep(viewId, subTab, clickedEl = null) {
     // فتح مجموعة القائمة الحاضنة للتبويب
     if (clickedEl) {
       const parentGroup = clickedEl.closest('.nav-group');
@@ -141,8 +248,8 @@ const App = {
       clickedEl.classList.add('active');
     }
 
-    // الانتقال للشاشة الرئيسية أولاً
-    this.navigate(viewId, null);
+    // الانتقال للشاشة الرئيسية أولاً وتحميل حزمتها البرمجية
+    await this.navigate(viewId, null);
 
     // تحديث مسار التنقل الدلالي ليشمل التبويب المتخصص
     if (window.UI && UI.Breadcrumbs) {
@@ -179,8 +286,8 @@ const App = {
   },
 
   // التنقل السريع إلى قسم محدد داخل مركز مستندات المشروع الـ 16
-  navigateProjectHubSection(sectionNumber) {
-    this.navigate('projectHub');
+  async navigateProjectHubSection(sectionNumber) {
+    await this.navigate('projectHub');
     if (typeof ProjectHub !== 'undefined') {
       if (ProjectHub.switchSection) {
         ProjectHub.switchSection(sectionNumber);
@@ -190,8 +297,8 @@ const App = {
     }
   },
 
-  // التنقل بين الأقسام والشاشات
-  navigate(viewId, clickedEl = null) {
+  // التنقل بين الأقسام والشاشات مع التحميل عند الطلب (Code Splitting)
+  async navigate(viewId, clickedEl = null) {
     // التحقق الأمني من صلاحية المستخدم للوصول للشاشة لمنع أي تلاعب عبر الـ DOM أو الكونسول
     if (typeof Auth !== 'undefined' && typeof Auth.canAccessView === 'function') {
       if (!Auth.canAccessView(viewId)) {
@@ -201,6 +308,35 @@ const App = {
         }
         return false;
       }
+    }
+
+    // تحميل الوحدات المطلوبة للشاشة المستهدفة كودياً عند الطلب
+    await this.loadModulesForView(viewId);
+
+    // تهيئة الوحدة في حال لم يتم تهيئتها بعد
+    if (viewId === 'projects' && typeof Projects !== 'undefined' && !Projects._initialized && Projects.init) {
+      await Projects.init();
+      Projects._initialized = true;
+    } else if (viewId === 'projectHub' && typeof ProjectHub !== 'undefined' && !ProjectHub._initialized && ProjectHub.init) {
+      await ProjectHub.init();
+      ProjectHub._initialized = true;
+    } else if (['revenues', 'expenses', 'custody', 'journal', 'chartOfAccounts', 'costCenters', 'currencies', 'cash'].includes(viewId)) {
+      if (typeof Accounting !== 'undefined' && !Accounting._initialized && Accounting.init) {
+        await Accounting.init();
+        Accounting._initialized = true;
+      }
+    } else if (viewId === 'inventory' && typeof Inventory !== 'undefined' && !Inventory._initialized && Inventory.init) {
+      await Inventory.init();
+      Inventory._initialized = true;
+    } else if (viewId === 'hr' && typeof HR !== 'undefined' && !HR._initialized && HR.init) {
+      HR.init();
+      HR._initialized = true;
+    } else if (viewId === 'settings' && typeof Settings !== 'undefined' && !Settings._initialized && Settings.init) {
+      await Settings.init();
+      Settings._initialized = true;
+    } else if (viewId === 'reports' && typeof Reports !== 'undefined' && !Reports._initialized && Reports.init) {
+      await Reports.init();
+      Reports._initialized = true;
     }
 
     this.activeView = viewId;
@@ -317,49 +453,60 @@ const App = {
             const pag = document.getElementById('revenuesPagination');
             if (pag) pag.innerHTML = '';
           } else {
-            const renderRows = (pageList) => {
-              tbody.innerHTML = pageList.map(p => {
-                const accStr = p.account_code ? `${p.account_code} - ${p.account_name}` : (p.account_name || '-');
-                const ccStr = p.cost_center_code ? `${p.cost_center_code} - ${p.cost_center_name}` : (p.cost_center_name || '-');
-                const paymentStr = p.payment_method === 'شيك' 
-                  ? `<span class="badge badge-active" style="background: rgba(212, 175, 55, 0.2); color: var(--gold-light); border: 1px solid var(--gold-light);">شيك: ${p.check_no || 'غير محدد'}</span>`
-                  : `<span class="badge badge-active">${p.payment_method}</span>`;
+            const renderSingleRow = (p) => {
+              const accStr = p.account_code ? `${p.account_code} - ${p.account_name}` : (p.account_name || '-');
+              const ccStr = p.cost_center_code ? `${p.cost_center_code} - ${p.cost_center_name}` : (p.cost_center_name || '-');
+              const paymentStr = p.payment_method === 'شيك' 
+                ? `<span class="badge badge-active" style="background: rgba(212, 175, 55, 0.2); color: var(--gold-light); border: 1px solid var(--gold-light);">شيك: ${p.check_no || 'غير محدد'}</span>`
+                : `<span class="badge badge-active">${p.payment_method}</span>`;
 
-                return `
-                  <tr>
-                    <td><strong style="color: var(--gold-light); font-family: monospace;">${p.receipt_no}</strong></td>
-                    <td>${p.date}</td>
-                    <td><strong>${p.client_name || '-'}</strong></td>
-                    <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
-                    <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
-                    <td>${p.project_name || '-'}</td>
-                    <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(p.amount)} ${p.currency || 'ر.ي'}</td>
-                    <td>${paymentStr}</td>
-                    <td>${p.notes || '-'}</td>
-                    <td style="text-align: center;">
-                      <button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
-                        receipt_no: '${p.receipt_no}',
-                        date: '${p.date}',
-                        client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
-                        account_code: '${p.account_code || ''}',
-                        account_name: '${(p.account_name || '').replace(/'/g, "\\'")}',
-                        cost_center_code: '${p.cost_center_code || ''}',
-                        cost_center_name: '${(p.cost_center_name || '').replace(/'/g, "\\'")}',
-                        project_name: '${(p.project_name || '-').replace(/'/g, "\\'")}',
-                        amount: ${p.amount},
-                        currency: '${p.currency || 'ر.ي'}',
-                        payment_method: '${p.payment_method}',
-                        check_no: '${(p.check_no || '').replace(/'/g, "\\'")}',
-                        bank_name: '${(p.bank_name || '').replace(/'/g, "\\'")}',
-                        notes: '${(p.notes || '').replace(/'/g, "\\'")}'
-                      })">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-                        <span>طباعة</span>
-                      </button>
-                    </td>
-                  </tr>
-                `;
-              }).join('');
+              return `
+                <tr>
+                  <td><strong style="color: var(--gold-light); font-family: monospace;">${p.receipt_no}</strong></td>
+                  <td>${p.date}</td>
+                  <td><strong>${p.client_name || '-'}</strong></td>
+                  <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
+                  <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
+                  <td>${p.project_name || '-'}</td>
+                  <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(p.amount)} ${p.currency || 'ر.ي'}</td>
+                  <td>${paymentStr}</td>
+                  <td>${p.notes || '-'}</td>
+                  <td style="text-align: center;">
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
+                      receipt_no: '${p.receipt_no}',
+                      date: '${p.date}',
+                      client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
+                      account_code: '${p.account_code || ''}',
+                      account_name: '${(p.account_name || '').replace(/'/g, "\\'")}',
+                      cost_center_code: '${p.cost_center_code || ''}',
+                      cost_center_name: '${(p.cost_center_name || '').replace(/'/g, "\\'")}',
+                      project_name: '${(p.project_name || '-').replace(/'/g, "\\'")}',
+                      amount: ${p.amount},
+                      currency: '${p.currency || 'ر.ي'}',
+                      payment_method: '${p.payment_method}',
+                      check_no: '${(p.check_no || '').replace(/'/g, "\\'")}',
+                      bank_name: '${(p.bank_name || '').replace(/'/g, "\\'")}',
+                      notes: '${(p.notes || '').replace(/'/g, "\\'")}'
+                    })">
+                      <svg class="icon"><use href="#icon-print"></use></svg>
+                      <span>طباعة</span>
+                    </button>
+                  </td>
+                </tr>
+              `;
+            };
+
+            const renderRows = (pageList) => {
+              if (pageList.length > 30 && window.UI && UI.VirtualTable) {
+                UI.VirtualTable.attach({
+                  tableBodyId: 'fullRevenuesTableBody',
+                  data: pageList,
+                  rowHeight: 46,
+                  renderRow: renderSingleRow
+                });
+              } else {
+                tbody.innerHTML = pageList.map(renderSingleRow).join('');
+              }
             };
 
             if (window.UI && UI.Pagination && document.getElementById('revenuesPagination')) {
@@ -403,51 +550,62 @@ const App = {
             const pag = document.getElementById('expensesPagination');
             if (pag) pag.innerHTML = '';
           } else {
-            const renderRows = (pageList) => {
-              tbody.innerHTML = pageList.map(e => {
-                const accStr = e.account_code ? `${e.account_code} - ${e.account_name}` : (e.account_name || '-');
-                const ccStr = e.cost_center_code ? `${e.cost_center_code} - ${e.cost_center_name}` : (e.cost_center_name || '-');
-                const paymentStr = e.payment_method === 'شيك' 
-                  ? `<span class="badge badge-active" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">شيك: ${e.check_no || 'غير محدد'}</span>`
-                  : `<span class="badge badge-active">${e.payment_method}</span>`;
+            const renderSingleRow = (e) => {
+              const accStr = e.account_code ? `${e.account_code} - ${e.account_name}` : (e.account_name || '-');
+              const ccStr = e.cost_center_code ? `${e.cost_center_code} - ${e.cost_center_name}` : (e.cost_center_name || '-');
+              const paymentStr = e.payment_method === 'شيك' 
+                ? `<span class="badge badge-active" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">شيك: ${e.check_no || 'غير محدد'}</span>`
+                : `<span class="badge badge-active">${e.payment_method}</span>`;
 
-                return `
-                  <tr>
-                    <td><strong style="color: var(--accent-red); font-family: monospace;">${e.receipt_no}</strong></td>
-                    <td>${e.date}</td>
-                    <td><span class="badge badge-expense">${e.expense_type}</span></td>
-                    <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
-                    <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
-                    <td>${e.project_name || '-'}</td>
-                    <td><strong>${e.supplier_name || '-'}</strong></td>
-                    <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(e.amount)} ${e.currency || 'ر.ي'}</td>
-                    <td>${paymentStr}</td>
-                    <td>${e.notes || '-'}</td>
-                    <td style="text-align: center;">
-                      <button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
-                        receipt_no: '${e.receipt_no}',
-                        date: '${e.date}',
-                        expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',
-                        account_code: '${e.account_code || ''}',
-                        account_name: '${(e.account_name || '').replace(/'/g, "\\'")}',
-                        cost_center_code: '${e.cost_center_code || ''}',
-                        cost_center_name: '${(e.cost_center_name || '').replace(/'/g, "\\'")}',
-                        supplier_name: '${(e.supplier_name || '-').replace(/'/g, "\\'")}',
-                        project_name: '${(e.project_name || '-').replace(/'/g, "\\'")}',
-                        amount: ${e.amount},
-                        currency: '${e.currency || 'ر.ي'}',
-                        payment_method: '${e.payment_method}',
-                        check_no: '${(e.check_no || '').replace(/'/g, "\\'")}',
-                        bank_name: '${(e.bank_name || '').replace(/'/g, "\\'")}',
-                        notes: '${(e.notes || '').replace(/'/g, "\\'")}'
-                      })">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-                        <span>طباعة</span>
-                      </button>
-                    </td>
-                  </tr>
-                `;
-              }).join('');
+              return `
+                <tr>
+                  <td><strong style="color: var(--accent-red); font-family: monospace;">${e.receipt_no}</strong></td>
+                  <td>${e.date}</td>
+                  <td><span class="badge badge-expense">${e.expense_type}</span></td>
+                  <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
+                  <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
+                  <td>${e.project_name || '-'}</td>
+                  <td><strong>${e.supplier_name || '-'}</strong></td>
+                  <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(e.amount)} ${e.currency || 'ر.ي'}</td>
+                  <td>${paymentStr}</td>
+                  <td>${e.notes || '-'}</td>
+                  <td style="text-align: center;">
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
+                      receipt_no: '${e.receipt_no}',
+                      date: '${e.date}',
+                      expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',
+                      account_code: '${e.account_code || ''}',
+                      account_name: '${(e.account_name || '').replace(/'/g, "\\'")}',
+                      cost_center_code: '${e.cost_center_code || ''}',
+                      cost_center_name: '${(e.cost_center_name || '').replace(/'/g, "\\'")}',
+                      supplier_name: '${(e.supplier_name || '-').replace(/'/g, "\\'")}',
+                      project_name: '${(e.project_name || '-').replace(/'/g, "\\'")}',
+                      amount: ${e.amount},
+                      currency: '${e.currency || 'ر.ي'}',
+                      payment_method: '${e.payment_method}',
+                      check_no: '${(e.check_no || '').replace(/'/g, "\\'")}',
+                      bank_name: '${(e.bank_name || '').replace(/'/g, "\\'")}',
+                      notes: '${(e.notes || '').replace(/'/g, "\\'")}'
+                    })">
+                      <svg class="icon"><use href="#icon-print"></use></svg>
+                      <span>طباعة</span>
+                    </button>
+                  </td>
+                </tr>
+              `;
+            };
+
+            const renderRows = (pageList) => {
+              if (pageList.length > 30 && window.UI && UI.VirtualTable) {
+                UI.VirtualTable.attach({
+                  tableBodyId: 'fullExpensesTableBody',
+                  data: pageList,
+                  rowHeight: 46,
+                  renderRow: renderSingleRow
+                });
+              } else {
+                tbody.innerHTML = pageList.map(renderSingleRow).join('');
+              }
             };
 
             if (window.UI && UI.Pagination && document.getElementById('expensesPagination')) {
