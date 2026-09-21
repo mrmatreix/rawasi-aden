@@ -15,12 +15,18 @@ const Projects = {
       const json = await res.json();
       if (json.success) {
         this.list = json.data;
-        this.renderProjectsTable();
+        if (this.currentStatusFilter && this.currentStatusFilter !== 'all') {
+          this.filterStatus(this.currentStatusFilter);
+        } else {
+          this.renderProjectsTable();
+        }
       }
     } catch (e) {
       console.error('Error loading projects:', e);
     }
   },
+
+  currentStatusFilter: 'all',
 
   renderProjectsTable(projectsToRender = null) {
     const tableBodyDashboard = document.getElementById('projectsTableBody');
@@ -30,62 +36,133 @@ const Projects = {
 
     const data = projectsToRender || this.list;
     if (data.length === 0) {
-      const emptyHtml = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
-      if (tableBodyDashboard) tableBodyDashboard.innerHTML = emptyHtml;
-      if (tableBodyFull) tableBodyFull.innerHTML = emptyHtml;
+      if (tableBodyDashboard) tableBodyDashboard.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
+      if (tableBodyFull) tableBodyFull.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
       return;
     }
 
-    const htmlContent = data.map(p => {
-      const progress = p.progress_percentage || 0;
-      const curr = p.currency || 'ر.ي';
-      return `
-        <tr>
-          <td>
-            <strong>${p.name}</strong>
-            <div style="font-size: 0.72rem; color: var(--text-secondary);">${p.code || ''}</div>
-          </td>
-          <td>${p.client_name || 'عميل مباشر'}</td>
-          <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
-          <td>${App.formatNumber(p.estimated_cost)} <small style="font-size:0.75rem">${curr}</small></td>
-          <td style="color: ${p.actual_cost > p.estimated_cost ? 'var(--accent-red)' : 'var(--text-primary)'}; font-weight: 600;">
-            ${App.formatNumber(p.actual_cost)} <small style="font-size:0.75rem">${curr}</small>
-          </td>
-          <td style="min-width: 120px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <div class="progress-wrap">
-                <div class="progress-bar-fill" style="width: ${progress}%;"></div>
-              </div>
-              <span class="progress-text">${progress}%</span>
-            </div>
-          </td>
-          <td style="color: var(--accent-blue); font-weight: 600;">${App.formatNumber(p.expected_profit)} <small style="font-size:0.75rem">${curr}</small></td>
-          <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
-          <td>
-            <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-              <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (14 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
-                📁 14 قسم
-              </button>
-              <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--gold-light); border-color: var(--gold-primary);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-              </button>
-              <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-              </button>
-              <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 3px;">
-                <span>📦</span><span>تصدير</span>
-              </button>
-              <button class="btn btn-danger btn-sm" onclick="Projects.deleteProject(${p.id})" title="حذف المشروع">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
+    const getStatusBadge = (s) => {
+      if (s === 'under_study') return '<span class="badge badge-info">تحت الدراسة والتسعير</span>';
+      if (s === 'completed') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);">مكتمل ومستلم</span>';
+      return '<span class="badge badge-active">جاري التنفيذ</span>';
+    };
 
-    if (tableBodyDashboard) tableBodyDashboard.innerHTML = htmlContent;
-    if (tableBodyFull) tableBodyFull.innerHTML = htmlContent;
+    if (tableBodyDashboard) {
+      tableBodyDashboard.innerHTML = data.map(p => {
+        const progress = p.progress_percentage || 0;
+        const curr = p.currency || 'ر.ي';
+        return `
+          <tr>
+            <td>
+              <strong>${p.name}</strong>
+              <div style="font-size: 0.72rem; color: var(--text-secondary);">${p.code || ''}</div>
+            </td>
+            <td>${p.client_name || 'عميل مباشر'}</td>
+            <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td>${App.formatNumber(p.estimated_cost)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: ${p.actual_cost > p.estimated_cost ? 'var(--accent-red)' : 'var(--text-primary)'}; font-weight: 600;">
+              ${App.formatNumber(p.actual_cost)} <small style="font-size:0.75rem">${curr}</small>
+            </td>
+            <td style="min-width: 120px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div class="progress-wrap">
+                  <div class="progress-bar-fill" style="width: ${progress}%;"></div>
+                </div>
+                <span class="progress-text">${progress}%</span>
+              </div>
+            </td>
+            <td style="color: var(--accent-blue); font-weight: 600;">${App.formatNumber(p.expected_profit)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
+                  📁 16 قسم
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="Projects.deleteProject(${p.id})" title="حذف المشروع">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    if (tableBodyFull) {
+      tableBodyFull.innerHTML = data.map(p => {
+        const progress = p.progress_percentage || 0;
+        const curr = p.currency || 'ر.ي';
+        return `
+          <tr>
+            <td>
+              <strong>${p.name}</strong>
+              <div style="font-size: 0.72rem; color: var(--text-secondary);">${p.code || ''}</div>
+            </td>
+            <td>${p.client_name || 'عميل مباشر'}</td>
+            <td>${getStatusBadge(p.status)}</td>
+            <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td>${App.formatNumber(p.estimated_cost)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: ${p.actual_cost > p.estimated_cost ? 'var(--accent-red)' : 'var(--text-primary)'}; font-weight: 600;">
+              ${App.formatNumber(p.actual_cost)} <small style="font-size:0.75rem">${curr}</small>
+            </td>
+            <td style="min-width: 120px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div class="progress-wrap">
+                  <div class="progress-bar-fill" style="width: ${progress}%;"></div>
+                </div>
+                <span class="progress-text">${progress}%</span>
+              </div>
+            </td>
+            <td style="color: var(--accent-blue); font-weight: 600;">${App.formatNumber(p.expected_profit)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
+                  📁 16 قسم
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                </button>
+                <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 3px;">
+                  <span>📦</span><span>تصدير</span>
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="Projects.deleteProject(${p.id})" title="حذف المشروع">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  },
+
+  filterStatus(status, clickedBtn) {
+    this.currentStatusFilter = status;
+    const btn = clickedBtn || document.getElementById('tabBtn_proj_' + status) || document.querySelector(`.report-tab-btn[onclick*="'${status}'"]`);
+    if (btn) {
+      const parent = btn.parentElement;
+      if (parent) {
+        parent.querySelectorAll('.report-tab-btn').forEach(b => b.classList.remove('active'));
+      }
+      btn.classList.add('active');
+    }
+
+    if (status === 'all') {
+      this.renderProjectsTable(this.list);
+    } else {
+      const filtered = this.list.filter(p => (p.status || 'active') === status);
+      this.renderProjectsTable(filtered);
+    }
   },
 
   openNewModal() {

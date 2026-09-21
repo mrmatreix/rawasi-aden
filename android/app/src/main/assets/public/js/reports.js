@@ -275,10 +275,16 @@ const Reports = {
 
     if (tabId === 'profit-loss') {
       this.loadFullProfitLoss();
-    } else if (tabId === 'projects-profitability') {
-      this.loadProjectsProfitability();
+    } else if (tabId === 'trial-balance') {
+      this.loadTrialBalance();
+    } else if (tabId === 'income-statement') {
+      this.loadIncomeStatement();
     } else if (tabId === 'balance-sheet') {
       this.loadBalanceSheet();
+    } else if (tabId === 'cash-flow') {
+      this.loadCashFlow();
+    } else if (tabId === 'projects-profitability') {
+      this.loadProjectsProfitability();
     } else if (tabId === 'client-statement') {
       this.initClientStatementDropdown();
     } else if (tabId === 'supplier-statement') {
@@ -860,6 +866,277 @@ const Reports = {
       link.click();
       document.body.removeChild(link);
       App.showToast('تم تصدير ملف Excel بنجاح', 'success');
+    }
+  },
+
+  // ================== التقارير المالية المتقدمة والمحاسبية ==================
+
+  // 5. تقرير ميزان المراجعة بالأرصدة والمجاميع
+  async loadTrialBalance() {
+    const fromDate = document.getElementById('tbFromDate')?.value || '2024-01-01';
+    const toDate = document.getElementById('tbToDate')?.value || '';
+    const q = toDate ? `?from_date=${fromDate}&to_date=${toDate}` : `?from_date=${fromDate}`;
+
+    try {
+      const res = await fetch(`/api/reports/trial-balance${q}`);
+      const json = await res.json();
+      if (json.success) {
+        const { accounts, totals } = json.data;
+        const is_balanced = totals?.is_balanced;
+        const difference = Math.abs((totals?.total_debit || 0) - (totals?.total_credit || 0));
+
+        // KPI
+        const debitEl = document.getElementById('tbTotalDebit');
+        const creditEl = document.getElementById('tbTotalCredit');
+        const balDebitEl = document.getElementById('tbBalanceDebit');
+        const statusEl = document.getElementById('tbBalanceStatus');
+
+        if (debitEl) debitEl.textContent = App.formatNumber(totals.total_debit) + ' ر.ي';
+        if (creditEl) creditEl.textContent = App.formatNumber(totals.total_credit) + ' ر.ي';
+        if (balDebitEl) balDebitEl.textContent = App.formatNumber(totals.balance_debit) + ' ر.ي';
+        if (statusEl) {
+          if (is_balanced) {
+            statusEl.textContent = 'متزن 100%';
+            statusEl.style.color = 'var(--accent-green)';
+          } else {
+            statusEl.textContent = `فارق: ${App.formatNumber(difference)} ر.ي`;
+            statusEl.style.color = 'var(--accent-red)';
+          }
+        }
+
+        // Table
+        const tbody = document.getElementById('trialBalanceTableBody');
+        if (tbody) {
+          if (!accounts || accounts.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد حركات في هذه الفترة</td></tr>`;
+          } else {
+            tbody.innerHTML = accounts.map(a => `
+              <tr>
+                <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${a.code}</td>
+                <td><strong>${a.name}</strong></td>
+                <td><span class="badge badge-info">${a.type}</span></td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${a.total_debit > 0 ? App.formatNumber(a.total_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8;">${a.total_credit > 0 ? App.formatNumber(a.total_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">${a.balance_debit > 0 ? App.formatNumber(a.balance_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: #38bdf8;">${a.balance_credit > 0 ? App.formatNumber(a.balance_credit) : '-'}</td>
+              </tr>
+            `).join('');
+          }
+        }
+
+        // Foot
+        const tfoot = document.getElementById('trialBalanceTableFoot');
+        if (tfoot) {
+          tfoot.innerHTML = `
+            <tr>
+              <td colspan="3" style="text-align: center; font-size: 1rem;">الإجمالي الكلي لميزان المراجعة</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.total_debit)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.total_credit)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.balance_debit)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.balance_credit)}</td>
+            </tr>
+          `;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading trial balance:', e);
+      App.showToast('فشل تحميل ميزان المراجعة', 'error');
+    }
+  },
+
+  // 6. تقرير قائمة الدخل (3 مصروفات + 4 إيرادات)
+  async loadIncomeStatement() {
+    const fromDate = document.getElementById('isFromDate')?.value || '2024-01-01';
+    const toDate = document.getElementById('isToDate')?.value || '';
+    const q = toDate ? `?from_date=${fromDate}&to_date=${toDate}` : `?from_date=${fromDate}`;
+
+    try {
+      const res = await fetch(`/api/reports/income-statement${q}`);
+      const json = await res.json();
+      if (json.success) {
+        const d = json.data;
+
+        // KPI
+        const revEl = document.getElementById('isTotalRevenues');
+        const expEl = document.getElementById('isTotalExpenses');
+        const grossEl = document.getElementById('isGrossProfit');
+        const netEl = document.getElementById('isNetIncome');
+
+        if (revEl) revEl.textContent = App.formatNumber(d.total_revenues) + ' ر.ي';
+        if (expEl) expEl.textContent = App.formatNumber(d.total_expenses) + ' ر.ي';
+        if (grossEl) grossEl.textContent = App.formatNumber(d.gross_profit) + ' ر.ي';
+        if (netEl) {
+          netEl.textContent = App.formatNumber(d.net_profit) + ' ر.ي';
+          netEl.style.color = d.net_profit >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
+        }
+
+        // Revenues Table
+        const revTbody = document.getElementById('isRevenuesTableBody');
+        if (revTbody) {
+          if (!d.revenues || d.revenues.length === 0) {
+            revTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد إيرادات مسجلة</td></tr>`;
+          } else {
+            revTbody.innerHTML = d.revenues.map(r => `
+              <tr>
+                <td><strong>${r.name}</strong></td>
+                <td style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(r.amount)} ر.ي</td>
+              </tr>
+            `).join('') + `
+              <tr style="background: rgba(16,185,129,0.08); font-weight: bold;">
+                <td>إجمالي الإيرادات (4)</td>
+                <td style="color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_revenues)} ر.ي</td>
+              </tr>
+            `;
+          }
+        }
+
+        // Expenses Table
+        const expTbody = document.getElementById('isExpensesTableBody');
+        if (expTbody) {
+          if (!d.expenses || d.expenses.length === 0) {
+            expTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد مصروفات مسجلة</td></tr>`;
+          } else {
+            expTbody.innerHTML = d.expenses.map(e => `
+              <tr>
+                <td><strong>${e.name}</strong></td>
+                <td style="font-weight: bold; color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(e.amount)} ر.ي</td>
+              </tr>
+            `).join('') + `
+              <tr style="background: rgba(239,68,68,0.08); font-weight: bold;">
+                <td>إجمالي التكاليف والمصروفات (3)</td>
+                <td style="color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_expenses)} ر.ي</td>
+              </tr>
+            `;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error loading income statement:', e);
+      App.showToast('فشل تحميل قائمة الدخل', 'error');
+    }
+  },
+
+  // 7. تقرير التدفقات النقدية
+  async loadCashFlow() {
+    const fromDate = document.getElementById('cfFromDate')?.value || '2024-01-01';
+    const toDate = document.getElementById('cfToDate')?.value || '';
+    const q = toDate ? `?from_date=${fromDate}&to_date=${toDate}` : `?from_date=${fromDate}`;
+
+    try {
+      const res = await fetch(`/api/reports/cash-flow${q}`);
+      const json = await res.json();
+      if (json.success) {
+        const d = json.data;
+        const op = d.operating_activities || { inflows: [], outflows: [], net: 0 };
+        const inv = d.investing_activities || { inflows: [], outflows: [], net: 0 };
+        const fin = d.financing_activities || { inflows: [], outflows: [], net: 0 };
+
+        // KPI
+        const openEl = document.getElementById('cfOpeningCash');
+        const netOpEl = document.getElementById('cfNetOperating');
+        const changeEl = document.getElementById('cfNetChange');
+        const closeEl = document.getElementById('cfClosingCash');
+
+        if (openEl) openEl.textContent = App.formatNumber(d.opening_balance) + ' ر.ي';
+        if (netOpEl) netOpEl.textContent = App.formatNumber(op.net) + ' ر.ي';
+        if (changeEl) changeEl.textContent = App.formatNumber(d.net_cash_change) + ' ر.ي';
+        if (closeEl) closeEl.textContent = App.formatNumber(d.closing_balance) + ' ر.ي';
+
+        // Table
+        const tbody = document.getElementById('cashFlowTableBody');
+        if (tbody) {
+          let html = '';
+
+          // Section 1: Operating
+          html += `<tr style="background: rgba(56,189,248,0.12); font-weight: bold;"><td colspan="4">أولاً: التدفقات النقدية من الأنشطة التشغيلية</td></tr>`;
+          (op.inflows || []).forEach(it => {
+            html += `
+              <tr>
+                <td>${it.item}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${App.formatNumber(it.amount)}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">-</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">+${App.formatNumber(it.amount)} ر.ي</td>
+              </tr>
+            `;
+          });
+          (op.outflows || []).forEach(it => {
+            html += `
+              <tr>
+                <td>${it.item}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">-</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">${App.formatNumber(it.amount)}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-red);">-${App.formatNumber(it.amount)} ر.ي</td>
+              </tr>
+            `;
+          });
+          html += `
+            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
+              <td>صافي النقد المتولد من الأنشطة التشغيلية</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(op.net)} ر.ي</td>
+            </tr>
+          `;
+
+          // Section 2: Investing
+          html += `<tr style="background: rgba(168,85,247,0.12); font-weight: bold;"><td colspan="4">ثانياً: التدفقات النقدية من الأنشطة الاستثمارية</td></tr>`;
+          (inv.outflows || []).forEach(it => {
+            html += `
+              <tr>
+                <td>${it.item}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">-</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">${App.formatNumber(it.amount)}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-red);">-${App.formatNumber(it.amount)} ر.ي</td>
+              </tr>
+            `;
+          });
+          html += `
+            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
+              <td>صافي النقد المستخدم في الأنشطة الاستثمارية</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${inv.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(inv.net)} ر.ي</td>
+            </tr>
+          `;
+
+          // Section 3: Financing
+          html += `<tr style="background: rgba(245,158,11,0.12); font-weight: bold;"><td colspan="4">ثالثاً: التدفقات النقدية من الأنشطة التمويلية</td></tr>`;
+          (fin.inflows || []).forEach(it => {
+            html += `
+              <tr>
+                <td>${it.item}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${App.formatNumber(it.amount)}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">-</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">+${App.formatNumber(it.amount)} ر.ي</td>
+              </tr>
+            `;
+          });
+          html += `
+            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
+              <td>صافي النقد المتولد من الأنشطة التمويلية</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${fin.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(fin.net)} ر.ي</td>
+            </tr>
+          `;
+
+          // Final Totals
+          html += `
+            <tr style="background: rgba(212,175,55,0.15); font-weight: bold; font-size: 1.05rem;">
+              <td>صافي التغير في النقدية خلال الفترة</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--gold-light);">${App.formatNumber(d.net_cash_change)} ر.ي</td>
+            </tr>
+            <tr style="background: rgba(255,255,255,0.06); font-weight: bold;">
+              <td>رصيد النقدية في نهاية المدة</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.1rem;">${App.formatNumber(d.closing_balance)} ر.ي</td>
+            </tr>
+          `;
+
+          tbody.innerHTML = html;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cash flow:', e);
+      App.showToast('فشل تحميل التدفقات النقدية', 'error');
     }
   }
 };
