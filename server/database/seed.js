@@ -163,7 +163,7 @@ function seedDatabase() {
   insertAccount.run(4, '112', 'العملاء (الذمم المدينة)', 'أصول', 2, 320000);
   insertAccount.run(5, '113', 'المخزون السلعي', 'أصول', 2, 1405000);
   insertAccount.run(6, '2', 'الخصوم', 'خصوم', null, 210000);
-  insertAccount.run(7, '21', 'الموردون (الذمم الدائنة)', 'خصوم', 6, 210000);
+  insertAccount.run(7, '21', 'الموردون', 'خصوم', 6, 210000);
   insertAccount.run(8, '3', 'حقوق الملكية', 'حقوق ملكية', null, 1840000);
   insertAccount.run(9, '4', 'الإيرادات', 'إيرادات', null, 1250000);
   insertAccount.run(10, '5', 'المصروفات وتكاليف المشاريع', 'مصروفات', null, 850000);
