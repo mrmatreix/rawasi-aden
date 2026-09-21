@@ -8,7 +8,10 @@ const App = {
 
   async init() {
     console.log('🚀 تهيئة نظام رواسي عدن للهندسة والمقاولات...');
-    
+
+    // تطبيق المظهر المحفوظ فورياً قبل تحميل أي شيء
+    this.initTheme();
+
     // التحقق المسبق من الاتصال بقاعدة البيانات (أونلاين / أوفلاين)
     await this.checkDatabaseStatus();
 
@@ -81,6 +84,40 @@ const App = {
     const backdrop = document.getElementById('sidebarBackdrop');
     if (sidebar) sidebar.classList.remove('mobile-open');
     if (backdrop) backdrop.classList.remove('active');
+  },
+
+  // ============================================
+  // 🌙☀️ تبديل الوضع الليلي / النهاري
+  // ============================================
+  initTheme() {
+    // استرجاع الوضع المحفوظ من localStorage
+    const savedTheme = localStorage.getItem('rawasi_theme') || 'dark';
+    this.applyTheme(savedTheme);
+  },
+
+  toggleTheme() {
+    const isLight = document.body.classList.contains('light-mode');
+    const newTheme = isLight ? 'dark' : 'light';
+    localStorage.setItem('rawasi_theme', newTheme);
+    this.applyTheme(newTheme);
+
+    // تلميح مرئي للمستخدم
+    const label = newTheme === 'light' ? 'نهاري' : 'ليلي';
+    this.showToast(`تم التبديل إلى الوضع ${label} ✨`, 'info');
+  },
+
+  applyTheme(theme) {
+    const isLight = theme === 'light';
+    document.body.classList.toggle('light-mode', isLight);
+    document.documentElement.classList.toggle('light-mode', isLight);
+
+    // تحديث نص وأيقونة زر التبديل
+    const label = document.getElementById('themeToggleLabel');
+    if (label) label.textContent = isLight ? 'نهاري' : 'ليلي';
+
+    // تحديث meta theme-color للمتصفح
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', isLight ? '#16304f' : '#0f172a');
   },
 
   // التحكم بالقوائم الشجرية المنسدلة (Accordion Groups)

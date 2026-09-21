@@ -151,6 +151,13 @@
     </div>
 
     <div class="header-actions">
+      <!-- زر تبديل الوضع الليلي/النهاري -->
+      <button class="theme-toggle-btn" id="btnThemeToggle" onclick="App.toggleTheme()" title="تبديل الوضع الليلي والنهاري" aria-label="تبديل المظهر">
+        <span class="theme-icon-dark">🌙</span>
+        <span class="theme-icon-light">☀️</span>
+        <span class="theme-toggle-label" id="themeToggleLabel">ليلي</span>
+      </button>
+
       <!-- زر وقائمة الإشعارات المنسدلة (تتضمن حالة وشعارات الاتصال بالمشروع بعد تسجيل الدخول) -->
       <div class="notifications-wrapper" id="notificationsWrapper">
         <button class="icon-btn" id="btnHeaderNotifications" title="إشعارات النظام وحالة الاتصال" onclick="App.toggleNotificationsDropdown(event)">
@@ -196,7 +203,42 @@
         </div>
       </div>
 
-      <!-- بطاقة المستخدم الحالية الأنيقة و�        <!-- 1. تهيئة النظام -->
+      <!-- بطاقة المستخدم الحالية الأنيقة والمنظمة -->
+      <div class="user-badge" onclick="App.showConnectionModal()" title="ملف المستخدم وتفاصيل النظام">
+        <div class="user-avatar-wrap">
+          <div class="user-avatar" id="headerUserAvatar">م</div>
+          <span class="user-avatar-dot offline" id="userAvatarStatusDot" title="حالة الاتصال"></span>
+        </div>
+        <div class="user-info-text">
+          <span class="user-name" id="headerUserName">المدير العام</span>
+          <span class="user-role" id="headerUserRole">المدير العام</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- خلفية معتمة عند فتح القائمة في الهواتف -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="App.closeMobileSidebar()"></div>
+
+  <div class="app-container" id="appMainContainer">
+    <!-- القائمة الجانبية (Sidebar) -->
+    <aside class="sidebar">
+      <div class="sidebar-logo-card">
+        <img src="images/logo.png" alt="شعار رواسي عدن">
+        <h3>رواسي عدن</h3>
+        <span>للهندسة والمقاولات</span>
+      </div>
+
+      <ul class="sidebar-nav" id="sidebarNavList">
+        <!-- لوحة التحكم العامة -->
+        <li data-perm="dashboard:view">
+          <a class="nav-item active" href="javascript:void(0)" onclick="App.navigate('dashboard', this)">
+            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+            <span>لوحة التحكم الرئيسية</span>
+          </a>
+        </li>
+
+        <!-- 1. تهيئة النظام -->
         <li class="nav-group" id="groupSystemSettings" data-perm="settings:users,settings:company,settings:backup">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupSystemSettings')">
             <div class="nav-group-title">
@@ -213,7 +255,7 @@
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'print_templates', this)">
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'print', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                 <span>أنماط الطباعة والترويسة</span>
               </a>
