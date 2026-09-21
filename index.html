@@ -341,13 +341,13 @@
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'income-statement', this)">
                 <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
-                <span>تقرير الدخل 3+4</span>
+                <span>تقرير الدخل</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'balance-sheet', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
-                <span>تقرير المركز المالي أو الميزانية العمومية 1+2</span>
+                <span>تقرير المركز المالي او الميزانية العمومية</span>
               </a>
             </li>
             <li>
@@ -592,13 +592,13 @@
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'income-statement', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
-                <span>تقرير الدخل (3+4)</span>
+                <span>تقرير الدخل</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'balance-sheet', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                <span>المركز المالي والميزانية العمومية</span>
+                <span>تقرير المركز المالي او الميزانية العمومية</span>
               </a>
             </li>
             <li>
@@ -2163,8 +2163,8 @@
         <div class="report-tabs-bar">
           <button class="report-tab-btn active" id="tabBtn_profit-loss" onclick="Reports.switchReportTab('profit-loss')">قائمة الأرباح والخسائر</button>
           <button class="report-tab-btn" id="tabBtn_trial-balance" onclick="Reports.switchReportTab('trial-balance')">ميزان المراجعة والأرصدة</button>
-          <button class="report-tab-btn" id="tabBtn_income-statement" onclick="Reports.switchReportTab('income-statement')">تقرير الدخل (3+4)</button>
-          <button class="report-tab-btn" id="tabBtn_balance-sheet" onclick="Reports.switchReportTab('balance-sheet')">الميزانية العمومية (1+2)</button>
+          <button class="report-tab-btn" id="tabBtn_income-statement" onclick="Reports.switchReportTab('income-statement')">تقرير الدخل</button>
+          <button class="report-tab-btn" id="tabBtn_balance-sheet" onclick="Reports.switchReportTab('balance-sheet')">تقرير المركز المالي او الميزانية العمومية</button>
           <button class="report-tab-btn" id="tabBtn_cash-flow" onclick="Reports.switchReportTab('cash-flow')">التدفقات النقدية</button>
           <button class="report-tab-btn" id="tabBtn_projects-profitability" onclick="Reports.switchReportTab('projects-profitability')">ربحية المشاريع</button>
           <button class="report-tab-btn" id="tabBtn_client-statement" onclick="Reports.switchReportTab('client-statement')">كشف حساب عميل</button>
@@ -2423,7 +2423,7 @@
               <button class="btn btn-primary" onclick="Reports.loadIncomeStatement()">تحديث قائمة الدخل</button>
             </div>
 
-            <!-- بطاقات مؤشرات قائمة الدخل 3+4 -->
+            <!-- بطاقات مؤشرات تقرير الدخل -->
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
               <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); padding: 14px; border-radius: var(--radius-md);">
                 <span style="font-size: 0.8rem; color: var(--text-secondary);">4. إجمالي الإيرادات:</span>

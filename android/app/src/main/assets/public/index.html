@@ -151,6 +151,13 @@
     </div>
 
     <div class="header-actions">
+      <!-- زر تبديل الوضع الليلي/النهاري -->
+      <button class="theme-toggle-btn" id="btnThemeToggle" onclick="App.toggleTheme()" title="تبديل الوضع الليلي والنهاري" aria-label="تبديل المظهر">
+        <span class="theme-icon-dark">🌙</span>
+        <span class="theme-icon-light">☀️</span>
+        <span class="theme-toggle-label" id="themeToggleLabel">ليلي</span>
+      </button>
+
       <!-- زر وقائمة الإشعارات المنسدلة (تتضمن حالة وشعارات الاتصال بالمشروع بعد تسجيل الدخول) -->
       <div class="notifications-wrapper" id="notificationsWrapper">
         <button class="icon-btn" id="btnHeaderNotifications" title="إشعارات النظام وحالة الاتصال" onclick="App.toggleNotificationsDropdown(event)">
@@ -196,7 +203,42 @@
         </div>
       </div>
 
-      <!-- بطاقة المستخدم الحالية الأنيقة و�        <!-- 1. تهيئة النظام -->
+      <!-- بطاقة المستخدم الحالية الأنيقة والمنظمة -->
+      <div class="user-badge" onclick="App.showConnectionModal()" title="ملف المستخدم وتفاصيل النظام">
+        <div class="user-avatar-wrap">
+          <div class="user-avatar" id="headerUserAvatar">م</div>
+          <span class="user-avatar-dot offline" id="userAvatarStatusDot" title="حالة الاتصال"></span>
+        </div>
+        <div class="user-info-text">
+          <span class="user-name" id="headerUserName">المدير العام</span>
+          <span class="user-role" id="headerUserRole">المدير العام</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- خلفية معتمة عند فتح القائمة في الهواتف -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="App.closeMobileSidebar()"></div>
+
+  <div class="app-container" id="appMainContainer">
+    <!-- القائمة الجانبية (Sidebar) -->
+    <aside class="sidebar">
+      <div class="sidebar-logo-card">
+        <img src="images/logo.png" alt="شعار رواسي عدن">
+        <h3>رواسي عدن</h3>
+        <span>للهندسة والمقاولات</span>
+      </div>
+
+      <ul class="sidebar-nav" id="sidebarNavList">
+        <!-- لوحة التحكم العامة -->
+        <li data-perm="dashboard:view">
+          <a class="nav-item active" href="javascript:void(0)" onclick="App.navigate('dashboard', this)">
+            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+            <span>لوحة التحكم الرئيسية</span>
+          </a>
+        </li>
+
+        <!-- 1. تهيئة النظام -->
         <li class="nav-group" id="groupSystemSettings" data-perm="settings:users,settings:company,settings:backup">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupSystemSettings')">
             <div class="nav-group-title">
@@ -213,7 +255,7 @@
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'print_templates', this)">
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'print', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                 <span>أنماط الطباعة والترويسة</span>
               </a>
@@ -299,13 +341,13 @@
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'income-statement', this)">
                 <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
-                <span>تقرير الدخل 3+4</span>
+                <span>تقرير الدخل</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'balance-sheet', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
-                <span>تقرير المركز المالي أو الميزانية العمومية 1+2</span>
+                <span>تقرير المركز المالي او الميزانية العمومية</span>
               </a>
             </li>
             <li>
@@ -550,13 +592,13 @@
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'income-statement', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
-                <span>تقرير الدخل (3+4)</span>
+                <span>تقرير الدخل</span>
               </a>
             </li>
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'balance-sheet', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                <span>المركز المالي والميزانية العمومية</span>
+                <span>تقرير المركز المالي او الميزانية العمومية</span>
               </a>
             </li>
             <li>
@@ -2121,8 +2163,8 @@
         <div class="report-tabs-bar">
           <button class="report-tab-btn active" id="tabBtn_profit-loss" onclick="Reports.switchReportTab('profit-loss')">قائمة الأرباح والخسائر</button>
           <button class="report-tab-btn" id="tabBtn_trial-balance" onclick="Reports.switchReportTab('trial-balance')">ميزان المراجعة والأرصدة</button>
-          <button class="report-tab-btn" id="tabBtn_income-statement" onclick="Reports.switchReportTab('income-statement')">تقرير الدخل (3+4)</button>
-          <button class="report-tab-btn" id="tabBtn_balance-sheet" onclick="Reports.switchReportTab('balance-sheet')">الميزانية العمومية (1+2)</button>
+          <button class="report-tab-btn" id="tabBtn_income-statement" onclick="Reports.switchReportTab('income-statement')">تقرير الدخل</button>
+          <button class="report-tab-btn" id="tabBtn_balance-sheet" onclick="Reports.switchReportTab('balance-sheet')">تقرير المركز المالي او الميزانية العمومية</button>
           <button class="report-tab-btn" id="tabBtn_cash-flow" onclick="Reports.switchReportTab('cash-flow')">التدفقات النقدية</button>
           <button class="report-tab-btn" id="tabBtn_projects-profitability" onclick="Reports.switchReportTab('projects-profitability')">ربحية المشاريع</button>
           <button class="report-tab-btn" id="tabBtn_client-statement" onclick="Reports.switchReportTab('client-statement')">كشف حساب عميل</button>
@@ -2381,7 +2423,7 @@
               <button class="btn btn-primary" onclick="Reports.loadIncomeStatement()">تحديث قائمة الدخل</button>
             </div>
 
-            <!-- بطاقات مؤشرات قائمة الدخل 3+4 -->
+            <!-- بطاقات مؤشرات تقرير الدخل -->
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
               <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); padding: 14px; border-radius: var(--radius-md);">
                 <span style="font-size: 0.8rem; color: var(--text-secondary);">4. إجمالي الإيرادات:</span>
