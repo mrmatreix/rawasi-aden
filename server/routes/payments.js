@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 
-// جلب سندات القبض والصرف
+// جلب سندات القبض والصرف مع بيانات الحسابات ومراكز التكلفة
 router.get('/', async (req, res) => {
   try {
     const { type, client_id, supplier_id, project_id } = req.query;
@@ -10,11 +10,17 @@ router.get('/', async (req, res) => {
       SELECT p.*, 
         c.name as client_name, 
         s.name as supplier_name,
-        pr.name as project_name
+        pr.name as project_name,
+        a.name as account_name,
+        a.code as account_code,
+        cc.name as cost_center_name,
+        cc.code as cost_center_code
       FROM payments p
       LEFT JOIN clients c ON p.client_id = c.id
       LEFT JOIN suppliers s ON p.supplier_id = s.id
       LEFT JOIN projects pr ON p.project_id = pr.id
+      LEFT JOIN accounts a ON p.account_id = a.id
+      LEFT JOIN cost_centers cc ON p.cost_center_id = cc.id
     `;
     const params = [];
     const conditions = [];
@@ -56,9 +62,13 @@ router.post('/', async (req, res) => {
       client_id,
       supplier_id,
       project_id,
+      account_id,
+      cost_center_id,
       amount,
       currency = 'ر.ي',
-      payment_method = 'تحويل بنكي', // تحويل بنكي، نقدي، شيك
+      payment_method = 'نقدي', // تحويل بنكي، نقدي، شيك
+      check_no,
+      bank_name,
       date = new Date().toISOString().split('T')[0],
       notes
     } = req.body;
@@ -67,8 +77,15 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'المبلغ مطلوب ويجب أن يكون أكبر من الصفر' });
     }
 
+    // شرط التحقق الإلزامي: عند القبض أو الصرف بشيك يجب تحديد رقم الشيك
+    if (payment_method === 'شيك' && (!check_no || !String(check_no).trim())) {
+      return res.status(400).json({ success: false, message: `عند إصدار سند ${type} بطريقة الدفع (شيك) يجب إدخال رقم الشيك` });
+    }
+
     const parsedAmount = Number(amount);
     const selectedCurrency = currency || 'ر.ي';
+    const cleanCheckNo = check_no ? String(check_no).trim() : null;
+    const cleanBankName = bank_name ? String(bank_name).trim() : null;
 
     // توليد رقم السند بطريقة آمنة تمنع التكرار: RC-2026-0001 أو PV-2026-0001
     const prefix = type === 'قبض' ? 'RC' : 'PV';
@@ -84,6 +101,8 @@ router.post('/', async (req, res) => {
     const cId = client_id && client_id !== '' ? Number(client_id) : null;
     const sId = supplier_id && supplier_id !== '' ? Number(supplier_id) : null;
     const pId = project_id && project_id !== '' ? Number(project_id) : null;
+    const accId = account_id && account_id !== '' ? Number(account_id) : null;
+    const ccId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
 
     // تنفيذ المعاملة المالية ككتلة واحدة (Atomic Transaction)
     const txResult = await transaction(async (tx) => {
@@ -91,11 +110,13 @@ router.post('/', async (req, res) => {
       const result = await tx.run(`
         INSERT INTO payments (
           receipt_no, type, client_id, supplier_id, project_id, 
-          amount, currency, payment_method, date, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          account_id, cost_center_id, amount, currency, payment_method, 
+          check_no, bank_name, date, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         receipt_no, type, cId, sId, pId,
-        parsedAmount, selectedCurrency, payment_method, date, notes || ''
+        accId, ccId, parsedAmount, selectedCurrency, payment_method,
+        cleanCheckNo, cleanBankName, date, notes || ''
       ]);
 
       // 2. التأثير المحاسبي على العميل أو المورد
@@ -116,6 +137,9 @@ router.post('/', async (req, res) => {
       const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
       const prevBal = Number(lastCash.current_balance) || 0;
       const newBal = type === 'قبض' ? prevBal + parsedAmount : prevBal - parsedAmount;
+      const moveDesc = payment_method === 'شيك' 
+        ? `سند ${type} بشيك رقم ${cleanCheckNo}: ${receipt_no}`
+        : `سند ${type}: ${receipt_no}`;
 
       await tx.run(`
         INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
@@ -127,7 +151,7 @@ router.post('/', async (req, res) => {
         newBal,
         selectedCurrency,
         date,
-        `سند ${type}: ${receipt_no}`
+        moveDesc
       ]);
 
       // 4. توليد قيد يومي تلقائي متزن
@@ -145,7 +169,7 @@ router.post('/', async (req, res) => {
       `, [
         entryNo,
         date,
-        `سند ${type} رقم ${receipt_no} - ${notes || ''}`,
+        `سند ${type} رقم ${receipt_no} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || ''}`,
         `سند ${type}`,
         result.lastInsertRowid || result.insertId,
         parsedAmount,
@@ -154,23 +178,33 @@ router.post('/', async (req, res) => {
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
-      // 5. سطور القيد المدين والدائن
+      // 5. سطور القيد المدين والدائن مع الحساب ومركز التكلفة المختارين
       if (type === 'قبض') {
-        // مدين: الصندوق والبنك (حساب 3) | دائن: العملاء (حساب 4)
-        await tx.run(`INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes) VALUES (?, 3, ?, ?, 0, ?)`,
-          [jeId, pId || null, parsedAmount, `قبض في الصندوق / البنك - طريقة: ${payment_method}`]
-        );
-        await tx.run(`INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes) VALUES (?, 4, ?, 0, ?, ?)`,
-          [jeId, pId || null, parsedAmount, `تخفيض ذمة العميل`]
-        );
+        // الطرف المدين: الصندوق والبنك (حساب 3)
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+          VALUES (?, 3, ?, ?, ?, 0, ?)
+        `, [jeId, ccId, pId, parsedAmount, `قبض في الصندوق / البنك - طريقة: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
+
+        // الطرف الدائن: الحساب المختار (أو حساب العملاء 4 افتراضياً)
+        const creditAcc = accId || 4;
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+          VALUES (?, ?, ?, ?, 0, ?, ?)
+        `, [jeId, creditAcc, ccId, pId, parsedAmount, `تخفيض ذمة العميل / الإيراد المالي`]);
       } else {
-        // مدين: الموردون (حساب 7) | دائن: الصندوق والبنك (حساب 3)
-        await tx.run(`INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes) VALUES (?, 7, ?, ?, 0, ?)`,
-          [jeId, pId || null, parsedAmount, `سداد للمورد`]
-        );
-        await tx.run(`INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes) VALUES (?, 3, ?, 0, ?, ?)`,
-          [jeId, pId || null, parsedAmount, `صرف من الصندوق`]
-        );
+        // الطرف المدين: الحساب المختار (أو حساب الموردون 7 افتراضياً)
+        const debitAcc = accId || 7;
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+          VALUES (?, ?, ?, ?, ?, 0, ?)
+        `, [jeId, debitAcc, ccId, pId, parsedAmount, `سداد للمورد / إثبات المصروف`]);
+
+        // الطرف الدائن: الصندوق والبنك (حساب 3)
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+          VALUES (?, 3, ?, ?, 0, ?, ?)
+        `, [jeId, ccId, pId, parsedAmount, `صرف من الصندوق / البنك - طريقة: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
       }
 
       return result;
@@ -178,7 +212,7 @@ router.post('/', async (req, res) => {
 
     res.json({
       success: true,
-      message: `تم تسجيل سند ال${type} بنجاح برقم ${receipt_no} وحفظ القيد اليومي التلقائي`,
+      message: `تم تسجيل سند ال${type} بنجاح برقم ${receipt_no} وحفظ القيد اليومي التلقائي مع الحساب ومركز التكلفة`,
       receipt_no,
       id: txResult.lastInsertRowid || txResult.insertId
     });

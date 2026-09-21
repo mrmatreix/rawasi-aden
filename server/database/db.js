@@ -213,6 +213,125 @@ async function initMysql() {
     }
   } catch {}
 
+  // ترقية جداول MySQL التلقائية لمراكز التكلفة والشيكات والعهد
+  try {
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS cost_centers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(200) NOT NULL,
+        type VARCHAR(100) DEFAULT 'مشروع',
+        project_id INT NULL,
+        status VARCHAR(50) DEFAULT 'active',
+        notes TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    const [ccCount] = await mysqlPool.query("SELECT count(*) as count FROM cost_centers");
+    if (!ccCount || ccCount[0].count === 0) {
+      await mysqlPool.query(`
+        INSERT IGNORE INTO cost_centers (code, name, type, notes) VALUES
+        ('CC-100', 'الإدارة العامة والمصروفات المشتركة', 'إدارة عامة', 'مركز تكلفة الإدارة الرئيسية والمصروفات العمومية'),
+        ('CC-200', 'المعدات والآليات والتشغيل الميداني', 'معدات وآليات', 'مركز تكلفة المحروقات وصيانة المعدات');
+      `);
+      await mysqlPool.query(`
+        INSERT IGNORE INTO cost_centers (code, name, type, project_id, notes)
+        SELECT CONCAT('CC-', LPAD(id, 3, '0')), name, 'مشروع', id, 'مركز تكلفة خاص بالمشروع'
+        FROM projects;
+      `);
+    }
+
+    const checkAndAddCol = async (table, col, def) => {
+      const [cols] = await mysqlPool.query(`SHOW COLUMNS FROM \`${table}\` LIKE '${col}'`);
+      if (!cols || cols.length === 0) {
+        await mysqlPool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${def}`);
+      }
+    };
+
+    await checkAndAddCol('expenses', 'account_id', 'INT NULL');
+    await checkAndAddCol('expenses', 'cost_center_id', 'INT NULL');
+    await checkAndAddCol('expenses', 'check_no', 'VARCHAR(100) NULL');
+    await checkAndAddCol('expenses', 'bank_name', 'VARCHAR(150) NULL');
+
+    await checkAndAddCol('payments', 'account_id', 'INT NULL');
+    await checkAndAddCol('payments', 'cost_center_id', 'INT NULL');
+    await checkAndAddCol('payments', 'check_no', 'VARCHAR(100) NULL');
+    await checkAndAddCol('payments', 'bank_name', 'VARCHAR(150) NULL');
+
+    await checkAndAddCol('journal_entry_lines', 'cost_center_id', 'INT NULL');
+
+    await checkAndAddCol('custodies', 'custody_no', 'VARCHAR(100) NULL');
+    await checkAndAddCol('custodies', 'employee_id', 'INT NULL');
+    await checkAndAddCol('custodies', 'employee_no', 'VARCHAR(50) NULL');
+    await checkAndAddCol('custodies', 'related_custody_id', 'INT NULL');
+    await checkAndAddCol('custodies', 'related_custody_no', 'VARCHAR(100) NULL');
+    await checkAndAddCol('custodies', 'status', 'VARCHAR(50) DEFAULT \'مفتوحة\'');
+
+    await checkAndAddCol('payroll', 'journal_entry_id', 'INT NULL');
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS currencies (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(10) NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        symbol VARCHAR(20) NOT NULL,
+        rate_to_base DECIMAL(12,4) DEFAULT 1.0,
+        is_base TINYINT(1) DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'active',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      INSERT IGNORE INTO currencies (code, name, symbol, rate_to_base, is_base, status) VALUES
+      ('YER', 'ريال يمني', 'ر.ي', 1.0, 1, 'active'),
+      ('SAR', 'ريال سعودي', 'ر.س', 535.0, 0, 'active'),
+      ('USD', 'دولار أمريكي', '$', 2040.0, 0, 'active');
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS leave_types (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        days_allowed INT DEFAULT 30,
+        is_paid TINYINT(1) DEFAULT 1,
+        notes TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      INSERT IGNORE INTO leave_types (name, days_allowed, is_paid, notes) VALUES
+      ('إجازة سنوية اعتيادية', 30, 1, 'رصيد سنوي مدفوع الأجر بالكامل'),
+      ('إجازة مرضية', 15, 1, 'بتقرير طبي معتمد مدفوعة الأجر'),
+      ('إجازة طارئة وعارضة', 6, 1, 'إجازة ظروف طارئة مقتطعة من الرصيد'),
+      ('إجازة بدون راتب', 90, 0, 'إجازة خاصة غير مدفوعة'),
+      ('إجازة حج وعمرة', 15, 1, 'تمنح لمرة واحدة طوال الخدمة');
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS employee_evaluations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        evaluator_name VARCHAR(150) NULL,
+        period VARCHAR(100) NOT NULL,
+        evaluation_date DATE NOT NULL,
+        score DECIMAL(5,2) DEFAULT 100,
+        rating VARCHAR(50) DEFAULT 'ممتاز',
+        strengths TEXT NULL,
+        improvements TEXT NULL,
+        recommendations TEXT NULL,
+        notes TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+  } catch (err) {
+    console.warn('Accounting migration note (MySQL):', err.message);
+  }
+
   activeEngine = 'mysql';
   console.log(`🐬 [Rawasi DB] MySQL engine active! Connected to [${mysqlCfg.database}] on ${mysqlCfg.host}:${mysqlCfg.port}`);
 }
@@ -241,7 +360,144 @@ function initSqlite() {
     if (!colNames.includes('last_login_device')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_device TEXT;");
     if (!colNames.includes('active_sessions')) sqliteDb.exec("ALTER TABLE users ADD COLUMN active_sessions TEXT;");
     if (!colNames.includes('security_settings')) sqliteDb.exec("ALTER TABLE users ADD COLUMN security_settings TEXT;");
-  } catch {}
+
+    // ترقية مراكز التكلفة وجداول المحاسبة والشيكات والعهد
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS cost_centers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT DEFAULT 'مشروع',
+        project_id INTEGER REFERENCES projects(id),
+        status TEXT DEFAULT 'active',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const ccCount = sqliteDb.prepare("SELECT count(*) as count FROM cost_centers").get();
+    if (!ccCount || ccCount.count === 0) {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO cost_centers (code, name, type, notes) VALUES
+        ('CC-100', 'الإدارة العامة والمصروفات المشتركة', 'إدارة عامة', 'مركز تكلفة الإدارة الرئيسية والمصروفات العمومية'),
+        ('CC-200', 'المعدات والآليات والتشغيل الميداني', 'معدات وآليات', 'مركز تكلفة المحروقات وصيانة المعدات');
+      `);
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO cost_centers (code, name, type, project_id, notes)
+        SELECT 'CC-' || printf('%03d', id), name, 'مشروع', id, 'مركز تكلفة خاص بالمشروع'
+        FROM projects;
+      `);
+    }
+
+    const expCols = sqliteDb.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+    if (!expCols.includes('account_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
+    if (!expCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
+    if (!expCols.includes('check_no')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN check_no TEXT;");
+    if (!expCols.includes('bank_name')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN bank_name TEXT;");
+
+    const payCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
+    if (!payCols.includes('account_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
+    if (!payCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
+    if (!payCols.includes('check_no')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN check_no TEXT;");
+    if (!payCols.includes('bank_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bank_name TEXT;");
+
+    const jelCols = sqliteDb.prepare("PRAGMA table_info(journal_entry_lines)").all().map(c => c.name);
+    if (!jelCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE journal_entry_lines ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
+
+    const custCols = sqliteDb.prepare("PRAGMA table_info(custodies)").all().map(c => c.name);
+    if (!custCols.includes('custody_no')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN custody_no TEXT;");
+    if (!custCols.includes('employee_id')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN employee_id INTEGER REFERENCES employees(id);");
+    if (!custCols.includes('employee_no')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN employee_no TEXT;");
+    if (!custCols.includes('related_custody_id')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN related_custody_id INTEGER REFERENCES custodies(id);");
+    if (!custCols.includes('related_custody_no')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN related_custody_no TEXT;");
+    if (!custCols.includes('status')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN status TEXT DEFAULT 'مفتوحة';");
+
+    sqliteDb.exec(`
+      UPDATE custodies SET custody_no = 'CST-2024-' || printf('%04d', id) WHERE custody_no IS NULL OR custody_no = '';
+    `);
+
+    // ترقية جداول الإدارات المؤسسية الـ 7:
+    // 1. جدول العملات وأسعار الصرف
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS currencies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        rate_to_base REAL DEFAULT 1.0,
+        is_base INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    const curCount = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM currencies").get();
+    if (!curCount || curCount.cnt === 0) {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO currencies (code, name, symbol, rate_to_base, is_base, status) VALUES
+        ('YER', 'ريال يمني', 'ر.ي', 1.0, 1, 'active'),
+        ('SAR', 'ريال سعودي', 'ر.س', 535.0, 0, 'active'),
+        ('USD', 'دولار أمريكي', '$', 2040.0, 0, 'active');
+      `);
+    }
+
+    // 2. جدول أنواع الإجازات
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS leave_types (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        days_allowed INTEGER DEFAULT 30,
+        is_paid INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    const ltCount = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM leave_types").get();
+    if (!ltCount || ltCount.cnt === 0) {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO leave_types (name, days_allowed, is_paid, notes) VALUES
+        ('إجازة سنوية اعتيادية', 30, 1, 'رصيد سنوي مدفوع الأجر بالكامل'),
+        ('إجازة مرضية', 15, 1, 'بتقرير طبي معتمد مدفوعة الأجر'),
+        ('إجازة طارئة وعارضة', 6, 1, 'إجازة ظروف طارئة مقتطعة من الرصيد'),
+        ('إجازة بدون راتب', 90, 0, 'إجازة خاصة غير مدفوعة'),
+        ('إجازة حج وعمرة', 15, 1, 'تمنح لمرة واحدة طوال الخدمة');
+      `);
+    }
+
+    // 3. جدول تقييم أداء الموظفين
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS employee_evaluations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL REFERENCES employees(id),
+        evaluator_name TEXT,
+        period TEXT NOT NULL,
+        evaluation_date DATE NOT NULL,
+        score REAL DEFAULT 100,
+        rating TEXT DEFAULT 'ممتاز',
+        strengths TEXT,
+        improvements TEXT,
+        recommendations TEXT,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 4. ربط مسير الرواتب برقم القيد اليومي عند الترحيل المحاسبي
+    const prCols = sqliteDb.prepare("PRAGMA table_info(payroll)").all().map(c => c.name);
+    if (!prCols.includes('journal_entry_id')) {
+      sqliteDb.exec("ALTER TABLE payroll ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
+    }
+
+    // 5. تهيئة عينة لمشاريع تحت الدراسة إن لم تكن موجودة
+    const studyProj = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM projects WHERE status = 'under_study'").get();
+    if (!studyProj || studyProj.cnt === 0) {
+      sqliteDb.exec(`
+        INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress, status, notes)
+        VALUES ('مشروع مجمع خورمكسر الطبي (قيد الدراسة والتسعير)', 1, 65000000, 52000000, 0, 0, 'under_study', 'مشروع قيد إعداد جدول الكميات BOQ والتسعير الهندسي للعطاء المنافس');
+      `);
+    }
+  } catch (err) {
+    console.warn('Accounting migration note (SQLite):', err.message);
+  }
 
   activeEngine = 'sqlite';
   console.log(`📦 [Rawasi DB] SQLite engine active -> rawasi_aden.db`);

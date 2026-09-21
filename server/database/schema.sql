@@ -135,8 +135,13 @@ CREATE TABLE IF NOT EXISTS expenses (
     expense_type TEXT NOT NULL, -- مواد بناء، أجور عمالة، معدات، نقل ومواصلات، مصروفات إدارية، أخرى
     project_id INTEGER REFERENCES projects(id),
     supplier_id INTEGER REFERENCES suppliers(id),
+    account_id INTEGER REFERENCES accounts(id),
+    cost_center_id INTEGER REFERENCES cost_centers(id),
     amount REAL NOT NULL,
+    currency TEXT DEFAULT 'ر.ي',
     payment_method TEXT DEFAULT 'نقدي', -- نقدي، تحويل بنكي، شيك
+    check_no TEXT,                      -- رقم الشيك (إلزامي عند الصرف بشيك)
+    bank_name TEXT,                     -- اسم البنك
     recipient TEXT,
     date DATE NOT NULL,
     notes TEXT,
@@ -167,8 +172,13 @@ CREATE TABLE IF NOT EXISTS payments (
     client_id INTEGER REFERENCES clients(id),
     supplier_id INTEGER REFERENCES suppliers(id),
     project_id INTEGER REFERENCES projects(id),
+    account_id INTEGER REFERENCES accounts(id),
+    cost_center_id INTEGER REFERENCES cost_centers(id),
     amount REAL NOT NULL,
+    currency TEXT DEFAULT 'ر.ي',
     payment_method TEXT DEFAULT 'نقدي', -- نقدي، تحويل بنكي، شيك
+    check_no TEXT,                      -- رقم الشيك (إلزامي عند القبض أو الصرف بشيك)
+    bank_name TEXT,                     -- اسم البنك
     date DATE NOT NULL,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -177,11 +187,18 @@ CREATE TABLE IF NOT EXISTS payments (
 -- 12. جدول النثريات والعهد
 CREATE TABLE IF NOT EXISTS custodies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    operation_type TEXT NOT NULL, -- صرف عهدة، تصفية عهدة، نثريات
+    custody_no TEXT UNIQUE,             -- رقم العهدة التسلسلي الفريد
+    operation_type TEXT NOT NULL,       -- صرف عهدة، تصفية عهدة، نثريات
+    employee_id INTEGER REFERENCES employees(id),
+    employee_no TEXT,                   -- الرقم الوظيفي
     employee_name TEXT NOT NULL,
+    related_custody_id INTEGER REFERENCES custodies(id), -- رقم العهدة الأصلية عند التصفية
+    related_custody_no TEXT,
     total_amount REAL NOT NULL,
     spent_amount REAL DEFAULT 0,
     remaining_amount REAL DEFAULT 0,
+    currency TEXT DEFAULT 'ر.ي',
+    status TEXT DEFAULT 'مفتوحة',       -- مفتوحة، مصفاة بالكامل، تصفية جزئية
     date DATE NOT NULL,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -211,25 +228,38 @@ CREATE TABLE IF NOT EXISTS accounts (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 14.ب جدول مراكز التكلفة
+CREATE TABLE IF NOT EXISTS cost_centers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,          -- كود مركز التكلفة
+    name TEXT NOT NULL,                 -- اسم مركز التكلفة
+    type TEXT DEFAULT 'مشروع',          -- نوع المركز: مشروع، إدارة عامة، معدات، فرع
+    project_id INTEGER REFERENCES projects(id),
+    status TEXT DEFAULT 'active',
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 15. القيود اليومية العامة
 CREATE TABLE IF NOT EXISTS journal_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     entry_no TEXT UNIQUE NOT NULL,
     date DATE NOT NULL,
     description TEXT NOT NULL,
-    reference_type TEXT, -- سند قبض، سند صرف، فاتورة، مستخلص
+    reference_type TEXT, -- سند قبض، سند صرف، فاتورة، مستخلص، قيد يدوي
     reference_id INTEGER,
     total_debit REAL DEFAULT 0,
     total_credit REAL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 16. سطور القيود اليومية
+-- 16. سطور القيود اليومية (طرفين مدين ودائن)
 CREATE TABLE IF NOT EXISTS journal_entry_lines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     entry_id INTEGER REFERENCES journal_entries(id) ON DELETE CASCADE,
     account_id INTEGER REFERENCES accounts(id),
     project_id INTEGER REFERENCES projects(id),
+    cost_center_id INTEGER REFERENCES cost_centers(id),
     debit REAL DEFAULT 0,
     credit REAL DEFAULT 0,
     notes TEXT
@@ -542,3 +572,46 @@ CREATE TABLE IF NOT EXISTS project_final_settlements (
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ========================================================
+-- جداول الإدارات المؤسسية الجديدة (ERP Modules Support)
+-- ========================================================
+
+-- جدول تهيئة العملات وأسعار الصرف
+CREATE TABLE IF NOT EXISTS currencies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,          -- YER, SAR, USD
+    name TEXT NOT NULL,                 -- ريال يمني، ريال سعودي، دولار أمريكي
+    symbol TEXT NOT NULL,               -- ر.ي، ر.س، $
+    rate_to_base REAL DEFAULT 1.0,      -- سعر الصرف مقابل العملة الأساسية (الريال اليمني)
+    is_base INTEGER DEFAULT 0,          -- 1 إذا كانت العملة الأساسية
+    status TEXT DEFAULT 'active',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جدول تهيئة أنواع الإجازات
+CREATE TABLE IF NOT EXISTS leave_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,          -- سنوية، مرضية، طارئة، بدون راتب، حج/عمرة
+    days_allowed INTEGER DEFAULT 30,    -- رصيد الأيام المسموح بها سنوياً
+    is_paid INTEGER DEFAULT 1,          -- 1 مدفوعة، 0 غير مدفوعة
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جدول تقييم أداء الموظفين
+CREATE TABLE IF NOT EXISTS employee_evaluations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id),
+    evaluator_name TEXT,
+    period TEXT NOT NULL,               -- شهري، ربع سنوي، سنوي
+    evaluation_date DATE NOT NULL,
+    score REAL DEFAULT 100,             -- الدرجة من 100
+    rating TEXT DEFAULT 'ممتاز',        -- ممتاز، جيد جداً، جيد، مقبول، ضعيف
+    strengths TEXT,                     -- نقاط القوة
+    improvements TEXT,                  -- مجالات التطوير
+    recommendations TEXT,               -- توصيات الحوافز والترقيات
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+

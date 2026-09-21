@@ -149,15 +149,20 @@ CREATE TABLE IF NOT EXISTS expenses (
     expense_type VARCHAR(100) NOT NULL,
     project_id INT NULL,
     supplier_id INT NULL,
+    account_id INT NULL,
+    cost_center_id INT NULL,
     amount DECIMAL(15,2) NOT NULL,
     currency VARCHAR(20) DEFAULT 'ر.ي',
     payment_method VARCHAR(50) DEFAULT 'نقدي',
+    check_no VARCHAR(100) NULL,
+    bank_name VARCHAR(150) NULL,
     recipient VARCHAR(150) NULL,
     date DATE NOT NULL,
     notes TEXT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-    FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 10. جدول الفواتير والمستخلصات
@@ -187,29 +192,41 @@ CREATE TABLE IF NOT EXISTS payments (
     client_id INT NULL,
     supplier_id INT NULL,
     project_id INT NULL,
+    account_id INT NULL,
+    cost_center_id INT NULL,
     amount DECIMAL(15,2) NOT NULL,
     currency VARCHAR(20) DEFAULT 'ر.ي',
     payment_method VARCHAR(50) DEFAULT 'نقدي',
+    check_no VARCHAR(100) NULL,
+    bank_name VARCHAR(150) NULL,
     date DATE NOT NULL,
     notes TEXT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 12. جدول النثريات والعهد
 CREATE TABLE IF NOT EXISTS custodies (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    custody_no VARCHAR(100) UNIQUE NULL,
     operation_type VARCHAR(100) NOT NULL,
+    employee_id INT NULL,
+    employee_no VARCHAR(50) NULL,
     employee_name VARCHAR(150) NOT NULL,
+    related_custody_id INT NULL,
+    related_custody_no VARCHAR(100) NULL,
     total_amount DECIMAL(15,2) NOT NULL,
     spent_amount DECIMAL(15,2) DEFAULT 0,
     remaining_amount DECIMAL(15,2) DEFAULT 0,
     currency VARCHAR(20) DEFAULT 'ر.ي',
+    status VARCHAR(50) DEFAULT 'مفتوحة',
     date DATE NOT NULL,
     notes TEXT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 13. جدول حركة الصندوق والبنك
@@ -238,6 +255,19 @@ CREATE TABLE IF NOT EXISTS accounts (
     FOREIGN KEY (parent_id) REFERENCES accounts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 14.ب جدول مراكز التكلفة
+CREATE TABLE IF NOT EXISTS cost_centers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    type VARCHAR(100) DEFAULT 'مشروع',
+    project_id INT NULL,
+    status VARCHAR(50) DEFAULT 'active',
+    notes TEXT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 15. القيود اليومية العامة
 CREATE TABLE IF NOT EXISTS journal_entries (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -257,12 +287,14 @@ CREATE TABLE IF NOT EXISTS journal_entry_lines (
     entry_id INT NOT NULL,
     account_id INT NULL,
     project_id INT NULL,
+    cost_center_id INT NULL,
     debit DECIMAL(15,2) DEFAULT 0,
     credit DECIMAL(15,2) DEFAULT 0,
     notes TEXT NULL,
     FOREIGN KEY (entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    FOREIGN KEY (cost_center_id) REFERENCES cost_centers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 17. إعدادات النظام ومعلومات الشركة
@@ -594,4 +626,48 @@ CREATE TABLE IF NOT EXISTS project_final_settlements (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ========================================================
+-- جداول الإدارات المؤسسية الجديدة (ERP Modules Support)
+-- ========================================================
+
+-- جدول تهيئة العملات وأسعار الصرف
+CREATE TABLE IF NOT EXISTS currencies (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(10) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    symbol VARCHAR(20) NOT NULL,
+    rate_to_base DECIMAL(12,4) DEFAULT 1.0,
+    is_base TINYINT(1) DEFAULT 0,
+    status VARCHAR(50) DEFAULT 'active',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- جدول تهيئة أنواع الإجازات
+CREATE TABLE IF NOT EXISTS leave_types (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    days_allowed INT DEFAULT 30,
+    is_paid TINYINT(1) DEFAULT 1,
+    notes TEXT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- جدول تقييم أداء الموظفين
+CREATE TABLE IF NOT EXISTS employee_evaluations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id INT NOT NULL,
+    evaluator_name VARCHAR(150) NULL,
+    period VARCHAR(100) NOT NULL,
+    evaluation_date DATE NOT NULL,
+    score DECIMAL(5,2) DEFAULT 100,
+    rating VARCHAR(50) DEFAULT 'ممتاز',
+    strengths TEXT NULL,
+    improvements TEXT NULL,
+    recommendations TEXT NULL,
+    notes TEXT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
+

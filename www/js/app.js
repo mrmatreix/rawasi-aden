@@ -83,6 +83,68 @@ const App = {
     if (backdrop) backdrop.classList.remove('active');
   },
 
+  // التحكم بالقوائم الشجرية المنسدلة (Accordion Groups)
+  toggleNavGroup(groupId) {
+    const groupEl = document.getElementById(groupId);
+    if (!groupEl) return;
+    const isOpen = groupEl.classList.contains('open');
+    groupEl.classList.toggle('open', !isOpen);
+  },
+
+  // التنقل الشجري العميق إلى إدارة وتبويب محدد
+  navigateDeep(viewId, subTab, clickedEl = null) {
+    // فتح مجموعة القائمة الحاضنة للتبويب
+    if (clickedEl) {
+      const parentGroup = clickedEl.closest('.nav-group');
+      if (parentGroup) parentGroup.classList.add('open');
+      document.querySelectorAll('.nav-sub-item').forEach(el => el.classList.remove('active'));
+      clickedEl.classList.add('active');
+    }
+
+    // الانتقال للشاشة الرئيسية أولاً
+    this.navigate(viewId, null);
+
+    // توجيه التبويب الفرعي المتخصص
+    if (viewId === 'settings') {
+      if (typeof Settings !== 'undefined' && Settings.switchTab) {
+        Settings.switchTab(subTab);
+      }
+    } else if (viewId === 'journal') {
+      if (typeof Accounting !== 'undefined' && Accounting.switchJournalTab) {
+        Accounting.switchJournalTab(subTab);
+      }
+    } else if (viewId === 'reports') {
+      if (typeof Reports !== 'undefined' && Reports.switchReportTab) {
+        Reports.switchReportTab(subTab);
+      }
+    } else if (viewId === 'hr') {
+      if (typeof HR !== 'undefined' && HR.showPane) {
+        const btn = document.querySelector(`#hrView .report-tab-btn[onclick*="'${subTab}'"]`);
+        HR.showPane(subTab, btn);
+      }
+    } else if (viewId === 'projects') {
+      if (typeof Projects !== 'undefined' && Projects.filterStatus) {
+        Projects.filterStatus(subTab);
+      }
+    } else if (viewId === 'inventory') {
+      if (typeof Inventory !== 'undefined' && Inventory.switchTab) {
+        Inventory.switchTab(subTab);
+      }
+    }
+  },
+
+  // التنقل السريع إلى قسم محدد داخل مركز مستندات المشروع الـ 16
+  navigateProjectHubSection(sectionNumber) {
+    this.navigate('projectHub');
+    if (typeof ProjectHub !== 'undefined') {
+      if (ProjectHub.switchSection) {
+        ProjectHub.switchSection(sectionNumber);
+      } else if (ProjectHub.showSection) {
+        ProjectHub.showSection(sectionNumber);
+      }
+    }
+  },
+
   // التنقل بين الأقسام والشاشات
   navigate(viewId, clickedEl = null) {
     this.activeView = viewId;
@@ -150,6 +212,8 @@ const App = {
     } else if (viewId === 'custody') {
       Accounting.loadRecentCustodySummary();
       this.loadCustodyTable();
+    } else if (viewId === 'journal') {
+      Accounting.loadJournalEntries();
     } else if (viewId === 'clients') {
       this.loadClientsTable();
     } else if (viewId === 'suppliers') {
@@ -292,8 +356,15 @@ const App = {
             tbody.innerHTML = list.map(c => `
               <tr>
                 <td>${c.date}</td>
-                <td><strong>${c.employee_name}</strong></td>
-                <td><span class="badge ${c.operation_type === 'تصفية عهدة' ? 'badge-income' : 'badge-active'}">${c.operation_type}</span></td>
+                <td>
+                  <strong>${c.employee_name}</strong>
+                  ${c.employee_no ? `<br><small style="color: var(--text-secondary); font-family: monospace;">(${c.employee_no})</small>` : ''}
+                </td>
+                <td>
+                  <span class="badge ${c.operation_type === 'تصفية عهدة' ? 'badge-income' : 'badge-active'}">${c.operation_type}</span>
+                  ${c.custody_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">${c.custody_no}</small>` : ''}
+                  ${c.related_custody_no ? `<br><small style="color: #38bdf8;">تصفية لـ: <strong>${c.related_custody_no}</strong></small>` : ''}
+                </td>
                 <td>${this.formatNumber(c.total_amount)} ${c.currency || 'ر.ي'}</td>
                 <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(c.spent_amount)} ${c.currency || 'ر.ي'}</td>
                 <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(c.remaining_amount)} ${c.currency || 'ر.ي'}</td>

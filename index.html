@@ -223,84 +223,328 @@
       </div>
 
       <ul class="sidebar-nav" id="sidebarNavList">
+        <!-- لوحة التحكم العامة -->
         <li data-perm="dashboard:view">
           <a class="nav-item active" href="javascript:void(0)" onclick="App.navigate('dashboard', this)">
             <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-            <span>لوحة التحكم</span>
+            <span>لوحة التحكم الرئيسية</span>
           </a>
         </li>
-        <li data-perm="revenues:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('revenues', this)">
-            <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
-            <span>الإيرادات</span>
-          </a>
+
+        <!-- 1. إدارة تهيئة النظام -->
+        <li class="nav-group" id="groupSystemSettings" data-perm="settings:users,settings:company,settings:backup">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupSystemSettings')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+              <span>1. تهيئة النظام</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'company', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+                <span>بيانات الشركة والترويسة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'users', this)">
+                <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                <span>المستخدمون والصلاحيات</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'backup', this)">
+                <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                <span>النسخ الاحتياطي والأمان</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('settings', 'print_templates', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                <span>أنماط الطباعة والترويسة</span>
+              </a>
+            </li>
+          </ul>
         </li>
-        <li data-perm="expenses:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('expenses', this)">
-            <svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg>
-            <span>المصروفات</span>
-          </a>
+
+        <!-- 2. إدارة الحسابات والمالية -->
+        <li class="nav-group" id="groupAccounting" data-perm="accounting:view,accounting:journal,revenues:view,expenses:view,custody:view,cash:view">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupAccounting')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zm-3-7h-2v2h2V9zm-4 0h-2v2h2V9zm-4 0H7v2h2V9zm8 4h-2v2h2v-2zm-4 0h-2v2h2v-2zm-4 0H7v2h2v-2z"/></svg>
+              <span>2. إدارة الحسابات</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'chartOfAccounts', this)">
+                <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                <span>دليل الحسابات الشجري</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'costCenters', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                <span>مراكز التكلفة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'currencies', this)">
+                <svg viewBox="0 0 24 24"><path d="M12.89 11.1c-1.78-.59-2.64-.96-2.64-1.9 0-1.02 1.11-1.39 1.81-1.39 1.31 0 1.79.59 1.9 1.4h2.15c-.11-1.49-.97-2.67-2.55-3.05V4h-2.91v2.07c-1.84.41-3.21 1.63-3.21 3.23 0 2.39 1.99 3.27 4.6 3.94 1.94.5 2.5 1.25 2.5 2.06 0 .9-.82 1.55-2.02 1.55-1.57 0-2.22-.72-2.35-1.65H5.97c.15 2.05 1.57 3.09 3.63 3.49V21h2.91v-2.19c1.92-.38 3.39-1.58 3.39-3.41 0-2.45-2.06-3.41-4.61-3.9z"/></svg>
+                <span>تهيئة العملات وأسعار الصرف</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('revenues', this)">
+                <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+                <span>سندات القبض</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('expenses', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg>
+                <span>سندات الصرف</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('journal', 'journalEntries', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                <span>القيود اليومية المحاسبية</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('cash', this)">
+                <svg viewBox="0 0 24 24"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                <span>حركة الصندوق والبنك</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('custody', this)">
+                <svg viewBox="0 0 24 24"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>
+                <span>النثريات والعهد وتصفيتها</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'trial-balance', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                <span>ميزان المراجعة والأرصدة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'income-statement', this)">
+                <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+                <span>تقرير الدخل (3 مصروفات + 4 إيرادات)</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'balance-sheet', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z"/></svg>
+                <span>المركز المالي (الميزانية العمومية 1+2)</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'cash-flow', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                <span>تقرير التدفقات النقدية</span>
+              </a>
+            </li>
+          </ul>
         </li>
-        <li data-perm="custody:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('custody', this)">
-            <svg viewBox="0 0 24 24"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>
-            <span>النثريات والعهد</span>
-          </a>
+
+        <!-- 3. إدارة الموارد البشرية -->
+        <li class="nav-group" id="groupHR" data-perm="hr:view">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupHR')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C22 14.17 18.33 13 16 13z"/></svg>
+              <span>3. الموارد البشرية</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'employees', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                <span>بيانات وملفات الموظفين</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'leaveTypes', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+                <span>أنواع وسياسات الإجازات</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'attendance', this)">
+                <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                <span>سجل الحضور والغياب</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'leaves', this)">
+                <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+                <span>طلبات الإجازات</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'advances', this)">
+                <svg viewBox="0 0 24 24"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8z"/></svg>
+                <span>سلف الموظفين</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'payroll', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                <span>مسير الرواتب والترحيل المالي</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('hr', 'evaluations', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                <span>تقييم الأداء والحوافز</span>
+              </a>
+            </li>
+          </ul>
         </li>
-        <li data-perm="projects:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('projects', this)">
-            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-            <span>المشاريع</span>
-          </a>
+
+        <!-- 4. إدارة المشاريع والمقاولات -->
+        <li class="nav-group" id="groupProjects" data-perm="projects:view">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupProjects')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+              <span>4. إدارة المشاريع</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('projects', 'under_study', this)">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <span>مشاريع تحت الدراسة والعطاءات</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('projects', 'active', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z M3.5 13.5h17v7h-17z"/></svg>
+                <span>المشاريع الجارية والمنفذة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('projectHub', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z M3.5 13.5h17v7h-17z M12 5.5l2.5 4h-5z"/></svg>
+                <span>مركز مستندات المشروع الـ 16</span>
+              </a>
+            </li>
+          </ul>
         </li>
-        <li data-perm="projects:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('projectHub', this)">
-            <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z M3.5 13.5h17v7h-17z M12 5.5l2.5 4h-5z"/></svg>
-            <span>مركز مستندات المشروع (14 قسم)</span>
-          </a>
+
+        <!-- 5. إدارة المبيعات والعقود -->
+        <li class="nav-group" id="groupSales" data-perm="revenues:view,projects:view">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupSales')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+              <span>5. إدارة المبيعات والعقود</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateProjectHubSection(10)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                <span>عروض الأسعار والتسعير</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateProjectHubSection(1)">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <span>عقود المقاولات المبرمة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateProjectHubSection(4)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                <span>مستخلصات المالك المعتمدة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'projects-profitability', this)">
+                <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+                <span>الحسابات الختامية وربحية المشاريع</span>
+              </a>
+            </li>
+          </ul>
         </li>
-        <li data-perm="clients:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('clients', this)">
-            <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-            <span>العملاء</span>
-          </a>
+
+        <!-- 6. إدارة العملاء والموردين -->
+        <li class="nav-group" id="groupParties" data-perm="clients:view,suppliers:view">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupParties')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+              <span>6. العملاء والموردون</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('clients', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                <span>سجل العملاء وحساباتهم</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('suppliers', this)">
+                <svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>
+                <span>سجل الموردين ومقاولي الباطن</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'client-statement', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                <span>كشف حساب عميل</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('reports', 'supplier-statement', this)">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <span>كشف حساب مورد / مقاول باطن</span>
+              </a>
+            </li>
+          </ul>
         </li>
-        <li data-perm="suppliers:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('suppliers', this)">
-            <svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-            <span>الموردون</span>
-          </a>
+
+        <!-- 7. إدارة المخزون والمشتريات -->
+        <li class="nav-group" id="groupInventory" data-perm="inventory:view">
+          <div class="nav-group-header" onclick="App.toggleNavGroup('groupInventory')">
+            <div class="nav-group-title">
+              <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm2 4h12v2H6zm2 4h8v2H8z"/></svg>
+              <span>7. المخزون والمشتريات</span>
+            </div>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <ul class="nav-sub-list">
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'items', this)">
+                <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm2 4h12v2H6zm2 4h8v2H8z"/></svg>
+                <span>دليل المواد والأصناف</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'purchases', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg>
+                <span>فواتير مشتريات المواد</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'movements', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                <span>أذون الصرف المخزني للمشاريع</span>
+              </a>
+            </li>
+          </ul>
         </li>
-        <li data-perm="inventory:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('inventory', this)">
-            <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm2 4h12v2H6zm2 4h8v2H8z"/></svg>
-            <span>المخزون والمواد</span>
-          </a>
-        </li>
-        <li data-perm="cash:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('cash', this)">
-            <svg viewBox="0 0 24 24"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-            <span>الصندوق والبنك</span>
-          </a>
-        </li>
-        <li data-perm="hr:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('hr', this)">
-            <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C22 14.17 18.33 13 16 13z"/></svg>
-            <span>الموارد البشرية</span>
-          </a>
-        </li>
-        <li data-perm="reports:view">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('reports', this)">
-            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
-            <span>التقارير</span>
-          </a>
-        </li>
-        <li data-perm="settings:users,settings:company,settings:backup">
-          <a class="nav-item" href="javascript:void(0)" onclick="App.navigate('settings', this)">
-            <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-            <span>الإعدادات</span>
-          </a>
-        </li>
+
+        <!-- تسجيل الخروج -->
         <li class="nav-logout">
           <a class="nav-item nav-logout" href="javascript:void(0)" onclick="Auth.logout()">
             <svg viewBox="0 0 24 24"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
@@ -492,6 +736,20 @@
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                </div>
+                <select id="rcAccountSelect" class="form-control">
+                  <option value="">اختر الحساب (افتراضي: العملاء 112)...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>مركز التكلفة</label>
+                <select id="rcCostCenterSelect" class="form-control">
+                  <option value="">اختر مركز التكلفة...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">المشروع</label>
                   <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
@@ -505,11 +763,24 @@
               </div>
               <div class="form-group">
                 <label>طريقة الدفع</label>
-                <select id="rcPaymentMethod" class="form-control">
+                <select id="rcPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('rcPaymentMethod', 'rcCheckFieldsRow')">
                   <option value="تحويل بنكي">تحويل بنكي</option>
                   <option value="نقدي">نقدي</option>
                   <option value="شيك">شيك</option>
                 </select>
+              </div>
+              <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
+              <div id="rcCheckFieldsRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
+                    <input type="text" id="rcCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.78rem;">البنك المسحوب عليه</label>
+                    <input type="text" id="rcBankName" class="form-control" placeholder="اسم البنك">
+                  </div>
+                </div>
               </div>
               <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
                 <div class="form-group">
@@ -555,6 +826,18 @@
                 </select>
               </div>
               <div class="form-group">
+                <label>الحساب المالي (دليل الحسابات)</label>
+                <select id="expAccountSelect" class="form-control">
+                  <option value="">اختر الحساب (تلقائي: تكاليف ومصروفات 5)...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>مركز التكلفة</label>
+                <select id="expCostCenterSelect" class="form-control">
+                  <option value="">اختر مركز التكلفة...</option>
+                </select>
+              </div>
+              <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">المشروع</label>
                   <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
@@ -592,11 +875,24 @@
               </div>
               <div class="form-group">
                 <label>طريقة الدفع</label>
-                <select id="expPaymentMethod" class="form-control">
+                <select id="expPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('expPaymentMethod', 'expCheckFieldsRow')">
                   <option value="نقدي">نقدي</option>
                   <option value="تحويل بنكي">تحويل بنكي</option>
                   <option value="شيك">شيك</option>
                 </select>
+              </div>
+              <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
+              <div id="expCheckFieldsRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
+                    <input type="text" id="expCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.78rem;">البنك المسحوب عليه</label>
+                    <input type="text" id="expBankName" class="form-control" placeholder="اسم البنك">
+                  </div>
+                </div>
               </div>
               <div class="form-group">
                 <label>ملاحظات</label>
@@ -617,20 +913,29 @@
             <form id="quickCustodyForm" onsubmit="Accounting.submitCustody(event)">
               <div class="form-group">
                 <label>نوع العملية</label>
-                <select id="custodyTypeSelect" class="form-control">
-                  <option value="صرف عهدة">صرف عهدة</option>
-                  <option value="تصفية عهدة">تصفية عهدة</option>
-                  <option value="نثريات">نثريات</option>
+                <select id="custodyTypeSelect" class="form-control" onchange="Accounting.handleCustodyTypeChange('custodyTypeSelect', 'quickCustodyRelatedRow')">
+                  <option value="صرف عهدة">صرف عهدة جديدة</option>
+                  <option value="تصفية عهدة">تصفية عهدة سابقة</option>
+                  <option value="نثريات">نثريات ومصروفات يومية</option>
                 </select>
               </div>
               <div class="form-group">
-                <label>الموظف</label>
-                <input type="text" id="custodyEmpName" class="form-control" value="أحمد محمد" required>
+                <label>الموظف المرتبط بالعهدة <span style="color: var(--accent-red);">*</span></label>
+                <select id="custodyEmployeeSelect" class="form-control" required onchange="Accounting.onCustodyEmployeeChange('custodyEmployeeSelect', 'custodyRelatedSelect')">
+                  <option value="">اختر الموظف...</option>
+                </select>
+              </div>
+              <!-- حقل اختيار رقم العهدة المراد تصفيتها شرطياً -->
+              <div class="form-group" id="quickCustodyRelatedRow" style="display: none; background: rgba(59, 130, 246, 0.08); border: 1px dashed #3b82f6; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+                <label style="color: #60a5fa; font-weight: bold; font-size: 0.8rem;">العهدة الأصلية المراد تصفيتها <span style="color: var(--accent-red);">*</span></label>
+                <select id="custodyRelatedSelect" class="form-control" onchange="Accounting.onRelatedCustodySelect('custodyRelatedSelect', 'custodyTotalAmount', 'custodySpentAmount')">
+                  <option value="">اختر العهدة المفتوحة للتصفية...</option>
+                </select>
               </div>
               <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
                 <div class="form-group">
-                  <label>إجمالي العهدة</label>
-                  <input type="number" id="custodyTotalAmount" class="form-control" value="10000" required>
+                  <label id="quickCustodyAmountLabel">إجمالي العهدة</label>
+                  <input type="number" id="custodyTotalAmount" class="form-control" placeholder="10000" required>
                 </div>
                 <div class="form-group">
                   <label>العملة</label>
@@ -641,9 +946,9 @@
                   </select>
                 </div>
               </div>
-              <div class="form-group">
-                <label>المصروف</label>
-                <input type="number" id="custodySpentAmount" class="form-control" value="3500">
+              <div class="form-group" id="quickCustodySpentGroup">
+                <label id="quickCustodySpentLabel">المصروف منها</label>
+                <input type="number" id="custodySpentAmount" class="form-control" value="0">
               </div>
               <div class="form-group">
                 <label>التاريخ</label>
@@ -651,15 +956,9 @@
               </div>
               <div class="form-group">
                 <label>ملاحظات</label>
-                <input type="text" id="custodyNotes" class="form-control" value="قرطاسية ومصروفات مكتبية">
+                <input type="text" id="custodyNotes" class="form-control" placeholder="قرطاسية ومصروفات مكتبية">
               </div>
-              <!-- شريط ملخص العهدة المباشر -->
-              <div style="display: flex; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 8px; border-radius: var(--radius-sm); margin: 10px 0; font-size: 0.75rem;">
-                <div>إجمالي العهدة: <strong id="custodySummaryTotal">10,000</strong></div>
-                <div>المصروف: <strong id="custodySummarySpent" style="color:var(--accent-red)">3,500</strong></div>
-                <div>المتبقي: <strong id="custodySummaryRemain" style="color:var(--accent-green)">6,500</strong></div>
-              </div>
-              <button type="submit" class="btn btn-primary btn-sm" style="width: 100%;">حفظ العهدة</button>
+              <button type="submit" class="btn btn-primary btn-sm" style="width: 100%; margin-top: 6px;">حفظ العملية</button>
             </form>
           </div>
 
@@ -794,24 +1093,39 @@
       <!-- ================== شاشة إدارة المشاريع الكاملة ================== -->
       <section id="projectsView" class="app-view-section" style="display: none;">
         <div class="page-header-row">
-          <h2 class="page-title">إدارة وتفاصيل كافة المشاريع</h2>
-          <button class="btn btn-primary" onclick="Projects.openNewModal()">مشروع جديد +</button>
+          <div>
+            <h2 class="page-title" id="projectsPageHeading">إدارة وتفاصيل كافة المشاريع</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">متابعة المشاريع الجارية ومشاريع تحت الدراسة وتسعير العطاءات والتكاليف الفعلية</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="Projects.openNewModal()">مشروع جديد +</button>
+            <button class="btn btn-secondary" onclick="Projects.loadProjects()">تحديث</button>
+          </div>
         </div>
+
+        <!-- أشرطة تصفية المشاريع -->
+        <div class="report-tabs-bar" style="margin-bottom: 16px;">
+          <button class="report-tab-btn active" id="tabBtn_proj_all" onclick="Projects.filterStatus('all', this)">كافة المشاريع</button>
+          <button class="report-tab-btn" id="tabBtn_proj_active" onclick="Projects.filterStatus('active', this)">المشاريع الجارية والمنفذة</button>
+          <button class="report-tab-btn" id="tabBtn_proj_under_study" onclick="Projects.filterStatus('under_study', this)">مشاريع تحت الدراسة والعطاءات</button>
+          <button class="report-tab-btn" id="tabBtn_proj_completed" onclick="Projects.filterStatus('completed', this)">المشاريع المكتملة</button>
+        </div>
+
         <div class="panel-card">
-          <p style="color: var(--text-secondary); margin-bottom: 15px;">يمكنك متابعة التكاليف الفعلية والمستخلصات ونسب الإنجاز لكل مشروع من هنا.</p>
           <div class="table-responsive">
             <table class="custom-table">
               <thead>
                 <tr>
-                  <th>اسم المشروع</th>
+                  <th>اسم المشروع وكوده</th>
                   <th>العميل</th>
+                  <th>الحالة</th>
                   <th>قيمة العقد</th>
                   <th>القيمة التقديرية</th>
                   <th>التكلفة الفعلية</th>
                   <th>نسبة الإنجاز</th>
                   <th>الربح المتوقع</th>
                   <th>الربح الفعلي</th>
-                  <th>الإجراء</th>
+                  <th style="text-align: center;">الإجراء</th>
                 </tr>
               </thead>
               <tbody id="fullProjectsTableBody"></tbody>
@@ -1559,14 +1873,171 @@
 
       <!-- ================== الموارد البشرية ================== -->
       <section id="hrView" class="app-view-section" style="display:none;">
-        <div class="page-header-row"><div><h2 class="page-title">إدارة الموارد البشرية</h2><p style="color:var(--text-secondary);font-size:.85rem;margin-top:4px;">الموظفون، الحضور، الإجازات، السلف ومسيرات الرواتب</p></div><div class="page-actions"><button class="btn btn-secondary" onclick="HR.load()">تحديث</button><button class="btn btn-primary" onclick="HR.openEmployeeModal()">+ موظف جديد</button></div></div>
-        <div class="kpi-grid"><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">الموظفون النشطون</span><span class="kpi-value" id="hrActiveEmployees">0</span></div><div class="kpi-icon-wrap">👥</div></div><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">حضور اليوم</span><span class="kpi-value" id="hrPresentToday">0</span></div><div class="kpi-icon-wrap">✓</div></div><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">رواتب بانتظار الصرف</span><span class="kpi-value" id="hrUnpaidPayroll">0</span></div><div class="kpi-icon-wrap">💰</div></div><div class="kpi-card"><div class="kpi-content"><span class="kpi-label">رصيد السلف</span><span class="kpi-value" id="hrActiveAdvances">0</span></div><div class="kpi-icon-wrap">📌</div></div></div>
-        <div class="report-tabs-bar" style="margin-bottom:20px;"><button class="report-tab-btn active" onclick="HR.showPane('employees',this)">الموظفون</button><button class="report-tab-btn" onclick="HR.showPane('attendance',this)">الحضور والانصراف</button><button class="report-tab-btn" onclick="HR.showPane('leaves',this)">الإجازات</button><button class="report-tab-btn" onclick="HR.showPane('advances',this)">السلف</button><button class="report-tab-btn" onclick="HR.showPane('payroll',this)">الرواتب</button></div>
-        <div id="hrPane_employees" class="hr-pane"><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الرقم</th><th>الموظف</th><th>المسمى</th><th>القسم</th><th>المشروع</th><th>الراتب</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="hrEmployeesTableBody"></tbody></table></div></div></div>
-        <div id="hrPane_attendance" class="hr-pane" style="display:none;"><div class="panel-card"><form onsubmit="HR.submitAttendance(event)" class="form-grid"><div class="form-group"><label>التاريخ</label><input id="hrAttendanceDate" class="form-control" type="date" onchange="HR.loadAttendance()"></div><div class="form-group"><label>الموظف</label><select id="hrAttendanceEmployee" class="form-control" required></select></div><div class="form-group"><label>الحالة</label><select id="hrAttendanceStatus" class="form-control"><option value="present">حاضر</option><option value="late">متأخر</option><option value="absent">غائب</option><option value="leave">إجازة</option></select></div><div class="form-group"><label>دخول</label><input id="hrCheckIn" class="form-control" type="time"></div><div class="form-group"><label>خروج</label><input id="hrCheckOut" class="form-control" type="time"></div><div class="form-group"><label>إضافي</label><input id="hrOvertime" class="form-control" type="number" value="0"></div><div class="form-group"><label>ملاحظات</label><input id="hrAttendanceNotes" class="form-control"></div><button class="btn btn-primary" type="submit">حفظ</button></form></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الرقم</th><th>الموظف</th><th>الحالة</th><th>الدخول</th><th>الخروج</th><th>إضافي</th><th>ملاحظات</th></tr></thead><tbody id="hrAttendanceTableBody"></tbody></table></div></div></div>
-        <div id="hrPane_leaves" class="hr-pane" style="display:none;"><div class="panel-card"><form onsubmit="HR.submitLeave(event)" class="form-grid"><div class="form-group"><label>الموظف</label><select id="hrLeaveEmployee" class="form-control" required></select></div><div class="form-group"><label>النوع</label><select id="hrLeaveType" class="form-control"><option>سنوية</option><option>مرضية</option><option>طارئة</option><option>بدون راتب</option></select></div><div class="form-group"><label>من</label><input id="hrLeaveStart" class="form-control" type="date" required></div><div class="form-group"><label>إلى</label><input id="hrLeaveEnd" class="form-control" type="date" required></div><div class="form-group"><label>الأيام</label><input id="hrLeaveDays" class="form-control" type="number" value="1"></div><button class="btn btn-primary">تسجيل الطلب</button></form></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الموظف</th><th>النوع</th><th>الفترة</th><th>الأيام</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="hrLeavesTableBody"></tbody></table></div></div></div>
-        <div id="hrPane_advances" class="hr-pane" style="display:none;"><div class="panel-card"><form onsubmit="HR.submitAdvance(event)" class="form-grid"><div class="form-group"><label>الموظف</label><select id="hrAdvanceEmployee" class="form-control" required></select></div><div class="form-group"><label>المبلغ</label><input id="hrAdvanceAmount" class="form-control" type="number" required></div><div class="form-group"><label>التاريخ</label><input id="hrAdvanceDate" class="form-control" type="date" required></div><div class="form-group"><label>القسط الشهري</label><input id="hrAdvanceInstallment" class="form-control" type="number" value="0"></div><button class="btn btn-primary">تسجيل السلفة</button></form></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الموظف</th><th>التاريخ</th><th>السلفة</th><th>المسدد</th><th>المتبقي</th><th>القسط</th><th>الحالة</th></tr></thead><tbody id="hrAdvancesTableBody"></tbody></table></div></div></div>
-        <div id="hrPane_payroll" class="hr-pane" style="display:none;"><div class="panel-card" style="display:flex;gap:10px;align-items:end;margin-bottom:14px;"><div class="form-group" style="margin:0;"><label>شهر المسير</label><input id="hrPayrollMonth" class="form-control" type="month" onchange="HR.loadPayroll()"></div><button class="btn btn-primary" onclick="HR.generatePayroll()">إنشاء مسير الرواتب</button></div><div class="panel-card"><div class="table-responsive"><table class="custom-table"><thead><tr><th>الموظف</th><th>الشهر</th><th>الأساسي</th><th>الإضافي</th><th>الاستقطاعات</th><th>الصافي</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="hrPayrollTableBody"></tbody></table></div></div></div>
+        <div class="page-header-row">
+          <div>
+            <h2 class="page-title">إدارة الموارد البشرية والأجور</h2>
+            <p style="color:var(--text-secondary);font-size:.85rem;margin-top:4px;">ملفات الموظفين، أنواع الإجازات، الحضور، السلف، مسيرات الرواتب والترحيل المالي، وتقييم الأداء</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-secondary" onclick="HR.load()">تحديث</button>
+            <button class="btn btn-primary" onclick="HR.openEmployeeModal()">+ موظف جديد</button>
+          </div>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-content"><span class="kpi-label">الموظفون النشطون</span><span class="kpi-value" id="hrActiveEmployees">0</span></div><div class="kpi-icon-wrap">👥</div></div>
+          <div class="kpi-card"><div class="kpi-content"><span class="kpi-label">حضور اليوم</span><span class="kpi-value" id="hrPresentToday">0</span></div><div class="kpi-icon-wrap">✓</div></div>
+          <div class="kpi-card"><div class="kpi-content"><span class="kpi-label">رواتب بانتظار الصرف</span><span class="kpi-value" id="hrUnpaidPayroll">0</span></div><div class="kpi-icon-wrap">💰</div></div>
+          <div class="kpi-card"><div class="kpi-content"><span class="kpi-label">رصيد السلف المستحقة</span><span class="kpi-value" id="hrActiveAdvances">0</span></div><div class="kpi-icon-wrap">📌</div></div>
+        </div>
+        <div class="report-tabs-bar" style="margin-bottom:20px;">
+          <button class="report-tab-btn active" onclick="HR.showPane('employees',this)">الموظفون</button>
+          <button class="report-tab-btn" onclick="HR.showPane('leaveTypes',this)">أنواع وسياسات الإجازات</button>
+          <button class="report-tab-btn" onclick="HR.showPane('attendance',this)">الحضور والانصراف</button>
+          <button class="report-tab-btn" onclick="HR.showPane('leaves',this)">طلبات الإجازات</button>
+          <button class="report-tab-btn" onclick="HR.showPane('advances',this)">سلف الموظفين</button>
+          <button class="report-tab-btn" onclick="HR.showPane('payroll',this)">مسيرات الرواتب والترحيل</button>
+          <button class="report-tab-btn" onclick="HR.showPane('evaluations',this)">تقييم الأداء والحوافز</button>
+        </div>
+
+        <div id="hrPane_employees" class="hr-pane">
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead><tr><th>الرقم</th><th>الموظف</th><th>المسمى</th><th>القسم</th><th>المشروع</th><th>الراتب</th><th>الحالة</th><th>إجراء</th></tr></thead>
+                <tbody id="hrEmployeesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="hrPane_leaveTypes" class="hr-pane" style="display:none;">
+          <div class="panel-card" style="margin-bottom:14px;">
+            <h4 style="margin-bottom:12px;color:var(--gold-light);">إضافة نوع إجازة جديد</h4>
+            <form onsubmit="HR.submitLeaveType(event)" class="form-grid">
+              <div class="form-group"><label>اسم نوع الإجازة</label><input id="hrLtName" class="form-control" placeholder="مثال: سنوية، مرضية..." required></div>
+              <div class="form-group"><label>الأيام المستحقة سنوياً</label><input id="hrLtDays" class="form-control" type="number" value="30" required></div>
+              <div class="form-group"><label>طبيعة الإجازة</label><select id="hrLtIsPaid" class="form-control"><option value="1">مدفوعة الراتب</option><option value="0">بدون راتب</option></select></div>
+              <div class="form-group"><label>الوصف والسياسة</label><input id="hrLtDesc" class="form-control" placeholder="ملاحظات الشروط والسياسة..."></div>
+              <button class="btn btn-primary" type="submit">حفظ نوع الإجازة</button>
+            </form>
+          </div>
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead><tr><th>النوع</th><th>الرصيد السنوي</th><th>الاستحقاق المالي</th><th>الوصف والسياسة</th></tr></thead>
+                <tbody id="hrLeaveTypesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="hrPane_attendance" class="hr-pane" style="display:none;">
+          <div class="panel-card">
+            <form onsubmit="HR.submitAttendance(event)" class="form-grid">
+              <div class="form-group"><label>التاريخ</label><input id="hrAttendanceDate" class="form-control" type="date" onchange="HR.loadAttendance()"></div>
+              <div class="form-group"><label>الموظف</label><select id="hrAttendanceEmployee" class="form-control" required></select></div>
+              <div class="form-group"><label>الحالة</label><select id="hrAttendanceStatus" class="form-control"><option value="present">حاضر</option><option value="late">متأخر</option><option value="absent">غائب</option><option value="leave">إجازة</option></select></div>
+              <div class="form-group"><label>دخول</label><input id="hrCheckIn" class="form-control" type="time"></div>
+              <div class="form-group"><label>خروج</label><input id="hrCheckOut" class="form-control" type="time"></div>
+              <div class="form-group"><label>إضافي</label><input id="hrOvertime" class="form-control" type="number" value="0"></div>
+              <div class="form-group"><label>ملاحظات</label><input id="hrAttendanceNotes" class="form-control"></div>
+              <button class="btn btn-primary" type="submit">حفظ السجل</button>
+            </form>
+          </div>
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead><tr><th>الرقم</th><th>الموظف</th><th>الحالة</th><th>الدخول</th><th>الخروج</th><th>إضافي</th><th>ملاحظات</th></tr></thead>
+                <tbody id="hrAttendanceTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="hrPane_leaves" class="hr-pane" style="display:none;">
+          <div class="panel-card">
+            <form onsubmit="HR.submitLeave(event)" class="form-grid">
+              <div class="form-group"><label>الموظف</label><select id="hrLeaveEmployee" class="form-control" required></select></div>
+              <div class="form-group"><label>نوع الإجازة</label><select id="hrLeaveType" class="form-control"><option>سنوية</option><option>مرضية</option><option>طارئة</option><option>بدون راتب</option><option>حج وعمرة</option></select></div>
+              <div class="form-group"><label>من</label><input id="hrLeaveStart" class="form-control" type="date" required></div>
+              <div class="form-group"><label>إلى</label><input id="hrLeaveEnd" class="form-control" type="date" required></div>
+              <div class="form-group"><label>الأيام</label><input id="hrLeaveDays" class="form-control" type="number" value="1"></div>
+              <button class="btn btn-primary" type="submit">تسجيل طلب الإجازة</button>
+            </form>
+          </div>
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead><tr><th>الموظف</th><th>النوع</th><th>الفترة</th><th>الأيام</th><th>الحالة</th><th>إجراء</th></tr></thead>
+                <tbody id="hrLeavesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="hrPane_advances" class="hr-pane" style="display:none;">
+          <div class="panel-card">
+            <form onsubmit="HR.submitAdvance(event)" class="form-grid">
+              <div class="form-group"><label>الموظف</label><select id="hrAdvanceEmployee" class="form-control" required></select></div>
+              <div class="form-group"><label>المبلغ</label><input id="hrAdvanceAmount" class="form-control" type="number" required></div>
+              <div class="form-group"><label>التاريخ</label><input id="hrAdvanceDate" class="form-control" type="date" required></div>
+              <div class="form-group"><label>القسط الشهري</label><input id="hrAdvanceInstallment" class="form-control" type="number" value="0"></div>
+              <button class="btn btn-primary" type="submit">تسجيل السلفة</button>
+            </form>
+          </div>
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead><tr><th>الموظف</th><th>التاريخ</th><th>السلفة</th><th>المسدد</th><th>المتبقي</th><th>القسط</th><th>الحالة</th></tr></thead>
+                <tbody id="hrAdvancesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="hrPane_payroll" class="hr-pane" style="display:none;">
+          <div class="panel-card" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px;">
+            <div class="form-group" style="margin:0;"><label>شهر المسير</label><input id="hrPayrollMonth" class="form-control" type="month" onchange="HR.loadPayroll()"></div>
+            <button class="btn btn-primary" onclick="HR.generatePayroll()">1. إعداد مسير الرواتب</button>
+            <button class="btn btn-success" style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;" onclick="HR.postPayrollToJournal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+              <span>2. ترحيل إلى قيد يومية متزن ⚡</span>
+            </button>
+          </div>
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead><tr><th>الموظف</th><th>الشهر</th><th>الأساسي</th><th>الإضافي</th><th>الاستقطاعات</th><th>الصافي</th><th>الحالة</th><th>القيد المحاسبي</th><th>إجراء</th></tr></thead>
+                <tbody id="hrPayrollTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="hrPane_evaluations" class="hr-pane" style="display:none;">
+          <div class="panel-card" style="margin-bottom:14px;">
+            <h4 style="margin-bottom:12px;color:var(--gold-light);">تسجيل تقييم أداء وحوافز/خصومات موظف</h4>
+            <form onsubmit="HR.submitEvaluation(event)" class="form-grid">
+              <div class="form-group"><label>الموظف</label><select id="hrEvalEmployee" class="form-control" required></select></div>
+              <div class="form-group"><label>تاريخ التقييم</label><input id="hrEvalDate" class="form-control" type="date"></div>
+              <div class="form-group"><label>التقدير العام</label><select id="hrEvalRating" class="form-control"><option>ممتاز</option><option selected>جيد جداً</option><option>جيد</option><option>مقبول</option><option>يحتاج تحسين</option></select></div>
+              <div class="form-group"><label>الدرجة من 100</label><input id="hrEvalScore" class="form-control" type="number" min="0" max="100" value="85"></div>
+              <div class="form-group"><label>مكافآت وحوافز</label><input id="hrEvalBonus" class="form-control" type="number" value="0"></div>
+              <div class="form-group"><label>خصومات وجزاءات</label><input id="hrEvalDeduction" class="form-control" type="number" value="0"></div>
+              <div class="form-group"><label>المسؤول عن التقييم</label><input id="hrEvalEvaluator" class="form-control" value="مدير الموارد البشرية"></div>
+              <div class="form-group"><label>ملاحظات التقييم</label><input id="hrEvalComments" class="form-control" placeholder="التوصيات ونقاط القوة..."></div>
+              <button class="btn btn-primary" type="submit">حفظ التقييم</button>
+            </form>
+          </div>
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead><tr><th>الموظف</th><th>تاريخ التقييم</th><th>التقدير</th><th>الدرجة</th><th>المكافآت</th><th>الخصومات</th><th>المسؤول</th><th>الملاحظات</th></tr></thead>
+                <tbody id="hrEvaluationsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ================== شاشة مركز التقارير الشاملة ================== -->
@@ -1588,8 +2059,11 @@
         <!-- شريط تبويبات التقارير -->
         <div class="report-tabs-bar">
           <button class="report-tab-btn active" id="tabBtn_profit-loss" onclick="Reports.switchReportTab('profit-loss')">قائمة الأرباح والخسائر</button>
+          <button class="report-tab-btn" id="tabBtn_trial-balance" onclick="Reports.switchReportTab('trial-balance')">ميزان المراجعة والأرصدة</button>
+          <button class="report-tab-btn" id="tabBtn_income-statement" onclick="Reports.switchReportTab('income-statement')">تقرير الدخل (3+4)</button>
+          <button class="report-tab-btn" id="tabBtn_balance-sheet" onclick="Reports.switchReportTab('balance-sheet')">الميزانية العمومية (1+2)</button>
+          <button class="report-tab-btn" id="tabBtn_cash-flow" onclick="Reports.switchReportTab('cash-flow')">التدفقات النقدية</button>
           <button class="report-tab-btn" id="tabBtn_projects-profitability" onclick="Reports.switchReportTab('projects-profitability')">ربحية المشاريع</button>
-          <button class="report-tab-btn" id="tabBtn_balance-sheet" onclick="Reports.switchReportTab('balance-sheet')">الميزانية العمومية</button>
           <button class="report-tab-btn" id="tabBtn_client-statement" onclick="Reports.switchReportTab('client-statement')">كشف حساب عميل</button>
           <button class="report-tab-btn" id="tabBtn_supplier-statement" onclick="Reports.switchReportTab('supplier-statement')">كشف حساب مورد</button>
         </div>
@@ -1763,6 +2237,183 @@
             </div>
           </div>
         </div>
+
+        <!-- تبويب: ميزان المراجعة بالأرصدة والمجاميع -->
+        <div id="pane_trial-balance" class="report-pane" style="display: none;">
+          <div class="panel-card" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px;">
+              <div class="form-group" style="margin: 0;">
+                <label>من تاريخ</label>
+                <input type="date" id="tbFromDate" class="form-control" value="2024-01-01">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label>إلى تاريخ</label>
+                <input type="date" id="tbToDate" class="form-control">
+              </div>
+              <button class="btn btn-primary" onclick="Reports.loadTrialBalance()">تحديث ميزان المراجعة</button>
+            </div>
+
+            <!-- بطاقات ملخص توازن ميزان المراجعة -->
+            <div class="kpi-grid" style="margin-bottom: 20px;">
+              <div class="kpi-card kpi-income">
+                <div class="kpi-content">
+                  <span class="kpi-label">إجمالي الحركات المدينة (منه)</span>
+                  <span class="kpi-value" id="tbTotalDebit">0 ر.ي</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-expense">
+                <div class="kpi-content">
+                  <span class="kpi-label">إجمالي الحركات الدائنة (له)</span>
+                  <span class="kpi-value" id="tbTotalCredit">0 ر.ي</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-total-proj">
+                <div class="kpi-content">
+                  <span class="kpi-label">مجموع الأرصدة المدينة</span>
+                  <span class="kpi-value" id="tbBalanceDebit">0 ر.ي</span>
+                </div>
+              </div>
+              <div class="kpi-card kpi-cash">
+                <div class="kpi-content">
+                  <span class="kpi-label">حالة التوازن المحاسبي</span>
+                  <span class="kpi-value" id="tbBalanceStatus" style="color: var(--accent-green); font-size: 1.15rem;">متزن 100%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2" style="vertical-align: middle;">رقم الحساب</th>
+                    <th rowspan="2" style="vertical-align: middle;">اسم الحساب المالي</th>
+                    <th rowspan="2" style="vertical-align: middle;">التصنيف</th>
+                    <th colspan="2" style="text-align: center; background: rgba(56,189,248,0.1);">حركات الفترة (المجاميع)</th>
+                    <th colspan="2" style="text-align: center; background: rgba(16,185,129,0.1);">الأرصدة الختامية</th>
+                  </tr>
+                  <tr>
+                    <th style="background: rgba(56,189,248,0.06);">مدين (منه)</th>
+                    <th style="background: rgba(56,189,248,0.06);">دائن (له)</th>
+                    <th style="background: rgba(16,185,129,0.06);">رصيد مدين</th>
+                    <th style="background: rgba(16,185,129,0.06);">رصيد دائن</th>
+                  </tr>
+                </thead>
+                <tbody id="trialBalanceTableBody"></tbody>
+                <tfoot id="trialBalanceTableFoot" style="font-weight: bold; background: rgba(255,255,255,0.04);"></tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- تبويب: تقرير قائمة الدخل (3 مصروفات + 4 إيرادات) -->
+        <div id="pane_income-statement" class="report-pane" style="display: none;">
+          <div class="panel-card" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px;">
+              <div class="form-group" style="margin: 0;">
+                <label>من تاريخ</label>
+                <input type="date" id="isFromDate" class="form-control" value="2024-01-01">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label>إلى تاريخ</label>
+                <input type="date" id="isToDate" class="form-control">
+              </div>
+              <button class="btn btn-primary" onclick="Reports.loadIncomeStatement()">تحديث قائمة الدخل</button>
+            </div>
+
+            <!-- بطاقات مؤشرات قائمة الدخل 3+4 -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+              <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">4. إجمالي الإيرادات:</span>
+                <h3 id="isTotalRevenues" style="color: var(--accent-green); margin-top: 4px;">0 ر.ي</h3>
+              </div>
+              <div style="background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">3. إجمالي المصروفات والتكاليف:</span>
+                <h3 id="isTotalExpenses" style="color: var(--accent-red); margin-top: 4px;">0 ر.ي</h3>
+              </div>
+              <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">مجمل الربح التقديري:</span>
+                <h3 id="isGrossProfit" style="color: var(--accent-blue); margin-top: 4px;">0 ر.ي</h3>
+              </div>
+              <div style="background: rgba(212,175,55,0.15); border: 1px solid rgba(212,175,55,0.4); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">صافي الربح / الدخل النهائي:</span>
+                <h3 id="isNetIncome" style="color: var(--gold-light); margin-top: 4px;">0 ر.ي</h3>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+              <div>
+                <h4 style="color: var(--accent-green); margin-bottom: 10px;">(4) حسابات الإيرادات ومستخلصات المشاريع</h4>
+                <div class="table-responsive">
+                  <table class="custom-table">
+                    <thead><tr><th>بند الإيراد</th><th>المبلغ المحقق</th></tr></thead>
+                    <tbody id="isRevenuesTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <h4 style="color: var(--accent-red); margin-bottom: 10px;">(3) حسابات المصروفات العمومية وتكاليف المشاريع</h4>
+                <div class="table-responsive">
+                  <table class="custom-table">
+                    <thead><tr><th>بند المصروف</th><th>المبلغ المنصرف</th></tr></thead>
+                    <tbody id="isExpensesTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- تبويب: تقرير التدفقات النقدية -->
+        <div id="pane_cash-flow" class="report-pane" style="display: none;">
+          <div class="panel-card" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px;">
+              <div class="form-group" style="margin: 0;">
+                <label>من تاريخ</label>
+                <input type="date" id="cfFromDate" class="form-control" value="2024-01-01">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label>إلى تاريخ</label>
+                <input type="date" id="cfToDate" class="form-control">
+              </div>
+              <button class="btn btn-primary" onclick="Reports.loadCashFlow()">تحديث التدفقات النقدية</button>
+            </div>
+
+            <!-- بطاقات ملخص التدفقات النقدية -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+              <div style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.3); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">النقدية أول المدة:</span>
+                <h3 id="cfOpeningCash" style="color: #cbd5e1; margin-top: 4px;">0 ر.ي</h3>
+              </div>
+              <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">صافي التدفقات التشغيلية:</span>
+                <h3 id="cfNetOperating" style="color: var(--accent-green); margin-top: 4px;">0 ر.ي</h3>
+              </div>
+              <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">صافي التغير في النقدية:</span>
+                <h3 id="cfNetChange" style="color: var(--accent-blue); margin-top: 4px;">0 ر.ي</h3>
+              </div>
+              <div style="background: rgba(212,175,55,0.15); border: 1px solid rgba(212,175,55,0.4); padding: 14px; border-radius: var(--radius-md);">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">النقدية في نهاية المدة:</span>
+                <h3 id="cfClosingCash" style="color: var(--gold-light); margin-top: 4px;">0 ر.ي</h3>
+              </div>
+            </div>
+
+            <!-- جداول التدفقات التشغيلية والاستثمارية والتمويلية -->
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>بيان التدفق النقدي</th>
+                    <th>مقبوضات نقدية (+)</th>
+                    <th>مدفوعات نقدية (-)</th>
+                    <th>الصافي</th>
+                  </tr>
+                </thead>
+                <tbody id="cashFlowTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ================== شاشة الإيرادات (سندات القبض ومستخلصات العملاء) ================== -->
@@ -1886,6 +2537,191 @@
               </thead>
               <tbody id="fullExpensesTableBody"></tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================== شاشة قيود اليومية العامة وإدارة الحسابات ================== -->
+      <section id="journalView" class="app-view-section" style="display: none;">
+        <div class="page-header-row">
+          <div>
+            <h2 class="page-title" id="journalPageTitle">إدارة الحسابات - سجل الأستاذ والتهيئة</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">دليل الحسابات الشجري، مراكز التكلفة، تهيئة العملات، والقيود اليومية المتزنة المزدوجة</p>
+          </div>
+          <div class="page-actions" id="journalHeaderActions">
+            <button class="btn btn-primary" id="btnNewJournalAction" onclick="Accounting.openNewJournalModal()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <span>تسجيل قيد يومية جديد +</span>
+            </button>
+            <button class="btn btn-secondary" onclick="Accounting.refreshCurrentJournalTab()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+              <span>تحديث البيانات</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- تبويبات إدارة الحسابات -->
+        <div class="report-tabs-bar" style="margin-bottom: 20px;">
+          <button class="report-tab-btn active" id="tabBtn_journalEntries" onclick="Accounting.switchJournalTab('journalEntries')">سجل القيود اليومية (طرفين مدين ودائن)</button>
+          <button class="report-tab-btn" id="tabBtn_chartOfAccounts" onclick="Accounting.switchJournalTab('chartOfAccounts')">دليل الحسابات الشجري</button>
+          <button class="report-tab-btn" id="tabBtn_costCenters" onclick="Accounting.switchJournalTab('costCenters')">مراكز التكلفة</button>
+          <button class="report-tab-btn" id="tabBtn_currencies" onclick="Accounting.switchJournalTab('currencies')">تهيئة العملات وأسعار الصرف</button>
+        </div>
+
+        <!-- تبويب 1: القيود اليومية -->
+        <div id="pane_journalEntries" class="journal-pane">
+          <!-- بطاقات ملخص القيود اليومية -->
+          <div class="kpi-grid" style="margin-bottom: 20px;">
+            <div class="kpi-card kpi-total-proj">
+              <div class="kpi-content">
+                <span class="kpi-label">إجمالي القيود المسجلة</span>
+                <span class="kpi-value" id="journalKpiCount">0</span>
+              </div>
+              <div class="kpi-icon-wrap">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+              </div>
+            </div>
+            <div class="kpi-card kpi-income">
+              <div class="kpi-content">
+                <span class="kpi-label">إجمالي الحركات المدينة (منه)</span>
+                <span class="kpi-value" id="journalKpiDebit">0</span>
+              </div>
+              <div class="kpi-icon-wrap">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z"/></svg>
+              </div>
+            </div>
+            <div class="kpi-card kpi-expense">
+              <div class="kpi-content">
+                <span class="kpi-label">إجمالي الحركات الدائنة (له)</span>
+                <span class="kpi-value" id="journalKpiCredit">0</span>
+              </div>
+              <div class="kpi-icon-wrap">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+              </div>
+            </div>
+            <div class="kpi-card kpi-cash">
+              <div class="kpi-content">
+                <span class="kpi-label">حالة التوازن المحاسبي</span>
+                <span class="kpi-value" id="journalKpiBalance" style="color: var(--accent-green); font-size: 1.15rem;">متزن 100%</span>
+              </div>
+              <div class="kpi-icon-wrap">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- جدول القيود اليومية -->
+          <div class="panel-card">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+              <h3 class="panel-title">قائمة القيود المحاسبية اليومية</h3>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="journalSearchInput" class="form-control" placeholder="بحث برقم القيد أو البيان..." style="max-width: 250px;" oninput="Accounting.filterJournalTable()">
+                <select id="journalRefFilter" class="form-control" style="max-width: 170px;" onchange="Accounting.filterJournalTable()">
+                  <option value="">كافة المراجع...</option>
+                  <option value="قيد يدوي">قيد يدوي</option>
+                  <option value="سند صرف">سند صرف</option>
+                  <option value="سند قبض">سند قبض</option>
+                  <option value="ترحيل رواتب">ترحيل رواتب</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>رقم القيد</th>
+                    <th>التاريخ</th>
+                    <th>البيان العام</th>
+                    <th>نوع المرجع</th>
+                    <th>إجمالي المدين</th>
+                    <th>إجمالي الدائن</th>
+                    <th>الحالة</th>
+                    <th style="text-align: center;">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="fullJournalTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- تبويب 2: دليل الحسابات الشجري -->
+        <div id="pane_chartOfAccounts" class="journal-pane" style="display: none;">
+          <div class="panel-card">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+              <h3 class="panel-title">دليل الحسابات الشجري الموحد</h3>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="accountSearchInput" class="form-control" placeholder="بحث برقم الحساب أو الاسم..." style="max-width: 250px;" oninput="Accounting.filterAccountsTable()">
+                <button class="btn btn-primary" onclick="Accounting.openNewAccountModal()">+ إضافة حساب جديد</button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>رقم الحساب</th>
+                    <th>اسم الحساب</th>
+                    <th>التصنيف المالي</th>
+                    <th>الحساب الرئيسي (الأب)</th>
+                    <th>الرصيد الدفتري</th>
+                    <th style="text-align: center;">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody id="chartOfAccountsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- تبويب 3: مراكز التكلفة للمشاريع -->
+        <div id="pane_costCenters" class="journal-pane" style="display: none;">
+          <div class="panel-card">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+              <h3 class="panel-title">مراكز التكلفة للمشاريع والعمليات</h3>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="costCenterSearchInput" class="form-control" placeholder="بحث برمز أو اسم المركز..." style="max-width: 250px;" oninput="Accounting.filterCostCentersTable()">
+                <button class="btn btn-primary" onclick="Accounting.openNewCostCenterModal()">+ إضافة مركز تكلفة</button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>رمز المركز</th>
+                    <th>اسم مركز التكلفة</th>
+                    <th>النوع</th>
+                    <th>المشروع المرتبط</th>
+                    <th>ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody id="costCentersTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- تبويب 4: تهيئة العملات وأسعار الصرف -->
+        <div id="pane_currencies" class="journal-pane" style="display: none;">
+          <div class="panel-card">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+              <h3 class="panel-title">تهيئة العملات وأسعار الصرف الرسمية</h3>
+              <button class="btn btn-primary" onclick="Accounting.openNewCurrencyModal()">+ إضافة عملة جديدة</button>
+            </div>
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>كود العملة</th>
+                    <th>اسم العملة</th>
+                    <th>الرمز</th>
+                    <th>سعر الصرف مقابل الريال اليمني (YER)</th>
+                    <th>عملة الأساس</th>
+                    <th style="text-align: center;">تعديل السعر</th>
+                  </tr>
+                </thead>
+                <tbody id="currenciesTableBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -3090,6 +3926,18 @@
           </select>
         </div>
         <div class="form-group">
+          <label>الحساب المالي (دليل الحسابات)</label>
+          <select id="modalRcAccountSelect" class="form-control">
+            <option value="">اختر الحساب (تلقائي: العملاء 112)...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>مركز التكلفة</label>
+          <select id="modalRcCostCenterSelect" class="form-control">
+            <option value="">اختر مركز التكلفة...</option>
+          </select>
+        </div>
+        <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">المشروع المرتبط</label>
             <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة مشروع جديد</a>
@@ -3105,11 +3953,24 @@
           </div>
           <div class="form-group">
             <label>طريقة الدفع</label>
-            <select id="modalRcPaymentMethod" class="form-control">
+            <select id="modalRcPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('modalRcPaymentMethod', 'modalRcCheckRow')">
               <option value="تحويل بنكي">تحويل بنكي</option>
               <option value="نقدي">نقدي</option>
               <option value="شيك">شيك</option>
             </select>
+          </div>
+        </div>
+        <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
+        <div id="modalRcCheckRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="color: var(--gold-light); font-weight: bold; font-size: 0.82rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
+              <input type="text" id="modalRcCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 0.82rem;">البنك المسحوب عليه</label>
+              <input type="text" id="modalRcBankName" class="form-control" placeholder="اسم البنك">
+            </div>
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
@@ -3158,6 +4019,18 @@
           </select>
         </div>
         <div class="form-group">
+          <label>الحساب المالي (دليل الحسابات)</label>
+          <select id="modalExpAccountSelect" class="form-control">
+            <option value="">اختر الحساب (تلقائي: تكاليف ومصروفات 5)...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>مركز التكلفة</label>
+          <select id="modalExpCostCenterSelect" class="form-control">
+            <option value="">اختر مركز التكلفة...</option>
+          </select>
+        </div>
+        <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">المشروع المرتبط</label>
             <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
@@ -3182,11 +4055,24 @@
           </div>
           <div class="form-group">
             <label>طريقة الدفع</label>
-            <select id="modalExpPaymentMethod" class="form-control">
+            <select id="modalExpPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('modalExpPaymentMethod', 'modalExpCheckRow')">
               <option value="نقدي">نقدي</option>
               <option value="تحويل بنكي">تحويل بنكي</option>
               <option value="شيك">شيك</option>
             </select>
+          </div>
+        </div>
+        <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
+        <div id="modalExpCheckRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="color: var(--accent-red); font-weight: bold; font-size: 0.82rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
+              <input type="text" id="modalExpCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 0.82rem;">البنك المسحوب عليه</label>
+              <input type="text" id="modalExpBankName" class="form-control" placeholder="اسم البنك">
+            </div>
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
@@ -3225,15 +4111,24 @@
       <form id="modalCustodyForm" onsubmit="Accounting.submitCustodyModal(event)">
         <div class="form-group">
           <label>نوع العملية <span style="color: var(--accent-red);">*</span></label>
-          <select id="modalCustodyTypeSelect" class="form-control" required>
+          <select id="modalCustodyTypeSelect" class="form-control" required onchange="Accounting.handleCustodyTypeChange('modalCustodyTypeSelect', 'modalCustodyRelatedRow')">
             <option value="صرف عهدة">صرف عهدة جديدة</option>
-            <option value="تصفية عهدة">تصفية / إغلاق عهدة</option>
+            <option value="تصفية عهدة">تصفية عهدة سابقة</option>
             <option value="نثريات">نثريات ومصروفات يومية</option>
           </select>
         </div>
         <div class="form-group">
-          <label>اسم الموظف / المشرف الميداني <span style="color: var(--accent-red);">*</span></label>
-          <input type="text" id="modalCustodyEmpName" class="form-control" placeholder="مثال: م. أحمد محمد" required>
+          <label>الموظف المرتبط بالعهدة <span style="color: var(--accent-red);">*</span></label>
+          <select id="modalCustodyEmployeeSelect" class="form-control" required onchange="Accounting.onCustodyEmployeeChange('modalCustodyEmployeeSelect', 'modalCustodyRelatedSelect')">
+            <option value="">اختر الموظف...</option>
+          </select>
+        </div>
+        <!-- حقل اختيار رقم العهدة الأصلية المراد تصفيتها شرطياً -->
+        <div class="form-group" id="modalCustodyRelatedRow" style="display: none; background: rgba(59, 130, 246, 0.08); border: 1px dashed #3b82f6; padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;">
+          <label style="color: #60a5fa; font-weight: bold; font-size: 0.82rem;">العهدة الأصلية المراد تصفيتها <span style="color: var(--accent-red);">*</span></label>
+          <select id="modalCustodyRelatedSelect" class="form-control" onchange="Accounting.onRelatedCustodySelect('modalCustodyRelatedSelect', 'modalCustodyTotalAmount', 'modalCustodySpentAmount')">
+            <option value="">اختر العهدة المفتوحة للتصفية...</option>
+          </select>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div class="form-group">
@@ -3251,14 +4146,14 @@
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
           <div class="form-group">
-            <label>إجمالي العهدة <span style="color: var(--accent-red);">*</span></label>
+            <label id="modalCustodyAmountLabel">إجمالي العهدة <span style="color: var(--accent-red);">*</span></label>
             <input type="number" id="modalCustodyTotalAmount" class="form-control" placeholder="100000" min="1" required oninput="Accounting.calcModalCustodyRemaining()">
           </div>
-          <div class="form-group">
-            <label>المصروف منها</label>
+          <div class="form-group" id="modalCustodySpentGroup">
+            <label id="modalCustodySpentLabel">المصروف منها</label>
             <input type="number" id="modalCustodySpentAmount" class="form-control" value="0" min="0" oninput="Accounting.calcModalCustodyRemaining()">
           </div>
-          <div class="form-group">
+          <div class="form-group" id="modalCustodyRemainGroup">
             <label>المتبقي</label>
             <input type="number" id="modalCustodyRemainingAmount" class="form-control" value="0" readonly>
           </div>
@@ -3268,8 +4163,233 @@
           <textarea id="modalCustodyNotes" class="form-control" rows="2" placeholder="عهدة نثريات وضيافة وأجور طارئة لمشروع..."></textarea>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">حفظ العهدة</button>
+          <button type="submit" class="btn btn-primary">حفظ العملية</button>
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('newCustodyModal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================== نافذة تسجيل قيد يومية جديد (طرفين أو متعدد الأطراف) ================== -->
+  <div class="modal-overlay" id="newJournalModal">
+    <div class="modal-box" style="max-width: 980px; width: 95%;">
+      <div class="modal-header">
+        <h3>تسجيل قيد يومية عام جديد (مدين ودائن)</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('newJournalModal')">&times;</button>
+      </div>
+      <form id="modalJournalForm" onsubmit="Accounting.submitJournalEntryModal(event)">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-group">
+            <label>التاريخ <span style="color: var(--accent-red);">*</span></label>
+            <input type="date" id="modalJeDate" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label>العملة</label>
+            <select id="modalJeCurrency" class="form-control">
+              <option value="ر.ي" selected>ريال يمني (ر.ي)</option>
+              <option value="ر.س">ريال سعودي (ر.س)</option>
+              <option value="$">دولار أمريكي ($)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>البيان العام للقيد <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="modalJeDescription" class="form-control" placeholder="مثال: إثبات سداد مصاريف موقع / تسوية حسابات..." required>
+          </div>
+        </div>
+
+        <!-- جدول أطراف القيد اليومي (ديناميكي) -->
+        <div style="margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
+          <div style="background: #1e293b; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: bold; font-size: 0.9rem; color: var(--gold-light);">أطراف وسطور القيد (مدين / دائن)</span>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.addJournalRow()">+ إضافة طرف</button>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.autoBalanceJournal()" title="موازنة القيد آلياً في الطرف الأخير">⚖️ موازنة تلقائية</button>
+            </div>
+          </div>
+          <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+            <table class="custom-table" style="margin-bottom: 0;">
+              <thead>
+                <tr>
+                  <th style="width: 25%;">الحساب (دليل الحسابات) <span style="color: var(--accent-red);">*</span></th>
+                  <th style="width: 20%;">مركز التكلفة</th>
+                  <th style="width: 15%;">مدين (منه)</th>
+                  <th style="width: 15%;">دائن (له)</th>
+                  <th style="width: 20%;">بيان السطر / الملاحظات</th>
+                  <th style="width: 5%; text-align: center;">حذف</th>
+                </tr>
+              </thead>
+              <tbody id="journalLinesTableBody">
+                <!-- يتم توليد الأسطر عبر JavaScript -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- شريط موازنة القيد الفوري -->
+          <div style="background: #0f172a; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-top: 2px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; gap: 20px; align-items: center;">
+              <div>
+                <span style="color: var(--text-secondary); font-size: 0.8rem;">إجمالي المدين:</span>
+                <strong id="modalJeTotalDebit" style="color: var(--accent-green); font-size: 1rem; margin-right: 6px;">0.00</strong>
+              </div>
+              <div>
+                <span style="color: var(--text-secondary); font-size: 0.8rem;">إجمالي الدائن:</span>
+                <strong id="modalJeTotalCredit" style="color: #38bdf8; font-size: 1rem; margin-right: 6px;">0.00</strong>
+              </div>
+              <div>
+                <span style="color: var(--text-secondary); font-size: 0.8rem;">الفارق:</span>
+                <strong id="modalJeDiff" style="color: var(--accent-red); font-size: 1rem; margin-right: 6px;">0.00</strong>
+              </div>
+            </div>
+            <div id="modalJeBalanceStatus" style="font-weight: bold; font-size: 0.85rem; padding: 4px 12px; border-radius: 20px; background: rgba(239, 68, 68, 0.15); color: #f87171;">
+              ⚠️ القيد غير متزن
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="submit" id="btnSubmitJournal" class="btn btn-primary" disabled>حفظ القيد اليومي المتزن</button>
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('newJournalModal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================== نافذة معاينة وتفاصيل القيد اليومي والطباعة ================== -->
+  <div class="modal-overlay" id="viewJournalModal">
+    <div class="modal-box" style="max-width: 800px; width: 95%;">
+      <div class="modal-header">
+        <h3 id="viewJeTitle">تفاصيل قيد اليومية</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('viewJournalModal')">&times;</button>
+      </div>
+      <div id="viewJeContent" style="padding: 10px 0;">
+        <!-- المحتوى التفصيلي للقيد والأسطر -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="Accounting.printCurrentJournalEntry()">🖨️ طباعة سند القيد</button>
+        <button type="button" class="btn btn-secondary" onclick="App.closeModal('viewJournalModal')">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================== نافذة إضافة حساب مالي جديد إلى الدليل ================== -->
+  <div class="modal-overlay" id="accountModal">
+    <div class="modal-box" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3>إضافة حساب جديد إلى دليل الحسابات الشجري</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('accountModal')">&times;</button>
+      </div>
+      <form onsubmit="Accounting.submitNewAccount(event)">
+        <div style="padding: 16px 20px;">
+          <div class="form-group">
+            <label>رقم / كود الحساب <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="modalAccCode" class="form-control" placeholder="مثال: 11105 أو 5204" required>
+          </div>
+          <div class="form-group">
+            <label>اسم الحساب <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="modalAccName" class="form-control" placeholder="مثال: صندوق فرع المكلا أو بنك التضامن..." required>
+          </div>
+          <div class="form-group">
+            <label>التصنيف المالي الرئيسي <span style="color: var(--accent-red);">*</span></label>
+            <select id="modalAccType" class="form-control" required>
+              <option value="أصول">1 - أصول (Assets)</option>
+              <option value="خصوم">2 - خصوم (Liabilities)</option>
+              <option value="حقوق ملكية">22 - حقوق ملكية (Equity)</option>
+              <option value="مصروفات">3 - مصروفات إدارية وتشغيلية (Expenses)</option>
+              <option value="إيرادات">4 - إيرادات ومبيعات (Revenues)</option>
+              <option value="تكاليف">5 - تكاليف مشاريع ومقاولات (Costs)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>الحساب الرئيسي (الأب - اختياري)</label>
+            <input type="text" id="modalAccParent" class="form-control" placeholder="مثال: 111 أو 21">
+          </div>
+          <div class="form-group">
+            <label>الرصيد الافتتاحي (اختياري)</label>
+            <input type="number" id="modalAccBalance" class="form-control" value="0" step="any">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">حفظ الحساب في الدليل</button>
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('accountModal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================== نافذة إضافة مركز تكلفة جديد ================== -->
+  <div class="modal-overlay" id="costCenterModal">
+    <div class="modal-box" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3>إضافة مركز تكلفة جديد للمشاريع</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('costCenterModal')">&times;</button>
+      </div>
+      <form onsubmit="Accounting.submitNewCostCenter(event)">
+        <div style="padding: 16px 20px;">
+          <div class="form-group">
+            <label>رمز مركز التكلفة (اختياري - يولد تلقائياً)</label>
+            <input type="text" id="modalCcCode" class="form-control" placeholder="تلقائي CC-001...">
+          </div>
+          <div class="form-group">
+            <label>اسم مركز التكلفة <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="modalCcName" class="form-control" placeholder="مثال: مشروع برج المنصورة، أعمال الخرسانة..." required>
+          </div>
+          <div class="form-group">
+            <label>النوع</label>
+            <select id="modalCcType" class="form-control">
+              <option value="مشروع">مشروع إنشائي</option>
+              <option value="قسم إداري">قسم إداري / تشغيلي</option>
+              <option value="آلية ومعدات">آليات ومعدات</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>ربط بمشروع محدد (اختياري)</label>
+            <select id="modalCcProjectSelect" class="form-control">
+              <option value="">بدون مشروع (عام)...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>ملاحظات</label>
+            <input type="text" id="modalCcNotes" class="form-control" placeholder="ملاحظات تفصيلية...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">حفظ مركز التكلفة</button>
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('costCenterModal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================== نافذة إضافة / تهيئة عملة جديدة ================== -->
+  <div class="modal-overlay" id="currencyModal">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="modalCurrencyTitle">تهيئة عملة جديدة</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('currencyModal')">&times;</button>
+      </div>
+      <form onsubmit="Accounting.submitNewCurrency(event)">
+        <div style="padding: 16px 20px;">
+          <div class="form-group">
+            <label>كود العملة الدولي <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="modalCurrCode" class="form-control" placeholder="مثال: AED أو KWD أو SAR" required>
+          </div>
+          <div class="form-group">
+            <label>اسم العملة <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="modalCurrName" class="form-control" placeholder="مثال: درهم إماراتي، دينار كويتي..." required>
+          </div>
+          <div class="form-group">
+            <label>الرمز المختصر</label>
+            <input type="text" id="modalCurrSymbol" class="form-control" placeholder="مثال: د.إ أو د.ك">
+          </div>
+          <div class="form-group">
+            <label>سعر الصرف بالنسبة للريال اليمني (YER)</label>
+            <input type="number" id="modalCurrRate" class="form-control" step="any" value="1.0" required>
+            <small style="color: var(--text-secondary); font-size: 0.75rem;">القيمة التي تعادل 1 وحدة من هذه العملة بالريال اليمني</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">حفظ العملة</button>
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('currencyModal')">إلغاء</button>
         </div>
       </form>
     </div>

@@ -563,15 +563,18 @@ body {
 }
 
 /* القائمة الجانبية (Sidebar) */
+/* القائمة الجانبية الشجرية لإدارات النظام الـ 7 */
 .sidebar {
-  width: 230px;
-  background: #0d1829;
+  width: 260px;
+  background: #0b1424;
   border-left: 1px solid var(--border-color);
-  padding: 18px 12px;
+  padding: 14px 10px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   transition: var(--transition);
+  overflow-y: auto;
+  max-height: calc(100vh - 73px);
 }
 
 .sidebar-logo-card {
@@ -580,14 +583,14 @@ body {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .sidebar-logo-card img {
-  height: 42px;
-  margin-bottom: 6px;
+  height: 40px;
+  margin-bottom: 4px;
 }
 .sidebar-logo-card h3 {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   color: #fff;
   font-weight: 700;
 }
@@ -600,18 +603,18 @@ body {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   flex-grow: 1;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 9px 12px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 600;
   cursor: pointer;
   transition: var(--transition);
@@ -638,6 +641,138 @@ body {
 }
 .nav-item.active svg {
   fill: #0b1524;
+}
+
+/* مجموعات الإدارات المنسدلة (Accordion Groups) */
+.nav-group {
+  margin-bottom: 3px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.nav-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  user-select: none;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.nav-group-header:hover {
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--gold-light);
+  border-color: rgba(212, 175, 55, 0.2);
+}
+
+.nav-group.open > .nav-group-header {
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--gold-light);
+  border-color: rgba(212, 175, 55, 0.3);
+}
+
+.nav-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-group-title svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.nav-group-chevron {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  opacity: 0.6;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: rotate(0deg);
+}
+
+.nav-group.open > .nav-group-header .nav-group-chevron {
+  transform: rotate(-90deg);
+  opacity: 1;
+  fill: var(--gold-primary);
+}
+
+.nav-sub-list {
+  display: none;
+  list-style: none;
+  padding: 4px 8px 6px 10px;
+  margin: 2px 0 4px 0;
+  border-right: 2px solid rgba(212, 175, 55, 0.3);
+  margin-right: 14px;
+}
+
+.nav-group.open > .nav-sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: slideDownNav 0.2s ease-out;
+}
+
+@keyframes slideDownNav {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.nav-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #94a3b8;
+  text-decoration: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-sub-item svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  opacity: 0.7;
+}
+
+.nav-sub-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f8fafc;
+  padding-right: 12px;
+}
+
+.nav-sub-item.active {
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--gold-light);
+  font-weight: 700;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+}
+
+.nav-sub-item.active svg {
+  opacity: 1;
+  fill: var(--gold-primary);
+}
+
+.dept-badge {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-weight: normal;
 }
 
 .nav-logout {

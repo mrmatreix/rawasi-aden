@@ -102,3 +102,5 @@ server.on('error', (err) => {
 
 // مؤقت للحفاظ على حيوية الخادم ومنع الإغلاق التلقائي
 setInterval(() => {}, 1000 * 60 * 60);
+
+module.exports = app;
