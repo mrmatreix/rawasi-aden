@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
+const { logAudit } = require('../services/auditService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 // جلب جميع المصروفات مع بيانات الحساب ومركز التكلفة والمشروع والمورد
 router.get('/', async (req, res) => {
@@ -82,6 +84,12 @@ router.post('/', async (req, res) => {
       recipient
     } = req.body;
 
+    // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ السند
+    const periodCheck = await checkPeriodOpen(date);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
     if (!expense_type || !amount || Number(amount) <= 0) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد نوع المصروف والمبلغ بشكل صحيح' });
     }
@@ -103,7 +111,16 @@ router.post('/', async (req, res) => {
     const pId = project_id && project_id !== '' ? Number(project_id) : null;
     const sId = supplier_id && supplier_id !== '' ? Number(supplier_id) : null;
     const accId = account_id && account_id !== '' ? Number(account_id) : null;
-    const ccId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
+    let finalCcId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
+
+    // إلزامية وإسناد مركز التكلفة تلقائياً لمنع كسر تقارير الربحية
+    if (!finalCcId && pId) {
+      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [pId]);
+      if (prjCc) finalCcId = prjCc.id;
+    }
+    if (!finalCcId) {
+      finalCcId = 1; // مركز التكلفة العام CC-100
+    }
 
     const txResult = await transaction(async (tx) => {
       // 1. تسجيل سند الصرف
@@ -115,7 +132,7 @@ router.post('/', async (req, res) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         receipt_no, expense_type, pId, sId,
-        accId, ccId, parsedAmount, selectedCurrency, payment_method,
+        accId, finalCcId, parsedAmount, selectedCurrency, payment_method,
         cleanCheckNo, cleanBankName, recipient || '', date, notes || ''
       ]);
 
@@ -157,14 +174,21 @@ router.post('/', async (req, res) => {
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
         VALUES (?, ?, ?, ?, ?, 0, ?)
-      `, [jeId, debitAccountId, ccId, pId, parsedAmount, `مصروف ${expense_type}${cleanCheckNo ? ' - شيك: ' + cleanCheckNo : ''}`]);
+      `, [jeId, debitAccountId, finalCcId, pId, parsedAmount, `مصروف ${expense_type}${cleanCheckNo ? ' - شيك: ' + cleanCheckNo : ''}`]);
 
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
         VALUES (?, 3, ?, ?, 0, ?, ?)
-      `, [jeId, ccId, pId, parsedAmount, `الصندوق الرئيسي / البنك - طريقة الدفع: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
+      `, [jeId, finalCcId, pId, parsedAmount, `الصندوق الرئيسي / البنك - طريقة الدفع: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
 
       return result;
+    });
+
+    await logAudit(req, {
+      action: 'INSERT',
+      entity_type: 'expense',
+      entity_id: receipt_no,
+      details: { amount: parsedAmount, expense_type, project_id: pId, cost_center_id: finalCcId, payment_method }
     });
 
     res.json({
@@ -182,10 +206,27 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const exp = await get('SELECT * FROM expenses WHERE id = ?', [req.params.id]);
-    if (exp && exp.project_id) {
+    if (!exp) {
+      return res.status(404).json({ success: false, message: 'سند الصرف غير موجود' });
+    }
+
+    const periodCheck = await checkPeriodOpen(exp.date);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
+    if (exp.project_id) {
       await run(`UPDATE projects SET actual_cost = GREATEST(0, actual_cost - ?) WHERE id = ?`, [exp.amount, exp.project_id]);
     }
     await run('DELETE FROM expenses WHERE id = ?', [req.params.id]);
+
+    await logAudit(req, {
+      action: 'DELETE',
+      entity_type: 'expense',
+      entity_id: req.params.id,
+      details: { receipt_no: exp.receipt_no, amount: exp.amount, date: exp.date }
+    });
+
     res.json({ success: true, message: 'تم حذف سند الصرف بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في حذف سند الصرف', error: err.message });

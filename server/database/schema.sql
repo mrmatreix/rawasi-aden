@@ -615,3 +615,34 @@ CREATE TABLE IF NOT EXISTS employee_evaluations (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- جدول الفترات المحاسبية وإغلاق الحسابات
+CREATE TABLE IF NOT EXISTS accounting_periods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period_name TEXT NOT NULL,
+    fiscal_year INTEGER NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    status TEXT DEFAULT 'open',          -- open, closed
+    closed_at DATETIME NULL,
+    closed_by TEXT NULL,
+    reopened_at DATETIME NULL,
+    reopened_by TEXT NULL,
+    reopen_reason TEXT NULL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جدول سجل التدقيق والرقابة المالية (Audit Log)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NULL,
+    username TEXT NOT NULL,
+    action TEXT NOT NULL,                -- INSERT, UPDATE, DELETE, CLOSE_PERIOD, REOPEN_PERIOD, POST_PAYROLL
+    entity_type TEXT NOT NULL,           -- journal_entry, payment, expense, custody, payroll, project, period
+    entity_id TEXT NULL,
+    details TEXT NULL,
+    ip_address TEXT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+

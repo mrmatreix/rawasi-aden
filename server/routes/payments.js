@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
+const { logAudit } = require('../services/auditService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 // جلب سندات القبض والصرف مع بيانات الحسابات ومراكز التكلفة
 router.get('/', async (req, res) => {
@@ -73,6 +75,12 @@ router.post('/', async (req, res) => {
       notes
     } = req.body;
 
+    // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ السند
+    const periodCheck = await checkPeriodOpen(date);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
     if (!amount || Number(amount) <= 0) {
       return res.status(400).json({ success: false, message: 'المبلغ مطلوب ويجب أن يكون أكبر من الصفر' });
     }
@@ -102,7 +110,16 @@ router.post('/', async (req, res) => {
     const sId = supplier_id && supplier_id !== '' ? Number(supplier_id) : null;
     const pId = project_id && project_id !== '' ? Number(project_id) : null;
     const accId = account_id && account_id !== '' ? Number(account_id) : null;
-    const ccId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
+    let finalCcId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
+
+    // إلزامية وإسناد مركز التكلفة تلقائياً
+    if (!finalCcId && pId) {
+      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [pId]);
+      if (prjCc) finalCcId = prjCc.id;
+    }
+    if (!finalCcId) {
+      finalCcId = 1; // مركز التكلفة العام CC-100
+    }
 
     // تنفيذ المعاملة المالية ككتلة واحدة (Atomic Transaction)
     const txResult = await transaction(async (tx) => {
@@ -115,7 +132,7 @@ router.post('/', async (req, res) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         receipt_no, type, cId, sId, pId,
-        accId, ccId, parsedAmount, selectedCurrency, payment_method,
+        accId, finalCcId, parsedAmount, selectedCurrency, payment_method,
         cleanCheckNo, cleanBankName, date, notes || ''
       ]);
 
@@ -184,30 +201,37 @@ router.post('/', async (req, res) => {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
           VALUES (?, 3, ?, ?, ?, 0, ?)
-        `, [jeId, ccId, pId, parsedAmount, `قبض في الصندوق / البنك - طريقة: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
+        `, [jeId, finalCcId, pId, parsedAmount, `قبض في الصندوق / البنك - طريقة: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
 
         // الطرف الدائن: الحساب المختار (أو حساب العملاء 4 افتراضياً)
         const creditAcc = accId || 4;
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
           VALUES (?, ?, ?, ?, 0, ?, ?)
-        `, [jeId, creditAcc, ccId, pId, parsedAmount, `تخفيض ذمة العميل / الإيراد المالي`]);
+        `, [jeId, creditAcc, finalCcId, pId, parsedAmount, `تخفيض ذمة العميل / الإيراد المالي`]);
       } else {
         // الطرف المدين: الحساب المختار (أو حساب الموردون 7 افتراضياً)
         const debitAcc = accId || 7;
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
           VALUES (?, ?, ?, ?, ?, 0, ?)
-        `, [jeId, debitAcc, ccId, pId, parsedAmount, `سداد للمورد / إثبات المصروف`]);
+        `, [jeId, debitAcc, finalCcId, pId, parsedAmount, `سداد للمورد / إثبات المصروف`]);
 
         // الطرف الدائن: الصندوق والبنك (حساب 3)
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
           VALUES (?, 3, ?, ?, 0, ?, ?)
-        `, [jeId, ccId, pId, parsedAmount, `صرف من الصندوق / البنك - طريقة: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
+        `, [jeId, finalCcId, pId, parsedAmount, `صرف من الصندوق / البنك - طريقة: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
       }
 
       return result;
+    });
+
+    await logAudit(req, {
+      action: 'INSERT',
+      entity_type: type === 'قبض' ? 'receipt' : 'payment_voucher',
+      entity_id: receipt_no,
+      details: { type, amount: parsedAmount, client_id: cId, supplier_id: sId, project_id: pId, cost_center_id: finalCcId, payment_method }
     });
 
     res.json({

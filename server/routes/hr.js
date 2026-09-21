@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
+const { logAudit } = require('../services/auditService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 const today = () => new Date().toISOString().slice(0, 10);
 const number = value => Number(value) || 0;
@@ -117,30 +119,29 @@ router.post('/leave-types', async (req, res) => {
       VALUES (?, ?, ?, ?)
     `, [name.trim(), number(days_per_year), is_paid ? 1 : 0, description.trim()]);
     res.json({ success: true, message: 'تمت إضافة نوع الإجازة بنجاح', id: result.lastInsertRowid || result.insertId });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في حفظ نوع الإجازة: ' + err.message });
-  }
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 router.get('/advances', async (_req, res) => {
   try {
-    const rows = await query('SELECT a.*, e.full_name FROM employee_advances a JOIN employees e ON e.id=a.employee_id ORDER BY a.date DESC');
+    const rows = await query(`SELECT a.*, e.full_name, e.employee_no FROM employee_advances a JOIN employees e ON e.id = a.employee_id ORDER BY a.id DESC`);
     res.json({ success: true, data: rows });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 router.post('/advances', async (req, res) => {
   try {
-    const { employee_id, amount, date, installment_amount, notes } = req.body;
-    if (!employee_id || !number(amount)) return res.status(400).json({ success: false, message: 'الموظف ومبلغ السلفة مطلوبان' });
-    await run('INSERT INTO employee_advances (employee_id, amount, recovered_amount, installment_amount, date, status, notes) VALUES (?, ?, 0, ?, ?, \'active\', ?)',
-      [employee_id, number(amount), number(installment_amount), date || today(), notes || '']);
+    const { employee_id, amount, request_date = today(), installment_amount, reason } = req.body;
+    await run('INSERT INTO employee_advances (employee_id,amount,request_date,installment_amount,reason) VALUES (?,?,?,?,?)',
+      [employee_id, number(amount), request_date, number(installment_amount), reason]);
+    await logAudit(req, {
+      action: 'INSERT',
+      entity_type: 'advance',
+      entity_id: employee_id,
+      details: { amount, installment_amount, reason }
+    });
     res.json({ success: true, message: 'تم تسجيل السلفة' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 router.get('/payroll', async (req, res) => {
@@ -159,6 +160,9 @@ router.get('/payroll', async (req, res) => {
   }
 });
 
+// إعداد واحتساب مسير الرواتب وفق القواعد النظامية:
+// - استقطاع التأمينات: 6% للموظف، 9% لرب العمل على الراتب الأساسي
+// - ضريبة كسب العمل: إعفاء لأول 20,000 ر.ي، ثم 10% للشرائح التالية
 router.post('/payroll/generate', async (req, res) => {
   try {
     const payrollMonth = req.body.payroll_month || today().slice(0, 7);
@@ -168,27 +172,62 @@ router.post('/payroll/generate', async (req, res) => {
       for (const e of employees) {
         const exists = await tx.get('SELECT id FROM payroll WHERE employee_id=? AND payroll_month=?', [e.id, payrollMonth]);
         if (exists) continue;
+
         const advances = await tx.get("SELECT COALESCE(SUM(CASE WHEN installment_amount > 0 THEN MIN(installment_amount, amount-recovered_amount) ELSE 0 END),0) AS total FROM employee_advances WHERE employee_id=? AND status='active'", [e.id]);
         const overtime = await tx.get("SELECT COALESCE(SUM(overtime_hours),0) AS hours FROM attendance WHERE employee_id=? AND substr(date,1,7)=?", [e.id, payrollMonth]);
-        const overtimePay = number(overtime?.hours) * (number(e.basic_salary) / 240) * 1.5;
+        
+        const basic = number(e.basic_salary);
+        const allowances = number(e.allowances || 0);
+        const overtimePay = Math.round(number(overtime?.hours) * (basic / 240) * 1.5 * 100) / 100;
+        const gross = basic + allowances + overtimePay;
+
+        // القواعد النظامية للتأمينات (6% موظف و 9% شركة على الأساسي)
+        const insEmp = Math.round(basic * 0.06 * 100) / 100;
+        const insOrg = Math.round(basic * 0.09 * 100) / 100;
+
+        // القواعد النظامية لضريبة كسب العمل (إعفاء 20,000 ر.ي)
+        const taxable = Math.max(0, gross - 20000);
+        let tax = 0;
+        if (taxable > 0) {
+          if (taxable <= 30000) {
+            tax = taxable * 0.10;
+          } else {
+            tax = (30000 * 0.10) + ((taxable - 30000) * 0.15);
+          }
+        }
+        tax = Math.round(tax * 100) / 100;
+
         const deductions = number(advances?.total);
-        const net = number(e.basic_salary) + overtimePay - deductions;
-        await tx.run('INSERT INTO payroll (employee_id,payroll_month,basic_salary,overtime_amount,deductions,net_salary,status) VALUES (?,?,?,?,?,?,\'draft\')',
-          [e.id, payrollMonth, number(e.basic_salary), overtimePay, deductions, net]);
+        const net = Math.round((gross - insEmp - tax - deductions) * 100) / 100;
+
+        await tx.run(`
+          INSERT INTO payroll (
+            employee_id, payroll_month, basic_salary, allowances, overtime_amount,
+            gross_salary, insurance_employee, insurance_employer, tax_amount,
+            deductions, net_salary, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+        `, [
+          e.id, payrollMonth, basic, allowances, overtimePay,
+          gross, insEmp, insOrg, tax,
+          deductions, net
+        ]);
         created++;
       }
       return created;
     });
-    res.json({ success: true, data: { created: result }, message: `تم إعداد ${result} مسير راتب` });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
 
-router.put('/payroll/:id/pay', async (req, res) => {
-  try {
-    await run("UPDATE payroll SET status='paid', paid_date=? WHERE id=?", [req.body.paid_date || today(), req.params.id]);
-    res.json({ success: true, message: 'تم اعتماد صرف الراتب' });
+    await logAudit(req, {
+      action: 'GENERATE_PAYROLL',
+      entity_type: 'payroll',
+      entity_id: payrollMonth,
+      details: { month: payrollMonth, records_count: result }
+    });
+
+    res.json({ 
+      success: true, 
+      data: { created: result }, 
+      message: `تم إعداد ${result} مسير راتب لشهر ${payrollMonth} وفق القواعد المحاسبية والنظامية` 
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -230,10 +269,18 @@ router.post('/evaluations', async (req, res) => {
   }
 });
 
-// ترحيل كشف الراتب آلياً إلى قيد محاسبي متزن في سجل الأستاذ العام
+// ترحيل كشف الراتب آلياً إلى قيد محاسبي مركب متزن تماماً في سجل اليومية العامة
 router.post('/payroll/:month/post-to-journal', async (req, res) => {
   try {
     const month = req.params.month;
+    const postDate = today();
+
+    // 1. التحقق من إغلاق الفترة المحاسبية
+    const periodCheck = await checkPeriodOpen(postDate);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
     const records = await query('SELECT p.*, e.full_name FROM payroll p JOIN employees e ON e.id=p.employee_id WHERE p.payroll_month = ?', [month]);
     if (!records || records.length === 0) {
       return res.status(400).json({ success: false, message: `لا توجد مسيرات رواتب لشهر ${month}` });
@@ -244,27 +291,62 @@ router.post('/payroll/:month/post-to-journal', async (req, res) => {
       return res.status(400).json({ success: false, message: `تم ترحيل مسير رواتب شهر ${month} مسبقاً بقيد يومية` });
     }
 
-    let totalBasic = 0;
-    let totalOvertime = 0;
+    let totalGross = 0;
+    let totalInsEmployer = 0;
+    let totalInsEmployee = 0;
+    let totalTax = 0;
     let totalDeductions = 0;
     let totalNet = 0;
 
     for (const r of records) {
-      totalBasic += number(r.basic_salary);
-      totalOvertime += number(r.overtime_amount);
-      totalDeductions += number(r.deductions);
-      totalNet += number(r.net_salary);
+      const g = r.gross_salary != null ? number(r.gross_salary) : (number(r.basic_salary) + number(r.overtime_amount));
+      const iOrg = number(r.insurance_employer || 0);
+      const iEmp = number(r.insurance_employee || 0);
+      const tx = number(r.tax_amount || 0);
+      const ded = number(r.deductions || 0);
+      const net = number(r.net_salary || 0);
+
+      totalGross += g;
+      totalInsEmployer += iOrg;
+      totalInsEmployee += iEmp;
+      totalTax += tx;
+      totalDeductions += ded;
+      totalNet += net;
     }
 
-    const totalExpense = totalBasic + totalOvertime;
+    totalGross = Math.round(totalGross * 100) / 100;
+    totalInsEmployer = Math.round(totalInsEmployer * 100) / 100;
+    totalInsEmployee = Math.round(totalInsEmployee * 100) / 100;
+    totalTax = Math.round(totalTax * 100) / 100;
+    totalDeductions = Math.round(totalDeductions * 100) / 100;
+    totalNet = Math.round(totalNet * 100) / 100;
 
-    // جلب الحسابات المحاسبية المطلوبة للقيد
-    let salaryExpAcc = await get("SELECT id FROM accounts WHERE code = '52' OR code = '3201' OR name LIKE '%رواتب%' ORDER BY code ASC LIMIT 1");
-    let cashBankAcc = await get("SELECT id FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' ORDER BY code ASC LIMIT 1");
-    let advanceAcc = await get("SELECT id FROM accounts WHERE code = '114' OR name LIKE '%سلف%' OR name LIKE '%عهد%' LIMIT 1");
+    // إجمالي الجانب المدين (إجمالي استحقاق الرواتب + مساهمة الشركة في التأمينات)
+    const totalDebit = Math.round((totalGross + totalInsEmployer) * 100) / 100;
+    
+    // إجمالي الجانب الدائن (صافي مسدد + ضريبة + إجمالي تأمينات + استرداد سلف)
+    const totalCredit = Math.round((totalNet + totalTax + (totalInsEmployee + totalInsEmployer) + totalDeductions) * 100) / 100;
+
+    // التحقق الرياضي من التوازن المحاسبي
+    const diff = Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100;
+    if (diff > 0.05) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `عدم توازن في مسير الرواتب! المدين: ${totalDebit}، الدائن: ${totalCredit}، الفارق: ${diff}` 
+      });
+    }
+
+    // جلب الحسابات المحاسبية المتخصصة
+    let salaryExpAcc = await get("SELECT id FROM accounts WHERE code = '511' OR code = '52' OR name LIKE '%رواتب%' LIMIT 1");
+    let insExpAcc = await get("SELECT id FROM accounts WHERE code = '512' OR name LIKE '%مساهمة%تأمين%' LIMIT 1");
+    let cashBankAcc = await get("SELECT id FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' LIMIT 1");
+    let taxAcc = await get("SELECT id FROM accounts WHERE code = '213' OR name LIKE '%ضرائب%' OR name LIKE '%كسب%' LIMIT 1");
+    let insLiabilityAcc = await get("SELECT id FROM accounts WHERE code = '214' OR name LIKE '%تأمينات%' LIMIT 1");
+    let advanceAcc = await get("SELECT id FROM accounts WHERE code = '114' OR name LIKE '%سلف%' LIMIT 1");
 
     if (!salaryExpAcc) salaryExpAcc = { id: 1 };
     if (!cashBankAcc) cashBankAcc = { id: 2 };
+    const defaultCostCenterId = 1; // CC-100 الإدارة العامة
 
     const currentYear = new Date().getFullYear();
     const countRes = await get('SELECT COUNT(*) as cnt FROM journal_entries');
@@ -276,35 +358,60 @@ router.post('/payroll/:month/post-to-journal', async (req, res) => {
     }
 
     const txResult = await transaction(async (tx) => {
-      // إدراج القيد اليومي
+      // إدراج القيد اليومي المركب
       const jeRes = await tx.run(`
         INSERT INTO journal_entries (entry_no, date, description, reference_type, total_debit, total_credit)
         VALUES (?, ?, ?, 'ترحيل رواتب', ?, ?)
-      `, [entry_no, today(), `إثبات وصرف استحقاق مسير رواتب شهر ${month} لعدد ${records.length} موظف`, totalExpense, totalExpense]);
+      `, [entry_no, postDate, `إثبات استحقاق واحتساب مسير رواتب شهر ${month} والتأمينات والضرائب لعدد ${records.length} موظف`, totalDebit, totalDebit]);
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
-      // طرف مدين: حساب مصروف الرواتب والأجور
+      // 1. طرف مدين: مصروف الرواتب والأجور (إجمالي الاستحقاق)
       await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [jeId, salaryExpAcc.id, totalExpense, `إجمالي استحقاق رواتب شهر ${month}`]);
+        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+        VALUES (?, ?, ?, ?, 0, ?)
+      `, [jeId, salaryExpAcc.id, defaultCostCenterId, totalGross, `إجمالي استحقاق رواتب وبدلات شهر ${month}`]);
 
-      // طرف دائن: الصندوق / البنك بصافي الرواتب
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, 0, ?, ?)
-      `, [jeId, cashBankAcc.id, totalNet, `صافي رواتب محولة للموظفين لشهر ${month}`]);
-
-      // طرف دائن إضافي: استرداد السلف والخصومات إن وجدت
-      if (totalDeductions > 0 && advanceAcc) {
+      // 2. طرف مدين: مصروف مساهمة الشركة في التأمينات (9%)
+      if (totalInsEmployer > 0 && insExpAcc) {
         await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, 0, ?, ?)
-        `, [jeId, advanceAcc.id, totalDeductions, `خصومات واسترداد سلف موظفين شهر ${month}`]);
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, insExpAcc.id, defaultCostCenterId, totalInsEmployer, `مساهمة المنشأة في التأمينات الاجتماعية (9%) لشهر ${month}`]);
       }
 
-      // تحديث حالة المسير إلى paid وتخزين رقم القيد
+      // 3. طرف دائن: الصندوق / البنك بصافي الرواتب المسددة للموظفين
+      await tx.run(`
+        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+        VALUES (?, ?, ?, 0, ?, ?)
+      `, [jeId, cashBankAcc.id, defaultCostCenterId, totalNet, `صافي رواتب محولة ومسددة للموظفين لشهر ${month}`]);
+
+      // 4. طرف دائن: أمانات مصلحة الضرائب (ضريبة كسب العمل)
+      if (totalTax > 0 && taxAcc) {
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+          VALUES (?, ?, ?, 0, ?, ?)
+        `, [jeId, taxAcc.id, defaultCostCenterId, totalTax, `أمانات ضريبة كسب العمل المستقطعة لشهر ${month}`]);
+      }
+
+      // 5. طرف دائن: الهيئة العامة للتأمينات والمعاشات (حصة الموظف 6% + حصة الشركة 9%)
+      const totalInsurance = Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100;
+      if (totalInsurance > 0 && insLiabilityAcc) {
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+          VALUES (?, ?, ?, 0, ?, ?)
+        `, [jeId, insLiabilityAcc.id, defaultCostCenterId, totalInsurance, `مستحقات التأمينات الاجتماعية (حصة العامل 6% + حصة المنشأة 9%) لشهر ${month}`]);
+      }
+
+      // 6. طرف دائن: استرداد السلف والعهد
+      if (totalDeductions > 0 && advanceAcc) {
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+          VALUES (?, ?, ?, 0, ?, ?)
+        `, [jeId, advanceAcc.id, defaultCostCenterId, totalDeductions, `استرداد سلف وذمم الموظفين لشهر ${month}`]);
+      }
+
+      // تحديث حالة مسيرات الرواتب إلى مرحلة ومسددة
       await tx.run(`
         UPDATE payroll 
         SET status = 'paid', paid_date = ?, journal_entry_id = ?
@@ -314,13 +421,22 @@ router.post('/payroll/:month/post-to-journal', async (req, res) => {
       return { jeId, entry_no };
     });
 
+    await logAudit(req, {
+      action: 'POST_PAYROLL_JOURNAL',
+      entity_type: 'payroll',
+      entity_id: month,
+      details: { month, entry_no: txResult.entry_no, total_debit: totalDebit, total_net: totalNet }
+    });
+
     res.json({
       success: true,
       message: `تم ترحيل مسير رواتب شهر ${month} بنجاح وإنشاء القيد المحاسبي المتزن رقم ${txResult.entry_no}`,
       entry_no: txResult.entry_no,
       journal_entry_id: txResult.jeId,
-      total_expense: totalExpense,
-      total_net: totalNet
+      total_expense: totalDebit,
+      total_net: totalNet,
+      total_tax: totalTax,
+      total_insurance: totalInsEmployee + totalInsEmployer
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في ترحيل مسير الرواتب: ' + err.message });

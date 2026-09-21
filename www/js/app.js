@@ -10,6 +10,7 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
+    tafqeet: 'js/tafqeet.js?v=5.2',
     projects: 'js/projects.js?v=5.2',
     projectHub: 'js/project_hub.js?v=5.3',
     accounting: 'js/accounting.js?v=5.2',
@@ -66,18 +67,18 @@ const App = {
     const viewMap = {
       dashboard: ['reports', 'projects'],
       projects: ['projects'],
-      projectHub: ['projects', 'projectHub', 'accounting'],
-      revenues: ['accounting'],
-      expenses: ['accounting'],
-      custody: ['accounting'],
-      journal: ['accounting', 'excelExport'],
+      projectHub: ['projects', 'projectHub', 'tafqeet', 'accounting'],
+      revenues: ['tafqeet', 'accounting'],
+      expenses: ['tafqeet', 'accounting'],
+      custody: ['tafqeet', 'accounting'],
+      journal: ['tafqeet', 'accounting', 'excelExport'],
       chartOfAccounts: ['accounting'],
       costCenters: ['accounting'],
       currencies: ['accounting'],
-      clients: ['accounting', 'reports'],
-      suppliers: ['accounting', 'reports'],
-      cash: ['accounting'],
-      reports: ['reports', 'accounting', 'excelExport'],
+      clients: ['tafqeet', 'accounting', 'reports'],
+      suppliers: ['tafqeet', 'accounting', 'reports'],
+      cash: ['tafqeet', 'accounting'],
+      reports: ['reports', 'tafqeet', 'accounting', 'excelExport'],
       inventory: ['inventory'],
       hr: ['hr'],
       settings: ['settings']

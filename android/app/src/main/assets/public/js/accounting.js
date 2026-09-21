@@ -188,68 +188,12 @@ const Accounting = {
 
   // ================== تفقيط الأرقام وتحويلها إلى كلمات عربية ==================
   tafqeet(num, currency = 'ر.ي') {
-    if (!num || isNaN(num) || num <= 0) return '';
-    num = Math.floor(Number(num));
-
-    const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
-    const teens = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
-    const tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
-    const hundreds = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
-
-    function convertGroup(n) {
-      let res = [];
-      const h = Math.floor(n / 100);
-      const remainder = n % 100;
-
-      if (h > 0) res.push(hundreds[h]);
-
-      if (remainder > 0) {
-        if (remainder < 10) {
-          res.push(ones[remainder]);
-        } else if (remainder < 20) {
-          res.push(teens[remainder - 10]);
-        } else {
-          const o = remainder % 10;
-          const t = Math.floor(remainder / 10);
-          if (o > 0) {
-            res.push(ones[o] + ' و' + tens[t]);
-          } else {
-            res.push(tens[t]);
-          }
-        }
-      }
-      return res.join(' و');
+    if (!num || isNaN(num) || Number(num) <= 0) return '';
+    if (typeof window !== 'undefined' && typeof window.Tafqeet === 'function') {
+      const words = window.Tafqeet(num, currency);
+      return words ? `فقط ${words} لا غير` : '';
     }
-
-    let parts = [];
-    const billions = Math.floor(num / 1000000000);
-    num %= 1000000000;
-    const millions = Math.floor(num / 1000000);
-    num %= 1000000;
-    const thousands = Math.floor(num / 1000);
-    const units = num % 1000;
-
-    if (billions > 0) {
-      parts.push(convertGroup(billions) + (billions === 1 ? ' مليار' : (billions === 2 ? ' ملياران' : (billions <= 10 ? ' مليارات' : ' مليار'))));
-    }
-    if (millions > 0) {
-      parts.push(convertGroup(millions) + (millions === 1 ? ' مليون' : (millions === 2 ? ' مليونان' : (millions <= 10 ? ' ملايين' : ' مليون'))));
-    }
-    if (thousands > 0) {
-      if (thousands === 1) parts.push('ألف');
-      else if (thousands === 2) parts.push('ألفان');
-      else if (thousands <= 10) parts.push(convertGroup(thousands) + ' آلاف');
-      else parts.push(convertGroup(thousands) + ' ألف');
-    }
-    if (units > 0) {
-      parts.push(convertGroup(units));
-    }
-
-    let currName = 'ريال يمني';
-    if (currency === 'ر.س') currName = 'ريال سعودي';
-    else if (currency === '$' || currency === 'USD') currName = 'دولار أمريكي';
-
-    return 'فقط ' + parts.join(' و') + ' ' + currName + ' لا غير';
+    return `فقط ${App.formatNumber(num)} ${currency} لا غير`;
   },
 
   // فتح نافذة منبثقة لتسجيل سند قبض جديد
@@ -1410,7 +1354,36 @@ const Accounting = {
 
   // ================== إدارة قيود اليومية العامة (Journal Entries) ==================
 
+  injectPeriodAndAuditButtons() {
+    const actions = document.getElementById('journalHeaderActions');
+    if (!actions) return;
+    if (!document.getElementById('btnJournalPeriods')) {
+      const pBtn = document.createElement('button');
+      pBtn.id = 'btnJournalPeriods';
+      pBtn.className = 'btn btn-warning';
+      pBtn.title = 'إدارة وإغلاق الفترات المحاسبية';
+      pBtn.innerHTML = '<span>🔒 الفترات المحاسبية</span>';
+      pBtn.onclick = () => Accounting.openPeriodsModal();
+      actions.insertBefore(pBtn, actions.firstChild);
+    }
+    if (!document.getElementById('btnJournalAuditLog')) {
+      const aBtn = document.createElement('button');
+      aBtn.id = 'btnJournalAuditLog';
+      aBtn.className = 'btn btn-info';
+      aBtn.title = 'سجل التدقيق والرقابة المالية';
+      aBtn.innerHTML = '<span>📜 سجل التدقيق</span>';
+      aBtn.onclick = () => Accounting.openAuditLogModal();
+      const pBtn = document.getElementById('btnJournalPeriods');
+      if (pBtn && pBtn.nextSibling) {
+        actions.insertBefore(aBtn, pBtn.nextSibling);
+      } else {
+        actions.appendChild(aBtn);
+      }
+    }
+  },
+
   async loadJournalEntries() {
+    this.injectPeriodAndAuditButtons();
     try {
       const res = await fetch('/api/accounting/journal-entries');
       const data = await res.json();
@@ -2310,6 +2283,333 @@ const Accounting = {
 
   loadCurrencies() {
     return this.loadCurrenciesTable();
+  },
+
+  // ================== إدارة الفترات المحاسبية وإغلاق الحسابات ==================
+  async openPeriodsModal() {
+    let modal = document.getElementById('accountingPeriodsModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'accountingPeriodsModal';
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal-dialog modal-lg" style="max-width: 850px;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+                <span>🔒 إدارة الفترات المحاسبية وإغلاق الدفاتر</span>
+              </h3>
+              <button type="button" class="btn-close" onclick="App.closeModal('accountingPeriodsModal')">✕</button>
+            </div>
+            <div class="modal-body">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <p style="color: var(--text-secondary); margin: 0; font-size: 0.88rem;">
+                  إغلاق الفترات يمنع تسجيل أو تعديل أي قيد أو سند مالي بتاريخ مغلق لحماية الحسابات من التلاعب.
+                </p>
+                <button class="btn btn-sm btn-primary" onclick="Accounting.showNewPeriodForm()">+ إضافة فترة جديدة</button>
+              </div>
+
+              <!-- نموذج إضافة فترة جديدة (مخفي افتراضياً) -->
+              <div id="newPeriodFormContainer" style="display: none; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 15px;">
+                <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--gold-light);">إضافة فترة محاسبية جديدة</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                  <div>
+                    <label class="form-label" style="font-size: 0.8rem;">اسم الفترة</label>
+                    <input type="text" id="newPeriodName" class="form-control" placeholder="مثال: الربع الأول 2026">
+                  </div>
+                  <div>
+                    <label class="form-label" style="font-size: 0.8rem;">تاريخ البدء</label>
+                    <input type="date" id="newPeriodStart" class="form-control">
+                  </div>
+                  <div>
+                    <label class="form-label" style="font-size: 0.8rem;">تاريخ الانتهاء</label>
+                    <input type="date" id="newPeriodEnd" class="form-control">
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                  <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('newPeriodFormContainer').style.display='none'">إلغاء</button>
+                  <button type="button" class="btn btn-sm btn-success" onclick="Accounting.submitNewPeriod()">حفظ الفترة</button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>اسم الفترة</th>
+                      <th>تاريخ البدء</th>
+                      <th>تاريخ الانتهاء</th>
+                      <th>الحالة</th>
+                      <th>ملاحظات الإغلاق / الفتح</th>
+                      <th style="text-align: center;">الإجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody id="accountingPeriodsTableBody">
+                    <tr><td colspan="6" style="text-align: center;">جاري التحميل...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="App.closeModal('accountingPeriodsModal')">إغلاق</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    App.openModal('accountingPeriodsModal');
+    await this.loadPeriodsTable();
+  },
+
+  showNewPeriodForm() {
+    const el = document.getElementById('newPeriodFormContainer');
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  },
+
+  async loadPeriodsTable() {
+    const tbody = document.getElementById('accountingPeriodsTableBody');
+    if (!tbody) return;
+
+    try {
+      const res = await fetch('/api/accounting/periods');
+      const json = await res.json();
+      if (!json.success || !json.data || json.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">لا توجد فترات محاسبية مسجلة</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = json.data.map(p => {
+        const isClosed = p.status === 'closed';
+        const badge = isClosed 
+          ? `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid #ef4444;">🔒 مغلقة</span>`
+          : `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid #22c55e;">🟢 مفتوحة</span>`;
+
+        let actionBtn = '';
+        if (isClosed) {
+          actionBtn = `<button class="btn btn-sm btn-warning" onclick="Accounting.promptReopenPeriod(${p.id}, '${p.period_name}')" style="padding: 3px 8px; font-size: 0.78rem;">🔓 إعادة فتح</button>`;
+        } else {
+          actionBtn = `<button class="btn btn-sm btn-danger" onclick="Accounting.promptClosePeriod(${p.id}, '${p.period_name}')" style="padding: 3px 8px; font-size: 0.78rem;">🔒 إغلاق الفترة</button>`;
+        }
+
+        const notes = isClosed 
+          ? `أغلقت بواسطة: ${p.closed_by || 'المدير'} ${p.closing_reason ? `(${p.closing_reason})` : ''}`
+          : (p.reopen_reason ? `أعيد فتحها: ${p.reopen_reason}` : 'جاهزة للعمليات');
+
+        return `
+          <tr>
+            <td style="font-weight: bold; color: #fff;">${p.period_name}</td>
+            <td>${p.start_date}</td>
+            <td>${p.end_date}</td>
+            <td>${badge}</td>
+            <td style="font-size: 0.8rem; color: var(--text-secondary);">${notes}</td>
+            <td style="text-align: center;">${actionBtn}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      console.error(e);
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #f87171;">فشل جلب الفترات المحاسبية</td></tr>';
+    }
+  },
+
+  async submitNewPeriod() {
+    const period_name = document.getElementById('newPeriodName')?.value?.trim();
+    const start_date = document.getElementById('newPeriodStart')?.value;
+    const end_date = document.getElementById('newPeriodEnd')?.value;
+
+    if (!period_name || !start_date || !end_date) {
+      App.showToast('جميع الحقول مطلوبة لإضافة الفترة', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/accounting/periods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period_name, start_date, end_date })
+      });
+      const data = await res.json();
+      if (data.success) {
+        App.showToast('تمت إضافة الفترة المحاسبية بنجاح', 'success');
+        document.getElementById('newPeriodFormContainer').style.display = 'none';
+        await this.loadPeriodsTable();
+      } else {
+        App.showToast(data.message || 'فشل إضافة الفترة', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      App.showToast('خطأ أثناء حفظ الفترة', 'error');
+    }
+  },
+
+  async promptClosePeriod(id, name) {
+    const reason = prompt(`هل أنت متأكد من إغلاق الفترة المحاسبية (${name})؟\nلن يسمح بأي تعديل مالي فيها بعد الإغلاق.\nأدخل سبب الإغلاق إن وجد:`, 'الإقفال الدوري للحسابات');
+    if (reason === null) return;
+
+    try {
+      const res = await fetch(`/api/accounting/periods/${id}/close`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+      const data = await res.json();
+      if (data.success) {
+        App.showToast(data.message, 'success');
+        await this.loadPeriodsTable();
+      } else {
+        App.showToast(data.message || 'فشل إغلاق الفترة', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      App.showToast('خطأ في إغلاق الفترة', 'error');
+    }
+  },
+
+  async promptReopenPeriod(id, name) {
+    const reason = prompt(`⚠️ إعادة فتح فترة مغلقة (${name}) يتطلب إذناً رسمياً.\nأدخل سبب ومبرر إعادة الفتح:`);
+    if (!reason || !reason.trim()) {
+      App.showToast('يجب إدخال سبب رسمي لإعادة فتح الفترة', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/accounting/periods/${id}/reopen`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        App.showToast(data.message, 'success');
+        await this.loadPeriodsTable();
+      } else {
+        App.showToast(data.message || 'فشل إعادة فتح الفترة', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      App.showToast('خطأ في إعادة فتح الفترة', 'error');
+    }
+  },
+
+  // ================== سجل التدقيق والرقابة المالية (Audit Log) ==================
+  async openAuditLogModal() {
+    let modal = document.getElementById('auditLogModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'auditLogModal';
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal-dialog modal-xl" style="max-width: 1050px;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+                <span>📜 سجل التدقيق والرقابة المالية (Audit Trail)</span>
+              </h3>
+              <button type="button" class="btn-close" onclick="App.closeModal('auditLogModal')">✕</button>
+            </div>
+            <div class="modal-body">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <p style="color: var(--text-secondary); margin: 0; font-size: 0.88rem;">
+                  توثيق دقيق لكل العمليات المالية والإدارية (من أنشأ، من عدّل، متى، والتفاصيل المحاسبية).
+                </p>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <select id="auditLogFilterEntity" class="form-control" style="max-width: 170px;" onchange="Accounting.loadAuditLogs()">
+                    <option value="">كافة الكيانات...</option>
+                    <option value="journal_entry">قيود يومية</option>
+                    <option value="expense">سندات صرف</option>
+                    <option value="receipt">سندات قبض</option>
+                    <option value="payroll">رواتب وأجور</option>
+                    <option value="period">فترات محاسبية</option>
+                    <option value="account">دليل الحسابات</option>
+                  </select>
+                  <button class="btn btn-sm btn-secondary" onclick="Accounting.loadAuditLogs()">🔄 تحديث</button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>التاريخ والوقت</th>
+                      <th>المستخدم</th>
+                      <th>نوع الحركة</th>
+                      <th>الكيان المالي</th>
+                      <th>الرقم / المعرف</th>
+                      <th>تفاصيل التعديل والبيانات</th>
+                      <th>عنوان IP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="auditLogsTableBody">
+                    <tr><td colspan="7" style="text-align: center;">جاري التحميل...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="App.closeModal('auditLogModal')">إغلاق</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    App.openModal('auditLogModal');
+    await this.loadAuditLogs();
+  },
+
+  async loadAuditLogs() {
+    const tbody = document.getElementById('auditLogsTableBody');
+    if (!tbody) return;
+
+    const entityType = document.getElementById('auditLogFilterEntity')?.value || '';
+    let url = '/api/accounting/audit-logs?limit=50';
+    if (entityType) url += `&entity_type=${encodeURIComponent(entityType)}`;
+
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (!json.success || !json.data || json.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">لا توجد حركات تدقيق مسجلة حتى الآن</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = json.data.map(log => {
+        let actionBadge = `<span class="badge badge-info">${log.action}</span>`;
+        if (log.action === 'INSERT') actionBadge = `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80;">إضافة +</span>`;
+        else if (log.action === 'DELETE') actionBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171;">حذف ✕</span>`;
+        else if (log.action === 'UPDATE') actionBadge = `<span class="badge" style="background: rgba(234,179,8,0.2); color: #facc15;">تعديل ✏️</span>`;
+        else if (log.action === 'CLOSE_PERIOD') actionBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171;">إغلاق فترة 🔒</span>`;
+        else if (log.action === 'REOPEN_PERIOD') actionBadge = `<span class="badge" style="background: rgba(59,130,246,0.2); color: #60a5fa;">فتح فترة 🔓</span>`;
+
+        let detailsDisplay = log.details || '';
+        try {
+          if (detailsDisplay.startsWith('{') || detailsDisplay.startsWith('[')) {
+            const parsed = JSON.parse(detailsDisplay);
+            detailsDisplay = Object.entries(parsed)
+              .map(([k, v]) => `<span style="color: var(--gold-light);">${k}:</span> ${typeof v === 'number' ? App.formatNumber(v) : v}`)
+              .join(' | ');
+          }
+        } catch (e) {}
+
+        return `
+          <tr>
+            <td style="font-size: 0.8rem; direction: ltr; text-align: right;">${log.created_at}</td>
+            <td style="font-weight: 600; color: #fff;">${log.username || 'نظام'}</td>
+            <td>${actionBadge}</td>
+            <td><span class="badge badge-secondary">${log.entity_type}</span></td>
+            <td style="font-family: monospace; color: #38bdf8;">${log.entity_id || '-'}</td>
+            <td style="font-size: 0.8rem; max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${detailsDisplay}</td>
+            <td style="font-size: 0.75rem; color: var(--text-secondary); direction: ltr;">${log.ip_address || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      console.error(e);
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #f87171;">فشل جلب سجلات التدقيق</td></tr>';
+    }
   },
 
   exportJournalToExcel() {
