@@ -5,47 +5,74 @@ const { query, get } = require('../database/db');
 // إحصائيات لوحة التحكم الحية الشاملة
 router.get('/dashboard', async (req, res) => {
   try {
-    // حساب المبالغ من الجداول أو القيم الافتراضية
-    const paymentsSum = await get("SELECT SUM(amount) as total FROM payments WHERE type = 'قبض'");
-    const expensesSum = await get("SELECT SUM(amount) as total FROM expenses");
-    const clientDueSum = await get("SELECT SUM(current_balance) as total FROM clients");
-    const supplierDueSum = await get("SELECT SUM(balance) as total FROM suppliers");
+    // حساب المبالغ الفعلية بدقة من الجداول المحاسبية الحية
+    const paymentsSum = await get("SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE type = 'قبض'");
+    const expensesSum = await get("SELECT COALESCE(SUM(amount), 0) as total FROM expenses");
+    const clientDueSum = await get("SELECT COALESCE(SUM(current_balance), 0) as total FROM clients");
+    const supplierDueSum = await get("SELECT COALESCE(SUM(balance), 0) as total FROM suppliers");
     const activeProjectsCount = await get("SELECT COUNT(*) as cnt FROM projects WHERE status = 'active'");
     const totalProjectsCount = await get("SELECT COUNT(*) as cnt FROM projects");
     const lastCash = await get("SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1");
 
-    const totalIncome = (paymentsSum && paymentsSum.total) ? Number(paymentsSum.total) : 1250000;
-    const totalExpenses = (expensesSum && expensesSum.total) ? Number(expensesSum.total) : 850000;
+    const totalIncome = paymentsSum ? Number(paymentsSum.total) : 0;
+    const totalExpenses = expensesSum ? Number(expensesSum.total) : 0;
     const netProfit = totalIncome - totalExpenses;
-    const cashBalance = (lastCash && lastCash.current_balance) ? Number(lastCash.current_balance) : 125000;
-    const clientReceivables = (clientDueSum && clientDueSum.total) ? Number(clientDueSum.total) : 320000;
-    const supplierPayables = (supplierDueSum && supplierDueSum.total) ? Number(supplierDueSum.total) : 210000;
-    const activeProjects = activeProjectsCount ? activeProjectsCount.cnt : 8;
-    const totalProjects = totalProjectsCount ? totalProjectsCount.cnt : 15;
+    const cashBalance = (lastCash && lastCash.current_balance !== null) ? Number(lastCash.current_balance) : 0;
+    const clientReceivables = clientDueSum ? Number(clientDueSum.total) : 0;
+    const supplierPayables = supplierDueSum ? Number(supplierDueSum.total) : 0;
+    const activeProjects = activeProjectsCount ? Number(activeProjectsCount.cnt) : 0;
+    const totalProjects = totalProjectsCount ? Number(totalProjectsCount.cnt) : 0;
 
-    // المصروفات حسب النوع (Donut Chart)
+    // المصروفات حسب النوع (Donut Chart) من قاعدة البيانات الفعلية
     const expStats = await query(`
       SELECT expense_type, SUM(amount) as total
       FROM expenses
       GROUP BY expense_type
       ORDER BY total DESC
     `);
-    const expTotal = expStats.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0) || totalExpenses;
+    const expTotal = expStats.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
     const expensesByType = expStats.map(item => ({
-      type: item.expense_type,
+      type: item.expense_type || 'أخرى',
       total: Number(item.total) || 0,
       percentage: expTotal > 0 ? Math.round(((Number(item.total) || 0) / expTotal) * 100) : 0
     }));
 
-    // بيانات الـ 6 أشهر للرسم الخطي
-    const monthlyTrend = [
-      { month: 'يناير', income: 150000, expense: 90000 },
-      { month: 'فبراير', income: 240000, expense: 150000 },
-      { month: 'مارس', income: 210000, expense: 130000 },
-      { month: 'أبريل', income: 320000, expense: 220000 },
-      { month: 'مايو', income: 280000, expense: 190000 },
-      { month: 'يونيو', income: 420000, expense: 270000 }
-    ];
+    // استخراج بيانات حركة الـ 6 أشهر الماضية بصورة ديناميكية وحية من قاعدة البيانات
+    const monthNamesArabic = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    const now = new Date();
+    const monthsList = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      monthsList.push({
+        key: `${y}-${m}`,
+        name: monthNamesArabic[d.getMonth()]
+      });
+    }
+
+    const monthlyIncomeRows = await query(`
+      SELECT SUBSTR(date, 1, 7) as month_key, SUM(amount) as total
+      FROM payments
+      WHERE type = 'قبض'
+      GROUP BY month_key
+    `);
+    const monthlyExpenseRows = await query(`
+      SELECT SUBSTR(date, 1, 7) as month_key, SUM(amount) as total
+      FROM expenses
+      GROUP BY month_key
+    `);
+
+    const incomeMap = {};
+    (monthlyIncomeRows || []).forEach(r => { if (r.month_key) incomeMap[r.month_key] = Number(r.total) || 0; });
+    const expenseMap = {};
+    (monthlyExpenseRows || []).forEach(r => { if (r.month_key) expenseMap[r.month_key] = Number(r.total) || 0; });
+
+    const monthlyTrend = monthsList.map(m => ({
+      month: m.name,
+      income: incomeMap[m.key] || 0,
+      expense: expenseMap[m.key] || 0
+    }));
 
     // آخر العمليات (Recent Operations)
     const recentExpenses = await query(`

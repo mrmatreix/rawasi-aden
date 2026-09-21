@@ -29,6 +29,9 @@ const App = {
     this.setupDatePickers();
     this.setupNetworkWatchers();
 
+    // تهيئة مسار التنقل الدلالي ووحدة تجربة المستخدم
+    if (window.UI && UI.Breadcrumbs) UI.Breadcrumbs.update(this.activeView);
+
     console.log('✅ تم تشغيل كافة وحدات النظام بنجاح!');
   },
 
@@ -141,6 +144,11 @@ const App = {
     // الانتقال للشاشة الرئيسية أولاً
     this.navigate(viewId, null);
 
+    // تحديث مسار التنقل الدلالي ليشمل التبويب المتخصص
+    if (window.UI && UI.Breadcrumbs) {
+      UI.Breadcrumbs.update(viewId, subTab);
+    }
+
     // توجيه التبويب الفرعي المتخصص
     if (viewId === 'settings') {
       if (typeof Settings !== 'undefined' && Settings.switchTab) {
@@ -197,6 +205,11 @@ const App = {
 
     this.activeView = viewId;
     this.closeMobileSidebar();
+
+    // تحديث مسار التنقل الدلالي تلقائياً
+    if (window.UI && UI.Breadcrumbs) {
+      UI.Breadcrumbs.update(viewId);
+    }
 
     // تحديث رابط القائمة الجانبية النشط
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -282,10 +295,14 @@ const App = {
   },
 
   async loadRevenuesTable() {
+    const tbody = document.getElementById('fullRevenuesTableBody');
+    if (tbody && window.UI && UI.Skeleton) {
+      UI.Skeleton.showTableSkeleton(tbody, 5, 10);
+    }
+
     try {
       const res = await fetch('/api/payments?type=قبض');
       const json = await res.json();
-      const tbody = document.getElementById('fullRevenuesTableBody');
       if (json.success) {
         const list = json.data || [];
         const total = list.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -297,49 +314,64 @@ const App = {
         if (tbody) {
           if (list.length === 0) {
             tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد سندات قبض مسجلة حتى الآن</td></tr>`;
+            const pag = document.getElementById('revenuesPagination');
+            if (pag) pag.innerHTML = '';
           } else {
-            tbody.innerHTML = list.map(p => {
-              const accStr = p.account_code ? `${p.account_code} - ${p.account_name}` : (p.account_name || '-');
-              const ccStr = p.cost_center_code ? `${p.cost_center_code} - ${p.cost_center_name}` : (p.cost_center_name || '-');
-              const paymentStr = p.payment_method === 'شيك' 
-                ? `<span class="badge badge-active" style="background: rgba(212, 175, 55, 0.2); color: var(--gold-light); border: 1px solid var(--gold-light);">شيك: ${p.check_no || 'غير محدد'}</span>`
-                : `<span class="badge badge-active">${p.payment_method}</span>`;
+            const renderRows = (pageList) => {
+              tbody.innerHTML = pageList.map(p => {
+                const accStr = p.account_code ? `${p.account_code} - ${p.account_name}` : (p.account_name || '-');
+                const ccStr = p.cost_center_code ? `${p.cost_center_code} - ${p.cost_center_name}` : (p.cost_center_name || '-');
+                const paymentStr = p.payment_method === 'شيك' 
+                  ? `<span class="badge badge-active" style="background: rgba(212, 175, 55, 0.2); color: var(--gold-light); border: 1px solid var(--gold-light);">شيك: ${p.check_no || 'غير محدد'}</span>`
+                  : `<span class="badge badge-active">${p.payment_method}</span>`;
 
-              return `
-                <tr>
-                  <td><strong style="color: var(--gold-light); font-family: monospace;">${p.receipt_no}</strong></td>
-                  <td>${p.date}</td>
-                  <td><strong>${p.client_name || '-'}</strong></td>
-                  <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
-                  <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
-                  <td>${p.project_name || '-'}</td>
-                  <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(p.amount)} ${p.currency || 'ر.ي'}</td>
-                  <td>${paymentStr}</td>
-                  <td>${p.notes || '-'}</td>
-                  <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
-                      receipt_no: '${p.receipt_no}',
-                      date: '${p.date}',
-                      client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
-                      account_code: '${p.account_code || ''}',
-                      account_name: '${(p.account_name || '').replace(/'/g, "\\'")}',
-                      cost_center_code: '${p.cost_center_code || ''}',
-                      cost_center_name: '${(p.cost_center_name || '').replace(/'/g, "\\'")}',
-                      project_name: '${(p.project_name || '-').replace(/'/g, "\\'")}',
-                      amount: ${p.amount},
-                      currency: '${p.currency || 'ر.ي'}',
-                      payment_method: '${p.payment_method}',
-                      check_no: '${(p.check_no || '').replace(/'/g, "\\'")}',
-                      bank_name: '${(p.bank_name || '').replace(/'/g, "\\'")}',
-                      notes: '${(p.notes || '').replace(/'/g, "\\'")}'
-                    })">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-                      <span>طباعة</span>
-                    </button>
-                  </td>
-                </tr>
-              `;
-            }).join('');
+                return `
+                  <tr>
+                    <td><strong style="color: var(--gold-light); font-family: monospace;">${p.receipt_no}</strong></td>
+                    <td>${p.date}</td>
+                    <td><strong>${p.client_name || '-'}</strong></td>
+                    <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
+                    <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
+                    <td>${p.project_name || '-'}</td>
+                    <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(p.amount)} ${p.currency || 'ر.ي'}</td>
+                    <td>${paymentStr}</td>
+                    <td>${p.notes || '-'}</td>
+                    <td style="text-align: center;">
+                      <button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
+                        receipt_no: '${p.receipt_no}',
+                        date: '${p.date}',
+                        client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
+                        account_code: '${p.account_code || ''}',
+                        account_name: '${(p.account_name || '').replace(/'/g, "\\'")}',
+                        cost_center_code: '${p.cost_center_code || ''}',
+                        cost_center_name: '${(p.cost_center_name || '').replace(/'/g, "\\'")}',
+                        project_name: '${(p.project_name || '-').replace(/'/g, "\\'")}',
+                        amount: ${p.amount},
+                        currency: '${p.currency || 'ر.ي'}',
+                        payment_method: '${p.payment_method}',
+                        check_no: '${(p.check_no || '').replace(/'/g, "\\'")}',
+                        bank_name: '${(p.bank_name || '').replace(/'/g, "\\'")}',
+                        notes: '${(p.notes || '').replace(/'/g, "\\'")}'
+                      })">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                        <span>طباعة</span>
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('');
+            };
+
+            if (window.UI && UI.Pagination && document.getElementById('revenuesPagination')) {
+              UI.Pagination.create({
+                containerId: 'revenuesPagination',
+                data: list,
+                pageSize: 15,
+                onPageChange: (pageData) => renderRows(pageData)
+              });
+            } else {
+              renderRows(list);
+            }
           }
         }
       }
@@ -349,10 +381,14 @@ const App = {
   },
 
   async loadExpensesTable() {
+    const tbody = document.getElementById('fullExpensesTableBody');
+    if (tbody && window.UI && UI.Skeleton) {
+      UI.Skeleton.showTableSkeleton(tbody, 5, 10);
+    }
+
     try {
       const res = await fetch('/api/expenses');
       const json = await res.json();
-      const tbody = document.getElementById('fullExpensesTableBody');
       if (json.success) {
         const list = json.data || [];
         const total = list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
@@ -364,51 +400,66 @@ const App = {
         if (tbody) {
           if (list.length === 0) {
             tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد سندات صرف مسجلة حتى الآن</td></tr>`;
+            const pag = document.getElementById('expensesPagination');
+            if (pag) pag.innerHTML = '';
           } else {
-            tbody.innerHTML = list.map(e => {
-              const accStr = e.account_code ? `${e.account_code} - ${e.account_name}` : (e.account_name || '-');
-              const ccStr = e.cost_center_code ? `${e.cost_center_code} - ${e.cost_center_name}` : (e.cost_center_name || '-');
-              const paymentStr = e.payment_method === 'شيك' 
-                ? `<span class="badge badge-active" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">شيك: ${e.check_no || 'غير محدد'}</span>`
-                : `<span class="badge badge-active">${e.payment_method}</span>`;
+            const renderRows = (pageList) => {
+              tbody.innerHTML = pageList.map(e => {
+                const accStr = e.account_code ? `${e.account_code} - ${e.account_name}` : (e.account_name || '-');
+                const ccStr = e.cost_center_code ? `${e.cost_center_code} - ${e.cost_center_name}` : (e.cost_center_name || '-');
+                const paymentStr = e.payment_method === 'شيك' 
+                  ? `<span class="badge badge-active" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">شيك: ${e.check_no || 'غير محدد'}</span>`
+                  : `<span class="badge badge-active">${e.payment_method}</span>`;
 
-              return `
-                <tr>
-                  <td><strong style="color: var(--accent-red); font-family: monospace;">${e.receipt_no}</strong></td>
-                  <td>${e.date}</td>
-                  <td><span class="badge badge-expense">${e.expense_type}</span></td>
-                  <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
-                  <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
-                  <td>${e.project_name || '-'}</td>
-                  <td><strong>${e.supplier_name || '-'}</strong></td>
-                  <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(e.amount)} ${e.currency || 'ر.ي'}</td>
-                  <td>${paymentStr}</td>
-                  <td>${e.notes || '-'}</td>
-                  <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
-                      receipt_no: '${e.receipt_no}',
-                      date: '${e.date}',
-                      expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',
-                      account_code: '${e.account_code || ''}',
-                      account_name: '${(e.account_name || '').replace(/'/g, "\\'")}',
-                      cost_center_code: '${e.cost_center_code || ''}',
-                      cost_center_name: '${(e.cost_center_name || '').replace(/'/g, "\\'")}',
-                      supplier_name: '${(e.supplier_name || '-').replace(/'/g, "\\'")}',
-                      project_name: '${(e.project_name || '-').replace(/'/g, "\\'")}',
-                      amount: ${e.amount},
-                      currency: '${e.currency || 'ر.ي'}',
-                      payment_method: '${e.payment_method}',
-                      check_no: '${(e.check_no || '').replace(/'/g, "\\'")}',
-                      bank_name: '${(e.bank_name || '').replace(/'/g, "\\'")}',
-                      notes: '${(e.notes || '').replace(/'/g, "\\'")}'
-                    })">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-                      <span>طباعة</span>
-                    </button>
-                  </td>
-                </tr>
-              `;
-            }).join('');
+                return `
+                  <tr>
+                    <td><strong style="color: var(--accent-red); font-family: monospace;">${e.receipt_no}</strong></td>
+                    <td>${e.date}</td>
+                    <td><span class="badge badge-expense">${e.expense_type}</span></td>
+                    <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
+                    <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
+                    <td>${e.project_name || '-'}</td>
+                    <td><strong>${e.supplier_name || '-'}</strong></td>
+                    <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(e.amount)} ${e.currency || 'ر.ي'}</td>
+                    <td>${paymentStr}</td>
+                    <td>${e.notes || '-'}</td>
+                    <td style="text-align: center;">
+                      <button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
+                        receipt_no: '${e.receipt_no}',
+                        date: '${e.date}',
+                        expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',
+                        account_code: '${e.account_code || ''}',
+                        account_name: '${(e.account_name || '').replace(/'/g, "\\'")}',
+                        cost_center_code: '${e.cost_center_code || ''}',
+                        cost_center_name: '${(e.cost_center_name || '').replace(/'/g, "\\'")}',
+                        supplier_name: '${(e.supplier_name || '-').replace(/'/g, "\\'")}',
+                        project_name: '${(e.project_name || '-').replace(/'/g, "\\'")}',
+                        amount: ${e.amount},
+                        currency: '${e.currency || 'ر.ي'}',
+                        payment_method: '${e.payment_method}',
+                        check_no: '${(e.check_no || '').replace(/'/g, "\\'")}',
+                        bank_name: '${(e.bank_name || '').replace(/'/g, "\\'")}',
+                        notes: '${(e.notes || '').replace(/'/g, "\\'")}'
+                      })">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                        <span>طباعة</span>
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('');
+            };
+
+            if (window.UI && UI.Pagination && document.getElementById('expensesPagination')) {
+              UI.Pagination.create({
+                containerId: 'expensesPagination',
+                data: list,
+                pageSize: 15,
+                onPageChange: (pageData) => renderRows(pageData)
+              });
+            } else {
+              renderRows(list);
+            }
           }
         }
       }
@@ -418,10 +469,14 @@ const App = {
   },
 
   async loadCustodyTable() {
+    const tbody = document.getElementById('fullCustodyTableBody');
+    if (tbody && window.UI && UI.Skeleton) {
+      UI.Skeleton.showTableSkeleton(tbody, 5, 9);
+    }
+
     try {
       const res = await fetch('/api/accounting/custodies');
       const json = await res.json();
-      const tbody = document.getElementById('fullCustodyTableBody');
       if (json.success) {
         const list = json.data || [];
         const totalAmount = list.reduce((sum, c) => sum + (Number(c.total_amount) || 0), 0);
@@ -438,55 +493,70 @@ const App = {
         if (tbody) {
           if (list.length === 0) {
             tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد حركات عهد مسجلة</td></tr>`;
+            const pag = document.getElementById('custodyPagination');
+            if (pag) pag.innerHTML = '';
           } else {
-            tbody.innerHTML = list.map(c => {
-              const empDisplay = `<strong>${c.employee_name}</strong>${c.employee_no ? `<br><small style="color: var(--gold-light); font-family: monospace; font-weight: bold;">(الرقم: ${c.employee_no})</small>` : ''}`;
-              const origCustodyDisplay = c.related_custody_no 
-                ? `<span style="color: #38bdf8; font-weight: bold; font-family: monospace;">تصفية لـ: ${c.related_custody_no}</span>`
-                : `<span style="color: var(--text-secondary);">-</span>`;
+            const renderRows = (pageList) => {
+              tbody.innerHTML = pageList.map(c => {
+                const empDisplay = `<strong>${c.employee_name}</strong>${c.employee_no ? `<br><small style="color: var(--gold-light); font-family: monospace; font-weight: bold;">(الرقم: ${c.employee_no})</small>` : ''}`;
+                const origCustodyDisplay = c.related_custody_no 
+                  ? `<span style="color: #38bdf8; font-weight: bold; font-family: monospace;">تصفية لـ: ${c.related_custody_no}</span>`
+                  : `<span style="color: var(--text-secondary);">-</span>`;
 
-              return `
-                <tr>
-                  <td>${c.date}</td>
-                  <td>${empDisplay}</td>
-                  <td>
-                    <span class="badge ${c.operation_type === 'تصفية عهدة' ? 'badge-income' : 'badge-active'}">${c.operation_type}</span>
-                    ${c.custody_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">${c.custody_no}</small>` : ''}
-                  </td>
-                  <td>${origCustodyDisplay}</td>
-                  <td>${this.formatNumber(c.total_amount)} ${c.currency || 'ر.ي'}</td>
-                  <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(c.spent_amount)} ${c.currency || 'ر.ي'}</td>
-                  <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(c.remaining_amount)} ${c.currency || 'ر.ي'}</td>
-                  <td>${c.notes || '-'}</td>
-                  <td style="text-align: center; white-space: nowrap;">
-                    <div style="display: inline-flex; gap: 4px; align-items: center; justify-content: center;">
-                      ${c.operation_type === 'صرف عهدة' && Number(c.remaining_amount) > 0 ? `
-                        <button class="btn btn-sm btn-primary" title="تصفية هذه العهدة بحسب عملية الصرف" onclick="Accounting.openSettleCustodyModal(${c.id}, '${c.custody_no || ('CST-' + c.id)}', '${(c.employee_name || '').replace(/'/g, "\\'")}', ${c.employee_id || 'null'}, ${c.remaining_amount}, '${c.currency || 'ر.ي'}')">
-                          ⚖️ تصفية
+                return `
+                  <tr>
+                    <td>${c.date}</td>
+                    <td>${empDisplay}</td>
+                    <td>
+                      <span class="badge ${c.operation_type === 'تصفية عهدة' ? 'badge-income' : 'badge-active'}">${c.operation_type}</span>
+                      ${c.custody_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">${c.custody_no}</small>` : ''}
+                    </td>
+                    <td>${origCustodyDisplay}</td>
+                    <td>${this.formatNumber(c.total_amount)} ${c.currency || 'ر.ي'}</td>
+                    <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(c.spent_amount)} ${c.currency || 'ر.ي'}</td>
+                    <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(c.remaining_amount)} ${c.currency || 'ر.ي'}</td>
+                    <td>${c.notes || '-'}</td>
+                    <td style="text-align: center; white-space: nowrap;">
+                      <div style="display: inline-flex; gap: 4px; align-items: center; justify-content: center;">
+                        ${c.operation_type === 'صرف عهدة' && Number(c.remaining_amount) > 0 ? `
+                          <button class="btn btn-sm btn-primary" title="تصفية هذه العهدة بحسب عملية الصرف" onclick="Accounting.openSettleCustodyModal(${c.id}, '${c.custody_no || ('CST-' + c.id)}', '${(c.employee_name || '').replace(/'/g, "\\'")}', ${c.employee_id || 'null'}, ${c.remaining_amount}, '${c.currency || 'ر.ي'}')">
+                            ⚖️ تصفية
+                          </button>
+                        ` : (c.operation_type === 'تصفية عهدة' ? `<span class="badge badge-income">مصفاة</span>` : `<span class="badge badge-inactive">مسددة</span>`)}
+                        <button class="btn btn-sm btn-secondary" title="طباعة سند العهدة / التصفية" onclick="Accounting.printCustodyReceipt({
+                          id: ${c.id},
+                          custody_no: '${c.custody_no || ('CST-' + c.id)}',
+                          date: '${c.date}',
+                          operation_type: '${c.operation_type || 'صرف عهدة'}',
+                          employee_name: '${(c.employee_name || '').replace(/'/g, "\\'")}',
+                          employee_no: '${(c.employee_no || '').replace(/'/g, "\\'")}',
+                          related_custody_id: ${c.related_custody_id || 'null'},
+                          related_custody_no: '${(c.related_custody_no || '').replace(/'/g, "\\'")}',
+                          total_amount: ${c.total_amount || 0},
+                          spent_amount: ${c.spent_amount || 0},
+                          remaining_amount: ${c.remaining_amount || 0},
+                          currency: '${c.currency || 'ر.ي'}',
+                          notes: '${(c.notes || '').replace(/'/g, "\\'")}'
+                        })">
+                          🖨️ طباعة
                         </button>
-                      ` : (c.operation_type === 'تصفية عهدة' ? `<span class="badge badge-income">مصفاة</span>` : `<span class="badge badge-inactive">مسددة</span>`)}
-                      <button class="btn btn-sm btn-secondary" title="طباعة سند العهدة / التصفية" onclick="Accounting.printCustodyReceipt({
-                        id: ${c.id},
-                        custody_no: '${c.custody_no || ('CST-' + c.id)}',
-                        date: '${c.date}',
-                        operation_type: '${c.operation_type || 'صرف عهدة'}',
-                        employee_name: '${(c.employee_name || '').replace(/'/g, "\\'")}',
-                        employee_no: '${(c.employee_no || '').replace(/'/g, "\\'")}',
-                        related_custody_id: ${c.related_custody_id || 'null'},
-                        related_custody_no: '${(c.related_custody_no || '').replace(/'/g, "\\'")}',
-                        total_amount: ${c.total_amount || 0},
-                        spent_amount: ${c.spent_amount || 0},
-                        remaining_amount: ${c.remaining_amount || 0},
-                        currency: '${c.currency || 'ر.ي'}',
-                        notes: '${(c.notes || '').replace(/'/g, "\\'")}'
-                      })">
-                        🖨️ طباعة
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              `;
-            }).join('');
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('');
+            };
+
+            if (window.UI && UI.Pagination && document.getElementById('custodyPagination')) {
+              UI.Pagination.create({
+                containerId: 'custodyPagination',
+                data: list,
+                pageSize: 15,
+                onPageChange: (pageData) => renderRows(pageData)
+              });
+            } else {
+              renderRows(list);
+            }
           }
         }
       }
@@ -496,73 +566,145 @@ const App = {
   },
 
   async loadClientsTable() {
+    const tbody = document.getElementById('fullClientsTableBody');
+    if (tbody && window.UI && UI.Skeleton) {
+      UI.Skeleton.showTableSkeleton(tbody, 5, 8);
+    }
+
     try {
       const res = await fetch('/api/clients');
       const json = await res.json();
-      const tbody = document.getElementById('fullClientsTableBody');
       if (tbody && json.success) {
-        tbody.innerHTML = json.data.map(c => `
-          <tr>
-            <td><strong>${c.name}</strong></td>
-            <td>${c.company || '-'}</td>
-            <td>${c.phone || '-'}</td>
-            <td>${c.address || '-'}</td>
-            <td>${this.formatNumber(c.total_paid)} ${c.currency || 'ر.ي'}</td>
-            <td>${this.formatNumber(c.total_due)} ${c.currency || 'ر.ي'}</td>
-            <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(c.current_balance)} ${c.currency || 'ر.ي'}</td>
-            <td>
-              <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${c.id}; Reports.fetchFullClientStatement();">
-                كشف الحساب
-              </button>
-            </td>
-          </tr>
-        `).join('');
+        const list = json.data || [];
+        if (list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا يوجد عملاء مسجلين</td></tr>`;
+          const pag = document.getElementById('clientsPagination');
+          if (pag) pag.innerHTML = '';
+        } else {
+          const renderRows = (pageList) => {
+            tbody.innerHTML = pageList.map(c => `
+              <tr>
+                <td><strong>${c.name}</strong></td>
+                <td>${c.company || '-'}</td>
+                <td>${c.phone || '-'}</td>
+                <td>${c.address || '-'}</td>
+                <td>${this.formatNumber(c.total_paid)} ${c.currency || 'ر.ي'}</td>
+                <td>${this.formatNumber(c.total_due)} ${c.currency || 'ر.ي'}</td>
+                <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(c.current_balance)} ${c.currency || 'ر.ي'}</td>
+                <td>
+                  <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${c.id}; Reports.fetchFullClientStatement();">
+                    كشف الحساب
+                  </button>
+                </td>
+              </tr>
+            `).join('');
+          };
+
+          if (window.UI && UI.Pagination && document.getElementById('clientsPagination')) {
+            UI.Pagination.create({
+              containerId: 'clientsPagination',
+              data: list,
+              pageSize: 15,
+              onPageChange: (pageData) => renderRows(pageData)
+            });
+          } else {
+            renderRows(list);
+          }
+        }
       }
     } catch (e) {}
   },
 
   async loadSuppliersTable() {
+    const tbody = document.getElementById('fullSuppliersTableBody');
+    if (tbody && window.UI && UI.Skeleton) {
+      UI.Skeleton.showTableSkeleton(tbody, 5, 7);
+    }
+
     try {
       const res = await fetch('/api/suppliers');
       const json = await res.json();
-      const tbody = document.getElementById('fullSuppliersTableBody');
       if (tbody && json.success) {
-        tbody.innerHTML = json.data.map(s => `
-          <tr>
-            <td><strong>${s.name}</strong></td>
-            <td><span class="badge badge-active">${s.category || 'مواد بناء'}</span></td>
-            <td>${s.phone || '-'}</td>
-            <td>${s.address || '-'}</td>
-            <td style="color: var(--accent-amber); font-weight: bold;">${this.formatNumber(s.balance)} ${s.currency || 'ر.ي'}</td>
-            <td>${s.notes || '-'}</td>
-            <td>
-              <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('supplier-statement'); document.getElementById('repSupplierSelect').value = ${s.id}; Reports.fetchFullSupplierStatement();">
-                كشف الحساب
-              </button>
-            </td>
-          </tr>
-        `).join('');
+        const list = json.data || [];
+        if (list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا يوجد موردين مسجلين</td></tr>`;
+          const pag = document.getElementById('suppliersPagination');
+          if (pag) pag.innerHTML = '';
+        } else {
+          const renderRows = (pageList) => {
+            tbody.innerHTML = pageList.map(s => `
+              <tr>
+                <td><strong>${s.name}</strong></td>
+                <td><span class="badge badge-active">${s.category || 'مواد بناء'}</span></td>
+                <td>${s.phone || '-'}</td>
+                <td>${s.address || '-'}</td>
+                <td style="color: var(--accent-amber); font-weight: bold;">${this.formatNumber(s.balance)} ${s.currency || 'ر.ي'}</td>
+                <td>${s.notes || '-'}</td>
+                <td>
+                  <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('supplier-statement'); document.getElementById('repSupplierSelect').value = ${s.id}; Reports.fetchFullSupplierStatement();">
+                    كشف الحساب
+                  </button>
+                </td>
+              </tr>
+            `).join('');
+          };
+
+          if (window.UI && UI.Pagination && document.getElementById('suppliersPagination')) {
+            UI.Pagination.create({
+              containerId: 'suppliersPagination',
+              data: list,
+              pageSize: 15,
+              onPageChange: (pageData) => renderRows(pageData)
+            });
+          } else {
+            renderRows(list);
+          }
+        }
       }
     } catch (e) {}
   },
 
   async loadCashTable() {
+    const tbody = document.getElementById('fullCashTableBody');
+    if (tbody && window.UI && UI.Skeleton) {
+      UI.Skeleton.showTableSkeleton(tbody, 5, 7);
+    }
+
     try {
       const res = await fetch('/api/accounting/cash-movements');
       const json = await res.json();
-      const tbody = document.getElementById('fullCashTableBody');
       if (tbody && json.success) {
-        tbody.innerHTML = json.data.map(m => `
-          <tr>
-            <td>${m.date}</td>
-            <td>${this.formatNumber(m.previous_balance)}</td>
-            <td style="color: var(--accent-green); font-weight: bold;">${m.cash_in ? '+' + this.formatNumber(m.cash_in) : '-'}</td>
-            <td style="color: var(--accent-red); font-weight: bold;">${m.cash_out ? '-' + this.formatNumber(m.cash_out) : '-'}</td>
-            <td>${m.withdrawals ? this.formatNumber(m.withdrawals) : '-'}</td>
-            <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(m.current_balance)}</td>
-            <td>${m.notes || '-'}</td>
-          </tr>
-        `).join('');
+        const list = json.data || [];
+        if (list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد حركات نقدية مسجلة</td></tr>`;
+          const pag = document.getElementById('cashPagination');
+          if (pag) pag.innerHTML = '';
+        } else {
+          const renderRows = (pageList) => {
+            tbody.innerHTML = pageList.map(m => `
+              <tr>
+                <td>${m.date}</td>
+                <td>${this.formatNumber(m.previous_balance)}</td>
+                <td style="color: var(--accent-green); font-weight: bold;">${m.cash_in ? '+' + this.formatNumber(m.cash_in) : '-'}</td>
+                <td style="color: var(--accent-red); font-weight: bold;">${m.cash_out ? '-' + this.formatNumber(m.cash_out) : '-'}</td>
+                <td>${m.withdrawals ? this.formatNumber(m.withdrawals) : '-'}</td>
+                <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(m.current_balance)}</td>
+                <td>${m.notes || '-'}</td>
+              </tr>
+            `).join('');
+          };
+
+          if (window.UI && UI.Pagination && document.getElementById('cashPagination')) {
+            UI.Pagination.create({
+              containerId: 'cashPagination',
+              data: list,
+              pageSize: 15,
+              onPageChange: (pageData) => renderRows(pageData)
+            });
+          } else {
+            renderRows(list);
+          }
+        }
       }
     } catch (e) {}
   },
@@ -573,6 +715,12 @@ const App = {
     const modal = document.getElementById(modalId);
     if (modal) {
       modal.classList.add('active');
+
+      // فحص واستعادة المسودات المحفوظة تلقائياً للنموذج
+      const form = modal.querySelector('form');
+      if (form && form.id && window.UI && UI.DraftManager) {
+        UI.DraftManager.checkAndPromptDraft(form.id);
+      }
     }
   },
 
@@ -583,8 +731,13 @@ const App = {
     }
   },
 
-  // رسائل التنبيه العائمة الفاخرة (Toast)
-  showToast(message, type = 'info') {
+  // رسائل التنبيه العائمة الفاخرة متعددة الطبقات (Toast Suite)
+  showToast(message, type = 'info', action = null, duration = 4500) {
+    // التوجيه إلى وحدة UI.Toast المتطورة مع شريط العد التنازلي والتراجع
+    if (window.UI && UI.Toast) {
+      return UI.Toast.show(message, type, action, duration);
+    }
+
     const existing = document.querySelectorAll('.toast-msg');
     existing.forEach(t => t.remove());
 
@@ -592,15 +745,10 @@ const App = {
     toast.className = `toast-msg toast-${type}`;
 
     let icon = '🔔';
-    if (type === 'success') {
-      icon = '✅';
-    } else if (type === 'error') {
-      icon = '⚠️';
-    } else if (type === 'warning') {
-      icon = '⚡';
-    } else if (type === 'info') {
-      icon = 'ℹ️';
-    }
+    if (type === 'success') icon = '✅';
+    else if (type === 'error') icon = '⚠️';
+    else if (type === 'warning') icon = '⚡';
+    else if (type === 'info') icon = 'ℹ️';
 
     toast.innerHTML = `
       <div class="toast-icon">${icon}</div>
@@ -620,12 +768,10 @@ const App = {
 
     document.body.appendChild(toast);
 
-    // تفعيل ظهور الرسالة بانسيابية
     requestAnimationFrame(() => {
       toast.classList.add('toast-visible');
     });
 
-    // إخفاء الرسالة تلقائياً بعد 4 ثوانٍ
     setTimeout(() => {
       if (toast.parentElement) {
         toast.classList.remove('toast-visible');
@@ -633,7 +779,7 @@ const App = {
           if (toast.parentElement) toast.remove();
         }, 350);
       }
-    }, 4500);
+    }, duration);
   },
 
   // تنسيق الأرقام بالفواصل المالية

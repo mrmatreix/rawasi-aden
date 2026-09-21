@@ -10,11 +10,19 @@ const Projects = {
   },
 
   async loadProjects() {
+    const tableBodyDashboard = document.getElementById('projectsTableBody');
+    const tableBodyFull = document.getElementById('fullProjectsTableBody');
+    if (window.UI && UI.Skeleton) {
+      if (tableBodyDashboard) UI.Skeleton.showTableSkeleton(tableBodyDashboard, 4, 8);
+      if (tableBodyFull) UI.Skeleton.showTableSkeleton(tableBodyFull, 5, 9);
+    }
+
     try {
       const res = await fetch('/api/projects');
       const json = await res.json();
       if (json.success) {
         this.list = json.data;
+        this.allProjects = json.data;
         if (this.currentStatusFilter && this.currentStatusFilter !== 'all') {
           this.filterStatus(this.currentStatusFilter);
         } else {
@@ -647,17 +655,56 @@ const Projects = {
   },
 
   async deleteProject(id) {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا المشروع؟')) return;
-    try {
-      const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        App.showToast('تم حذف المشروع بنجاح', 'info');
-        await this.loadProjects();
-        Reports.loadDashboardKPIs();
+    const project = (this.list || []).find(p => p.id === id);
+    const projName = project ? project.name : `المشروع رقم ${id}`;
+
+    // إخفاء فوري للعنصر من الذاكرة والجدول لتجربة استخدام فائقة السرعة
+    const previousList = [...(this.list || [])];
+    this.list = this.list.filter(p => p.id !== id);
+    this.renderProjectsTable();
+
+    if (window.UI && UI.UndoManager) {
+      UI.UndoManager.deferAction({
+        id: `delete_project_${id}`,
+        description: `🗑️ تم حذف مشروع "${projName}" مؤقتاً`,
+        timeout: 6500,
+        onUndo: () => {
+          this.list = previousList;
+          this.renderProjectsTable();
+        },
+        onCommit: async () => {
+          try {
+            const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+              Reports.loadDashboardKPIs();
+            } else {
+              App.showToast('تعذر إتمام حذف المشروع من الخادم', 'error');
+              await this.loadProjects();
+            }
+          } catch (e) {
+            App.showToast('خطأ أثناء تنفيذ الحذف', 'error');
+            await this.loadProjects();
+          }
+        }
+      });
+    } else {
+      if (!confirm(`هل أنت متأكد من رغبتك في حذف "${projName}"؟`)) {
+        this.list = previousList;
+        this.renderProjectsTable();
+        return;
       }
-    } catch (e) {
-      App.showToast('خطأ أثناء الحذف', 'error');
+      try {
+        const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          App.showToast('تم حذف المشروع بنجاح', 'info');
+          Reports.loadDashboardKPIs();
+        }
+      } catch (e) {
+        App.showToast('خطأ أثناء الحذف', 'error');
+        await this.loadProjects();
+      }
     }
   }
 };

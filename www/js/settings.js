@@ -2043,23 +2043,52 @@ const Settings = {
 
   // ================== حذف مستخدم ==================
   async deleteUser(userId, username) {
-    if (!confirm(`هل أنت متأكد من حذف المستخدم (${username}) نهائياً من النظام؟`)) {
-      return;
-    }
+    if (window.UI && UI.UndoManager) {
+      const row = document.querySelector(`tr[data-user-id="${userId}"]`) || document.getElementById(`userRow_${userId}`);
+      if (row) row.style.display = 'none';
 
-    try {
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'DELETE'
+      UI.UndoManager.deferAction({
+        id: `delete_user_${userId}`,
+        description: `🗑️ تم حذف حساب المستخدم (${username}) مؤقتاً`,
+        timeout: 6500,
+        onUndo: () => {
+          if (row) row.style.display = '';
+        },
+        onCommit: async () => {
+          try {
+            const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              await this.loadUsers();
+            } else {
+              App.showToast(data.message || 'تعذر حذف المستخدم', 'error');
+              if (row) row.style.display = '';
+            }
+          } catch (e) {
+            App.showToast('خطأ في الاتصال بالخادم', 'error');
+            if (row) row.style.display = '';
+          }
+        }
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        App.showToast(data.message, 'success');
-        await this.loadUsers();
-      } else {
-        App.showToast(data.message || 'تعذر حذف المستخدم', 'error');
+    } else {
+      if (!confirm(`هل أنت متأكد من حذف المستخدم (${username}) نهائياً من النظام؟`)) {
+        return;
       }
-    } catch (e) {
-      App.showToast('خطأ في الاتصال بالخادم', 'error');
+
+      try {
+        const res = await fetch(`/api/users/${userId}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          App.showToast(data.message, 'success');
+          await this.loadUsers();
+        } else {
+          App.showToast(data.message || 'تعذر حذف المستخدم', 'error');
+        }
+      } catch (e) {
+        App.showToast('خطأ في الاتصال بالخادم', 'error');
+      }
     }
   },
 

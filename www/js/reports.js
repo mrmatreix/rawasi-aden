@@ -10,6 +10,17 @@ const Reports = {
   },
 
   async loadDashboardKPIs() {
+    const kpiIds = ['kpiTotalIncome', 'kpiTotalExpenses', 'kpiNetProfit', 'kpiCashBalance', 'kpiClientReceivables', 'kpiSupplierPayables', 'kpiActiveProjects', 'kpiTotalProjects'];
+    kpiIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('skeleton', 'skeleton-text');
+    });
+
+    const recentTbody = document.getElementById('recentOperationsTableBody');
+    if (recentTbody && window.UI && UI.Skeleton) {
+      UI.Skeleton.showTableSkeleton(recentTbody, 4, 5);
+    }
+
     try {
       const res = await fetch('/api/reports/dashboard');
       const json = await res.json();
@@ -28,7 +39,10 @@ const Reports = {
   updateKPIElements(k) {
     const setTxt = (id, val) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = App.formatNumber(val);
+      if (el) {
+        el.classList.remove('skeleton', 'skeleton-text');
+        el.textContent = App.formatNumber(val);
+      }
     };
 
     setTxt('kpiTotalIncome', k.total_income);
@@ -39,9 +53,15 @@ const Reports = {
     setTxt('kpiSupplierPayables', k.supplier_payables);
 
     const activeEl = document.getElementById('kpiActiveProjects');
-    if (activeEl) activeEl.textContent = k.active_projects;
+    if (activeEl) {
+      activeEl.classList.remove('skeleton', 'skeleton-text');
+      activeEl.textContent = k.active_projects;
+    }
     const totalEl = document.getElementById('kpiTotalProjects');
-    if (totalEl) totalEl.textContent = k.total_projects;
+    if (totalEl) {
+      totalEl.classList.remove('skeleton', 'skeleton-text');
+      totalEl.textContent = k.total_projects;
+    }
   },
 
   // رسم المخطط الدائري (Donut Chart) للمصروفات حسب النوع
