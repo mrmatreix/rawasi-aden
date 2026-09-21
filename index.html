@@ -196,7 +196,42 @@
         </div>
       </div>
 
-      <!-- بطاقة المستخدم الحالية الأنيقة و�        <!-- 1. تهيئة النظام -->
+      <!-- بطاقة المستخدم الحالية الأنيقة والمنظمة -->
+      <div class="user-badge" onclick="App.showConnectionModal()" title="ملف المستخدم وتفاصيل النظام">
+        <div class="user-avatar-wrap">
+          <div class="user-avatar" id="headerUserAvatar">م</div>
+          <span class="user-avatar-dot offline" id="userAvatarStatusDot" title="حالة الاتصال"></span>
+        </div>
+        <div class="user-info-text">
+          <span class="user-name" id="headerUserName">المدير العام</span>
+          <span class="user-role" id="headerUserRole">المدير العام</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- خلفية معتمة عند فتح القائمة في الهواتف -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="App.closeMobileSidebar()"></div>
+
+  <div class="app-container" id="appMainContainer">
+    <!-- القائمة الجانبية (Sidebar) -->
+    <aside class="sidebar">
+      <div class="sidebar-logo-card">
+        <img src="images/logo.png" alt="شعار رواسي عدن">
+        <h3>رواسي عدن</h3>
+        <span>للهندسة والمقاولات</span>
+      </div>
+
+      <ul class="sidebar-nav" id="sidebarNavList">
+        <!-- لوحة التحكم العامة -->
+        <li data-perm="dashboard:view">
+          <a class="nav-item active" href="javascript:void(0)" onclick="App.navigate('dashboard', this)">
+            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+            <span>لوحة التحكم الرئيسية</span>
+          </a>
+        </li>
+
+        <!-- 1. تهيئة النظام -->
         <li class="nav-group" id="groupSystemSettings" data-perm="settings:users,settings:company,settings:backup">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupSystemSettings')">
             <div class="nav-group-title">
