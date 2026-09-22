@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_device TEXT,
     active_sessions TEXT,
     security_settings TEXT,
+    two_factor_pin TEXT DEFAULT '123456',
+    two_factor_enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

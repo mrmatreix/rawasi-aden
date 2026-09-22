@@ -3,6 +3,7 @@
  */
 
 const App = {
+  assetVersion: '1.0.0.20260922-5j3x',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -10,15 +11,15 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=5.2',
-    projects: 'js/projects.js?v=5.2',
-    projectHub: 'js/project_hub.js?v=5.3',
-    accounting: 'js/accounting.js?v=5.2',
-    hr: 'js/hr.js?v=5.2',
-    reports: 'js/reports.js?v=5.2',
-    inventory: 'js/inventory.js?v=5.2',
-    settings: 'js/settings.js?v=5.2',
-    excelExport: 'js/excel-export.js?v=5.2'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20260922-5j3x',
+    projects: 'js/projects.js?v=1.0.0.20260922-5j3x',
+    projectHub: 'js/project_hub.js?v=1.0.0.20260922-5j3x',
+    accounting: 'js/accounting.js?v=1.0.0.20260922-5j3x',
+    hr: 'js/hr.js?v=1.0.0.20260922-5j3x',
+    reports: 'js/reports.js?v=1.0.0.20260922-5j3x',
+    inventory: 'js/inventory.js?v=1.0.0.20260922-5j3x',
+    settings: 'js/settings.js?v=1.0.0.20260922-5j3x',
+    excelExport: 'js/excel-export.js?v=1.0.0.20260922-5j3x'
   },
   _loadedModules: {},
   _loadingPromises: {},

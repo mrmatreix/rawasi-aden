@@ -1373,6 +1373,18 @@ const Settings = {
             secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="يرث الإعدادات العامة للنظام - انقر لتخصيص هذا المستخدم">⚙️ عام: ${label}</span></div>`;
           }
 
+          // 2FA PIN Badge
+          let tfaBadgeHtml = '';
+          const has2Fa = (u.two_factor_enabled !== 0 && u.two_factor_enabled !== false);
+          if (u.role === 'admin' || u.username === 'admin' || has2Fa) {
+            const currentPin = u.two_factor_pin || '123456';
+            tfaBadgeHtml = `<div style="margin-top: 5px;">
+              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id})" title="رمز التحقق بخطوتين (PIN) المعتمد لهذا الحساب - انقر للتعديل في أي وقت">
+                🔐 PIN: <strong style="font-family: monospace; letter-spacing: 1px; color: #fbbf24;">${currentPin}</strong>
+              </span>
+            </div>`;
+          }
+
           // Status Badge & Live Connection Indicator
           const isActive = u.status === 'active';
           const statusBadge = isActive
@@ -1402,6 +1414,7 @@ const Settings = {
               <td>
                 ${permsHtml}
                 ${secBadgeHtml}
+                ${tfaBadgeHtml}
               </td>
               <td>
                 ${statusBadge}
@@ -1481,6 +1494,17 @@ const Settings = {
     }
     this.populateUserSecurityCard(null);
 
+    // ضبط حقل رمز التحقق 2FA الافتراضي وحالته
+    const pinInput = document.getElementById('user2FaPinVal');
+    if (pinInput) {
+      pinInput.value = '123456';
+      pinInput.type = 'password';
+    }
+    const tfaEnabledChk = document.getElementById('user2FaEnabledVal');
+    if (tfaEnabledChk) tfaEnabledChk.checked = true;
+    const eyeIcon = document.getElementById('user2FaEyeIcon');
+    if (eyeIcon) eyeIcon.textContent = '👁️';
+
     App.openModal('newUserModal');
   },
 
@@ -1521,6 +1545,21 @@ const Settings = {
       roleSelect.value = user.role || 'custom';
     }
 
+    // تعبئة حقل رمز التحقق بخطوتين (2FA PIN) وحالته للمستخدم الحالي
+    const editPinInput = document.getElementById('user2FaPinVal');
+    if (editPinInput) {
+      editPinInput.value = user.two_factor_pin || (user.role === 'admin' || user.username === 'admin' ? '123456' : '123456');
+      editPinInput.type = 'password';
+    }
+    const editTfaEnabledChk = document.getElementById('user2FaEnabledVal');
+    if (editTfaEnabledChk) {
+      editTfaEnabledChk.checked = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
+        ? (user.two_factor_enabled !== 0 && user.two_factor_enabled !== false)
+        : true;
+    }
+    const editEyeIcon = document.getElementById('user2FaEyeIcon');
+    if (editEyeIcon) editEyeIcon.textContent = '👁️';
+
     // تجهيز بطاقة الأمان والجلسات للمستخدم داخل نافذة التعديل (المكان الأخضر)
     const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
     const secCard = document.getElementById('userModalSecurityCard');
@@ -1554,6 +1593,38 @@ const Settings = {
     }
 
     App.openModal('newUserModal');
+  },
+
+  // ================== دوال التحكم برمز التحقق بخطوتين (2FA PIN) ==================
+  toggle2FaPinVisibility() {
+    const pinInput = document.getElementById('user2FaPinVal');
+    const eyeIcon = document.getElementById('user2FaEyeIcon');
+    if (!pinInput) return;
+    if (pinInput.type === 'password') {
+      pinInput.type = 'text';
+      if (eyeIcon) eyeIcon.textContent = '🙈';
+    } else {
+      pinInput.type = 'password';
+      if (eyeIcon) eyeIcon.textContent = '👁️';
+    }
+  },
+
+  generateRandom2FaPin() {
+    const pinInput = document.getElementById('user2FaPinVal');
+    if (!pinInput) return;
+    const randomPin = String(Math.floor(100000 + Math.random() * 900000));
+    pinInput.value = randomPin;
+    pinInput.type = 'text';
+    const eyeIcon = document.getElementById('user2FaEyeIcon');
+    if (eyeIcon) eyeIcon.textContent = '🙈';
+    App.showToast(`تم توليد رمز أمان جديد: ${randomPin} 🎲 - يرجى حفظ التعديلات للاعتماد`, 'info');
+  },
+
+  resetDefault2FaPin() {
+    const pinInput = document.getElementById('user2FaPinVal');
+    if (!pinInput) return;
+    pinInput.value = '123456';
+    App.showToast('تمت إعادة تعيين الرمز للافتراضي: 123456', 'info');
   },
 
   // تعبئة وضبط خيارات الأمان والجلسات في البطاقة الخضراء
@@ -1957,6 +2028,20 @@ const Settings = {
       finalRole = 'custom';
     }
 
+    // قراءة والتحقق من رمز التحقق بخطوتين (2FA PIN)
+    const pinInput = document.getElementById('user2FaPinVal');
+    const tfaEnabledChk = document.getElementById('user2FaEnabledVal');
+    const twoFactorPin = pinInput ? pinInput.value.trim() : '123456';
+    const twoFactorEnabled = tfaEnabledChk ? (tfaEnabledChk.checked ? 1 : 0) : 1;
+
+    if (twoFactorEnabled && twoFactorPin) {
+      if (!/^\d{6}$/.test(twoFactorPin)) {
+        App.showToast('رمز التحقق بخطوتين (PIN) يجب أن يتكون من 6 أرقام تماماً', 'warning');
+        if (pinInput) pinInput.focus();
+        return;
+      }
+    }
+
     const payload = {
       full_name,
       username,
@@ -1964,7 +2049,9 @@ const Settings = {
       phone,
       email,
       status,
-      permissions: finalPerms
+      permissions: finalPerms,
+      two_factor_pin: twoFactorPin || '123456',
+      two_factor_enabled: twoFactorEnabled
     };
 
     if (userSecuritySettings !== undefined) {

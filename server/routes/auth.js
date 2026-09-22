@@ -512,10 +512,14 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
     // التحقق هل الحساب للمدير العام وهل ميزة 2FA مفعلة
     if (user.role === 'admin' || user.username === 'admin') {
-      let is2FaEnabled = true;
+      let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
+        ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
+        : true;
       try {
         const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
-        if (row2fa) is2FaEnabled = (row2fa.value === '1' || row2fa.value === 'true');
+        if (row2fa && (user.two_factor_enabled === undefined || user.two_factor_enabled === null)) {
+          is2FaEnabled = (row2fa.value === '1' || row2fa.value === 'true');
+        }
       } catch (e) {}
 
       if (is2FaEnabled) {
@@ -566,12 +570,21 @@ router.post('/verify-2fa', async (req, res) => {
       return res.status(401).json({ success: false, message: 'طلب التحقق غير صالح' });
     }
 
-    // جلب الرمز السري المعتمد لـ 2FA
-    let admin2FaPin = '123456';
-    try {
-      const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
-      if (rowPin && rowPin.value) admin2FaPin = rowPin.value;
-    } catch (e) {}
+    // جلب بيانات المستخدم أولاً
+    const user = await get('SELECT * FROM users WHERE id = ?', [decoded.id]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    }
+
+    // جلب الرمز السري المعتمد لـ 2FA الخاص بالمستخدم أو من إعدادات النظام
+    let admin2FaPin = user.two_factor_pin;
+    if (!admin2FaPin) {
+      try {
+        const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
+        if (rowPin && rowPin.value) admin2FaPin = rowPin.value;
+      } catch (e) {}
+    }
+    if (!admin2FaPin) admin2FaPin = '123456';
 
     const cleanCode = String(code).trim();
     // التحقق من الرمز أو رمز الطوارئ الاحتياطي 889900
@@ -580,11 +593,6 @@ router.post('/verify-2fa', async (req, res) => {
         success: false,
         message: 'رمز التحقق بخطوتين (2FA) غير صحيح، يرجى التأكد من الرمز والمحاولة مجدداً'
       });
-    }
-
-    const user = await get('SELECT * FROM users WHERE id = ?', [decoded.id]);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
     // اعتماد الجلسة وإصدار التوكن النهائي

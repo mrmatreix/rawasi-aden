@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
     const now = Date.now();
 
     const users = await query(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.created_at,
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
              u.is_logged_in, u.last_heartbeat, u.last_login_at, u.last_login_ip, u.last_login_device,
              r.display_name as role_name
       FROM users u
@@ -51,6 +51,8 @@ router.get('/', async (req, res) => {
 
       return { 
         ...u, 
+        two_factor_pin: u.two_factor_pin || (u.role === 'admin' || u.username === 'admin' ? '123456' : ''),
+        two_factor_enabled: u.two_factor_enabled !== undefined && u.two_factor_enabled !== null ? u.two_factor_enabled : 1,
         permissions_list: perms,
         security_settings: secSettings,
         is_currently_online: isOnline
@@ -67,7 +69,7 @@ router.get('/', async (req, res) => {
 // إضافة مستخدم جديد مع الصلاحيات
 router.post('/', async (req, res) => {
   try {
-    const { username, password, full_name, role_id, role, email, phone, status = 'active', permissions, security_settings } = req.body;
+    const { username, password, full_name, role_id, role, email, phone, status = 'active', permissions, security_settings, two_factor_pin, two_factor_enabled } = req.body;
     
     if (!username || !password || !full_name) {
       return res.status(400).json({ success: false, message: 'اسم المستخدم وكلمة المرور والاسم الكامل حقول مطلوبة' });
@@ -95,14 +97,24 @@ router.post('/', async (req, res) => {
     const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions || '');
     const secString = security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null;
 
+    const cleanPin = two_factor_pin !== undefined ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || '123456') : '123456';
+    const tfaEnabled = two_factor_enabled !== undefined ? (two_factor_enabled ? 1 : 0) : 1;
+
     const result = await run(`
-      INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status, permissions, security_settings)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, permsString, secString]);
+      INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status, permissions, security_settings, two_factor_pin, two_factor_enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, permsString, secString, cleanPin, tfaEnabled]);
+
+    if (cleanUsername === 'admin') {
+      try {
+        await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_pin', ?)", [cleanPin]);
+        await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_enabled', ?)", [String(tfaEnabled)]);
+      } catch (e) {}
+    }
 
     const newId = result.insertId || result.lastInsertRowid;
     const insertedUser = await get(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.created_at, r.display_name as role_name
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at, r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
@@ -127,7 +139,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    const { username, password, full_name, role_id, role, email, phone, status, permissions, security_settings } = req.body;
+    const { username, password, full_name, role_id, role, email, phone, status, permissions, security_settings, two_factor_pin, two_factor_enabled } = req.body;
 
     const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) {
@@ -155,12 +167,19 @@ router.put('/:id', async (req, res) => {
       ? (security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null)
       : user.security_settings;
 
+    const cleanPin = two_factor_pin !== undefined 
+      ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || user.two_factor_pin || '123456')
+      : (user.two_factor_pin || '123456');
+    const tfaEnabled = two_factor_enabled !== undefined 
+      ? (two_factor_enabled ? 1 : 0) 
+      : (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null ? user.two_factor_enabled : 1);
+
     if (password && password.trim().length > 0) {
       const salt = bcrypt.genSaltSync(10);
       const password_hash = bcrypt.hashSync(password, salt);
       await run(`
         UPDATE users
-        SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?
+        SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -173,12 +192,14 @@ router.put('/:id', async (req, res) => {
         status || user.status,
         permsString,
         secString,
+        cleanPin,
+        tfaEnabled,
         userId
       ]);
     } else {
       await run(`
         UPDATE users
-        SET username = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?
+        SET username = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -190,12 +211,21 @@ router.put('/:id', async (req, res) => {
         status || user.status,
         permsString,
         secString,
+        cleanPin,
+        tfaEnabled,
         userId
       ]);
     }
 
+    if (user.username === 'admin' || user.id === 1 || (username && username.trim().toLowerCase() === 'admin')) {
+      try {
+        await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_pin', ?)", [cleanPin]);
+        await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_enabled', ?)", [String(tfaEnabled)]);
+      } catch (e) {}
+    }
+
     const updatedUser = await get(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.created_at, r.display_name as role_name
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at, r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?

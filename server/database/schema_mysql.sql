@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_device VARCHAR(255) NULL,
     active_sessions TEXT NULL,
     security_settings TEXT NULL,
+    two_factor_pin VARCHAR(20) DEFAULT '123456',
+    two_factor_enabled TINYINT(1) DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

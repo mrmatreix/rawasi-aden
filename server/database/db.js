@@ -212,6 +212,18 @@ async function initMysql() {
       await mysqlPool.query("ALTER TABLE users ADD COLUMN security_settings TEXT NULL");
     }
   } catch {}
+  try {
+    const [pinCols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'two_factor_pin'");
+    if (!pinCols || pinCols.length === 0) {
+      await mysqlPool.query("ALTER TABLE users ADD COLUMN two_factor_pin VARCHAR(20) DEFAULT '123456'");
+    }
+  } catch {}
+  try {
+    const [tfaCols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'two_factor_enabled'");
+    if (!tfaCols || tfaCols.length === 0) {
+      await mysqlPool.query("ALTER TABLE users ADD COLUMN two_factor_enabled TINYINT(1) DEFAULT 1");
+    }
+  } catch {}
 
   // ترقية جداول MySQL التلقائية لمراكز التكلفة والشيكات والعهد
   try {
@@ -360,6 +372,16 @@ function initSqlite() {
     if (!colNames.includes('last_login_device')) sqliteDb.exec("ALTER TABLE users ADD COLUMN last_login_device TEXT;");
     if (!colNames.includes('active_sessions')) sqliteDb.exec("ALTER TABLE users ADD COLUMN active_sessions TEXT;");
     if (!colNames.includes('security_settings')) sqliteDb.exec("ALTER TABLE users ADD COLUMN security_settings TEXT;");
+    if (!colNames.includes('two_factor_pin')) sqliteDb.exec("ALTER TABLE users ADD COLUMN two_factor_pin TEXT DEFAULT '123456';");
+    if (!colNames.includes('two_factor_enabled')) sqliteDb.exec("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 1;");
+
+    // مزامنة الرمز مع إعدادات المدير العام إن وجدت
+    try {
+      const adminPinRow = sqliteDb.prepare("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'").get();
+      if (adminPinRow && adminPinRow.value) {
+        sqliteDb.prepare("UPDATE users SET two_factor_pin = ? WHERE username = 'admin' AND (two_factor_pin IS NULL OR two_factor_pin = '')").run(adminPinRow.value);
+      }
+    } catch {}
 
     // ترقية مراكز التكلفة وجداول المحاسبة والشيكات والعهد
     sqliteDb.exec(`

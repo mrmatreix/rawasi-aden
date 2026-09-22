@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20260922-kryh">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260922-kryh">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20260922-5j3x">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260922-5j3x">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -5014,6 +5014,46 @@
           </div>
         </div>
 
+        <!-- التحقق بخطوتين (2FA) - رمز الأمان (PIN) للمدير العام والمستخدمين -->
+        <div class="user-2fa-card" id="user2FaCardContainer" style="background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(15, 23, 42, 0.75)); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: var(--radius-sm); padding: 12px 16px; margin: 12px 0 16px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">🔐</span>
+              <div>
+                <h4 style="margin: 0; font-size: 0.92rem; color: var(--gold-light); font-weight: 700;">التحقق بخطوتين (2FA) - رمز الأمان (PIN)</h4>
+                <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
+                  حساب المدير العام محمي بطبقة أمان مضاعفة. يمكن إدخال وتغيير رمز الأمان (PIN) المكون من 6 أرقام في أي لحظة.
+                </div>
+              </div>
+            </div>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer; color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">
+              <input type="checkbox" id="user2FaEnabledVal" checked style="accent-color: var(--gold-primary); cursor: pointer;">
+              <span style="font-weight: 600;">تفعيل التحقق بخطوتين</span>
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px;">
+            <div style="position: relative; width: 220px;">
+              <input type="password" id="user2FaPinVal" class="form-control" placeholder="123456" maxlength="6" pattern="[0-9]{6}" autocomplete="off" style="font-family: monospace; font-size: 1.15rem; letter-spacing: 5px; text-align: center; font-weight: bold; padding-left: 38px; border-color: rgba(212, 175, 55, 0.45); background: #070c18; color: #fbbf24;" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+              <button type="button" id="btnToggle2FaEye" onclick="Settings.toggle2FaPinVisibility()" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 1rem; padding: 2px;" title="إظهار / إخفاء الرمز">
+                <span id="user2FaEyeIcon">👁️</span>
+              </button>
+            </div>
+
+            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.generateRandom2FaPin()" style="border-color: rgba(212, 175, 55, 0.4); color: var(--gold-light); background: rgba(212, 175, 55, 0.1); padding: 6px 12px; font-weight: 600;" title="توليد رمز أمان عشوائي جديد فوري">
+              🎲 توليد رمز جديد
+            </button>
+
+            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.resetDefault2FaPin()" style="border-color: rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 6px 10px; font-size: 0.74rem;" title="إعادة تعيين للرمز الافتراضي 123456">
+              ↺ الافتراضي (123456)
+            </button>
+
+            <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+              <span>💡 كود الطوارئ الدائم: <code style="color: #6ee7b7; font-family: monospace; font-weight: bold; background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">889900</code></span>
+            </div>
+          </div>
+        </div>
+
         <!-- مصفوفة الصلاحيات الممنوحة -->
         <div class="permissions-container">
           <div class="permissions-header">
@@ -6725,16 +6765,16 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/ui-ux.js?v=1.0.0.20260922-kryh"></script>
-  <script src="js/auth.js?v=1.0.0.20260922-kryh"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20260922-5j3x"></script>
+  <script src="js/auth.js?v=1.0.0.20260922-5j3x"></script>
   <script src="js/events.js"></script>
-  <script src="js/app.js?v=1.0.0.20260922-kryh"></script>
+  <script src="js/app.js?v=1.0.0.20260922-5j3x"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260922-kryh')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260922-5j3x')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً
