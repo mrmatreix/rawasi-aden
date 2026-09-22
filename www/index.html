@@ -2,14 +2,16 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>نظام رواسي عدن للهندسة والمقاولات - النظام المحاسبي والإداري المتكامل</title>
   <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20260922-5j3x">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260922-5j3x">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20260922-bhmo">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260922-bhmo">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -304,6 +306,7 @@
     <!-- القائمة الجانبية (Sidebar) -->
     <aside class="sidebar">
       <div class="sidebar-logo-card">
+        <button type="button" class="mobile-sidebar-close-btn" onclick="App.closeMobileSidebar()" aria-label="إغلاق القائمة">&times;</button>
         <img src="images/logo.png" alt="شعار رواسي عدن" loading="lazy" decoding="async">
         <h3>رواسي عدن</h3>
         <span>للهندسة والمقاولات</span>
@@ -6765,16 +6768,16 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/ui-ux.js?v=1.0.0.20260922-5j3x"></script>
-  <script src="js/auth.js?v=1.0.0.20260922-5j3x"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20260922-bhmo"></script>
+  <script src="js/auth.js?v=1.0.0.20260922-bhmo"></script>
   <script src="js/events.js"></script>
-  <script src="js/app.js?v=1.0.0.20260922-5j3x"></script>
+  <script src="js/app.js?v=1.0.0.20260922-bhmo"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260922-5j3x')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260922-bhmo')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً
@@ -6960,5 +6963,29 @@
     </div>
   </div>
 </div>
+
+  <!-- ================== شريط التنقل السفلي للهواتف الذكية والأجهزة المحمولة (Android & iPhone Bottom Nav) ================== -->
+  <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="شريط التنقل الرئيسي للجوال">
+    <button type="button" class="bottom-nav-item active" data-nav="dashboard" onclick="App.navigate('dashboard')" aria-label="الرئيسية">
+      <svg class="icon"><use href="#icon-dashboard"></use></svg>
+      <span>الرئيسية</span>
+    </button>
+    <button type="button" class="bottom-nav-item" data-nav="projects" onclick="App.navigate('projects')" aria-label="المشاريع">
+      <svg class="icon"><use href="#icon-projects"></use></svg>
+      <span>المشاريع</span>
+    </button>
+    <button type="button" class="bottom-nav-item" data-nav="journal" onclick="App.navigate('journal')" aria-label="المحاسبة">
+      <svg class="icon"><use href="#icon-money"></use></svg>
+      <span>المحاسبة</span>
+    </button>
+    <button type="button" class="bottom-nav-item" data-nav="reports" onclick="App.navigate('reports')" aria-label="التقارير">
+      <svg class="icon"><use href="#icon-barchart"></use></svg>
+      <span>التقارير</span>
+    </button>
+    <button type="button" class="bottom-nav-item" id="bottomNavMoreBtn" onclick="App.toggleMobileSidebar()" aria-label="القائمة والمزيد">
+      <svg class="icon"><use href="#icon-menu"></use></svg>
+      <span>المزيد</span>
+    </button>
+  </nav>
 </body>
 </html>

@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20260922-5j3x',
+  assetVersion: '1.0.0.20260922-bhmo',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,15 +11,15 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20260922-5j3x',
-    projects: 'js/projects.js?v=1.0.0.20260922-5j3x',
-    projectHub: 'js/project_hub.js?v=1.0.0.20260922-5j3x',
-    accounting: 'js/accounting.js?v=1.0.0.20260922-5j3x',
-    hr: 'js/hr.js?v=1.0.0.20260922-5j3x',
-    reports: 'js/reports.js?v=1.0.0.20260922-5j3x',
-    inventory: 'js/inventory.js?v=1.0.0.20260922-5j3x',
-    settings: 'js/settings.js?v=1.0.0.20260922-5j3x',
-    excelExport: 'js/excel-export.js?v=1.0.0.20260922-5j3x'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20260922-bhmo',
+    projects: 'js/projects.js?v=1.0.0.20260922-bhmo',
+    projectHub: 'js/project_hub.js?v=1.0.0.20260922-bhmo',
+    accounting: 'js/accounting.js?v=1.0.0.20260922-bhmo',
+    hr: 'js/hr.js?v=1.0.0.20260922-bhmo',
+    reports: 'js/reports.js?v=1.0.0.20260922-bhmo',
+    inventory: 'js/inventory.js?v=1.0.0.20260922-bhmo',
+    settings: 'js/settings.js?v=1.0.0.20260922-bhmo',
+    excelExport: 'js/excel-export.js?v=1.0.0.20260922-bhmo'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -129,6 +129,7 @@ const App = {
     this.bindEvents();
     this.setupDatePickers();
     this.setupNetworkWatchers();
+    this.setupHardwareBackButton();
 
     // تهيئة مسار التنقل الدلالي ووحدة تجربة المستخدم والتحميل الكسول
     if (window.UI && UI.Breadcrumbs) UI.Breadcrumbs.update(this.activeView);
@@ -163,6 +164,14 @@ const App = {
       }
     });
 
+        // إغلاق القائمة الجانبية تلقائياً عند النقر على أي رابط داخلها على الهواتف والأجهزة اللوحية
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest('.sidebar-nav a, .nav-sub-item');
+      if (link && window.innerWidth <= 1024) {
+        this.closeMobileSidebar();
+      }
+    });
+
     // استجابة تغيير حجم النافذة للرسوم البيانية
     window.addEventListener('resize', () => {
       if (this.activeView === 'dashboard') {
@@ -187,8 +196,13 @@ const App = {
   toggleMobileSidebar() {
     const sidebar = document.querySelector('.sidebar');
     const backdrop = document.getElementById('sidebarBackdrop');
-    if (sidebar) sidebar.classList.toggle('mobile-open');
-    if (backdrop) backdrop.classList.toggle('active');
+    if (sidebar) {
+      const isOpen = sidebar.classList.toggle('mobile-open');
+      if (backdrop) backdrop.classList.toggle('active', isOpen);
+      if (window.innerWidth <= 1024) {
+        document.body.style.overflow = isOpen ? 'hidden' : '';
+      }
+    }
   },
 
   closeMobileSidebar() {
@@ -196,6 +210,65 @@ const App = {
     const backdrop = document.getElementById('sidebarBackdrop');
     if (sidebar) sidebar.classList.remove('mobile-open');
     if (backdrop) backdrop.classList.remove('active');
+    document.body.style.overflow = '';
+  },
+
+  setupHardwareBackButton() {
+    // 1. دعم زر الرجوع الفعلي لأجهزة أندرويد عبر Capacitor
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+      window.Capacitor.Plugins.App.addListener('backButton', () => {
+        const handled = this.handleDismissOrBack();
+        if (!handled) {
+          if (this.activeView !== 'dashboard') {
+            this.navigate('dashboard');
+          } else {
+            window.Capacitor.Plugins.App.exitApp();
+          }
+        }
+      });
+    }
+
+    // 2. زر Escape في لوحة المفاتيح
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' || e.keyCode === 27) {
+        this.handleDismissOrBack();
+      }
+    });
+
+    // 3. سجل تصفح المتصفح (PopState)
+    window.addEventListener('popstate', () => {
+      this.handleDismissOrBack();
+    });
+  },
+
+  handleDismissOrBack() {
+    // إغلاق أي نافذة منبثقة مفتوحة
+    const activeModals = document.querySelectorAll('.modal-overlay.active, .modal.active');
+    if (activeModals.length > 0) {
+      const topModal = activeModals[activeModals.length - 1];
+      topModal.classList.remove('active');
+      const remaining = document.querySelectorAll('.modal-overlay.active, .modal.active');
+      if (remaining.length === 0) {
+        document.body.style.overflow = '';
+      }
+      return true;
+    }
+
+    // إغلاق القائمة الجانبية إذا كانت مفتوحة
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar && sidebar.classList.contains('mobile-open')) {
+      this.closeMobileSidebar();
+      return true;
+    }
+
+    // إغلاق قائمة الإشعارات إذا كانت مفتوحة
+    const dropdown = document.getElementById('notificationsDropdown');
+    if (dropdown && dropdown.classList.contains('active')) {
+      dropdown.classList.remove('active');
+      return true;
+    }
+
+    return false;
   },
 
   // ============================================
@@ -362,8 +435,18 @@ const App = {
     }
 
     // تحديث أزرار شريط التنقل السفلي للهواتف
+    const accountingViews = ['journal', 'revenues', 'expenses', 'custody', 'chartOfAccounts', 'costCenters', 'currencies', 'cash'];
+    const projectViews = ['projects', 'projectHub'];
+
     document.querySelectorAll('.bottom-nav-item').forEach(btn => {
-      if (btn.getAttribute('data-nav') === viewId) {
+      const navTarget = btn.getAttribute('data-nav');
+      if (!navTarget) return;
+
+      let isMatch = (navTarget === viewId);
+      if (navTarget === 'projects' && projectViews.includes(viewId)) isMatch = true;
+      if (navTarget === 'journal' && accountingViews.includes(viewId)) isMatch = true;
+
+      if (isMatch) {
         btn.classList.add('active');
       } else {
         btn.classList.remove('active');
@@ -875,6 +958,7 @@ const App = {
     const modal = document.getElementById(modalId);
     if (modal) {
       modal.classList.add('active');
+      document.body.style.overflow = 'hidden';
 
       // فحص واستعادة المسودات المحفوظة تلقائياً للنموذج
       const form = modal.querySelector('form');
@@ -888,6 +972,10 @@ const App = {
     const modal = document.getElementById(modalId);
     if (modal) {
       modal.classList.remove('active');
+      const anyOtherModal = document.querySelectorAll('.modal-overlay.active, .modal.active');
+      if (anyOtherModal.length === 0) {
+        document.body.style.overflow = '';
+      }
     }
   },
 
