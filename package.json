@@ -5,8 +5,12 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
+    "start:staging": "node scripts/run_staging.js",
     "build": "node build_www.js",
     "dev": "node --watch server/server.js",
+    "test": "node --test --test-concurrency=1 tests/**/*.test.js",
+    "test:unit": "node --test --test-concurrency=1 tests/unit/**/*.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/**/*.test.js",
     "seed": "node server/database/seed.js",
     "android:sync": "node build_www.js && npx cap sync android",
     "android:open": "npx cap open android"

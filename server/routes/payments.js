@@ -246,4 +246,41 @@ router.post('/', async (req, res) => {
   }
 });
 
+// حذف سند قبض أو صرف
+router.delete('/:id', async (req, res) => {
+  try {
+    const pay = await get('SELECT * FROM payments WHERE id = ?', [req.params.id]);
+    if (!pay) {
+      return res.status(404).json({ success: false, message: 'السند غير موجود' });
+    }
+
+    const periodCheck = await checkPeriodOpen(pay.date);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
+    await transaction(async (tx) => {
+      // إرجاع أرصدة العملاء أو الموردين
+      if (pay.client_id && pay.type === 'قبض') {
+        await tx.run('UPDATE clients SET current_balance = current_balance + ? WHERE id = ?', [pay.amount, pay.client_id]);
+      } else if (pay.supplier_id && pay.type === 'صرف') {
+        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [pay.amount, pay.supplier_id]);
+      }
+
+      await tx.run('DELETE FROM payments WHERE id = ?', [req.params.id]);
+    });
+
+    await logAudit(req, {
+      action: 'DELETE',
+      entity_type: pay.type === 'قبض' ? 'receipt' : 'payment_voucher',
+      entity_id: pay.receipt_no,
+      details: { receipt_no: pay.receipt_no, type: pay.type, amount: pay.amount, date: pay.date }
+    });
+
+    res.json({ success: true, message: `تم حذف سند ال${pay.type} بنجاح` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حذف السند: ' + err.message });
+  }
+});
+
 module.exports = router;

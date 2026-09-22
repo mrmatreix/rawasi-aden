@@ -44,7 +44,7 @@
         const container = this.initContainer();
 
         const toast = document.createElement('div');
-        toast.className = `toast-card toast-${type}`;
+        toast.className = `toast-card toast-${type} toast-card-${type}`;
 
         let icon = '🔔';
         if (type === 'success') icon = '✅';
@@ -86,6 +86,7 @@
           if (timeoutId) clearTimeout(timeoutId);
           toast.classList.remove('toast-visible');
           toast.classList.add('toast-exit');
+          toast.classList.add('toast-removing');
           setTimeout(() => {
             if (toast.parentElement) toast.remove();
           }, 300);
@@ -153,6 +154,58 @@
         });
 
         return { dismiss };
+      },
+
+      success(message, duration = 4500) {
+        return this.show(message, 'success', null, duration);
+      },
+      error(message, duration = 6000) {
+        return this.show(message, 'error', null, duration);
+      },
+      warning(message, duration = 5000) {
+        return this.show(message, 'warning', null, duration);
+      },
+      info(message, duration = 4000) {
+        return this.show(message, 'info', null, duration);
+      }
+    },
+
+    // ============================================================
+    // 1.ب إدارة حالات التحميل ومنع النقر المكرر (Loading States)
+    // ============================================================
+    Loading: {
+      set(btn, isLoading, loadingText = 'جاري المعالجة...') {
+        const el = typeof btn === 'string' ? document.getElementById(btn) : btn;
+        if (!el) return;
+
+        if (isLoading) {
+          if (el.dataset.loadingActive === 'true') return;
+          el.dataset.loadingActive = 'true';
+          el.dataset.originalHtml = el.innerHTML;
+          el.disabled = true;
+          el.classList.add('btn-loading');
+          el.innerHTML = `
+            <span class="loading-spinner-inline" style="display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-left:6px;" aria-hidden="true"></span>
+            <span>${loadingText}</span>
+          `;
+        } else {
+          if (el.dataset.originalHtml) {
+            el.innerHTML = el.dataset.originalHtml;
+            delete el.dataset.originalHtml;
+          }
+          el.disabled = false;
+          el.classList.remove('btn-loading');
+          delete el.dataset.loadingActive;
+        }
+      },
+
+      async wrap(btn, asyncFn, loadingText) {
+        this.set(btn, true, loadingText);
+        try {
+          return await asyncFn();
+        } finally {
+          this.set(btn, false);
+        }
       }
     },
 

@@ -223,6 +223,8 @@ const Reports = {
       this.loadCashFlow();
     } else if (tabId === 'projects-profitability') {
       this.loadProjectsProfitability();
+    } else if (tabId === 'cost-centers-profitability') {
+      this.loadCostCentersProfitability();
     } else if (tabId === 'client-statement') {
       this.initClientStatementDropdown();
     } else if (tabId === 'supplier-statement') {
@@ -288,6 +290,63 @@ const Reports = {
       }
     } catch (e) {
       console.error(e);
+    }
+  },
+
+  // 2.ب تقرير ربحية مراكز التكلفة والمشاريع الشامل
+  async loadCostCentersProfitability() {
+    try {
+      const fromDate = document.getElementById('repCcFromDate')?.value || '';
+      const toDate = document.getElementById('repCcToDate')?.value || '';
+      let url = '/api/reports/cost-centers-profitability';
+      if (fromDate && toDate) url += `?from_date=${fromDate}&to_date=${toDate}`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        const totRevEl = document.getElementById('ccProfitTotalRev');
+        const totExpEl = document.getElementById('ccProfitTotalExp');
+        const totNetEl = document.getElementById('ccProfitTotalNet');
+        const totMarginEl = document.getElementById('ccProfitTotalMargin');
+
+        if (totRevEl) totRevEl.textContent = App.formatNumber(d.totals.total_revenue) + ' ر.ي';
+        if (totExpEl) totExpEl.textContent = App.formatNumber(d.totals.total_expense) + ' ر.ي';
+        if (totNetEl) {
+          totNetEl.textContent = App.formatNumber(d.totals.net_profit) + ' ر.ي';
+          totNetEl.style.color = d.totals.net_profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        }
+        if (totMarginEl) totMarginEl.textContent = d.totals.overall_margin + '%';
+
+        const tbody = document.getElementById('ccProfitTableBody');
+        if (tbody) {
+          if (!d.centers || d.centers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">لا توجد بيانات مراكز تكلفة مسجلة</td></tr>';
+            return;
+          }
+          tbody.innerHTML = d.centers.map(cc => {
+            const isProfit = cc.net_profit >= 0;
+            const statusBadge = isProfit
+              ? `<span class="badge" style="background: rgba(34,197,94,0.15); color: #4ade80;">ربح محقق (${cc.profit_margin}%)</span>`
+              : `<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171;">عجز / خسارة (${cc.profit_margin}%)</span>`;
+
+            return `
+              <tr>
+                <td><strong>${cc.code}</strong></td>
+                <td><strong style="color: #fff;">${cc.name}</strong></td>
+                <td><span class="badge badge-info">${cc.type}</span></td>
+                <td>${cc.project_name}</td>
+                <td style="color: var(--gold-light); font-weight: bold;">${App.formatNumber(cc.total_revenue)} ر.ي</td>
+                <td style="color: #38bdf8; font-weight: bold;">${App.formatNumber(cc.total_expense)} ر.ي</td>
+                <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${App.formatNumber(cc.net_profit)} ر.ي</td>
+                <td>${statusBadge}</td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cost centers profitability:', e);
     }
   },
 
@@ -653,6 +712,58 @@ const Reports = {
           </thead>
           <tbody>
             ${projRows || '<tr><td colspan="7" style="text-align: center;">لا توجد مشاريع</td></tr>'}
+          </tbody>
+        </table>
+      `;
+    } else if (tab === 'cost-centers-profitability') {
+      reportTitle = 'تقرير أداء وربحية مراكز التكلفة والمشاريع';
+      const ccRows = document.getElementById('ccProfitTableBody')?.innerHTML || '';
+      const totRev = document.getElementById('ccProfitTotalRev')?.textContent || '0';
+      const totExp = document.getElementById('ccProfitTotalExp')?.textContent || '0';
+      const totNet = document.getElementById('ccProfitTotalNet')?.textContent || '0';
+      const totMargin = document.getElementById('ccProfitTotalMargin')?.textContent || '0%';
+
+      reportMeta = [
+        { label: 'تاريخ التقرير', val: todayDate },
+        { label: 'إجمالي الإيرادات', val: totRev },
+        { label: 'إجمالي المصروفات', val: totExp },
+        { label: 'صافي الربح الإجمالي', val: totNet }
+      ];
+
+      reportBodyHtml = `
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+          <div style="border: 1px solid #86efac; border-radius: 6px; padding: 8px; text-align: center; background: #f0fdf4;">
+            <div style="font-size: 0.75rem; color: #15803d;">إجمالي الإيرادات</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #15803d;">${totRev}</div>
+          </div>
+          <div style="border: 1px solid #fca5a5; border-radius: 6px; padding: 8px; text-align: center; background: #fef2f2;">
+            <div style="font-size: 0.75rem; color: #b91c1c;">إجمالي المصروفات</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #b91c1c;">${totExp}</div>
+          </div>
+          <div style="border: 1px solid #fef08a; border-radius: 6px; padding: 8px; text-align: center; background: #fefce8;">
+            <div style="font-size: 0.75rem; color: #a16207;">صافي الفائض / الربح</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #a16207;">${totNet}</div>
+          </div>
+          <div style="border: 1px solid #bae6fd; border-radius: 6px; padding: 8px; text-align: center; background: #f0f9ff;">
+            <div style="font-size: 0.75rem; color: #0369a1;">متوسط هامش الربح</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #0369a1;">${totMargin}</div>
+          </div>
+        </div>
+        <table class="official-report-table">
+          <thead>
+            <tr>
+              <th>كود المركز</th>
+              <th>اسم المركز</th>
+              <th>النوع</th>
+              <th>المشروع</th>
+              <th>الإيرادات</th>
+              <th>المصروفات</th>
+              <th>صافي الربح</th>
+              <th>هامش الربحية</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ccRows || '<tr><td colspan="8" style="text-align: center;">لا توجد بيانات مراكز تكلفة</td></tr>'}
           </tbody>
         </table>
       `;

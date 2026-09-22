@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
+const { logAudit } = require('../services/auditService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 // جلب الفواتير والمستخلصات
 router.get('/', async (req, res) => {
@@ -56,6 +58,12 @@ router.post('/', async (req, res) => {
       notes
     } = req.body;
 
+    // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ المستخلص
+    const periodCheck = await checkPeriodOpen(date);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
     if (!project_id || !amount || Number(amount) <= 0) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المشروع والمبلغ الإجمالي' });
     }
@@ -97,6 +105,13 @@ router.post('/', async (req, res) => {
       }
 
       return result;
+    });
+
+    await logAudit(req, {
+      action: 'INSERT',
+      entity_type: 'bill',
+      entity_id: bill_no,
+      details: { bill_no, bill_type, project_id, client_id: finalClientId, amount: parsedAmount, net_amount, status, date }
     });
 
     res.json({

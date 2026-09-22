@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
+const { tafqeet } = require('../services/tafqeetService');
 
 // ============================================================================
 // 0. ملخص شامل لجميع المتطلبات الـ 14 للمشروع المحدد
@@ -1086,56 +1087,9 @@ router.post('/:projectId/settlement', async (req, res) => {
   }
 });
 
-// دالة تفقيط المبالغ المالية باللغة العربية
+// دالة تفقيط المبالغ المالية باللغة العربية المعتمدة على المحرك المالي الشامل
 function tafqeetArabic(num, currency = 'ر.ي') {
-  if (!num || isNaN(num) || num <= 0) return 'صفر';
-  num = Math.floor(Number(num));
-  const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
-  const teens = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
-  const tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
-  const hundreds = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
-
-  function convertGroup(n) {
-    let res = [];
-    const h = Math.floor(n / 100);
-    const remainder = n % 100;
-    if (h > 0) res.push(hundreds[h]);
-    if (remainder > 0) {
-      if (remainder < 10) res.push(ones[remainder]);
-      else if (remainder < 20) res.push(teens[remainder - 10]);
-      else {
-        const o = remainder % 10;
-        const t = Math.floor(remainder / 10);
-        if (o > 0) res.push(ones[o] + ' و' + tens[t]);
-        else res.push(tens[t]);
-      }
-    }
-    return res.join(' و');
-  }
-
-  let parts = [];
-  const billions = Math.floor(num / 1000000000);
-  num %= 1000000000;
-  const millions = Math.floor(num / 1000000);
-  num %= 1000000;
-  const thousands = Math.floor(num / 1000);
-  const units = num % 1000;
-
-  if (billions > 0) parts.push(convertGroup(billions) + (billions === 1 ? ' مليار' : (billions === 2 ? ' ملياران' : (billions <= 10 ? ' مليارات' : ' مليار'))));
-  if (millions > 0) parts.push(convertGroup(millions) + (millions === 1 ? ' مليون' : (millions === 2 ? ' مليونان' : (millions <= 10 ? ' ملايين' : ' مليون'))));
-  if (thousands > 0) {
-    if (thousands === 1) parts.push('ألف');
-    else if (thousands === 2) parts.push('ألفان');
-    else if (thousands <= 10) parts.push(convertGroup(thousands) + ' آلاف');
-    else parts.push(convertGroup(thousands) + ' ألف');
-  }
-  if (units > 0) parts.push(convertGroup(units));
-
-  let currName = 'ريال يمني';
-  if (currency === 'ر.س') currName = 'ريال سعودي';
-  else if (currency === '$' || currency === 'USD') currName = 'دولار أمريكي';
-
-  return 'فقط ' + (parts.join(' و') || 'صفر') + ' ' + currName + ' لا غير';
+  return tafqeet(num, currency);
 }
 
 // ============================================================================

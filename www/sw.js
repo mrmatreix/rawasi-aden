@@ -1,18 +1,24 @@
-const CACHE_NAME = 'rawasi-aden-v5.1';
+const CACHE_NAME = 'rawasi-aden-1.0.0.20260922-cr6o';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/app.js',
+  './js/ui-ux.js',
   './js/auth.js',
+  './js/app.js',
+  './js/events.js',
+  './js/tafqeet.js',
   './js/projects.js',
   './js/project_hub.js',
   './js/inventory.js',
   './js/accounting.js',
+  './js/hr.js',
   './js/reports.js',
   './js/settings.js',
+  './js/excel-export.js',
   './images/logo.svg',
   './images/icon.svg',
+  './images/logo.png',
   './manifest.json'
 ];
 

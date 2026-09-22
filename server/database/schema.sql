@@ -250,8 +250,28 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     reference_id INTEGER,
     total_debit REAL DEFAULT 0,
     total_credit REAL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_journal_balance CHECK (total_debit > 0 AND abs(total_debit - total_credit) < 0.001)
 );
+
+-- مشغلات حماية التوازن المحاسبي الصارم (منع أي إدراج أو تعديل غير متوازن)
+CREATE TRIGGER IF NOT EXISTS trg_enforce_journal_balance_insert
+BEFORE INSERT ON journal_entries
+BEGIN
+  SELECT CASE 
+    WHEN (NEW.total_debit <= 0 OR abs(NEW.total_debit - NEW.total_credit) > 0.001)
+    THEN RAISE(ABORT, '⛔ خطأ محاسبي: لا يمكن حفظ قيد غير متزن! إجمالي المدين يجب أن يساوي إجمالي الدائن.')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_enforce_journal_balance_update
+BEFORE UPDATE ON journal_entries
+BEGIN
+  SELECT CASE 
+    WHEN (NEW.total_debit <= 0 OR abs(NEW.total_debit - NEW.total_credit) > 0.001)
+    THEN RAISE(ABORT, '⛔ خطأ محاسبي: لا يمكن تحديث قيد ليصبح غير متزن! إجمالي المدين يجب أن يساوي إجمالي الدائن.')
+  END;
+END;
 
 -- 16. سطور القيود اليومية (طرفين مدين ودائن)
 CREATE TABLE IF NOT EXISTS journal_entry_lines (

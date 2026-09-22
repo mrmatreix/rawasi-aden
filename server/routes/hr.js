@@ -3,6 +3,7 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const PayrollService = require('../services/payrollService');
 
 const today = () => new Date().toISOString().slice(0, 10);
 const number = value => Number(value) || 0;
@@ -266,6 +267,94 @@ router.post('/evaluations', async (req, res) => {
     res.json({ success: true, message: 'تم حفظ تقييم الموظف بنجاح', id: result.lastInsertRowid || result.insertId });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في حفظ التقييم: ' + err.message });
+  }
+});
+
+// معاينة القيد المحاسبي المركب لمسير الرواتب وقواعد التأمينات والضرائب قبل الترحيل
+router.get('/payroll/:month/preview-journal', async (req, res) => {
+  try {
+    const month = req.params.month;
+    const records = await query('SELECT p.*, e.full_name FROM payroll p JOIN employees e ON e.id=p.employee_id WHERE p.payroll_month = ?', [month]);
+    if (!records || records.length === 0) {
+      return res.status(404).json({ success: false, message: `لا توجد مسيرات رواتب لشهر ${month}` });
+    }
+
+    let totalGross = 0;
+    let totalInsEmployer = 0;
+    let totalInsEmployee = 0;
+    let totalTax = 0;
+    let totalDeductions = 0;
+    let totalNet = 0;
+
+    for (const r of records) {
+      const g = r.gross_salary != null ? number(r.gross_salary) : (number(r.basic_salary) + number(r.overtime_amount));
+      const iOrg = number(r.insurance_employer || 0);
+      const iEmp = number(r.insurance_employee || 0);
+      const tx = number(r.tax_amount || 0);
+      const ded = number(r.deductions || 0);
+      const net = number(r.net_salary || 0);
+
+      totalGross += g;
+      totalInsEmployer += iOrg;
+      totalInsEmployee += iEmp;
+      totalTax += tx;
+      totalDeductions += ded;
+      totalNet += net;
+    }
+
+    totalGross = Math.round(totalGross * 100) / 100;
+    totalInsEmployer = Math.round(totalInsEmployer * 100) / 100;
+    totalInsEmployee = Math.round(totalInsEmployee * 100) / 100;
+    totalTax = Math.round(totalTax * 100) / 100;
+    totalDeductions = Math.round(totalDeductions * 100) / 100;
+    totalNet = Math.round(totalNet * 100) / 100;
+
+    const totalDebit = Math.round((totalGross + totalInsEmployer) * 100) / 100;
+    const totalCredit = Math.round((totalNet + totalTax + (totalInsEmployee + totalInsEmployer) + totalDeductions) * 100) / 100;
+
+    let salaryExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '511' OR code = '52' OR name LIKE '%رواتب%' LIMIT 1") || { id: 1, code: '511', name: 'مصروف الرواتب والأجور الأساسية والبدلات' };
+    let insExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '512' OR name LIKE '%مساهمة%تأمين%' LIMIT 1") || { id: 2, code: '512', name: 'مصروف مساهمة المنشأة في التأمينات الاجتماعية' };
+    let cashBankAcc = await get("SELECT id, code, name FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' LIMIT 1") || { id: 3, code: '111', name: 'الصندوق الرئيسي / البنك' };
+    let taxAcc = await get("SELECT id, code, name FROM accounts WHERE code = '213' OR name LIKE '%ضرائب%' OR name LIKE '%كسب%' LIMIT 1") || { id: 4, code: '213', name: 'أمانات مصلحة الضرائب (ضريبة كسب العمل)' };
+    let insLiabilityAcc = await get("SELECT id, code, name FROM accounts WHERE code = '214' OR name LIKE '%تأمينات%' LIMIT 1") || { id: 5, code: '214', name: 'الهيئة العامة للتأمينات والمعاشات' };
+    let advanceAcc = await get("SELECT id, code, name FROM accounts WHERE code = '114' OR name LIKE '%سلف%' LIMIT 1") || { id: 6, code: '114', name: 'سلف وعهد الموظفين' };
+
+    const previewLines = [
+      { side: 'مدين (منه)', account_code: salaryExpAcc.code, account_name: salaryExpAcc.name, debit: totalGross, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `إجمالي استحقاق رواتب وبدلات شهر ${month}` },
+      { side: 'مدين (منه)', account_code: insExpAcc.code, account_name: insExpAcc.name, debit: totalInsEmployer, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `مساهمة المنشأة في التأمينات الاجتماعية (9%)` },
+      { side: 'دائن (له)', account_code: cashBankAcc.code, account_name: cashBankAcc.name, debit: 0, credit: totalNet, cost_center: 'الإدارة العامة CC-100', notes: `صافي رواتب محولة ومسددة للموظفين` },
+      { side: 'دائن (له)', account_code: taxAcc.code, account_name: taxAcc.name, debit: 0, credit: totalTax, cost_center: 'الإدارة العامة CC-100', notes: `أمانات ضريبة كسب العمل المستقطعة` },
+      { side: 'دائن (له)', account_code: insLiabilityAcc.code, account_name: insLiabilityAcc.name, debit: 0, credit: Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100, cost_center: 'الإدارة العامة CC-100', notes: `مستحقات التأمينات (حصة العامل 6% + المنشأة 9%)` },
+      { side: 'دائن (له)', account_code: advanceAcc.code, account_name: advanceAcc.name, debit: 0, credit: totalDeductions, cost_center: 'الإدارة العامة CC-100', notes: `استرداد أقساط سلف الموظفين` }
+    ].filter(l => l.debit > 0 || l.credit > 0);
+
+    res.json({
+      success: true,
+      data: {
+        month,
+        employee_count: records.length,
+        summary: {
+          total_gross: totalGross,
+          insurance_employer_9pct: totalInsEmployer,
+          insurance_employee_6pct: totalInsEmployee,
+          total_insurance_15pct: Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100,
+          total_tax: totalTax,
+          total_advances: totalDeductions,
+          total_net_payable: totalNet,
+          total_debit: totalDebit,
+          total_credit: totalCredit,
+          diff: Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100,
+          is_balanced: Math.abs(totalDebit - totalCredit) < 0.05
+        },
+        lines: previewLines,
+        rules: {
+          social_insurance: 'حصة الموظف 6% تستقطع من الراتب الأساسي + حصة المنشأة 9% تتحملها الشركة كمصروف إضافي = 15% تورد لهيئة التأمينات',
+          income_tax: 'إعفاء أول 20,000 ر.ي شهرياً، ثم 10% للشريحة الأولى (حتى 50,000 ر.ي)، و 15% لما زاد عن ذلك'
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب معاينة قيد الرواتب: ' + err.message });
   }
 });
 

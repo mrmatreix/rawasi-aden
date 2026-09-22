@@ -132,8 +132,48 @@ body.light-mode .kpi-value {
   color: #1e293b;
 }
 
-body.light-mode .badge {
-  border: 1px solid rgba(0, 0, 0, 0.08);
+body.light-mode .badge,
+html.light-mode .badge {
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+/* الأزرار الثانوية في الوضع النهاري */
+body.light-mode .btn-secondary,
+html.light-mode .btn-secondary {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+body.light-mode .btn-secondary:hover,
+html.light-mode .btn-secondary:hover {
+  background: #e2e8f0 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* تحسينات الشعار والشارات في الوضع النهاري */
+body.light-mode .sidebar-logo-card,
+html.light-mode .sidebar-logo-card {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+body.light-mode .sidebar-logo-card h3,
+html.light-mode .sidebar-logo-card h3 {
+  color: #ffffff !important;
+}
+body.light-mode .sidebar-logo-card span,
+html.light-mode .sidebar-logo-card span {
+  color: #fde68a !important;
+}
+body.light-mode .brand-logo-img,
+html.light-mode .brand-logo-img {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+body.light-mode .report-header-brand img,
+html.light-mode .report-header-brand img {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
 }
 
 /* Smooth theme transition */
@@ -159,7 +199,7 @@ html.light-mode {
 }
 
 body {
-  font-family: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif;
   background-color: var(--bg-main) !important;
   color: var(--text-primary);
   direction: rtl;
@@ -1766,7 +1806,7 @@ body.light-mode .theme-icon-light { display: inline; }
 
 .toast-text {
   line-height: 1.45;
-  color: #ffffff;
+  color: inherit;
   font-size: 0.95rem;
 }
 
@@ -4146,30 +4186,24 @@ body.light-mode .skeleton {
 
 .toast-card {
   pointer-events: auto;
-  background: rgba(15, 23, 42, 0.94);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.2);
-  padding: 12px 14px;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  color: #f1f5f9;
-  font-family: inherit;
   position: relative;
+  background: rgba(15, 28, 48, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.55), 0 0 1px rgba(255, 255, 255, 0.2);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  color: #f8fafc;
+  font-family: inherit;
   overflow: hidden;
+  direction: rtl;
   transform: translateY(20px) scale(0.95);
   opacity: 0;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
-}
-
-body.light-mode .toast-card {
-  background: rgba(255, 255, 255, 0.96);
-  border-color: rgba(0, 0, 0, 0.1);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-  color: #0f172a;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, background-color 0.25s ease;
 }
 
 .toast-card.toast-visible {
@@ -4177,97 +4211,281 @@ body.light-mode .toast-card {
   opacity: 1;
 }
 
+.toast-card.toast-exit,
 .toast-card.toast-removing {
-  transform: translateY(15px) scale(0.9);
+  transform: translateY(12px) scale(0.92);
   opacity: 0;
+  pointer-events: none;
 }
 
-.toast-card-success { border-right: 4px solid #10b981; }
-.toast-card-error { border-right: 4px solid #ef4444; }
-.toast-card-warning { border-right: 4px solid #f59e0b; }
-.toast-card-info { border-right: 4px solid #38bdf8; }
+/* تخطيط المحتوى الرئيسي للإشعار */
+.toast-card .toast-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
 
+.toast-card .toast-icon,
 .toast-card-icon {
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   line-height: 1;
   flex-shrink: 0;
-  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.toast-card-body {
+.toast-card .toast-body,
+.toast-card-body,
+.toast-content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
 }
 
+.toast-card .toast-title,
 .toast-card-title {
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  margin-bottom: 3px;
-  color: var(--text-primary, #ffffff);
+  color: #ffffff;
+  line-height: 1.3;
 }
 
+.toast-card .toast-text,
 .toast-card-msg {
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: var(--text-secondary, #94a3b8);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #f1f5f9;
   word-break: break-word;
 }
 
-.toast-card-actions {
-  margin-top: 8px;
-  display: flex;
-  gap: 8px;
-}
-
+/* أزرار الإجراء والإغلاق */
+.toast-card .toast-action-btn,
 .toast-action-btn {
-  background: rgba(212, 175, 55, 0.18);
+  background: rgba(212, 175, 55, 0.2);
   border: 1px solid var(--gold-primary, #d4af37);
   color: var(--gold-light, #fbbf24);
   border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
+  padding: 5px 12px;
+  font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.2s ease;
 }
 
+.toast-card .toast-action-btn:hover,
 .toast-action-btn:hover {
   background: var(--gold-primary, #d4af37);
   color: #0f172a;
 }
 
+.toast-card .toast-close,
 .toast-card-close {
   background: none;
   border: none;
   color: #94a3b8;
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0 4px;
-  opacity: 0.6;
-  transition: opacity 0.2s;
+  padding: 2px 6px;
+  border-radius: 6px;
   flex-shrink: 0;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
+.toast-card .toast-close:hover,
 .toast-card-close:hover {
   opacity: 1;
   color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.toast-progress-bar {
+/* شريط التقدم والعد التنازلي */
+.toast-progress-wrap {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   height: 3px;
-  background: rgba(255, 255, 255, 0.15);
-  transform-origin: right;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
 }
 
-.toast-card-success .toast-progress-bar { background: #10b981; }
-.toast-card-error .toast-progress-bar { background: #ef4444; }
-.toast-card-warning .toast-progress-bar { background: #f59e0b; }
-.toast-card-info .toast-progress-bar { background: #38bdf8; }
+.toast-progress-bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: right;
+  transition: width linear;
+}
+
+/* أنواع الإشعارات بالوضع الليلي */
+.toast-card.toast-success,
+.toast-card.toast-card-success {
+  border-right: 5px solid #10b981;
+}
+.toast-card.toast-success .toast-progress-bar,
+.toast-card-success .toast-progress-bar {
+  background: #10b981;
+}
+
+.toast-card.toast-error,
+.toast-card.toast-card-error {
+  border-right: 5px solid #ef4444;
+}
+.toast-card.toast-error .toast-progress-bar,
+.toast-card-error .toast-progress-bar {
+  background: #ef4444;
+}
+
+.toast-card.toast-warning,
+.toast-card.toast-card-warning {
+  border-right: 5px solid #f59e0b;
+}
+.toast-card.toast-warning .toast-progress-bar,
+.toast-card-warning .toast-progress-bar {
+  background: #f59e0b;
+}
+
+.toast-card.toast-info,
+.toast-card.toast-card-info {
+  border-right: 5px solid #38bdf8;
+}
+.toast-card.toast-info .toast-progress-bar,
+.toast-card-info .toast-progress-bar {
+  background: #38bdf8;
+}
+
+/* ============================================================
+   🌞 تنسيقات الإشعارات العائمة في الوضع النهاري (Light Mode Toasts)
+   ============================================================ */
+body.light-mode .toast-card,
+html.light-mode .toast-card,
+body.light-mode .toast-msg,
+html.light-mode .toast-msg {
+  background: #ffffff !important;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+  color: #0f172a !important;
+}
+
+body.light-mode .toast-card .toast-text,
+html.light-mode .toast-card .toast-text,
+body.light-mode .toast-card .toast-card-msg,
+html.light-mode .toast-card .toast-card-msg,
+body.light-mode .toast-card .toast-title,
+html.light-mode .toast-card .toast-title,
+body.light-mode .toast-card .toast-card-title,
+html.light-mode .toast-card .toast-card-title,
+body.light-mode .toast-card .toast-body,
+html.light-mode .toast-card .toast-body,
+body.light-mode .toast-msg .toast-text,
+html.light-mode .toast-msg .toast-text {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+body.light-mode .toast-card .toast-close,
+html.light-mode .toast-card .toast-close,
+body.light-mode .toast-msg .toast-close,
+html.light-mode .toast-msg .toast-close {
+  color: #64748b !important;
+}
+
+body.light-mode .toast-card .toast-close:hover,
+html.light-mode .toast-card .toast-close:hover,
+body.light-mode .toast-msg .toast-close:hover,
+html.light-mode .toast-msg .toast-close:hover {
+  color: #0f172a !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+body.light-mode .toast-progress-wrap,
+html.light-mode .toast-progress-wrap {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* تمييز الإشعارات حسب النوع في الوضع النهاري بنعومة وفخامة */
+body.light-mode .toast-card.toast-success,
+html.light-mode .toast-card.toast-success,
+body.light-mode .toast-card.toast-card-success,
+html.light-mode .toast-card.toast-card-success,
+body.light-mode .toast-msg.toast-success,
+html.light-mode .toast-msg.toast-success {
+  background: linear-gradient(135deg, #ffffff 80%, #ecfdf5 100%) !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+  border-right: 5px solid #10b981 !important;
+}
+body.light-mode .toast-card.toast-success .toast-progress-bar,
+body.light-mode .toast-card.toast-card-success .toast-progress-bar {
+  background: #10b981 !important;
+}
+
+body.light-mode .toast-card.toast-error,
+html.light-mode .toast-card.toast-error,
+body.light-mode .toast-card.toast-card-error,
+html.light-mode .toast-card.toast-card-error,
+body.light-mode .toast-msg.toast-error,
+html.light-mode .toast-msg.toast-error {
+  background: linear-gradient(135deg, #ffffff 80%, #fef2f2 100%) !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+  border-right: 5px solid #ef4444 !important;
+}
+body.light-mode .toast-card.toast-error .toast-progress-bar,
+body.light-mode .toast-card.toast-card-error .toast-progress-bar {
+  background: #ef4444 !important;
+}
+
+body.light-mode .toast-card.toast-warning,
+html.light-mode .toast-card.toast-warning,
+body.light-mode .toast-card.toast-card-warning,
+html.light-mode .toast-card.toast-card-warning,
+body.light-mode .toast-msg.toast-warning,
+html.light-mode .toast-msg.toast-warning {
+  background: linear-gradient(135deg, #ffffff 80%, #fffbeb 100%) !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+  border-right: 5px solid #f59e0b !important;
+}
+body.light-mode .toast-card.toast-warning .toast-progress-bar,
+body.light-mode .toast-card.toast-card-warning .toast-progress-bar {
+  background: #f59e0b !important;
+}
+
+body.light-mode .toast-card.toast-info,
+html.light-mode .toast-card.toast-info,
+body.light-mode .toast-card.toast-card-info,
+html.light-mode .toast-card.toast-card-info,
+body.light-mode .toast-msg.toast-info,
+html.light-mode .toast-msg.toast-info {
+  background: linear-gradient(135deg, #ffffff 80%, #f0f9ff 100%) !important;
+  border: 1px solid rgba(2, 132, 199, 0.35) !important;
+  border-right: 5px solid #0284c7 !important;
+}
+body.light-mode .toast-card.toast-info .toast-progress-bar,
+body.light-mode .toast-card.toast-card-info .toast-progress-bar {
+  background: #0284c7 !important;
+}
+
+body.light-mode .toast-card .toast-action-btn,
+body.light-mode .toast-action-btn {
+  background: #fef3c7 !important;
+  border-color: #d97706 !important;
+  color: #92400e !important;
+}
+body.light-mode .toast-card .toast-action-btn:hover,
+body.light-mode .toast-action-btn:hover {
+  background: #d97706 !important;
+  color: #ffffff !important;
+}
 
 /* 3. Interactive Semantic Breadcrumbs Bar */
 .breadcrumbs-bar {

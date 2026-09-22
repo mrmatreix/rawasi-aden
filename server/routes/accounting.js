@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
+const bcrypt = require('bcryptjs');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const AccountingService = require('../services/accountingService');
 
 // دليل الحسابات الشجري
 router.get('/accounts', async (req, res) => {
@@ -258,6 +260,17 @@ router.get('/journal-entries/:id', async (req, res) => {
   }
 });
 
+// نقطة فحص فوري لحالة الفترة المحاسبية لتاريخ محدد (تستخدمها الواجهات ونماذج الإدخال)
+router.get('/check-period', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const result = await checkPeriodOpen(date || new Date().toISOString().split('T')[0]);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // إنشاء قيد يدوي متزن بطرفين أو أطراف متعددة مع الفحص الصارم للاتزان وإغلاق الفترات ومراكز التكلفة
 router.post('/journal-entries', async (req, res) => {
   try {
@@ -265,115 +278,28 @@ router.post('/journal-entries', async (req, res) => {
       date = new Date().toISOString().split('T')[0], 
       description, 
       reference_type = 'قيد يدوي',
-      currency = 'ر.ي',
+      reference_id = null,
       lines 
     } = req.body;
 
-    // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ القيد
-    const periodCheck = await checkPeriodOpen(date);
-    if (!periodCheck.isOpen) {
-      return res.status(403).json({ success: false, message: periodCheck.message });
-    }
-
-    if (!description || !lines || lines.length < 2) {
-      return res.status(400).json({ success: false, message: 'القيد اليومي يتطلب بياناً وطرفين على الأقل (مدين ودائن)' });
-    }
-
-    let totalDebit = 0;
-    let totalCredit = 0;
-
-    // 2. فحص أسطر القيد والتحقق من الحسابات ومراكز التكلفة
-    for (const line of lines) {
-      const d = Number(line.debit || 0);
-      const c = Number(line.credit || 0);
-      totalDebit += d;
-      totalCredit += c;
-
-      if (!line.account_id) {
-        return res.status(400).json({ success: false, message: 'يجب تحديد الحساب المالي لكل طرف في القيد' });
-      }
-
-      // التحقق من إلزامية مركز التكلفة لحسابات المصروفات والإيرادات والمشاريع
-      const acc = await get('SELECT id, code, name, type FROM accounts WHERE id = ?', [line.account_id]);
-      if (acc) {
-        const isNominal = acc.type === 'مصروفات' || acc.type === 'إيرادات' || String(acc.code).startsWith('4') || String(acc.code).startsWith('5');
-        if ((isNominal || line.project_id) && !line.cost_center_id) {
-          // محاولة ربط مركز تكلفة المشروع إذا كان المشروع محدداً
-          if (line.project_id) {
-            const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [line.project_id]);
-            if (prjCc) line.cost_center_id = prjCc.id;
-          }
-          // إذا تعذر، إسناد مركز الإدارة العامة التلقائي CC-100 لضمان سلامة تقارير الأرباح
-          if (!line.cost_center_id) {
-            line.cost_center_id = 1;
-          }
-        }
-      }
-    }
-
-    if (totalDebit <= 0) {
-      return res.status(400).json({ success: false, message: 'مبلغ القيد يجب أن يكون أكبر من الصفر' });
-    }
-
-    // 3. التحقق الصارم من اتزان القيد محاسبياً (المدين = الدائن تماماً)
-    const diff = Math.round(Math.abs(totalDebit - totalCredit) * 1000) / 1000;
-    if (diff > 0.001) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `القيد غير متزن محاسبياً! إجمالي المدين (${totalDebit.toLocaleString()}) لا يساوي إجمالي الدائن (${totalCredit.toLocaleString()}). الفارق: ${diff.toLocaleString()}` 
-      });
-    }
-
-    const currentYear = new Date().getFullYear();
-    const countRes = await get('SELECT COUNT(*) as cnt FROM journal_entries');
-    let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-    let entry_no = `JE-${currentYear}-${String(seq).padStart(5, '0')}`;
-    while (await get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-      seq++;
-      entry_no = `JE-${currentYear}-${String(seq).padStart(5, '0')}`;
-    }
-
-    const txResult = await transaction(async (tx) => {
-      const jeRes = await tx.run(`
-        INSERT INTO journal_entries (entry_no, date, description, reference_type, total_debit, total_credit)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [entry_no, date, description, reference_type, totalDebit, totalCredit]);
-
-      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-
-      for (const line of lines) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [
-          jeId, 
-          line.account_id, 
-          line.cost_center_id || 1, 
-          line.project_id || null, 
-          Number(line.debit || 0), 
-          Number(line.credit || 0), 
-          line.notes || ''
-        ]);
-      }
-
-      return jeRes;
-    });
-
-    await logAudit(req, {
-      action: 'INSERT',
-      entity_type: 'journal_entry',
-      entity_id: entry_no,
-      details: { total_debit: totalDebit, lines_count: lines.length, description }
-    });
+    const result = await AccountingService.createJournalEntry({
+      date,
+      description,
+      reference_type,
+      reference_id
+    }, lines, req);
 
     res.json({
       success: true,
-      message: 'تم حفظ القيد اليومي المتزن بنجاح وتحديث السجلات المحاسبية',
-      entry_no,
-      id: txResult.lastInsertRowid || txResult.insertId
+      message: 'تم حفظ وتوثيق القيد اليومي المتزن بنجاح وتحديث السجلات المحاسبية',
+      entry_no: result.entry_no,
+      id: result.id,
+      total_debit: result.total_debit,
+      total_credit: result.total_credit
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في تسجيل القيد: ' + err.message, error: err.message });
+    const status = err.message.includes('لا يمكن') || err.message.includes('غير متزن') || err.message.includes('مغلقة') ? 400 : 500;
+    res.status(status).json({ success: false, message: err.message, error: err.message });
   }
 });
 
@@ -646,11 +572,19 @@ router.post('/periods', async (req, res) => {
   }
 });
 
-// إغلاق فترة محاسبية رسمياً لمنع التعديل على أي تاريخ يقع داخلها
+// إغلاق فترة محاسبية رسمياً لمنع التعديل على أي تاريخ يقع داخلها (يتطلب تفويض وكلمة مرور المدير)
 router.put('/periods/:id/close', async (req, res) => {
   try {
     const { id } = req.params;
-    const { notes } = req.body;
+    const { notes, manager_password } = req.body;
+
+    if (!manager_password || !String(manager_password).trim()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '⛔ إقفال الفترة المحاسبية يتطلب إدخال كلمة مرور المدير المالي / المشرف للتفويض القانوني.' 
+      });
+    }
+
     const period = await get('SELECT * FROM accounting_periods WHERE id = ?', [id]);
     if (!period) {
       return res.status(404).json({ success: false, message: 'الفترة المحاسبية غير موجودة' });
@@ -660,7 +594,41 @@ router.put('/periods/:id/close', async (req, res) => {
       return res.status(400).json({ success: false, message: 'الفترة المحاسبية مغلقة مسبقاً' });
     }
 
-    const username = req.user?.username || req.user?.full_name || 'المدير المالي';
+    // التحقق الأمني من صحة كلمة مرور المدير
+    let isAuthorized = false;
+    let authorizedUser = null;
+
+    // 1. فحص المستخدم الحالي المسجل
+    if (req.user && req.user.id) {
+      const currentUser = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      if (currentUser && currentUser.password_hash) {
+        if (bcrypt.compareSync(manager_password, currentUser.password_hash)) {
+          isAuthorized = true;
+          authorizedUser = currentUser;
+        }
+      }
+    }
+
+    // 2. إذا لم يتطابق، التحقق هل كلمة المرور تخص أحد حسابات المدراء (Admin / Manager)
+    if (!isAuthorized) {
+      const adminUsers = await query("SELECT * FROM users WHERE role IN ('admin', 'general_manager') OR username = 'admin'");
+      for (const admin of adminUsers) {
+        if (admin.password_hash && bcrypt.compareSync(manager_password, admin.password_hash)) {
+          isAuthorized = true;
+          authorizedUser = admin;
+          break;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      return res.status(401).json({ 
+        success: false, 
+        message: '⛔ كلمة مرور المدير غير صحيحة! لا يمكن إقفال الفترة بدون تفويض مالي معتمد.' 
+      });
+    }
+
+    const username = authorizedUser?.full_name || authorizedUser?.username || req.user?.username || 'المدير العام';
     await run(`
       UPDATE accounting_periods 
       SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = ?, notes = COALESCE(?, notes)
@@ -671,12 +639,12 @@ router.put('/periods/:id/close', async (req, res) => {
       action: 'CLOSE_PERIOD',
       entity_type: 'period',
       entity_id: id,
-      details: { period_name: period.period_name, closed_by: username, notes }
+      details: { period_name: period.period_name, closed_by: username, notes, authorized_user_id: authorizedUser?.id }
     });
 
     res.json({ 
       success: true, 
-      message: `تم إغلاق الفترة المحاسبية (${period.period_name}) بنجاح، وتم قفل أي عمليات مالية تقع بين ${period.start_date} و ${period.end_date}` 
+      message: `🔒 تم إغلاق وتأمين الفترة المحاسبية (${period.period_name}) بنجاح بواسطة [${username}]، وتم قفل كافة المعاملات والقيود بين ${period.start_date} و ${period.end_date}.` 
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إغلاق الفترة المحاسبية: ' + err.message });

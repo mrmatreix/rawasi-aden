@@ -1,0 +1,42 @@
+<section id="projectsView" class="app-view-section" style="display: none;">
+        <div class="page-header-row">
+          <div>
+            <h2 class="page-title" id="projectsPageHeading">إدارة وتفاصيل كافة المشاريع</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">متابعة المشاريع الجارية ومشاريع تحت الدراسة وتسعير العطاءات والتكاليف الفعلية</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="Projects.openNewModal()">مشروع جديد +</button>
+            <button class="btn btn-secondary" onclick="Projects.loadProjects()">تحديث</button>
+          </div>
+        </div>
+
+        <!-- أشرطة تصفية المشاريع -->
+        <div class="report-tabs-bar" style="margin-bottom: 16px;">
+          <button class="report-tab-btn active" id="tabBtn_proj_all" onclick="Projects.filterStatus('all', this)">كافة المشاريع</button>
+          <button class="report-tab-btn" id="tabBtn_proj_active" onclick="Projects.filterStatus('active', this)">المشاريع الجارية والمنفذة</button>
+          <button class="report-tab-btn" id="tabBtn_proj_under_study" onclick="Projects.filterStatus('under_study', this)">مشاريع تحت الدراسة والعطاءات</button>
+          <button class="report-tab-btn" id="tabBtn_proj_completed" onclick="Projects.filterStatus('completed', this)">المشاريع المكتملة</button>
+        </div>
+
+        <div class="panel-card">
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>اسم المشروع وكوده</th>
+                  <th>العميل</th>
+                  <th>الحالة</th>
+                  <th>قيمة العقد</th>
+                  <th>القيمة التقديرية</th>
+                  <th>التكلفة الفعلية</th>
+                  <th>نسبة الإنجاز</th>
+                  <th>الربح المتوقع</th>
+                  <th>الربح الفعلي</th>
+                  <th style="text-align: center;">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="fullProjectsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>

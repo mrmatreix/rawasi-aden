@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
+const { logAudit } = require('../services/auditService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 // جلب جميع المواد مع حالة المخزون وتنبيهات النواقص
 router.get('/items', async (req, res) => {
@@ -100,6 +102,12 @@ router.post('/transactions', async (req, res) => {
       notes
     } = req.body;
 
+    // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ الحركة المخزنية
+    const periodCheck = await checkPeriodOpen(date);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
     if (!item_id || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد الصنف والكمية المطلوبة' });
     }
@@ -145,7 +153,14 @@ router.post('/transactions', async (req, res) => {
         reference_no, recipient || '', date, notes || ''
       ]);
 
-      return { result, totalAmount };
+      return { result, totalAmount, parsedPrice };
+    });
+
+    await logAudit(req, {
+      action: 'INSERT',
+      entity_type: 'inventory',
+      entity_id: reference_no,
+      details: { reference_no, item_id, project_id, type, quantity: parsedQty, unit_price: txResult.parsedPrice, total_amount: txResult.totalAmount, date }
     });
 
     res.json({

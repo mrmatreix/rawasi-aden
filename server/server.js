@@ -2,9 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
+const config = require('./config/environment');
+
 // إعداد تطبيق Express
 const app = express();
-const PORT = process.env.PORT || 5500;
+const PORT = config.port;
 
 // البرمجيات الوسيطة (Middleware)
 app.use(cors());
@@ -47,12 +49,32 @@ app.use('/api/hr', requireAuth, require('./routes/hr'));
 app.use('/api/project-hub', requireAuth, require('./routes/project_management'));
 app.use('/api/project-files', requireAuth, require('./routes/project_files'));
 
+// مسار توثيق الـ API التفاعلي ومواصفة OpenAPI 3.0
+const docsModule = require('./routes/docs');
+app.use('/api', docsModule.router);
+app.get('/api-docs', (_req, res) => res.send(docsModule.renderDocsHtml()));
+
 // نقطة فحص صحة النظام
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    system: 'رواسي عدن للهندسة والمقاولات',
-    version: '1.0.0',
+    system: config.appName,
+    version: config.version,
+    environment: config.env,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// نقطة فحص إصدار النظام والبيئة التشغيلية
+app.get('/api/version', (req, res) => {
+  res.json({
+    success: true,
+    version: config.version,
+    environment: config.env,
+    port: config.port,
+    system: config.appName,
+    isDev: config.isDev,
+    isStaging: config.isStaging,
     timestamp: new Date().toISOString()
   });
 });
@@ -84,28 +106,30 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('⚠️ [Server] Unhandled Rejection:', reason);
 });
 
-// تشغيل الخادم
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log('===========================================================');
-  console.log(`🚀 Rawasi Aden System Server is Running!`);
-  console.log(`🌐 System URL: http://localhost:${PORT}`);
-  console.log(`💼 Port:       ${PORT}`);
-  console.log('===========================================================');
-});
+if (require.main === module) {
+  // تشغيل الخادم
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log('===========================================================');
+    console.log(`🚀 Rawasi Aden System Server is Running!`);
+    console.log(`🌐 System URL: http://localhost:${PORT}`);
+    console.log(`💼 Port:       ${PORT}`);
+    console.log('===========================================================');
+  });
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error('===========================================================');
-    console.error(`⚠️  [Port Conflict] Port ${PORT} is already running!`);
-    console.error(`🌐 The system is ready at: http://localhost:${PORT}`);
-    console.error('===========================================================');
-    process.exit(0);
-  } else {
-    console.error('⚠️ [Server] Listen error:', err.message);
-  }
-});
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error('===========================================================');
+      console.error(`⚠️  [Port Conflict] Port ${PORT} is already running!`);
+      console.error(`🌐 The system is ready at: http://localhost:${PORT}`);
+      console.error('===========================================================');
+      process.exit(0);
+    } else {
+      console.error('⚠️ [Server] Listen error:', err.message);
+    }
+  });
 
-// مؤقت للحفاظ على حيوية الخادم ومنع الإغلاق التلقائي
-setInterval(() => {}, 1000 * 60 * 60);
+  // مؤقت للحفاظ على حيوية الخادم ومنع الإغلاق التلقائي
+  setInterval(() => {}, 1000 * 60 * 60);
+}
 
 module.exports = app;

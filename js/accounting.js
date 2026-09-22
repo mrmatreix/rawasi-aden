@@ -1496,7 +1496,7 @@ const Accounting = {
     tr.className = 'journal-line-row';
 
     const accountOptions = this.accounts.map(a => 
-      `<option value="${a.id}" ${data.account_id == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name}</option>`
+      `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${data.account_id == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || ''})</option>`
     ).join('');
 
     const ccOptions = this.costCenters.map(cc => 
@@ -1505,22 +1505,22 @@ const Accounting = {
 
     tr.innerHTML = `
       <td>
-        <select class="form-control je-line-account" required style="font-size: 0.85rem;">
+        <select class="form-control je-line-account" required style="font-size: 0.85rem;" onchange="Accounting.onJournalAccountChange('${rowId}')">
           <option value="">اختر الحساب...</option>
           ${accountOptions}
         </select>
       </td>
       <td>
         <select class="form-control je-line-costcenter" style="font-size: 0.85rem;">
-          <option value="">مركز التكلفة (اختياري)...</option>
+          <option value="">مركز التكلفة...</option>
           ${ccOptions}
         </select>
       </td>
       <td>
-        <input type="number" class="form-control je-line-debit" value="${data.debit || 0}" min="0" step="any" placeholder="0.00" oninput="Accounting.calcJournalBalance()" style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr;">
+        <input type="number" class="form-control je-line-debit" value="${data.debit || 0}" min="0" step="any" placeholder="0.00" oninput="Accounting.onJournalDebitInput('${rowId}')" style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr;">
       </td>
       <td>
-        <input type="number" class="form-control je-line-credit" value="${data.credit || 0}" min="0" step="any" placeholder="0.00" oninput="Accounting.calcJournalBalance()" style="font-weight: bold; color: #38bdf8; text-align: left; direction: ltr;">
+        <input type="number" class="form-control je-line-credit" value="${data.credit || 0}" min="0" step="any" placeholder="0.00" oninput="Accounting.onJournalCreditInput('${rowId}')" style="font-weight: bold; color: #38bdf8; text-align: left; direction: ltr;">
       </td>
       <td>
         <input type="text" class="form-control je-line-desc" value="${data.description || ''}" placeholder="بيان السطر...">
@@ -1531,6 +1531,52 @@ const Accounting = {
     `;
 
     tbody.appendChild(tr);
+    this.onJournalAccountChange(rowId);
+    this.calcJournalBalance();
+  },
+
+  onJournalAccountChange(rowId) {
+    const tr = document.getElementById(rowId);
+    if (!tr) return;
+    const accSelect = tr.querySelector('.je-line-account');
+    const ccSelect = tr.querySelector('.je-line-costcenter');
+    if (!accSelect || !ccSelect) return;
+
+    const opt = accSelect.options[accSelect.selectedIndex];
+    const code = opt ? (opt.getAttribute('data-code') || '') : '';
+    const type = opt ? (opt.getAttribute('data-type') || '') : '';
+
+    const isNominal = type === 'مصروفات' || type === 'إيرادات' || code.startsWith('4') || code.startsWith('5');
+    if (isNominal) {
+      ccSelect.style.borderColor = '#f59e0b';
+      ccSelect.title = 'مركز التكلفة إلزامي لحسابات المصروفات والإيرادات لضمان سلامة تقارير الربحية';
+      if (ccSelect.options[0]) ccSelect.options[0].textContent = 'اختر مركز التكلفة (إلزامي *)';
+    } else {
+      ccSelect.style.borderColor = '';
+      ccSelect.title = '';
+      if (ccSelect.options[0]) ccSelect.options[0].textContent = 'مركز التكلفة (اختياري)...';
+    }
+  },
+
+  onJournalDebitInput(rowId) {
+    const tr = document.getElementById(rowId);
+    if (!tr) return;
+    const debitInput = tr.querySelector('.je-line-debit');
+    const creditInput = tr.querySelector('.je-line-credit');
+    if (debitInput && creditInput && Number(debitInput.value) > 0) {
+      creditInput.value = 0;
+    }
+    this.calcJournalBalance();
+  },
+
+  onJournalCreditInput(rowId) {
+    const tr = document.getElementById(rowId);
+    if (!tr) return;
+    const debitInput = tr.querySelector('.je-line-debit');
+    const creditInput = tr.querySelector('.je-line-credit');
+    if (debitInput && creditInput && Number(creditInput.value) > 0) {
+      debitInput.value = 0;
+    }
     this.calcJournalBalance();
   },
 
@@ -1576,7 +1622,7 @@ const Accounting = {
 
     if (statusEl) {
       if (isBalanced) {
-        statusEl.innerHTML = '✅ القيد متزن وجاهز للحفظ';
+        statusEl.innerHTML = '✅ القيد متزن 100% وجاهز للحفظ';
         statusEl.style.background = 'rgba(34, 197, 94, 0.15)';
         statusEl.style.color = '#4ade80';
       } else {
@@ -1613,15 +1659,15 @@ const Accounting = {
     if (totalDebit > totalCredit) {
       // الطرف الدائن يحتاج للفرق
       lastDebit.value = 0;
-      lastCredit.value = totalDebit - totalCredit;
+      lastCredit.value = Math.round((totalDebit - totalCredit) * 100) / 100;
     } else if (totalCredit > totalDebit) {
       // الطرف المدين يحتاج للفرق
       lastCredit.value = 0;
-      lastDebit.value = totalCredit - totalDebit;
+      lastDebit.value = Math.round((totalCredit - totalDebit) * 100) / 100;
     }
 
     this.calcJournalBalance();
-    App.showToast('تمت الموازنة التلقائية للسطر الأخير', 'success');
+    App.showToast('تمت الموازنة التلقائية للسطر الأخير بنجاح', 'success');
   },
 
   async submitJournalEntryModal(e) {
@@ -1635,6 +1681,17 @@ const Accounting = {
       return;
     }
 
+    // 1. فحص فوري لحالة الفترة المحاسبية
+    try {
+      const pCheck = await (await fetch(`/api/accounting/check-period?date=${date}`)).json();
+      if (pCheck && pCheck.isOpen === false) {
+        App.showToast(pCheck.message || 'الفترة المحاسبية لهذا التاريخ مغلقة رسمياً', 'error');
+        return;
+      }
+    } catch (err) {
+      console.warn('Period check warning:', err);
+    }
+
     const rows = document.querySelectorAll('#journalLinesTableBody tr');
     if (rows.length < 2) {
       App.showToast('يجب تسجيل سطرين على الأقل (طرف مدين وطرف دائن)', 'error');
@@ -1645,9 +1702,11 @@ const Accounting = {
     let totalDebit = 0;
     let totalCredit = 0;
     let hasInvalidAccount = false;
+    let missingCostCenterMsg = null;
 
     rows.forEach(r => {
-      const account_id = r.querySelector('.je-line-account')?.value;
+      const accountSelect = r.querySelector('.je-line-account');
+      const account_id = accountSelect?.value;
       const cost_center_id = r.querySelector('.je-line-costcenter')?.value || null;
       const debit = Number(r.querySelector('.je-line-debit')?.value) || 0;
       const credit = Number(r.querySelector('.je-line-credit')?.value) || 0;
@@ -1657,13 +1716,24 @@ const Accounting = {
         hasInvalidAccount = true;
       }
 
+      // فحص إلزامية مركز التكلفة لحسابات الأرباح والخسائر
+      if (accountSelect && accountSelect.selectedIndex >= 0) {
+        const opt = accountSelect.options[accountSelect.selectedIndex];
+        const code = opt ? (opt.getAttribute('data-code') || '') : '';
+        const type = opt ? (opt.getAttribute('data-type') || '') : '';
+        const isNominal = type === 'مصروفات' || type === 'إيرادات' || code.startsWith('4') || code.startsWith('5');
+        if (isNominal && !cost_center_id) {
+          missingCostCenterMsg = `يجب اختيار مركز التكلفة لحساب [${opt.text}] لكونه حساب ${type}، لضمان دقة تقارير الربحية.`;
+        }
+      }
+
       if (debit > 0 || credit > 0) {
         lines.push({
           account_id,
           cost_center_id,
           debit,
           credit,
-          description: lineDesc
+          notes: lineDesc
         });
         totalDebit += debit;
         totalCredit += credit;
@@ -1675,6 +1745,11 @@ const Accounting = {
       return;
     }
 
+    if (missingCostCenterMsg) {
+      App.showToast(missingCostCenterMsg, 'error');
+      return;
+    }
+
     if (lines.length < 2) {
       App.showToast('يجب أن يتضمن القيد سطرين فعليين بمبالغ مالية على الأقل', 'error');
       return;
@@ -1682,7 +1757,7 @@ const Accounting = {
 
     const diff = Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100;
     if (diff !== 0 || totalDebit <= 0) {
-      App.showToast(`القيد غير متزن! إجمالي المدين: ${totalDebit}، إجمالي الدائن: ${totalCredit}`, 'error');
+      App.showToast(`القيد غير متزن محاسبياً! إجمالي المدين: ${totalDebit}، إجمالي الدائن: ${totalCredit}. الفارق: ${diff}`, 'error');
       return;
     }
 
@@ -1708,7 +1783,7 @@ const Accounting = {
         App.showToast(`تم حفظ القيد اليومي بنجاح (${data.entry_no})`, 'success');
         App.closeModal('newJournalModal');
         await this.loadJournalEntries();
-        if (confirm(`تم إنشاء قيد اليومية ${data.entry_no}. هل تريد استعراض وسند الطباعة الآن؟`)) {
+        if (confirm(`تم إنشاء قيد اليومية المتزن ${data.entry_no}. هل تريد استعراض وسند الطباعة الآن؟`)) {
           this.viewJournalDetails(data.id);
         }
       } else {
@@ -2609,6 +2684,177 @@ const Accounting = {
     } catch (e) {
       console.error(e);
       tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #f87171;">فشل جلب سجلات التدقيق</td></tr>';
+    }
+  },
+
+  // ============================================================
+  // 🔒 إدارة الفترات المحاسبية وإقفال الحسابات (Period Closing)
+  // ============================================================
+  async loadPeriods() {
+    const tbody = document.getElementById('accountingPeriodsTableBody');
+    if (!tbody) return;
+
+    try {
+      const res = await fetch('/api/accounting/periods');
+      const json = await res.json();
+      if (!json.success || !json.data || json.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">لا توجد فترات محاسبية مسجلة</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = json.data.map(p => {
+        const isClosed = p.status === 'closed';
+        const badge = isClosed
+          ? `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171;">مغلقة رسمياً 🔒</span>`
+          : `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80;">مفتوحة للعمليات 🟢</span>`;
+
+        const actionBtn = isClosed
+          ? `<button type="button" class="btn btn-secondary btn-sm" data-action="reopen-period" data-period-id="${p.id}" onclick="Accounting.reopenPeriod(${p.id})">إعادة فتح 🔓</button>`
+          : `<button type="button" class="btn btn-danger btn-sm" data-action="close-period-modal" data-period-id="${p.id}" data-period-name="${p.period_name}" onclick="Accounting.openClosePeriodModal(${p.id}, '${p.period_name}', '${p.start_date}', '${p.end_date}')">إقفال الفترة 🔒</button>`;
+
+        return `
+          <tr>
+            <td><strong>${p.period_name}</strong></td>
+            <td>${p.fiscal_year}</td>
+            <td>${p.start_date}</td>
+            <td>${p.end_date}</td>
+            <td>${badge}</td>
+            <td style="font-size: 0.85rem; color: var(--text-secondary);">${isClosed ? (p.closed_by || 'المدير المالي') : '—'}</td>
+            <td>${actionBtn}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      console.error('Error loading periods:', e);
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #f87171;">تعذر تحميل الفترات المحاسبية</td></tr>';
+    }
+  },
+
+  openClosePeriodModal(periodId, periodName, startDate = '', endDate = '') {
+    let modal = document.getElementById('periodCloseModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'periodCloseModal';
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-box" style="max-width: 540px;">
+          <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); border-bottom: 2px solid #ef4444;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.4rem;">🔒</span>
+              <h3 style="color: #ef4444; margin: 0;">إقفال الفترة المحاسبية نهائياً</h3>
+            </div>
+            <button type="button" class="btn-close" data-action="close-modal" data-modal="periodCloseModal" onclick="App.closeModal('periodCloseModal')">&times;</button>
+          </div>
+          <div class="modal-body" style="padding: 20px;">
+            <div style="background: rgba(239,68,68,0.1); border: 1.5px solid #ef4444; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;">
+              <strong style="color: #ef4444; font-size: 0.95rem; display: block; margin-bottom: 4px;">⚠️ تحذير مالي ورقابي صارم:</strong>
+              <div style="font-size: 0.84rem; color: #e2e8f0; line-height: 1.6;">
+                إقفال الفترة المحاسبية سيقفل بشكل نهائي كافة القيود والسندات والفواتير وحركات المخزون والمصروفات الواقعة ضمن تواريخ هذه الفترة، وسيمنع أي تعديل أو إضافة أو حذف إلا بتفويض رسمي مبرر.
+              </div>
+            </div>
+
+            <div style="margin-bottom: 14px; background: rgba(255,255,255,0.03); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border-color);">
+              <div>الفترة المستهدفة: <strong id="closePeriodNameLabel" style="color: #fff;">-</strong></div>
+              <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;" id="closePeriodRangeLabel">-</div>
+            </div>
+
+            <form id="formClosePeriod" onsubmit="Accounting.submitClosePeriod(event)">
+              <input type="hidden" id="closePeriodId">
+              
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label style="color: #f3cf65; font-weight: 700;">كلمة مرور المدير المالي / المشرف (إلزامية للتفويض) *</label>
+                <input type="password" id="closePeriodManagerPassword" class="form-control" required placeholder="أدخل كلمة مرور الإدارة للمصادقة" autocomplete="current-password">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label>ملاحظات أو مبررات الإقفال</label>
+                <textarea id="closePeriodNotes" class="form-control" rows="2" placeholder="مثال: إقفال الربع المالي ومطابقة أرصدة البنوك والعملاء"></textarea>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="App.closeModal('periodCloseModal')">إلغاء</button>
+                <button type="submit" id="btnConfirmClosePeriod" class="btn btn-danger" style="background: #dc2626; border-color: #dc2626; font-weight: 700;">
+                  تأكيد الإقفال القانوني 🔒
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    document.getElementById('closePeriodId').value = periodId;
+    document.getElementById('closePeriodNameLabel').textContent = periodName;
+    document.getElementById('closePeriodRangeLabel').textContent = startDate && endDate ? `من ${startDate} إلى ${endDate}` : '';
+    document.getElementById('closePeriodManagerPassword').value = '';
+    document.getElementById('closePeriodNotes').value = '';
+
+    App.openModal('periodCloseModal');
+  },
+
+  async submitClosePeriod(event) {
+    if (event) event.preventDefault();
+    const periodId = document.getElementById('closePeriodId')?.value;
+    const password = document.getElementById('closePeriodManagerPassword')?.value;
+    const notes = document.getElementById('closePeriodNotes')?.value;
+    const submitBtn = document.getElementById('btnConfirmClosePeriod');
+
+    if (!periodId) return;
+    if (!password || !password.trim()) {
+      if (window.UI && UI.Toast) UI.Toast.error('يرجى إدخال كلمة مرور المدير لإقرار إقفال الفترة');
+      return;
+    }
+
+    if (window.UI && UI.Loading) UI.Loading.set(submitBtn, true, 'جاري التحقق والإقفال...');
+
+    try {
+      const res = await fetch(`/api/accounting/periods/${periodId}/close`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_password: password.trim(), notes: notes?.trim() })
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        if (window.UI && UI.Toast) UI.Toast.success(json.message);
+        else App.showToast(json.message, 'success');
+        App.closeModal('periodCloseModal');
+        await this.loadPeriods();
+      } else {
+        if (window.UI && UI.Toast) UI.Toast.error(json.message);
+        else App.showToast(json.message, 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      if (window.UI && UI.Toast) UI.Toast.error('فشل الاتصال بالخادم لإقفال الفترة');
+    } finally {
+      if (window.UI && UI.Loading) UI.Loading.set(submitBtn, false);
+    }
+  },
+
+  async reopenPeriod(periodId) {
+    const reason = prompt('يرجى إدخال مبرر رسمي لإعادة فتح الفترة المحاسبية المغلقة:');
+    if (!reason || !reason.trim()) return;
+
+    try {
+      const res = await fetch(`/api/accounting/periods/${periodId}/reopen`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+      const json = await res.json();
+      if (json.success) {
+        if (window.UI && UI.Toast) UI.Toast.success(json.message);
+        else App.showToast(json.message, 'success');
+        await this.loadPeriods();
+      } else {
+        if (window.UI && UI.Toast) UI.Toast.error(json.message);
+        else App.showToast(json.message, 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      if (window.UI && UI.Toast) UI.Toast.error('تعذر إعادة فتح الفترة');
     }
   },
 

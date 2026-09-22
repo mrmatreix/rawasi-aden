@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
+const { logAudit } = require('../services/auditService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 // جلب فواتير المشتريات
 router.get('/', async (req, res) => {
@@ -53,6 +55,12 @@ router.post('/', async (req, res) => {
       notes
     } = req.body;
 
+    // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ فاتورة الشراء
+    const periodCheck = await checkPeriodOpen(date);
+    if (!periodCheck.isOpen) {
+      return res.status(403).json({ success: false, message: periodCheck.message });
+    }
+
     if (!supplier_id || !total_amount || Number(total_amount) <= 0) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المورد والمبلغ الإجمالي' });
     }
@@ -93,6 +101,13 @@ router.post('/', async (req, res) => {
       }
 
       return result;
+    });
+
+    await logAudit(req, {
+      action: 'INSERT',
+      entity_type: 'purchase',
+      entity_id: invoice_no,
+      details: { invoice_no, supplier_id, project_id, total_amount: parsedTotal, paid_amount: parsedPaid, date }
     });
 
     res.json({

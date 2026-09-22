@@ -111,7 +111,30 @@ try {
     }
   }
 
-  // 5. إضافة قيد التحقق من الاتزان في journal_entries إن كان يدعم
+  // 5. إنشاء مشغل (Trigger) على قاعدة البيانات لمنع إدراج أو تعديل أي قيد غير متزن إطلاقاً
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_enforce_journal_balance_insert
+    BEFORE INSERT ON journal_entries
+    BEGIN
+      SELECT CASE 
+        WHEN (NEW.total_debit <= 0 OR abs(NEW.total_debit - NEW.total_credit) > 0.001)
+        THEN RAISE(ABORT, '⛔ خطأ محاسبي: لا يمكن حفظ قيد غير متزن! إجمالي المدين يجب أن يساوي إجمالي الدائن.')
+      END;
+    END;
+  `);
+
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_enforce_journal_balance_update
+    BEFORE UPDATE ON journal_entries
+    BEGIN
+      SELECT CASE 
+        WHEN (NEW.total_debit <= 0 OR abs(NEW.total_debit - NEW.total_credit) > 0.001)
+        THEN RAISE(ABORT, '⛔ خطأ محاسبي: لا يمكن تحديث قيد ليصبح غير متزن! إجمالي المدين يجب أن يساوي إجمالي الدائن.')
+      END;
+    END;
+  `);
+  console.log('✓ تم إنشاء مشغلات حماية التوازن المحاسبي (Balance Enforcement Triggers)');
+
   console.log('✅ اكتملت هجرة قاعدة البيانات لقواعد منطق الأعمال بنجاح 100%!');
 
 } catch (err) {
