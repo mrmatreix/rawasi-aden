@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20260922-cr6o',
+  assetVersion: '1.0.0.20260922-kryh',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,15 +11,15 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20260922-cr6o',
-    projects: 'js/projects.js?v=1.0.0.20260922-cr6o',
-    projectHub: 'js/project_hub.js?v=1.0.0.20260922-cr6o',
-    accounting: 'js/accounting.js?v=1.0.0.20260922-cr6o',
-    hr: 'js/hr.js?v=1.0.0.20260922-cr6o',
-    reports: 'js/reports.js?v=1.0.0.20260922-cr6o',
-    inventory: 'js/inventory.js?v=1.0.0.20260922-cr6o',
-    settings: 'js/settings.js?v=1.0.0.20260922-cr6o',
-    excelExport: 'js/excel-export.js?v=1.0.0.20260922-cr6o'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20260922-kryh',
+    projects: 'js/projects.js?v=1.0.0.20260922-kryh',
+    projectHub: 'js/project_hub.js?v=1.0.0.20260922-kryh',
+    accounting: 'js/accounting.js?v=1.0.0.20260922-kryh',
+    hr: 'js/hr.js?v=1.0.0.20260922-kryh',
+    reports: 'js/reports.js?v=1.0.0.20260922-kryh',
+    inventory: 'js/inventory.js?v=1.0.0.20260922-kryh',
+    settings: 'js/settings.js?v=1.0.0.20260922-kryh',
+    excelExport: 'js/excel-export.js?v=1.0.0.20260922-kryh'
   },
   _loadedModules: {},
   _loadingPromises: {},

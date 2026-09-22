@@ -4372,10 +4372,21 @@ body.light-mode .skeleton {
 body.light-mode .toast-card,
 html.light-mode .toast-card,
 body.light-mode .toast-msg,
-html.light-mode .toast-msg {
+html.light-mode .toast-msg,
+.toast-card.toast-light,
+.toast-msg.toast-light {
   background: #ffffff !important;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.06) !important;
-  color: #0f172a !important;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.18), 0 3px 10px rgba(0, 0, 0, 0.08) !important;
+  color: #000000 !important;
+}
+
+body.light-mode .toast-card *,
+html.light-mode .toast-card *,
+body.light-mode .toast-msg *,
+html.light-mode .toast-msg *,
+.toast-card.toast-light *,
+.toast-msg.toast-light * {
+  color: #000000 !important;
 }
 
 body.light-mode .toast-card .toast-text,
@@ -4389,28 +4400,39 @@ html.light-mode .toast-card .toast-card-title,
 body.light-mode .toast-card .toast-body,
 html.light-mode .toast-card .toast-body,
 body.light-mode .toast-msg .toast-text,
-html.light-mode .toast-msg .toast-text {
-  color: #0f172a !important;
-  font-weight: 700 !important;
+html.light-mode .toast-msg .toast-text,
+.toast-card.toast-light .toast-text,
+.toast-card.toast-light .toast-card-msg,
+.toast-card.toast-light .toast-title,
+.toast-card.toast-light .toast-body {
+  color: #000000 !important;
+  font-weight: 800 !important;
 }
 
 body.light-mode .toast-card .toast-close,
 html.light-mode .toast-card .toast-close,
 body.light-mode .toast-msg .toast-close,
-html.light-mode .toast-msg .toast-close {
-  color: #64748b !important;
+html.light-mode .toast-msg .toast-close,
+.toast-card.toast-light .toast-close,
+.toast-msg.toast-light .toast-close {
+  color: #000000 !important;
+  opacity: 0.8 !important;
 }
 
 body.light-mode .toast-card .toast-close:hover,
 html.light-mode .toast-card .toast-close:hover,
 body.light-mode .toast-msg .toast-close:hover,
-html.light-mode .toast-msg .toast-close:hover {
-  color: #0f172a !important;
-  background: rgba(0, 0, 0, 0.06) !important;
+html.light-mode .toast-msg .toast-close:hover,
+.toast-card.toast-light .toast-close:hover,
+.toast-msg.toast-light .toast-close:hover {
+  color: #000000 !important;
+  background: rgba(0, 0, 0, 0.08) !important;
+  opacity: 1 !important;
 }
 
 body.light-mode .toast-progress-wrap,
-html.light-mode .toast-progress-wrap {
+html.light-mode .toast-progress-wrap,
+.toast-card.toast-light .toast-progress-wrap {
   background: rgba(0, 0, 0, 0.08) !important;
 }
 

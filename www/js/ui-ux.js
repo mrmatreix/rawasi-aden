@@ -43,8 +43,15 @@
       show(message, type = 'info', action = null, duration = 4500) {
         const container = this.initContainer();
 
+        const isLight = document.body.classList.contains('light-mode') || 
+                        document.documentElement.classList.contains('light-mode') || 
+                        localStorage.getItem('rawasi_theme') === 'light' ||
+                        (typeof window !== 'undefined' && window.getComputedStyle && 
+                         (window.getComputedStyle(document.body).backgroundColor === 'rgb(240, 244, 248)' || 
+                          window.getComputedStyle(document.body).backgroundColor === 'rgb(255, 255, 255)'));
+
         const toast = document.createElement('div');
-        toast.className = `toast-card toast-${type} toast-card-${type}`;
+        toast.className = `toast-card toast-${type} toast-card-${type} ${isLight ? 'toast-light' : ''}`;
 
         let icon = '🔔';
         if (type === 'success') icon = '✅';
@@ -54,19 +61,26 @@
 
         let actionBtnHtml = '';
         if (action && action.label && typeof action.callback === 'function') {
-          actionBtnHtml = `<button type="button" class="toast-action-btn">${action.label}</button>`;
+          actionBtnHtml = `<button type="button" class="toast-action-btn" style="${isLight ? 'background:#fef3c7!important;color:#000000!important;border-color:#d97706!important;' : ''}">${action.label}</button>`;
         }
 
+        if (isLight) {
+          toast.style.cssText = 'background: #ffffff !important; color: #000000 !important; border: 1px solid rgba(0,0,0,0.15) !important; box-shadow: 0 12px 35px rgba(0,0,0,0.18) !important;';
+        }
+
+        const textStyle = isLight ? 'color: #000000 !important; font-weight: 700 !important;' : '';
+        const closeStyle = isLight ? 'color: #000000 !important; opacity: 0.8;' : '';
+
         toast.innerHTML = `
-          <div class="toast-main">
-            <span class="toast-icon">${icon}</span>
-            <div class="toast-body">
-              <div class="toast-text">${message}</div>
+          <div class="toast-main" style="display: flex; align-items: center; gap: 12px; width: 100%;">
+            <span class="toast-icon" style="font-size: 1.35rem; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;">${icon}</span>
+            <div class="toast-body" style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;">
+              <div class="toast-text" style="font-size: 0.88rem; line-height: 1.45; word-break: break-word; ${textStyle}">${message}</div>
             </div>
             ${actionBtnHtml}
-            <button type="button" class="toast-close" title="إغلاق" aria-label="إغلاق">&times;</button>
+            <button type="button" class="toast-close" title="إغلاق" aria-label="إغلاق" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; padding: 2px 6px; ${closeStyle}">&times;</button>
           </div>
-          <div class="toast-progress-wrap">
+          <div class="toast-progress-wrap" style="position: absolute; bottom: 0; left: 0; right: 0; height: 3px; ${isLight ? 'background: rgba(0,0,0,0.08);' : ''}">
             <div class="toast-progress-bar"></div>
           </div>
         `;
