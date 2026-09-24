@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20260924-89im">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260924-89im">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20260924-tzvx">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260924-tzvx">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -539,7 +539,7 @@
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('projectHub', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z M3.5 13.5h17v7h-17z M12 5.5l2.5 4h-5z"/></svg>
-                <span>مركز مستندات المشروع الـ 16</span>
+                <span>مركز إدارة ومستندات المشروع الشامل (20 قسم)</span>
               </a>
             </li>
           </ul>
@@ -1562,6 +1562,19 @@
               <span>🏷️ 16. عرض السعر والتسعير (المخازن والمواد والكميات)</span>
               <span class="tab-count-badge" id="cnt_integrated_quotation" style="background: #059669;">32</span>
             </button>
+            <button class="hub-tab-btn" id="hubTabBtn_smart-completion" onclick="ProjectHub.switchTab('smart-completion')" style="border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1);">
+              <span>🎯 17. الرقابة الذكية ونسبة الإنجاز</span>
+            </button>
+            <button class="hub-tab-btn" id="hubTabBtn_wbs-schedule" onclick="ProjectHub.switchTab('wbs-schedule')" style="border: 1px solid rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.1);">
+              <span>⏱️ 18. الجدول الزمني WBS والمسار الحرج</span>
+            </button>
+            <button class="hub-tab-btn" id="hubTabBtn_evm-control" onclick="ProjectHub.switchTab('evm-control')" style="border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1);">
+              <span>📈 19. القيمة المكتسبة EVM</span>
+            </button>
+            <button class="hub-tab-btn" id="hubTabBtn_risks-claims" onclick="ProjectHub.switchTab('risks-claims')" style="border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);">
+              <span>🛡️ 20. المخاطر والمطالبات وNCR وRFI</span>
+              <span class="tab-count-badge" id="cnt_risks" style="background: #ef4444;">0</span>
+            </button>
           </div>
         </div>
 
@@ -2116,6 +2129,18 @@
 
           </div>
         </div>
+
+        <!-- 17. الرقابة الذكية ونسبة الإنجاز (Smart % Complete) -->
+        <div id="hubPane_smart-completion" class="hub-pane-view" style="display: none;"></div>
+
+        <!-- 18. الجدول الزمني وهيكل WBS والمسار الحرج (WBS & CPM Scheduler) -->
+        <div id="hubPane_wbs-schedule" class="hub-pane-view" style="display: none;"></div>
+
+        <!-- 19. إدارة القيمة المكتسبة EVM (Earned Value Management) -->
+        <div id="hubPane_evm-control" class="hub-pane-view" style="display: none;"></div>
+
+        <!-- 20. سجل المخاطر والمطالبات وNCR وRFI (Governance & Controls) -->
+        <div id="hubPane_risks-claims" class="hub-pane-view" style="display: none;"></div>
       </section>
 
       <!-- ================== شاشة المخزون والمواد ================== -->
@@ -6935,6 +6960,412 @@
     </div>
   </div>
 
+  <!-- ================== نوافذ التحكم والرقابة المتقدمة على المشاريع ================== -->
+
+  <!-- 1. نافذة تعديل نسبة الإنجاز يدوياً مع اشتراط المسوّغ الهندسي المعتمد -->
+  <div class="modal-overlay" id="manualCompletionModal">
+    <div class="modal-box" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3>🎯 تعديل نسبة الإنجاز مع التدقيق الرقابي</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('manualCompletionModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitManualOverride(event)">
+        <div style="background: rgba(245, 158, 11, 0.1); border-right: 4px solid var(--accent-amber); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 0.85rem;">
+          ⚠️ <b>نظام منع التلاعب:</b> النسبة المسجلة حالياً: <b id="manualOverrideCurrentVal" style="color:var(--gold-light);">0%</b> | النسبة المحسوبة فيزيائياً: <b id="manualOverrideRecommendedVal" style="color:#10b981;">0%</b>.
+          يُحظر حفظ نسب إنجاز تبتعد بأكثر من 15% عن الواقع الفيزيائي بدون تقديم مسوّغ هندسي موثق.
+        </div>
+        <div class="form-group">
+          <label>نسبة الإنجاز المطلوبة (%) <span style="color: var(--accent-red);">*</span></label>
+          <input type="number" id="manualOverrideInput" class="form-control" min="0" max="100" step="0.5" required placeholder="مثال: 45">
+        </div>
+        <div class="form-group">
+          <label>المسوّغ الهندسي الميداني والمستندات الداعمة <span style="color: var(--accent-red);">*</span></label>
+          <textarea id="manualOverrideJustification" class="form-control" rows="4" required placeholder="اكتب مبررات التعديل الميداني، رقم محضر الاستلام أو المستخلص قيد الاعتماد... (15 حرفاً على الأقل)"></textarea>
+          <small style="color: var(--text-muted);">سيتم تسجيل هذا التعديل وتوقيع المستخدم في سجل التدقيق الرقابي غير القابل للتعديل.</small>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('manualCompletionModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #d97706, #f59e0b);">توثيق وتعديل النسبة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. نافذة تسجيل شهادة اعتماد استشاري / مهندس -->
+  <div class="modal-overlay" id="engineerCertModal">
+    <div class="modal-box" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3>👨‍💼 تسجيل شهادة معاينة واعتماد استشاري / مهندس</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('engineerCertModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitEngineerCert(event)">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>نسبة الإنجاز المعتمدة (%) <span style="color: var(--accent-red);">*</span></label>
+            <input type="number" id="engCertPct" class="form-control" min="0" max="100" step="0.5" required placeholder="مثال: 55">
+          </div>
+          <div class="form-group">
+            <label>تاريخ المعاينة الميدانية <span style="color: var(--accent-red);">*</span></label>
+            <input type="date" id="engCertDate" class="form-control" required>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>اسم المهندس / الاستشاري <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="engCertName" class="form-control" required placeholder="م. محمد علي">
+          </div>
+          <div class="form-group">
+            <label>الصفة والجهة المشرفة</label>
+            <input type="text" id="engCertRole" class="form-control" placeholder="استشاري المالك / مكتب دار الهندسة">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>ملاحظات وتوصيات الاستشاري</label>
+          <textarea id="engCertNotes" class="form-control" rows="3" placeholder="ملاحظات فحص الأعمال، العينات، ومطابقة المواصفات..."></textarea>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('engineerCertModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ واعتماد الشهادة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. نافذة إضافة نشاط / حزمة عمل WBS -->
+  <div class="modal-overlay" id="wbsActivityModal">
+    <div class="modal-box" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3>🏗️ إضافة نشاط / حزمة عمل WBS للبرنامج الزمني</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('wbsActivityModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitWbsActivity(event)">
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
+          <div class="form-group">
+            <label>رمز WBS <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="wbsModalCode" class="form-control" required placeholder="مثال: 1.1 أو 2.3.1">
+          </div>
+          <div class="form-group">
+            <label>مسمى النشاط أو حزمة العمل <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="wbsModalName" class="form-control" required placeholder="أعمال القواعد الخرسانية المسلحة">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>تاريخ البداية المخططة</label>
+            <input type="date" id="wbsModalStart" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>تاريخ النهاية المخططة</label>
+            <input type="date" id="wbsModalEnd" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>المدة (أيام) <span style="color: var(--accent-red);">*</span></label>
+            <input type="number" id="wbsModalDuration" class="form-control" min="1" value="10" required>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>الاعتماديات والأنشطة المسبقة (Predecessors)</label>
+            <input type="text" id="wbsModalPredecessors" class="form-control" placeholder="مثال: 1.1 FS, 1.2 SS">
+            <small style="color: var(--text-muted);">أدخل رمز النشاط السابق لاعتماده بالمسار الحرج CPM</small>
+          </div>
+          <div class="form-group">
+            <label>نسبة إنجاز النشاط الحالية (%)</label>
+            <input type="number" id="wbsModalProgress" class="form-control" min="0" max="100" value="0">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>الموارد والعمالة المقدرة (Resources)</label>
+            <input type="text" id="wbsModalResources" class="form-control" placeholder="طاقم نجارة، مضخة خرسانة، مهندس موقع">
+          </div>
+          <div class="form-group">
+            <label>التكلفة التقديرية للنشاط</label>
+            <input type="number" id="wbsModalCost" class="form-control" placeholder="0">
+          </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('wbsActivityModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #4f46e5, #6366f1);">حفظ النشاط بالجدول</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. نافذة حفظ خط الأساس التعاقدي للجدول الزمني -->
+  <div class="modal-overlay" id="saveBaselineModal">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>📌 حفظ لقطة خط الأساس (Schedule Baseline)</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('saveBaselineModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitSaveBaseline(event)">
+        <div class="form-group">
+          <label>مسمى خط الأساس التعاقدي <span style="color: var(--accent-red);">*</span></label>
+          <input type="text" id="baselineModalName" class="form-control" required value="خط الأساس المعتمد Baseline-1">
+        </div>
+        <div class="form-group">
+          <label>ملاحظات وسند التثبيت</label>
+          <textarea id="baselineModalNotes" class="form-control" rows="3" placeholder="موافقة الاستشاري على البرنامج الزمني الأولي"></textarea>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('saveBaselineModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary">تثبيت وحفظ خط الأساس</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. نافذة تسجيل خطر جديد في مصفوفة 5x5 -->
+  <div class="modal-overlay" id="riskModal">
+    <div class="modal-box" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3>⚠️ تسجيل خطر جديد في سجل ومصفوفة المخاطر</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('riskModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitRiskForm(event)">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>عنوان الخطر <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="riskModalTitle" class="form-control" required placeholder="مثال: تأخر توريد حديد التسليح المستورد">
+          </div>
+          <div class="form-group">
+            <label>تصنيف الخطر</label>
+            <select id="riskModalCategory" class="form-control">
+              <option value="technical">فني وهندسي</option>
+              <option value="financial">مالي وتدفقات نقدية</option>
+              <option value="contractual">تعاقدي وقانوني</option>
+              <option value="supply_chain">سلسلة التوريد والمواد</option>
+              <option value="environmental">بيئي وموقعي</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>وصف الخطر ومسبباته المحتملة</label>
+          <textarea id="riskModalDesc" class="form-control" rows="2" placeholder="شرح تفصيلي للظروف التي قد تؤدي لحدوث هذا الخطر..."></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>الاحتمالية (1 إلى 5) <span style="color: var(--accent-red);">*</span></label>
+            <select id="riskModalProbability" class="form-control">
+              <option value="1">1 - نادر جداً (Rare)</option>
+              <option value="2">2 - منخفض (Unlikely)</option>
+              <option value="3" selected>3 - متوسط (Possible)</option>
+              <option value="4">4 - مرجح (Likely)</option>
+              <option value="5">5 - شبه مؤكد (Almost Certain)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>شدة التأثير (1 إلى 5) <span style="color: var(--accent-red);">*</span></label>
+            <select id="riskModalImpact" class="form-control">
+              <option value="1">1 - ضئيل (Insignificant)</option>
+              <option value="2">2 - محدود (Minor)</option>
+              <option value="3" selected>3 - متوسط (Moderate)</option>
+              <option value="4">4 - جسيم (Major)</option>
+              <option value="5">5 - كارثي (Catastrophic)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>الأثر المالي المتوقع (ر.ي)</label>
+            <input type="number" id="riskModalFinancial" class="form-control" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>التأثير الزمني المتوقع (أيام تأخير)</label>
+            <input type="number" id="riskModalSchedule" class="form-control" placeholder="0">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
+          <div class="form-group">
+            <label>استراتيجية المعالجة</label>
+            <select id="riskModalTreatment" class="form-control">
+              <option value="mitigate" selected>تخفيف (Mitigate)</option>
+              <option value="avoid">تجنب (Avoid)</option>
+              <option value="transfer">نقل / تأمين (Transfer)</option>
+              <option value="accept">قبول ومراقبة (Accept)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>خطة المعالجة والإجراءات الوقائية</label>
+            <input type="text" id="riskModalPlan" class="form-control" placeholder="تأمين موردين بدائل محلياً، الدفع المبكر...">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>تاريخ المراجعة الدوري</label>
+          <input type="date" id="riskModalReviewDate" class="form-control">
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('riskModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #b91c1c, #ef4444);">تسجيل الخطر بالمصفوفة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. نافذة تسجيل مطالبة تعاقدية / نزاع / تمديد وقت -->
+  <div class="modal-overlay" id="claimModal">
+    <div class="modal-box" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3>📑 تسجيل مطالبة تعاقدية / تمديد وقت (Claim & Dispute)</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('claimModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitClaimForm(event)">
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
+          <div class="form-group">
+            <label>نوع المطالبة <span style="color: var(--accent-red);">*</span></label>
+            <select id="claimModalType" class="form-control">
+              <option value="extension_of_time">تمديد زمني (EOT)</option>
+              <option value="additional_cost">تكاليف إضافية (Cost)</option>
+              <option value="contractual_dispute">نزاع تعاقدي (Dispute)</option>
+              <option value="site_delay">توقف / عائق موقعي (Delay)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>موضوع وعنوان المطالبة <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="claimModalTitle" class="form-control" required placeholder="مطالبة تمديد زمني لتأخر تسليم المخططات التنفيذية">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>التمديد الزمني المطلوب (أيام)</label>
+            <input type="number" id="claimModalDays" class="form-control" min="0" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>المبلغ المالي المطالب به</label>
+            <input type="number" id="claimModalAmount" class="form-control" min="0" placeholder="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>السند التعاقدي / القانوني (وفق شروط العقد)</label>
+          <input type="text" id="claimModalRef" class="form-control" placeholder="المادة (44) من الشروط العامة لعقد المقاولات الموحد">
+        </div>
+        <div class="form-group">
+          <label>المسوغات والوقائع الميدانية والأدلة</label>
+          <textarea id="claimModalJustification" class="form-control" rows="4" placeholder="شرح تفاصيل سبب التأخير أو التكلفة والمراسلات المتبادلة مع الاستشاري..."></textarea>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('claimModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary">توثيق وحفظ المطالبة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 7. نافذة تقرير عدم المطابقة الفنية NCR -->
+  <div class="modal-overlay" id="ncrModal">
+    <div class="modal-box" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3>🛠️ إصدار تقرير عدم مطابقة فنية (NCR Report)</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('ncrModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitNCRForm(event)">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>العيب الفني / المخالفة <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="ncrModalTitle" class="form-control" required placeholder="تعشيش في خرسانة الأعمدة / حديد غير مطابق">
+          </div>
+          <div class="form-group">
+            <label>درجة الخطورة</label>
+            <select id="ncrModalSeverity" class="form-control">
+              <option value="minor">بسيط (Minor)</option>
+              <option value="moderate" selected>متوسط (Moderate)</option>
+              <option value="critical">حرج / جسيم (Critical)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>الموقع والبند المعني</label>
+            <input type="text" id="ncrModalLocation" class="form-control" placeholder="الدور الأول - محور (C-4)">
+          </div>
+          <div class="form-group">
+            <label>تاريخ الفحص والملاحظة</label>
+            <input type="date" id="ncrModalDate" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>وصف العيب الفني بالتفصيل <span style="color: var(--accent-red);">*</span></label>
+          <textarea id="ncrModalDesc" class="form-control" rows="3" required placeholder="وصف كامل لحالة عدم المطابقة والمواصفة الفنية المخالفة..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>الإجراء التصحيحي المطلوب تنفيذه</label>
+          <textarea id="ncrModalAction" class="form-control" rows="2" placeholder="معالجة التعشيش بمونة إيبوكسية غير قابلة للانكماش وإعادة الفحص..."></textarea>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('ncrModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #b91c1c, #ef4444);">إصدار تقرير NCR</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 8. نافذة طلب معلومات فنية RFI -->
+  <div class="modal-overlay" id="rfiModal">
+    <div class="modal-box" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3>❓ إرسال طلب استفسار ومعلومات فنية (RFI)</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('rfiModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitRFIForm(event)">
+        <div class="form-group">
+          <label>موضوع الاستفسار الفني <span style="color: var(--accent-red);">*</span></label>
+          <input type="text" id="rfiModalSubject" class="form-control" required placeholder="استفسار بشأن تفاصيل تسليح الفتحات بالمخطط الإنشائي S-104">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>الجهة الموجه إليها</label>
+            <input type="text" id="rfiModalTo" class="form-control" value="استشاري المالك">
+          </div>
+          <div class="form-group">
+            <label>درجة الاستعجال</label>
+            <select id="rfiModalUrgency" class="form-control">
+              <option value="normal">عادي</option>
+              <option value="urgent">عاجل</option>
+              <option value="critical">حرج (يوقف العمل)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>الموعد الأقصى للرد</label>
+            <input type="date" id="rfiModalDueDate" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>نص وتفاصيل الاستفسار الفني <span style="color: var(--accent-red);">*</span></label>
+          <textarea id="rfiModalQuestion" class="form-control" rows="4" required placeholder="اكتب السؤال الفني والمقترحات والرسومات المرجعية المطلوب اعتمادها..."></textarea>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('rfiModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #0284c7, #38bdf8);">إرسال وتوثيق RFI</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 9. نافذة تسجيل رد الاستشاري على طلب RFI -->
+  <div class="modal-overlay" id="rfiReplyModal">
+    <div class="modal-box" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3>📝 تسجيل اعتماد رد الاستشاري على RFI</h3>
+        <button class="modal-close-btn" onclick="App.closeModal('rfiReplyModal')">&times;</button>
+      </div>
+      <form onsubmit="ProjectControlUI.submitRFIReply(event)">
+        <input type="hidden" id="rfiReplyId">
+        <div style="background: rgba(56, 189, 248, 0.1); border-right: 4px solid var(--accent-blue); padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 0.85rem;">
+          الموضوع: <strong id="rfiReplySubject" style="color: #fff;">-</strong>
+        </div>
+        <div class="form-group">
+          <label>الرد الرسمي والاعتماد الهندسي <span style="color: var(--accent-red);">*</span></label>
+          <textarea id="rfiReplyText" class="form-control" rows="5" required placeholder="اكتب نص الرد الرسمي المعتمد من الاستشاري أو المالك..."></textarea>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('rfiReplyModal')">إلغاء</button>
+          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #059669, #10b981);">اعتماد وإغلاق الاستفسار</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- حاوية الطباعة الخاصة بالسندات الرسمية -->
   <div id="printArea" class="print-area" style="display: none;"></div>
 
@@ -6986,16 +7417,17 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/ui-ux.js?v=1.0.0.20260924-89im"></script>
-  <script src="js/auth.js?v=1.0.0.20260924-89im"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20260924-tzvx"></script>
+  <script src="js/auth.js?v=1.0.0.20260924-tzvx"></script>
   <script src="js/events.js"></script>
-  <script src="js/app.js?v=1.0.0.20260924-89im"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20260924-tzvx"></script>
+  <script src="js/app.js?v=1.0.0.20260924-tzvx"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260924-89im')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260924-tzvx')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

@@ -1138,4 +1138,204 @@ CREATE TABLE IF NOT EXISTS bank_guarantees (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================================
+-- وحدة 15: التحكم المتقدم في المشاريع (Advanced Project Control Suite)
+-- ============================================================================
+
+-- 1. أنشطة WBS
+CREATE TABLE IF NOT EXISTS project_wbs_activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    parent_id INTEGER REFERENCES project_wbs_activities(id) ON DELETE SET NULL,
+    wbs_code TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    discipline TEXT,
+    activity_type TEXT DEFAULT 'task',
+    weight REAL DEFAULT 1.0,
+    planned_start DATE,
+    planned_finish DATE,
+    planned_duration_days REAL DEFAULT 0,
+    actual_start DATE,
+    actual_finish DATE,
+    actual_duration_days REAL DEFAULT 0,
+    percent_complete REAL DEFAULT 0,
+    es_days REAL, ef_days REAL, ls_days REAL, lf_days REAL,
+    total_float_days REAL, free_float_days REAL,
+    is_critical INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'not_started',
+    priority TEXT DEFAULT 'medium',
+    assigned_to INTEGER REFERENCES users(id),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. الاعتماديات بين الأنشطة
+CREATE TABLE IF NOT EXISTS project_wbs_dependencies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    predecessor_id INTEGER NOT NULL REFERENCES project_wbs_activities(id) ON DELETE CASCADE,
+    successor_id INTEGER NOT NULL REFERENCES project_wbs_activities(id) ON DELETE CASCADE,
+    dependency_type TEXT DEFAULT 'FS',
+    lag_days REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(predecessor_id, successor_id)
+);
+
+-- 3. الخط الأساسي للجدول الزمني
+CREATE TABLE IF NOT EXISTS project_wbs_baselines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    activity_id INTEGER NOT NULL REFERENCES project_wbs_activities(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    planned_start DATE,
+    planned_finish DATE,
+    planned_duration_days REAL,
+    is_current INTEGER DEFAULT 1,
+    created_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. شهادات المهندس/الاستشاري لنسبة الإنجاز
+CREATE TABLE IF NOT EXISTS project_engineer_certifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    pct REAL NOT NULL CHECK(pct >= 0 AND pct <= 100),
+    certified_by INTEGER REFERENCES users(id),
+    certified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    certifier_name TEXT,
+    certifier_role TEXT,
+    inspection_date DATE,
+    notes TEXT,
+    attachment_base64 TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. لقطات EVM التاريخية
+CREATE TABLE IF NOT EXISTS project_evm_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    status_date DATE NOT NULL,
+    bac REAL, pv REAL, ev REAL, ac REAL,
+    cv REAL, sv REAL, cpi REAL, spi REAL,
+    eac REAL, etc REAL, vac REAL,
+    completion_pct REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_id, status_date)
+);
+
+-- 6. سجل المخاطر (Risk Register - ISO 31000)
+CREATE TABLE IF NOT EXISTS project_risk_register (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    risk_ref TEXT,
+    title TEXT NOT NULL,
+    description TEXT,
+    category TEXT DEFAULT 'general',
+    probability INTEGER NOT NULL CHECK(probability BETWEEN 1 AND 5),
+    impact INTEGER NOT NULL CHECK(impact BETWEEN 1 AND 5),
+    risk_score INTEGER,
+    risk_rating TEXT,
+    financial_impact REAL DEFAULT 0,
+    schedule_impact_days INTEGER DEFAULT 0,
+    treatment_type TEXT DEFAULT 'mitigate',
+    treatment_plan TEXT,
+    owner_id INTEGER REFERENCES users(id),
+    status TEXT DEFAULT 'open',
+    review_date DATE,
+    last_reviewed_at DATETIME,
+    last_reviewed_by INTEGER REFERENCES users(id),
+    closure_notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. سجل المطالبات والنزاعات
+CREATE TABLE IF NOT EXISTS project_claims_register (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    claim_ref TEXT,
+    claim_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    claimed_amount REAL DEFAULT 0,
+    claimed_days INTEGER DEFAULT 0,
+    approved_amount REAL DEFAULT 0,
+    approved_days INTEGER DEFAULT 0,
+    submitted_date DATE,
+    responsible_party TEXT,
+    priority TEXT DEFAULT 'medium',
+    status TEXT DEFAULT 'مفتوح',
+    supporting_docs TEXT,
+    response_notes TEXT,
+    resolution_date DATE,
+    created_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. تقارير عدم المطابقة (NCR)
+CREATE TABLE IF NOT EXISTS project_non_conformance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    ncr_ref TEXT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    location TEXT,
+    discipline TEXT,
+    severity TEXT DEFAULT 'medium',
+    responsible_party TEXT,
+    root_cause TEXT,
+    corrective_action TEXT,
+    preventive_action TEXT,
+    due_date DATE,
+    closed_date DATE,
+    status TEXT DEFAULT 'مفتوح',
+    verified_by INTEGER REFERENCES users(id),
+    verification_notes TEXT,
+    reported_by INTEGER REFERENCES users(id),
+    reported_date DATE DEFAULT (date('now')),
+    attachments TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. طلبات المعلومات (RFI)
+CREATE TABLE IF NOT EXISTS project_rfi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    rfi_ref TEXT,
+    subject TEXT NOT NULL,
+    description TEXT,
+    discipline TEXT,
+    submitted_to TEXT,
+    submitted_by INTEGER REFERENCES users(id),
+    submitted_date DATE DEFAULT (date('now')),
+    required_response_date DATE,
+    response_date DATE,
+    response TEXT,
+    priority TEXT DEFAULT 'normal',
+    status TEXT DEFAULT 'معلق',
+    attachments TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. موارد الأنشطة
+CREATE TABLE IF NOT EXISTS project_wbs_resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    activity_id INTEGER NOT NULL REFERENCES project_wbs_activities(id) ON DELETE CASCADE,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    resource_type TEXT NOT NULL,
+    resource_name TEXT NOT NULL,
+    unit TEXT,
+    planned_qty REAL DEFAULT 0,
+    actual_qty REAL DEFAULT 0,
+    unit_cost REAL DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 

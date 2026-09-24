@@ -230,6 +230,22 @@ const ProjectHub = {
       this.renderProjectFiles();
       return;
     }
+    if (tabId === 'smart-completion') {
+      ProjectControlUI.renderSmartCompletion(this.currentProjectId);
+      return;
+    }
+    if (tabId === 'wbs-schedule') {
+      ProjectControlUI.renderWBSSchedule(this.currentProjectId);
+      return;
+    }
+    if (tabId === 'evm-control') {
+      ProjectControlUI.renderEVM(this.currentProjectId);
+      return;
+    }
+    if (tabId === 'risks-claims') {
+      ProjectControlUI.renderRisksAndClaims(this.currentProjectId);
+      return;
+    }
 
     if (!this.data) return;
 
@@ -249,6 +265,10 @@ const ProjectHub = {
       case 'handovers': this.renderHandovers(); break;
       case 'correspondence': this.renderCorrespondence(); break;
       case 'settlement': this.renderSettlement(); break;
+      case 'smart-completion': ProjectControlUI.renderSmartCompletion(this.currentProjectId); break;
+      case 'wbs-schedule': ProjectControlUI.renderWBSSchedule(this.currentProjectId); break;
+      case 'evm-control': ProjectControlUI.renderEVM(this.currentProjectId); break;
+      case 'risks-claims': ProjectControlUI.renderRisksAndClaims(this.currentProjectId); break;
     }
   },
 

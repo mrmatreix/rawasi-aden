@@ -51,6 +51,8 @@ app.use('/api/project-files', requireAuth, require('./routes/project_files'));
 app.use('/api/procurement', requireAuth, require('./routes/procurement'));
 app.use('/api/bank-reconciliation', requireAuth, require('./routes/bank_reconciliation'));
 app.use('/api/taxes-guarantees', requireAuth, require('./routes/taxes_guarantees'));
+app.use('/api/project-control', requireAuth, require('./routes/project_control'));
+
 
 // مسار توثيق الـ API التفاعلي ومواصفة OpenAPI 3.0
 const docsModule = require('./routes/docs');
