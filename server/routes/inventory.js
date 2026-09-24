@@ -168,6 +168,7 @@ router.post('/transactions', (req, res, next) => {
       return { result, totalAmount, parsedPrice };
     });
 
+
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'inventory',
@@ -187,4 +188,120 @@ router.post('/transactions', (req, res, next) => {
   }
 });
 
+const InventoryValuationService = require('../services/inventoryValuationService');
+
+// 1. المستودعات ومواقع التخزين
+router.get('/warehouses', requirePermission('inventory:view'), async (req, res) => {
+  try {
+    const warehouses = await query('SELECT * FROM warehouses ORDER BY id ASC');
+    res.json({ success: true, data: warehouses });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.post('/warehouses', requirePermission('inventory:create'), async (req, res) => {
+  try {
+    const { code, name, type = 'central', project_id, location, manager_name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: 'اسم المستودع مطلوب' });
+
+    const whCode = code || `WH-${Date.now().toString().slice(-4)}`;
+    const result = await run(`
+      INSERT INTO warehouses (code, name, type, project_id, location, manager_name)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [whCode, name, type, project_id || null, location || '', manager_name || '']);
+
+    res.json({ success: true, message: 'تم إنشاء المستودع بنجاح', id: result.lastInsertRowid || result.insertId, code: whCode });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 2. أرصدة المستودعات التفصيلية
+router.get('/warehouse-stocks', requirePermission('inventory:view'), async (req, res) => {
+  try {
+    const { warehouse_id, item_id } = req.query;
+    let sql = `
+      SELECT ws.*, w.name as warehouse_name, w.code as warehouse_code, i.name as item_name, i.unit, i.code as item_code
+      FROM warehouse_stocks ws
+      JOIN warehouses w ON ws.warehouse_id = w.id
+      JOIN items i ON ws.item_id = i.id
+    `;
+    const params = [];
+    const conditions = [];
+
+    if (warehouse_id) { conditions.push('ws.warehouse_id = ?'); params.push(warehouse_id); }
+    if (item_id) { conditions.push('ws.item_id = ?'); params.push(item_id); }
+
+    if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += ' ORDER BY ws.quantity DESC';
+
+    const stocks = await query(sql, params);
+    res.json({ success: true, data: stocks });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 3. التحويل بين المستودعات
+router.post('/transfers', requirePermission('inventory:create'), async (req, res) => {
+  try {
+    const result = await InventoryValuationService.transferStock({ ...req.body, user: req.user }, req);
+    res.json({ success: true, message: 'تم التحويل المخزني وتحديث أرصدة المستودعات بنجاح', data: result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 4. مرتجع مشتريات إلى المورد
+router.post('/purchase-returns', requirePermission('inventory:create,purchases:create'), async (req, res) => {
+  try {
+    const result = await InventoryValuationService.processPurchaseReturn({ ...req.body, user: req.user }, req);
+    res.json({ success: true, message: 'تم تسجيل مرتجع المشتريات وترحيل قيده المحاسبي بنجاح', data: result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 5. مرتجع مواد من المشروع إلى المستودع
+router.post('/project-returns', requirePermission('inventory:create,projects:edit'), async (req, res) => {
+  try {
+    const result = await InventoryValuationService.processProjectReturn({ ...req.body, user: req.user }, req);
+    res.json({ success: true, message: 'تم تسجيل مرتجع مواد المشروع وتخفيض التكلفة الفعلية بنجاح', data: result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 6. الجرد الدوري وتسويات الفائض والعجز
+router.post('/adjustments', requirePermission('inventory:create,accounting:create'), async (req, res) => {
+  try {
+    const result = await InventoryValuationService.processStocktakingAdjustment({ ...req.body, user: req.user }, req);
+    res.json({ success: true, message: 'تم تنفيذ تسوية الجرد وترحيل القيد المحاسبي المتزن بنجاح', data: result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 7. تنبيهات حد إعادة الطلب والمخزون الحرج
+router.get('/reorder-alerts', requirePermission('inventory:view'), async (req, res) => {
+  try {
+    const result = await InventoryValuationService.getReorderAlerts();
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 8. صرف مواد مع الربط ببند جدول الكميات BOQ للمشروع
+router.post('/issue-boq', requirePermission('inventory:issue,inventory:create'), async (req, res) => {
+  try {
+    const result = await InventoryValuationService.issueMaterialWithBOQBinding({ ...req.body, user: req.user }, req);
+    res.json({ success: true, message: 'تم صرف المواد وربطها ببند جدول الكميات وتحديث تكلفة المشروع بنجاح', data: result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;
+

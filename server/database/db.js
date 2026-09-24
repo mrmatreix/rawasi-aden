@@ -760,6 +760,449 @@ function initSqlite() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // 9. إضافة أعمدة إضافية لفواتير المشتريات والمستخلصات والأصناف والعملاء والموردين
+    const puColsExt = sqliteDb.prepare("PRAGMA table_info(purchases)").all().map(c => c.name);
+    if (!puColsExt.includes('po_id')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN po_id INTEGER;");
+    if (!puColsExt.includes('grn_id')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN grn_id INTEGER;");
+    if (!puColsExt.includes('matching_status')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN matching_status TEXT DEFAULT 'unmatched';");
+    if (!puColsExt.includes('matching_notes')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN matching_notes TEXT;");
+
+    const billColsExt = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
+    if (!billColsExt.includes('tax_wht_rate')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN tax_wht_rate REAL DEFAULT 0;");
+    if (!billColsExt.includes('tax_wht_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN tax_wht_amount REAL DEFAULT 0;");
+
+    const clientCols = sqliteDb.prepare("PRAGMA table_info(clients)").all().map(c => c.name);
+    if (!clientCols.includes('tax_number')) sqliteDb.exec("ALTER TABLE clients ADD COLUMN tax_number TEXT;");
+
+    const suppCols = sqliteDb.prepare("PRAGMA table_info(suppliers)").all().map(c => c.name);
+    if (!suppCols.includes('tax_number')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN tax_number TEXT;");
+
+    const itemCols = sqliteDb.prepare("PRAGMA table_info(items)").all().map(c => c.name);
+    if (!itemCols.includes('costing_method')) sqliteDb.exec("ALTER TABLE items ADD COLUMN costing_method TEXT DEFAULT 'wac';");
+    if (!itemCols.includes('reorder_level')) sqliteDb.exec("ALTER TABLE items ADD COLUMN reorder_level REAL DEFAULT 10;");
+    if (!itemCols.includes('safety_stock')) sqliteDb.exec("ALTER TABLE items ADD COLUMN safety_stock REAL DEFAULT 5;");
+    if (!itemCols.includes('has_batch_tracking')) sqliteDb.exec("ALTER TABLE items ADD COLUMN has_batch_tracking INTEGER DEFAULT 0;");
+
+    const invTxCols = sqliteDb.prepare("PRAGMA table_info(inventory_transactions)").all().map(c => c.name);
+    if (!invTxCols.includes('warehouse_id')) sqliteDb.exec("ALTER TABLE inventory_transactions ADD COLUMN warehouse_id INTEGER;");
+    if (!invTxCols.includes('boq_item_id')) sqliteDb.exec("ALTER TABLE inventory_transactions ADD COLUMN boq_item_id INTEGER;");
+    if (!invTxCols.includes('batch_number')) sqliteDb.exec("ALTER TABLE inventory_transactions ADD COLUMN batch_number TEXT;");
+    if (!invTxCols.includes('serial_number')) sqliteDb.exec("ALTER TABLE inventory_transactions ADD COLUMN serial_number TEXT;");
+
+    // 10. حسابات الضرائب والضمانات وعجز/فائض المخزون في شجرة الحسابات
+    sqliteDb.exec(`
+      INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
+      (22, '1115', 'غطاء خطابات ضمان لدى البنوك (Restricted Cash Collateral)', 'أصول', 3, 0),
+      (23, '1130', 'أرصدة ضريبية مدينة - ضرائب مخصومة من المنبع (WHT Receivable)', 'أصول', 2, 0),
+      (24, '2130', 'ضرائب مستحقة الدفع - مصلحة الضرائب (WHT Payable)', 'خصوم', 6, 0),
+      (25, '5205', 'رسوم وعمولات خطابات الضمان البنكية (Bank Guarantee Fees)', 'مصروفات', 10, 0),
+      (26, '5210', 'عمولات ومصاريف بنكية عامة (Bank Charges & Commissions)', 'مصروفات', 10, 0),
+      (27, '5105', 'خسائر عجز وتسويات المخزون (Inventory Shrinkage & Losses)', 'مصروفات', 10, 0),
+      (28, '4205', 'أرباح وفائض تسويات المخزون (Inventory Gain & Surpluses)', 'إيرادات', 9, 0);
+    `);
+
+    // 11. جداول دورة المشتريات المتقدمة (PR -> RFQ -> PO -> GRN -> 3-Way Match)
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS purchase_requisitions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pr_no TEXT UNIQUE NOT NULL,
+        project_id INTEGER REFERENCES projects(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        department TEXT DEFAULT 'إدارة المشاريع',
+        required_date DATE,
+        urgency TEXT DEFAULT 'عادي',
+        estimated_total REAL DEFAULT 0,
+        status TEXT DEFAULT 'draft',
+        created_by INTEGER REFERENCES users(id),
+        created_by_name TEXT,
+        approved_by INTEGER REFERENCES users(id),
+        approved_by_name TEXT,
+        approved_at DATETIME,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS purchase_requisition_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        requisition_id INTEGER NOT NULL REFERENCES purchase_requisitions(id) ON DELETE CASCADE,
+        item_id INTEGER REFERENCES items(id),
+        item_name TEXT NOT NULL,
+        unit TEXT,
+        quantity REAL NOT NULL,
+        estimated_price REAL DEFAULT 0,
+        notes TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS rfqs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rfq_no TEXT UNIQUE NOT NULL,
+        requisition_id INTEGER REFERENCES purchase_requisitions(id),
+        title TEXT NOT NULL,
+        date DATE NOT NULL,
+        closing_date DATE,
+        winner_supplier_id INTEGER REFERENCES suppliers(id),
+        winner_quote_amount REAL DEFAULT 0,
+        status TEXT DEFAULT 'draft',
+        created_by INTEGER REFERENCES users(id),
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS rfq_vendor_quotes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rfq_id INTEGER NOT NULL REFERENCES rfqs(id) ON DELETE CASCADE,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        quote_reference TEXT,
+        total_price REAL NOT NULL,
+        delivery_days INTEGER DEFAULT 1,
+        payment_terms TEXT,
+        is_selected INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        po_no TEXT UNIQUE NOT NULL,
+        requisition_id INTEGER REFERENCES purchase_requisitions(id),
+        rfq_id INTEGER REFERENCES rfqs(id),
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        project_id INTEGER REFERENCES projects(id),
+        warehouse_id INTEGER,
+        date DATE NOT NULL,
+        expected_delivery_date DATE,
+        payment_terms TEXT DEFAULT '30 يوم من تاريخ الاستلام',
+        delivery_terms TEXT DEFAULT 'موقع المشروع',
+        currency TEXT DEFAULT 'ر.ي',
+        subtotal REAL DEFAULT 0,
+        tax_amount REAL DEFAULT 0,
+        total_amount REAL NOT NULL,
+        status TEXT DEFAULT 'draft',
+        created_by INTEGER REFERENCES users(id),
+        created_by_name TEXT,
+        approved_by INTEGER REFERENCES users(id),
+        approved_by_name TEXT,
+        approved_at DATETIME,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        item_id INTEGER REFERENCES items(id),
+        item_name TEXT NOT NULL,
+        unit TEXT,
+        ordered_qty REAL NOT NULL,
+        received_qty REAL DEFAULT 0,
+        billed_qty REAL DEFAULT 0,
+        unit_price REAL NOT NULL,
+        tax_rate REAL DEFAULT 0,
+        total_price REAL NOT NULL,
+        notes TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS goods_receipt_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        grn_no TEXT UNIQUE NOT NULL,
+        po_id INTEGER NOT NULL REFERENCES purchase_orders(id),
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        project_id INTEGER REFERENCES projects(id),
+        warehouse_id INTEGER NOT NULL,
+        delivery_note_no TEXT,
+        received_date DATE NOT NULL,
+        receiver_name TEXT NOT NULL,
+        inspector_name TEXT,
+        inspection_status TEXT DEFAULT 'accepted',
+        status TEXT DEFAULT 'posted',
+        created_by INTEGER REFERENCES users(id),
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS goods_receipt_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        grn_id INTEGER NOT NULL REFERENCES goods_receipt_notes(id) ON DELETE CASCADE,
+        po_item_id INTEGER REFERENCES purchase_order_items(id),
+        item_id INTEGER REFERENCES items(id),
+        item_name TEXT NOT NULL,
+        unit TEXT,
+        received_qty REAL NOT NULL,
+        accepted_qty REAL NOT NULL,
+        rejected_qty REAL DEFAULT 0,
+        rejection_reason TEXT,
+        unit_cost REAL DEFAULT 0,
+        total_cost REAL DEFAULT 0,
+        batch_number TEXT,
+        expiry_date DATE
+      );
+    `);
+
+    // 12. جداول المستودعات المتعددة وتقييم المخزون والتسويات والجرد
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS warehouses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT DEFAULT 'central',
+        project_id INTEGER REFERENCES projects(id),
+        location TEXT,
+        manager_name TEXT,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS warehouse_stocks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        quantity REAL DEFAULT 0,
+        reorder_level REAL DEFAULT 10,
+        safety_stock REAL DEFAULT 5,
+        last_cost REAL DEFAULT 0,
+        average_cost REAL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(warehouse_id, item_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_transfers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transfer_no TEXT UNIQUE NOT NULL,
+        from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        quantity REAL NOT NULL,
+        unit_cost REAL DEFAULT 0,
+        total_cost REAL DEFAULT 0,
+        transfer_date DATE NOT NULL,
+        status TEXT DEFAULT 'completed',
+        created_by INTEGER REFERENCES users(id),
+        received_by TEXT,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_no TEXT UNIQUE NOT NULL,
+        return_type TEXT NOT NULL,
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        quantity REAL NOT NULL,
+        unit_price REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        supplier_id INTEGER REFERENCES suppliers(id),
+        project_id INTEGER REFERENCES projects(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT DEFAULT 'posted',
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        created_by INTEGER REFERENCES users(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_adjustments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        adjustment_no TEXT UNIQUE NOT NULL,
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        system_qty REAL NOT NULL,
+        physical_qty REAL NOT NULL,
+        diff_qty REAL NOT NULL,
+        unit_cost REAL NOT NULL,
+        diff_amount REAL NOT NULL,
+        adjustment_type TEXT NOT NULL,
+        date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT DEFAULT 'posted',
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        created_by INTEGER REFERENCES users(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_valuation_layers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        grn_id INTEGER REFERENCES goods_receipt_notes(id),
+        date DATE NOT NULL,
+        initial_qty REAL NOT NULL,
+        remaining_qty REAL NOT NULL,
+        unit_cost REAL NOT NULL,
+        landed_cost_allocated REAL DEFAULT 0,
+        batch_number TEXT,
+        expiry_date DATE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 13. جداول الحسابات البنكية والتسويات ومحفظة الشيكات
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS bank_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER REFERENCES accounts(id),
+        bank_name TEXT NOT NULL,
+        account_number TEXT UNIQUE NOT NULL,
+        iban TEXT,
+        currency TEXT DEFAULT 'ر.ي',
+        current_balance REAL DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS bank_statements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id),
+        statement_date DATE NOT NULL,
+        opening_balance REAL DEFAULT 0,
+        closing_balance REAL DEFAULT 0,
+        currency TEXT DEFAULT 'ر.ي',
+        file_name TEXT,
+        status TEXT DEFAULT 'draft',
+        imported_by INTEGER REFERENCES users(id),
+        imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS bank_statement_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        statement_id INTEGER NOT NULL REFERENCES bank_statements(id) ON DELETE CASCADE,
+        transaction_date DATE NOT NULL,
+        value_date DATE,
+        description TEXT NOT NULL,
+        reference_no TEXT,
+        debit REAL DEFAULT 0,
+        credit REAL DEFAULT 0,
+        balance REAL DEFAULT 0,
+        is_reconciled INTEGER DEFAULT 0,
+        matched_entity_type TEXT,
+        matched_entity_id TEXT,
+        matched_at DATETIME,
+        notes TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS bank_reconciliations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reconciliation_no TEXT UNIQUE NOT NULL,
+        bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id),
+        statement_id INTEGER REFERENCES bank_statements(id),
+        reconciliation_date DATE NOT NULL,
+        bank_statement_balance REAL NOT NULL,
+        book_balance REAL NOT NULL,
+        deposits_in_transit REAL DEFAULT 0,
+        outstanding_cheques REAL DEFAULT 0,
+        bank_charges_unrecorded REAL DEFAULT 0,
+        adjusted_bank_balance REAL NOT NULL,
+        adjusted_book_balance REAL NOT NULL,
+        variance REAL DEFAULT 0,
+        status TEXT DEFAULT 'balanced',
+        prepared_by INTEGER REFERENCES users(id),
+        approved_by INTEGER REFERENCES users(id),
+        approved_at DATETIME,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS cheques (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cheque_no TEXT NOT NULL,
+        type TEXT NOT NULL,
+        bank_account_id INTEGER REFERENCES bank_accounts(id),
+        drawer_name TEXT,
+        beneficiary_name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        currency TEXT DEFAULT 'ر.ي',
+        issue_date DATE NOT NULL,
+        due_date DATE NOT NULL,
+        status TEXT DEFAULT 'pending',
+        project_id INTEGER REFERENCES projects(id),
+        client_id INTEGER REFERENCES clients(id),
+        supplier_id INTEGER REFERENCES suppliers(id),
+        payment_id INTEGER REFERENCES payments(id),
+        expense_id INTEGER REFERENCES expenses(id),
+        clearance_date DATE,
+        bounce_date DATE,
+        bounce_reason TEXT,
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 14. جداول الضرائب (الخصم من المنبع) والضمانات البنكية للمقاولات
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS tax_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tax_code TEXT UNIQUE NOT NULL,
+        tax_name TEXT NOT NULL,
+        rate_percentage REAL NOT NULL,
+        type TEXT NOT NULL,
+        law_reference TEXT,
+        is_active INTEGER DEFAULT 1,
+        legal_disclaimer TEXT,
+        notes TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS tax_withholdings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        withholding_no TEXT UNIQUE NOT NULL,
+        type TEXT NOT NULL,
+        project_id INTEGER REFERENCES projects(id),
+        client_id INTEGER REFERENCES clients(id),
+        supplier_id INTEGER REFERENCES suppliers(id),
+        source_doc_type TEXT NOT NULL,
+        source_doc_id INTEGER NOT NULL,
+        base_amount REAL NOT NULL,
+        tax_rate REAL NOT NULL,
+        tax_amount REAL NOT NULL,
+        tax_period TEXT NOT NULL,
+        date DATE NOT NULL,
+        tax_number TEXT,
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS bank_guarantees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guarantee_no TEXT UNIQUE NOT NULL,
+        type TEXT NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        client_id INTEGER REFERENCES clients(id),
+        issuing_bank TEXT NOT NULL,
+        bank_account_id INTEGER REFERENCES bank_accounts(id),
+        amount REAL NOT NULL,
+        currency TEXT DEFAULT 'ر.ي',
+        cash_margin_pct REAL DEFAULT 10,
+        cash_margin_amount REAL NOT NULL,
+        commission_fee REAL DEFAULT 0,
+        issue_date DATE NOT NULL,
+        expiry_date DATE NOT NULL,
+        status TEXT DEFAULT 'active',
+        release_date DATE,
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        release_journal_entry_id INTEGER REFERENCES journal_entries(id),
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 15. تهيئة بذور البيانات الافتراضية للمستودعات والحساب البنكي وإعدادات الضرائب اليمنية
+    sqliteDb.exec(`
+      INSERT OR IGNORE INTO warehouses (id, code, name, type, location, manager_name) VALUES
+      (1, 'WH-MAIN', 'المستودع المركزي الرئيسي - خورمكسر', 'central', 'عدن - خورمكسر', 'أمين المستودع العام'),
+      (2, 'WH-SITE-1', 'مستودع موقع مشروع برج الصالح', 'site', 'عدن - المعلا', 'مهندس الموقع');
+
+      INSERT OR IGNORE INTO bank_accounts (id, account_id, bank_name, account_number, iban, currency, current_balance) VALUES
+      (1, 3, 'البنك الأهلي اليمني', '1023456789', 'YE98NBYE0000001023456789', 'ر.ي', 50000000),
+      (2, 3, 'بنك التضامن الإسلامي', '2034567890', 'YE98TDBE0000002034567890', 'ر.ي', 25000000);
+
+      INSERT OR IGNORE INTO tax_configs (id, tax_code, tax_name, rate_percentage, type, law_reference, legal_disclaimer) VALUES
+      (1, 'WHT-CONT-3', 'ضريبة أرباح تجارية وصناعية - مقاولات (3%)', 3.0, 'wht_contracting', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
+      (2, 'WHT-SUPP-1', 'ضريبة خصم من المنبع - توريدات ومشتريات (1%)', 1.0, 'wht_supplies', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
+      (3, 'VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية', 'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
+    `);
   } catch (err) {
     console.warn('Accounting migration note (SQLite):', err.message);
   }

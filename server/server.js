@@ -48,6 +48,9 @@ app.use('/api/settings', requireAuth, require('./routes/settings'));
 app.use('/api/hr', requireAuth, require('./routes/hr'));
 app.use('/api/project-hub', requireAuth, require('./routes/project_management'));
 app.use('/api/project-files', requireAuth, require('./routes/project_files'));
+app.use('/api/procurement', requireAuth, require('./routes/procurement'));
+app.use('/api/bank-reconciliation', requireAuth, require('./routes/bank_reconciliation'));
+app.use('/api/taxes-guarantees', requireAuth, require('./routes/taxes_guarantees'));
 
 // مسار توثيق الـ API التفاعلي ومواصفة OpenAPI 3.0
 const docsModule = require('./routes/docs');
