@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { exec, execFile, spawn } = require('child_process');
 const { get, query, run } = require('../database/db');
+const { requirePermission, requireScope } = require('../middleware/security');
 
 // المجلد الرئيسي الافتراضي لحفظ ملفات وتقارير المشاريع
 const DEFAULT_PROJECTS_BASE_DIR = path.resolve(__dirname, '..', '..', 'ملفات_المشاريع');
@@ -12,6 +13,17 @@ const DEFAULT_PROJECTS_BASE_DIR = path.resolve(__dirname, '..', '..', 'ملفا�
 if (!fs.existsSync(DEFAULT_PROJECTS_BASE_DIR)) {
   fs.mkdirSync(DEFAULT_PROJECTS_BASE_DIR, { recursive: true });
 }
+
+// حماية مسارات ملفات المشروع بالنطاق والصلاحيات
+router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
+  if (req.method === 'GET') {
+    return requirePermission('projects:view')(req, res, next);
+  }
+  if (req.path.includes('/export-package')) {
+    return requirePermission('projects:export,projects:view')(req, res, next);
+  }
+  return requirePermission('projects:edit,projects:create')(req, res, next);
+});
 
 /**
  * جلب المسار الأساسي الحالي المعتمد لمجلد حفظ ملفات المشاريع

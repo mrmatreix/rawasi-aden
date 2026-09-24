@@ -111,31 +111,54 @@ const AccountingService = {
     const countRow = await get('SELECT COUNT(*) as count FROM journal_entries');
     const entryNo = `JV-${new Date().getFullYear()}-${String((countRow?.count || 0) + 1).padStart(4, '0')}`;
 
-    // 4. الحفظ الذري
+    // 4. الحفظ الذري مع توثيق المنشئ وحالة الترحيل
+    let validCreatorId = null;
+    const rawCreatorId = req?.user?.id || null;
+    if (rawCreatorId) {
+      try {
+        const u = await get('SELECT id FROM users WHERE id = ?', [Number(rawCreatorId)]);
+        if (u) validCreatorId = u.id;
+      } catch {}
+    }
+    const creatorName = req?.user?.username || req?.user?.full_name || 'المحاسب المالي';
+    const status = entryData.status || 'posted';
+
     let entryId = null;
     await transaction(async (tx) => {
       const res = await tx.run(`
-        INSERT INTO journal_entries (entry_no, date, description, reference_type, reference_id, total_debit, total_credit)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [entryNo, date, description.trim(), reference_type, reference_id, totalDebit, totalCredit]);
+        INSERT INTO journal_entries (
+          entry_no, date, description, reference_type, reference_id, 
+          total_debit, total_credit, status, 
+          created_by, created_by_name, posted_by, posted_by_name, posted_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        entryNo, date, description.trim(), reference_type, reference_id, 
+        totalDebit, totalCredit, status,
+        validCreatorId, creatorName, 
+        status === 'posted' ? validCreatorId : null,
+        status === 'posted' ? creatorName : null,
+        status === 'posted' ? new Date().toISOString() : null
+      ]);
 
       entryId = res.lastInsertRowid || res.insertId;
 
       for (const line of sanitizedLines) {
         await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, description)
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
           VALUES (?, ?, ?, ?, ?, ?)
         `, [entryId, line.account_id, line.cost_center_id, line.debit, line.credit, line.description]);
       }
     });
 
-    // 5. تسجيل التدقيق الرقابي
+    // 5. تسجيل التدقيق الرقابي مع بيانات القيمة والحالة
     if (req) {
       await logAudit(req, {
-        action: 'INSERT',
+        action: status === 'draft' ? 'CREATE_DRAFT' : 'INSERT',
         entity_type: 'journal_entry',
-        entity_id: entryId,
-        details: { entry_no: entryNo, date, total_debit: totalDebit, total_credit: totalCredit, lines_count: sanitizedLines.length }
+        entity_id: entryNo,
+        details: { entry_no: entryNo, date, total_debit: totalDebit, total_credit: totalCredit, lines_count: sanitizedLines.length, status },
+        new_values: { entry_no: entryNo, date, total_debit: totalDebit, total_credit: totalCredit, status, created_by: creatorName }
       });
     }
 
@@ -143,7 +166,8 @@ const AccountingService = {
       id: entryId,
       entry_no: entryNo,
       total_debit: totalDebit,
-      total_credit: totalCredit
+      total_credit: totalCredit,
+      status
     };
   }
 };

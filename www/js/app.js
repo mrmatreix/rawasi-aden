@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20260922-bhmo',
+  assetVersion: '1.0.0.20260924-89im',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,15 +11,15 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20260922-bhmo',
-    projects: 'js/projects.js?v=1.0.0.20260922-bhmo',
-    projectHub: 'js/project_hub.js?v=1.0.0.20260922-bhmo',
-    accounting: 'js/accounting.js?v=1.0.0.20260922-bhmo',
-    hr: 'js/hr.js?v=1.0.0.20260922-bhmo',
-    reports: 'js/reports.js?v=1.0.0.20260922-bhmo',
-    inventory: 'js/inventory.js?v=1.0.0.20260922-bhmo',
-    settings: 'js/settings.js?v=1.0.0.20260922-bhmo',
-    excelExport: 'js/excel-export.js?v=1.0.0.20260922-bhmo'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20260924-89im',
+    projects: 'js/projects.js?v=1.0.0.20260924-89im',
+    projectHub: 'js/project_hub.js?v=1.0.0.20260924-89im',
+    accounting: 'js/accounting.js?v=1.0.0.20260924-89im',
+    hr: 'js/hr.js?v=1.0.0.20260924-89im',
+    reports: 'js/reports.js?v=1.0.0.20260924-89im',
+    inventory: 'js/inventory.js?v=1.0.0.20260924-89im',
+    settings: 'js/settings.js?v=1.0.0.20260924-89im',
+    excelExport: 'js/excel-export.js?v=1.0.0.20260924-89im'
   },
   _loadedModules: {},
   _loadingPromises: {},

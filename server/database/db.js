@@ -173,9 +173,10 @@ async function initMysql() {
     await mysqlPool.query(`
       INSERT IGNORE INTO roles (id, name, display_name, permissions) VALUES 
       (1, 'admin', 'المدير العام', 'all'),
-      (2, 'accountant', 'المحاسب المالي', 'accounting,reports,payments,billing'),
+      (2, 'accountant', 'المحاسب المالي', 'accounting,reports,payments,billing,expenses,revenues,custody,clients,suppliers,cash'),
       (3, 'project_manager', 'مدير المشاريع', 'projects,inventory,expenses'),
-      (4, 'storekeeper', 'أمين المخزن', 'inventory,items');
+      (4, 'storekeeper', 'أمين المخزن', 'inventory,items'),
+      (5, 'auditor', 'المراجع والمدقق المالي', 'accounting:view,accounting:approve,accounting:post,accounting:export,reports:view,reports:export,expenses:view,expenses:approve,revenues:view,revenues:approve,billing:view,billing:approve,custody:view,custody:approve,projects:view,projects:export,inventory:view,purchases:view,purchases:approve,hr:view,hr:approve,cash:view');
     `);
 
     await mysqlPool.query(`
@@ -374,6 +375,71 @@ function initSqlite() {
     if (!colNames.includes('security_settings')) sqliteDb.exec("ALTER TABLE users ADD COLUMN security_settings TEXT;");
     if (!colNames.includes('two_factor_pin')) sqliteDb.exec("ALTER TABLE users ADD COLUMN two_factor_pin TEXT DEFAULT '123456';");
     if (!colNames.includes('two_factor_enabled')) sqliteDb.exec("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 1;");
+    if (!colNames.includes('branch_id')) sqliteDb.exec("ALTER TABLE users ADD COLUMN branch_id INTEGER DEFAULT 1;");
+    if (!colNames.includes('branch')) sqliteDb.exec("ALTER TABLE users ADD COLUMN branch TEXT DEFAULT 'المركز الرئيسي';");
+    if (!colNames.includes('department_id')) sqliteDb.exec("ALTER TABLE users ADD COLUMN department_id INTEGER DEFAULT 1;");
+    if (!colNames.includes('department')) sqliteDb.exec("ALTER TABLE users ADD COLUMN department TEXT DEFAULT 'الإدارة العامة';");
+    if (!colNames.includes('allowed_projects')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_projects TEXT DEFAULT '*';");
+    if (!colNames.includes('allowed_branches')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_branches TEXT DEFAULT '*';");
+    if (!colNames.includes('allowed_departments')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_departments TEXT DEFAULT '*';");
+
+    // ترقية جداول الفروع والأقسام المؤسسية
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS branches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        address TEXT,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS departments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        manager_name TEXT,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const brCount = sqliteDb.prepare("SELECT count(*) as count FROM branches").get();
+    if (!brCount || brCount.count === 0) {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO branches (id, code, name, address, status) VALUES
+        (1, 'BR-01', 'المركز الرئيسي - عدن', 'عدن - إنماء الجديدة - خلف القطيبي', 'active'),
+        (2, 'BR-02', 'فرع المنصورة', 'عدن - المنصورة - شارع التسعين', 'active'),
+        (3, 'BR-03', 'فرع حضرموت / المكلا', 'المكلا - فوه - الشارع العام', 'active');
+      `);
+    }
+
+    const deptCount = sqliteDb.prepare("SELECT count(*) as count FROM departments").get();
+    if (!deptCount || deptCount.count === 0) {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO departments (id, code, name, manager_name, status) VALUES
+        (1, 'DEP-01', 'الإدارة العامة والتنفيذية', 'م. علوي', 'active'),
+        (2, 'DEP-02', 'الإدارة المالية والمحاسبة', 'المحاسب المالي', 'active'),
+        (3, 'DEP-03', 'إدارة المشاريع والمقاولات', 'مدير المشاريع', 'active'),
+        (4, 'DEP-04', 'المراجعة والتدقيق الداخلي', 'المراجع الداخلي', 'active'),
+        (5, 'DEP-05', 'الموارد البشرية والشؤون الإدارية', 'مسؤول الموارد البشرية', 'active'),
+        (6, 'DEP-06', 'المشتريات والمخازن', 'أمين المخزن', 'active');
+      `);
+    }
+
+    // ترقية أدوار النظام وفصل الصلاحيات (Admin, Accountant, Auditor, Project Manager, Storekeeper)
+    sqliteDb.exec(`
+      INSERT OR IGNORE INTO roles (id, name, display_name, permissions) VALUES 
+      (1, 'admin', 'المدير العام', 'all'),
+      (2, 'accountant', 'المحاسب المالي', 'accounting,reports,payments,billing,expenses,revenues,custody,clients,suppliers,cash'),
+      (3, 'project_manager', 'مدير المشاريع', 'projects,inventory,expenses'),
+      (4, 'storekeeper', 'أمين المخزن', 'inventory,items'),
+      (5, 'auditor', 'المراجع والمدقق المالي', 'accounting:view,accounting:approve,accounting:post,accounting:export,reports:view,reports:export,expenses:view,expenses:approve,revenues:view,revenues:approve,billing:view,billing:approve,custody:view,custody:approve,projects:view,projects:export,inventory:view,purchases:view,purchases:approve,hr:view,hr:approve,cash:view');
+    `);
+
+    // ترقية أعمدة جدول المشاريع لربطها بالفروع والأقسام
+    const prjCols = sqliteDb.prepare("PRAGMA table_info(projects)").all().map(c => c.name);
+    if (!prjCols.includes('branch_id')) sqliteDb.exec("ALTER TABLE projects ADD COLUMN branch_id INTEGER DEFAULT 1;");
+    if (!prjCols.includes('department_id')) sqliteDb.exec("ALTER TABLE projects ADD COLUMN department_id INTEGER DEFAULT 3;");
 
     // مزامنة الرمز مع إعدادات المدير العام إن وجدت
     try {
@@ -416,12 +482,74 @@ function initSqlite() {
     if (!expCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
     if (!expCols.includes('check_no')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN check_no TEXT;");
     if (!expCols.includes('bank_name')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN bank_name TEXT;");
+    // أعمدة دورة المستند المالي والرقابة الثنائية (Maker-Checker / Lifecycle)
+    if (!expCols.includes('status')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN status TEXT DEFAULT 'posted';");
+    if (!expCols.includes('created_by')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN created_by INTEGER REFERENCES users(id);");
+    if (!expCols.includes('created_by_name')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN created_by_name TEXT;");
+    if (!expCols.includes('reviewed_by')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reviewed_by INTEGER REFERENCES users(id);");
+    if (!expCols.includes('reviewed_by_name')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reviewed_by_name TEXT;");
+    if (!expCols.includes('reviewed_at')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reviewed_at DATETIME;");
+    if (!expCols.includes('review_notes')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN review_notes TEXT;");
+    if (!expCols.includes('approved_by')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN approved_by INTEGER REFERENCES users(id);");
+    if (!expCols.includes('approved_by_name')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN approved_by_name TEXT;");
+    if (!expCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN approved_at DATETIME;");
+    if (!expCols.includes('approval_notes')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN approval_notes TEXT;");
+    if (!expCols.includes('posted_by')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN posted_by INTEGER REFERENCES users(id);");
+    if (!expCols.includes('posted_by_name')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN posted_by_name TEXT;");
+    if (!expCols.includes('posted_at')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN posted_at DATETIME;");
+    if (!expCols.includes('reversed_by')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversed_by INTEGER REFERENCES users(id);");
+    if (!expCols.includes('reversed_by_name')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversed_by_name TEXT;");
+    if (!expCols.includes('reversed_at')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversed_at DATETIME;");
+    if (!expCols.includes('reversal_reason')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversal_reason TEXT;");
+    if (!expCols.includes('reversal_ref_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversal_ref_id INTEGER;");
 
     const payCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
     if (!payCols.includes('account_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
     if (!payCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
     if (!payCols.includes('check_no')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN check_no TEXT;");
     if (!payCols.includes('bank_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bank_name TEXT;");
+    // أعمدة دورة المستند المالي لسندات القبض والصرف
+    if (!payCols.includes('status')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN status TEXT DEFAULT 'posted';");
+    if (!payCols.includes('created_by')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN created_by INTEGER REFERENCES users(id);");
+    if (!payCols.includes('created_by_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN created_by_name TEXT;");
+    if (!payCols.includes('reviewed_by')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reviewed_by INTEGER REFERENCES users(id);");
+    if (!payCols.includes('reviewed_by_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reviewed_by_name TEXT;");
+    if (!payCols.includes('reviewed_at')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reviewed_at DATETIME;");
+    if (!payCols.includes('review_notes')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN review_notes TEXT;");
+    if (!payCols.includes('approved_by')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN approved_by INTEGER REFERENCES users(id);");
+    if (!payCols.includes('approved_by_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN approved_by_name TEXT;");
+    if (!payCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN approved_at DATETIME;");
+    if (!payCols.includes('approval_notes')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN approval_notes TEXT;");
+    if (!payCols.includes('posted_by')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN posted_by INTEGER REFERENCES users(id);");
+    if (!payCols.includes('posted_by_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN posted_by_name TEXT;");
+    if (!payCols.includes('posted_at')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN posted_at DATETIME;");
+    if (!payCols.includes('reversed_by')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reversed_by INTEGER REFERENCES users(id);");
+    if (!payCols.includes('reversed_by_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reversed_by_name TEXT;");
+    if (!payCols.includes('reversed_at')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reversed_at DATETIME;");
+    if (!payCols.includes('reversal_reason')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reversal_reason TEXT;");
+    if (!payCols.includes('reversal_ref_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN reversal_ref_id INTEGER;");
+    if (!payCols.includes('receipt_category')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN receipt_category TEXT DEFAULT 'general';");
+
+    const jeCols = sqliteDb.prepare("PRAGMA table_info(journal_entries)").all().map(c => c.name);
+    if (!jeCols.includes('status')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN status TEXT DEFAULT 'posted';");
+    if (!jeCols.includes('created_by')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN created_by INTEGER REFERENCES users(id);");
+    if (!jeCols.includes('created_by_name')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN created_by_name TEXT;");
+    if (!jeCols.includes('approved_by')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN approved_by INTEGER REFERENCES users(id);");
+    if (!jeCols.includes('approved_by_name')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN approved_by_name TEXT;");
+    if (!jeCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN approved_at DATETIME;");
+    if (!jeCols.includes('posted_by')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN posted_by INTEGER REFERENCES users(id);");
+    if (!jeCols.includes('posted_by_name')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN posted_by_name TEXT;");
+    if (!jeCols.includes('posted_at')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN posted_at DATETIME;");
+    if (!jeCols.includes('reversed_by')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reversed_by INTEGER REFERENCES users(id);");
+    if (!jeCols.includes('reversed_by_name')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reversed_by_name TEXT;");
+    if (!jeCols.includes('reversed_at')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reversed_at DATETIME;");
+    if (!jeCols.includes('reversal_reason')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reversal_reason TEXT;");
+    if (!jeCols.includes('reversal_ref_id')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reversal_ref_id INTEGER;");
+
+    const auditCols = sqliteDb.prepare("PRAGMA table_info(audit_logs)").all().map(c => c.name);
+    if (!auditCols.includes('old_values')) sqliteDb.exec("ALTER TABLE audit_logs ADD COLUMN old_values TEXT;");
+    if (!auditCols.includes('new_values')) sqliteDb.exec("ALTER TABLE audit_logs ADD COLUMN new_values TEXT;");
+    if (!auditCols.includes('reason')) sqliteDb.exec("ALTER TABLE audit_logs ADD COLUMN reason TEXT;");
 
     const jelCols = sqliteDb.prepare("PRAGMA table_info(journal_entry_lines)").all().map(c => c.name);
     if (!jelCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE journal_entry_lines ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
@@ -513,10 +641,125 @@ function initSqlite() {
     const studyProj = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM projects WHERE status = 'under_study'").get();
     if (!studyProj || studyProj.cnt === 0) {
       sqliteDb.exec(`
-        INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress, status, notes)
+        INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status, notes)
         VALUES ('مشروع مجمع خورمكسر الطبي (قيد الدراسة والتسعير)', 1, 65000000, 52000000, 0, 0, 'under_study', 'مشروع قيد إعداد جدول الكميات BOQ والتسعير الهندسي للعطاء المنافس');
       `);
     }
+
+    // 6. إضافة أعمدة تصنيف المستخلصات ودورة المستند والفصل المحاسبي للمقاولات
+    const billCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
+    if (!billCols.includes('gross_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN gross_amount REAL DEFAULT 0;");
+    if (!billCols.includes('advance_deduction')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN advance_deduction REAL DEFAULT 0;");
+    if (!billCols.includes('retention_deduction')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN retention_deduction REAL DEFAULT 0;");
+    if (!billCols.includes('created_by')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN created_by INTEGER REFERENCES users(id);");
+    if (!billCols.includes('created_by_name')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN created_by_name TEXT;");
+    if (!billCols.includes('reviewed_by')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reviewed_by INTEGER REFERENCES users(id);");
+    if (!billCols.includes('reviewed_by_name')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reviewed_by_name TEXT;");
+    if (!billCols.includes('reviewed_at')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reviewed_at DATETIME;");
+    if (!billCols.includes('review_notes')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN review_notes TEXT;");
+    if (!billCols.includes('approved_by')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN approved_by INTEGER REFERENCES users(id);");
+    if (!billCols.includes('approved_by_name')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN approved_by_name TEXT;");
+    if (!billCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN approved_at DATETIME;");
+    if (!billCols.includes('approval_notes')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN approval_notes TEXT;");
+    if (!billCols.includes('posted_by')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN posted_by INTEGER REFERENCES users(id);");
+    if (!billCols.includes('posted_by_name')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN posted_by_name TEXT;");
+    if (!billCols.includes('posted_at')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN posted_at DATETIME;");
+    if (!billCols.includes('reversed_by')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reversed_by INTEGER REFERENCES users(id);");
+    if (!billCols.includes('reversed_by_name')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reversed_by_name TEXT;");
+    if (!billCols.includes('reversed_at')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reversed_at DATETIME;");
+    if (!billCols.includes('reversal_reason')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reversal_reason TEXT;");
+    if (!billCols.includes('reversal_ref_id')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN reversal_ref_id INTEGER;");
+    if (!billCols.includes('journal_entry_id')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
+
+    // أعمدة دورة مستند المشتريات
+    const puCols = sqliteDb.prepare("PRAGMA table_info(purchases)").all().map(c => c.name);
+    if (!puCols.includes('status')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN status TEXT DEFAULT 'posted';");
+    if (!puCols.includes('created_by')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN created_by INTEGER REFERENCES users(id);");
+    if (!puCols.includes('created_by_name')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN created_by_name TEXT;");
+    if (!puCols.includes('reviewed_by')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reviewed_by INTEGER REFERENCES users(id);");
+    if (!puCols.includes('reviewed_by_name')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reviewed_by_name TEXT;");
+    if (!puCols.includes('reviewed_at')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reviewed_at DATETIME;");
+    if (!puCols.includes('review_notes')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN review_notes TEXT;");
+    if (!puCols.includes('approved_by')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN approved_by INTEGER REFERENCES users(id);");
+    if (!puCols.includes('approved_by_name')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN approved_by_name TEXT;");
+    if (!puCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN approved_at DATETIME;");
+    if (!puCols.includes('approval_notes')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN approval_notes TEXT;");
+    if (!puCols.includes('posted_by')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN posted_by INTEGER REFERENCES users(id);");
+    if (!puCols.includes('posted_by_name')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN posted_by_name TEXT;");
+    if (!puCols.includes('posted_at')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN posted_at DATETIME;");
+    if (!puCols.includes('reversed_by')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reversed_by INTEGER REFERENCES users(id);");
+    if (!puCols.includes('reversed_by_name')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reversed_by_name TEXT;");
+    if (!puCols.includes('reversed_at')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reversed_at DATETIME;");
+    if (!puCols.includes('reversal_reason')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reversal_reason TEXT;");
+    if (!puCols.includes('reversal_ref_id')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN reversal_ref_id INTEGER;");
+    if (!puCols.includes('journal_entry_id')) sqliteDb.exec("ALTER TABLE purchases ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
+
+    // أعمدة إضافية لقيود اليومية (المراجعة والاعتماد)
+    if (!jeCols.includes('reviewed_by')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reviewed_by INTEGER REFERENCES users(id);");
+    if (!jeCols.includes('reviewed_by_name')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reviewed_by_name TEXT;");
+    if (!jeCols.includes('reviewed_at')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reviewed_at DATETIME;");
+    if (!jeCols.includes('review_notes')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN review_notes TEXT;");
+    if (!jeCols.includes('approval_notes')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN approval_notes TEXT;");
+
+    // مشغلات حماية التوازن المحاسبي الصارم (Zero-Sum Invariant Triggers)
+    sqliteDb.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_enforce_journal_balance_insert
+      BEFORE INSERT ON journal_entries
+      BEGIN
+        SELECT CASE 
+          WHEN (NEW.total_debit <= 0 OR abs(NEW.total_debit - NEW.total_credit) > 0.001)
+          THEN RAISE(ABORT, '⛔ خطأ محاسبي: لا يمكن حفظ قيد غير متزن! إجمالي المدين يجب أن يساوي إجمالي الدائن.')
+        END;
+      END;
+    `);
+
+    sqliteDb.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_enforce_journal_balance_update
+      BEFORE UPDATE OF total_debit, total_credit ON journal_entries
+      BEGIN
+        SELECT CASE 
+          WHEN (NEW.total_debit <= 0 OR abs(NEW.total_debit - NEW.total_credit) > 0.001)
+          THEN RAISE(ABORT, '⛔ خطأ محاسبي: لا يمكن تحديث قيد ليصبح غير متزن! إجمالي المدين يجب أن يساوي إجمالي الدائن.')
+        END;
+      END;
+    `);
+
+    // 7. إنشاء دليل حسابات المقاولات المعياري (IFRS 15 Construction Accounts)
+    sqliteDb.exec(`
+      INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
+      (16, '1125', 'محتجزات ضمان لدى العملاء (Retention Receivables)', 'أصول', 2, 0),
+      (17, '1128', 'أصول تعاقدية - أعمال منجزة غير مفوترة (Contract Assets / WIP)', 'أصول', 2, 0),
+      (18, '2105', 'التزامات تعاقدية - دفعات مقدمة من العملاء (Customer Advances)', 'خصوم', 6, 0),
+      (19, '2115', 'التزامات تعاقدية - فواتير تزيد عن التكلفة والإنجاز (Contract Liabilities)', 'خصوم', 6, 0),
+      (20, '4101', 'إيرادات عقود المقاولات المعترف بها (Recognized Contract Revenue)', 'إيرادات', 9, 0),
+      (21, '4102', 'إيرادات أوامر التغيير المعتمدة (Approved Variation Orders)', 'إيرادات', 9, 0);
+    `);
+
+    // 8. جدول إثبات وتسجيل الإيرادات التعاقدية ونسب الإنجاز (Contract Revenue Recognitions)
+    sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS contract_revenue_recognitions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recognition_no TEXT UNIQUE NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        period_date DATE NOT NULL,
+        contract_value REAL DEFAULT 0,
+        estimated_cost REAL DEFAULT 0,
+        actual_cost_cumulative REAL DEFAULT 0,
+        poc_percentage REAL DEFAULT 0,
+        cumulative_recognized_revenue REAL DEFAULT 0,
+        previous_recognized_revenue REAL DEFAULT 0,
+        period_recognized_revenue REAL DEFAULT 0,
+        cumulative_billings REAL DEFAULT 0,
+        contract_asset_wip REAL DEFAULT 0,
+        contract_liability REAL DEFAULT 0,
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        status TEXT DEFAULT 'posted',
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_by_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
   } catch (err) {
     console.warn('Accounting migration note (SQLite):', err.message);
   }

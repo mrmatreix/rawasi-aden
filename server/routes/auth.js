@@ -16,36 +16,40 @@ const {
 function getRoleDefaultPermissions(role) {
   switch (role) {
     case 'admin':
-      return [
-        'dashboard:view',
-        'projects:view', 'projects:manage', 'projects:print',
-        'revenues:view', 'revenues:create', 'revenues:print',
-        'expenses:view', 'expenses:create',
-        'custody:view', 'custody:manage',
-        'clients:view', 'clients:manage', 'clients:statement',
-        'suppliers:view', 'suppliers:manage', 'suppliers:statement',
-        'inventory:view', 'inventory:manage', 'inventory:issue',
-        'cash:view',
-        'hr:view', 'hr:manage', 'hr:payroll',
-        'reports:view',
-        'settings:company', 'settings:users', 'settings:backup'
-      ];
+      return ['*'];
     case 'accountant':
       return [
-        'dashboard:view',
-        'revenues:view', 'revenues:create', 'revenues:print',
-        'expenses:view', 'expenses:create',
-        'custody:view', 'custody:manage',
-        'clients:view', 'clients:manage', 'clients:statement',
-        'suppliers:view', 'suppliers:manage', 'suppliers:statement',
+        'dashboard:view', 'dashboard:export',
+        'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
+        'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
+        'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
+        'billing:view', 'billing:create', 'billing:edit', 'billing:export',
+        'custody:view', 'custody:create', 'custody:edit', 'custody:export',
+        'clients:view', 'clients:create', 'clients:edit', 'clients:export',
+        'suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:export',
         'cash:view',
-        'hr:view', 'hr:manage', 'hr:payroll',
-        'reports:view'
+        'hr:view', 'hr:payroll',
+        'reports:view', 'reports:export'
+      ];
+    case 'auditor':
+      return [
+        'dashboard:view', 'dashboard:export',
+        'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
+        'expenses:view', 'expenses:approve', 'expenses:export',
+        'revenues:view', 'revenues:approve', 'revenues:export',
+        'billing:view', 'billing:approve', 'billing:export',
+        'custody:view', 'custody:approve', 'custody:export',
+        'projects:view', 'projects:export',
+        'inventory:view', 'inventory:export',
+        'purchases:view', 'purchases:approve', 'purchases:export',
+        'hr:view', 'hr:approve', 'hr:export',
+        'reports:view', 'reports:export',
+        'cash:view'
       ];
     case 'project_manager':
       return [
         'dashboard:view',
-        'projects:view', 'projects:manage', 'projects:print',
+        'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export',
         'expenses:view', 'expenses:create',
         'custody:view',
         'inventory:view', 'inventory:issue',
@@ -53,7 +57,8 @@ function getRoleDefaultPermissions(role) {
       ];
     case 'storekeeper':
       return [
-        'inventory:view', 'inventory:manage', 'inventory:issue',
+        'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export',
+        'purchases:view',
         'projects:view'
       ];
     default:
@@ -415,8 +420,26 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
     lastHeartbeatMs: nowMs
   });
 
+  const userScope = {
+    allowed_projects: user.allowed_projects || '*',
+    allowed_branches: user.allowed_branches || '*',
+    allowed_departments: user.allowed_departments || '*',
+    branch_id: user.branch_id || 1,
+    branch: user.branch || 'المركز الرئيسي',
+    department_id: user.department_id || 1,
+    department: user.department || 'الإدارة العامة'
+  };
+
   const token = jwt.sign(
-    { id: user.id, username: user.username, role: user.role, full_name: user.full_name, permissions: permissionsList, sessionId },
+    { 
+      id: user.id, 
+      username: user.username, 
+      role: user.role, 
+      full_name: user.full_name, 
+      permissions: permissionsList, 
+      scope: userScope,
+      sessionId 
+    },
     JWT_SECRET,
     { expiresIn: tokenExpiry }
   );
@@ -453,6 +476,13 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
       full_name: user.full_name,
       role: user.role,
       status: user.status,
+      branch_id: user.branch_id || 1,
+      branch: user.branch || 'المركز الرئيسي',
+      department_id: user.department_id || 1,
+      department: user.department || 'الإدارة العامة',
+      allowed_projects: user.allowed_projects || '*',
+      allowed_branches: user.allowed_branches || '*',
+      allowed_departments: user.allowed_departments || '*',
       permissions: permissionsList
     }
   });
@@ -671,7 +701,7 @@ router.get('/me', async (req, res) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token, active_sessions FROM users WHERE id = ?', [decoded.id]);
+    const user = await get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token, active_sessions, branch_id, branch, department_id, department, allowed_projects, allowed_branches, allowed_departments FROM users WHERE id = ?', [decoded.id]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
@@ -718,6 +748,13 @@ router.get('/me', async (req, res) => {
         full_name: user.full_name,
         role: user.role,
         status: user.status,
+        branch_id: user.branch_id || 1,
+        branch: user.branch || 'المركز الرئيسي',
+        department_id: user.department_id || 1,
+        department: user.department || 'الإدارة العامة',
+        allowed_projects: user.allowed_projects || '*',
+        allowed_branches: user.allowed_branches || '*',
+        allowed_departments: user.allowed_departments || '*',
         permissions: permissionsList
       }
     });

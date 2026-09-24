@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
+const { requirePermission, parseScopeArray } = require('../middleware/security');
 
-// جلب جميع المشاريع مع اسم العميل
-router.get('/', async (req, res) => {
+// جلب جميع المشاريع مع اسم العميل وتطبيق نطاق الصلاحيات
+router.get('/', requirePermission('projects:view'), async (req, res) => {
   try {
     const { status } = req.query;
     let sql = `
@@ -12,10 +13,30 @@ router.get('/', async (req, res) => {
       LEFT JOIN clients c ON p.client_id = c.id
     `;
     const params = [];
+    const conditions = [];
+
+    // فلترة نطاق المشاريع المصرح بها للمستخدم (Project Scoping)
+    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+      const allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
+      if (!allowedProjects.includes('*') && !allowedProjects.includes('all')) {
+        if (allowedProjects.length === 0) {
+          return res.json({ success: true, data: [] });
+        }
+        const placeholders = allowedProjects.map(() => '?').join(',');
+        conditions.push(`p.id IN (${placeholders})`);
+        params.push(...allowedProjects.map(Number));
+      }
+    }
+
     if (status) {
-      sql += ` WHERE p.status = ?`;
+      conditions.push(`p.status = ?`);
       params.push(status);
     }
+
+    if (conditions.length > 0) {
+      sql += ` WHERE ` + conditions.join(' AND ');
+    }
+
     sql += ` ORDER BY p.id ASC`;
     const projects = await query(sql, params);
     res.json({ success: true, data: projects });
@@ -24,8 +45,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// جلب مشروع محدد بالتفصيل مع المصروفات والمستخلصات التابعة له
-router.get('/:id', async (req, res) => {
+// جلب مشروع محدد بالتفصيل مع فحص الصلاحية والنطاق
+router.get('/:id', requirePermission('projects:view', { projectParam: 'id' }), async (req, res) => {
   try {
     const project = await get(`
       SELECT p.*, c.name as client_name, c.phone as client_phone
@@ -65,7 +86,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // إنشاء مشروع جديد مع التأكيد والتحقق من قاعدة البيانات
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('projects:create'), async (req, res) => {
   try {
     const {
       name,
@@ -127,8 +148,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// تحديث مشروع
-router.put('/:id', async (req, res) => {
+// تحديث مشروع مع فحص الصلاحية والنطاق
+router.put('/:id', requirePermission('projects:edit', { projectParam: 'id' }), async (req, res) => {
   try {
     const {
       name,
@@ -174,8 +195,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// حذف مشروع
-router.delete('/:id', async (req, res) => {
+// حذف مشروع مع فحص الصلاحية والنطاق
+router.delete('/:id', requirePermission('projects:cancel', { projectParam: 'id' }), async (req, res) => {
   try {
     await run('DELETE FROM projects WHERE id = ?', [req.params.id]);
     res.json({ success: true, message: 'تم حذف المشروع بنجاح' });

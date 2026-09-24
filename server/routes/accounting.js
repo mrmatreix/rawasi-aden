@@ -5,9 +5,11 @@ const bcrypt = require('bcryptjs');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const AccountingService = require('../services/accountingService');
+const FinancialControlService = require('../services/financialControlService');
+const { requirePermission } = require('../middleware/security');
 
 // دليل الحسابات الشجري
-router.get('/accounts', async (req, res) => {
+router.get('/accounts', requirePermission('accounting:view'), async (req, res) => {
   try {
     const accounts = await query('SELECT * FROM accounts ORDER BY code ASC');
     res.json({ success: true, data: accounts });
@@ -17,7 +19,7 @@ router.get('/accounts', async (req, res) => {
 });
 
 // إضافة حساب جديد إلى الدليل المحاسبي
-router.post('/accounts', async (req, res) => {
+router.post('/accounts', requirePermission('accounting:create,settings:company'), async (req, res) => {
   try {
     const { code, name, type, parent_code = '', balance = 0 } = req.body;
     if (!code || !name || !type) {
@@ -53,7 +55,7 @@ router.post('/accounts', async (req, res) => {
 });
 
 // تعديل بيانات حساب مالي
-router.put('/accounts/:id', async (req, res) => {
+router.put('/accounts/:id', requirePermission('accounting:edit,settings:company'), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, type, parent_id } = req.body;
@@ -80,7 +82,7 @@ router.put('/accounts/:id', async (req, res) => {
 });
 
 // جلب قائمة العملات وأسعار الصرف
-router.get('/currencies', async (req, res) => {
+router.get('/currencies', requirePermission('accounting:view'), async (req, res) => {
   try {
     const currencies = await query('SELECT * FROM currencies ORDER BY is_base DESC, code ASC');
     res.json({ success: true, data: currencies });
@@ -90,7 +92,7 @@ router.get('/currencies', async (req, res) => {
 });
 
 // إضافة عملة جديدة
-router.post('/currencies', async (req, res) => {
+router.post('/currencies', requirePermission('accounting:create,settings:company'), async (req, res) => {
   try {
     const { code, name, symbol, rate_to_base = 1.0, is_base = 0 } = req.body;
     if (!code || !name || !symbol) {
@@ -117,7 +119,7 @@ router.post('/currencies', async (req, res) => {
 });
 
 // تعديل سعر صرف العملة
-router.put('/currencies/:id', async (req, res) => {
+router.put('/currencies/:id', requirePermission('accounting:edit,settings:company'), async (req, res) => {
   try {
     const { id } = req.params;
     const { rate_to_base, name, symbol, is_base } = req.body;
@@ -146,7 +148,7 @@ router.put('/currencies/:id', async (req, res) => {
 });
 
 // جلب قائمة مراكز التكلفة
-router.get('/cost-centers', async (req, res) => {
+router.get('/cost-centers', requirePermission('accounting:view'), async (req, res) => {
   try {
     const centers = await query(`
       SELECT cc.*, p.name as project_name 
@@ -161,7 +163,7 @@ router.get('/cost-centers', async (req, res) => {
 });
 
 // إضافة مركز تكلفة جديد
-router.post('/cost-centers', async (req, res) => {
+router.post('/cost-centers', requirePermission('accounting:create'), async (req, res) => {
   try {
     const { code, name, type = 'مشروع', project_id, notes } = req.body;
     if (!code || !name) {
@@ -192,7 +194,7 @@ router.post('/cost-centers', async (req, res) => {
 });
 
 // جلب قيود اليومية العامة
-router.get('/journal-entries', async (req, res) => {
+router.get('/journal-entries', requirePermission('accounting:view'), async (req, res) => {
   try {
     const { from_date, to_date, reference_type } = req.query;
     let sql = `
@@ -230,7 +232,7 @@ router.get('/journal-entries', async (req, res) => {
 });
 
 // جلب تفاصيل قيد يومية محدد مع كافة أطرافه المحاسبية
-router.get('/journal-entries/:id', async (req, res) => {
+router.get('/journal-entries/:id', requirePermission('accounting:view'), async (req, res) => {
   try {
     const { id } = req.params;
     const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [id]);
@@ -261,7 +263,7 @@ router.get('/journal-entries/:id', async (req, res) => {
 });
 
 // نقطة فحص فوري لحالة الفترة المحاسبية لتاريخ محدد (تستخدمها الواجهات ونماذج الإدخال)
-router.get('/check-period', async (req, res) => {
+router.get('/check-period', requirePermission('accounting:view,expenses:create,revenues:create'), async (req, res) => {
   try {
     const { date } = req.query;
     const result = await checkPeriodOpen(date || new Date().toISOString().split('T')[0]);
@@ -272,21 +274,23 @@ router.get('/check-period', async (req, res) => {
 });
 
 // إنشاء قيد يدوي متزن بطرفين أو أطراف متعددة مع الفحص الصارم للاتزان وإغلاق الفترات ومراكز التكلفة
-router.post('/journal-entries', async (req, res) => {
+router.post('/journal-entries', requirePermission('accounting:create'), async (req, res) => {
   try {
     const { 
       date = new Date().toISOString().split('T')[0], 
       description, 
       reference_type = 'قيد يدوي',
       reference_id = null,
-      lines 
+      lines,
+      status: requestedStatus
     } = req.body;
 
     const result = await AccountingService.createJournalEntry({
       date,
       description,
       reference_type,
-      reference_id
+      reference_id,
+      status: requestedStatus
     }, lines, req);
 
     res.json({
@@ -295,7 +299,8 @@ router.post('/journal-entries', async (req, res) => {
       entry_no: result.entry_no,
       id: result.id,
       total_debit: result.total_debit,
-      total_credit: result.total_credit
+      total_credit: result.total_credit,
+      status: result.status
     });
   } catch (err) {
     const status = err.message.includes('لا يمكن') || err.message.includes('غير متزن') || err.message.includes('مغلقة') ? 400 : 500;
@@ -303,8 +308,274 @@ router.post('/journal-entries', async (req, res) => {
   }
 });
 
+// إرسال مسودة القيد اليومي للمراجعة (Draft -> Under Review)
+router.post('/journal-entries/:id/submit-review', requirePermission('accounting:create,accounting:edit'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [id]);
+    if (!entry) return res.status(404).json({ success: false, message: 'القيد اليومي غير موجود' });
+
+    if (entry.status !== 'draft') {
+      return res.status(400).json({ success: false, message: `لا يمكن إرسال القيد للمراجعة لأنه في حالة [${entry.status}]` });
+    }
+
+    const rawRevId = req.user?.id || null;
+    const reviewerId = await FinancialControlService.resolveValidUserId(rawRevId);
+    const reviewerName = req.user?.username || req.user?.full_name || 'مراجع الحسابات';
+
+    await run(`
+      UPDATE journal_entries 
+      SET status = 'under_review', reviewed_by = ?, reviewed_by_name = ?, reviewed_at = CURRENT_TIMESTAMP, review_notes = ?
+      WHERE id = ?
+    `, [reviewerId, reviewerName, notes || null, id]);
+
+    await logAudit(req, {
+      action: 'SUBMIT_REVIEW',
+      entity_type: 'journal_entry',
+      entity_id: entry.entry_no,
+      old_values: { status: 'draft' },
+      new_values: { status: 'under_review', reviewed_by: reviewerName }
+    });
+
+    res.json({ success: true, message: `تم إرسال القيد اليومي (${entry.entry_no}) للمراجعة بنجاح`, status: 'under_review' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// اعتماد القيد اليومي مع تطبيق مبدأ العيون الأربع (Maker-Checker / Four-Eyes Principle)
+router.post('/journal-entries/:id/approve', requirePermission('accounting:approve'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [id]);
+    if (!entry) return res.status(404).json({ success: false, message: 'القيد اليومي غير موجود' });
+
+    // 1. تطبيق مبدأ العيون الأربع (منع منشئ القيد من اعتماده بنفسه)
+    try {
+      FinancialControlService.assertMakerChecker(entry, req.user, 'اعتماد');
+    } catch (soDError) {
+      return res.status(403).json({ success: false, message: soDError.message, fourEyesViolation: true });
+    }
+
+    // 2. فحص الفترة المحاسبية
+    await FinancialControlService.assertPeriodOpen(entry.date);
+
+    if (entry.status === 'approved' || entry.status === 'posted') {
+      return res.status(400).json({ success: false, message: 'القيد معتمد مسبقاً' });
+    }
+
+    const rawAppId = req.user?.id || null;
+    const approverId = await FinancialControlService.resolveValidUserId(rawAppId);
+    const approverName = req.user?.username || req.user?.full_name || 'المدير المالي';
+
+    await run(`
+      UPDATE journal_entries 
+      SET status = 'approved', approved_by = ?, approved_by_name = ?, approved_at = CURRENT_TIMESTAMP, approval_notes = ?
+      WHERE id = ?
+    `, [approverId, approverName, notes || null, id]);
+
+    await logAudit(req, {
+      action: 'APPROVE',
+      entity_type: 'journal_entry',
+      entity_id: entry.entry_no,
+      old_values: { status: entry.status },
+      new_values: { status: 'approved', approved_by: approverName },
+      reason: notes || 'اعتماد مالي قانوني'
+    });
+
+    res.json({ success: true, message: `تم اعتماد القيد اليومي (${entry.entry_no}) بنجاح بواسطة [${approverName}]`, status: 'approved' });
+  } catch (err) {
+    const status = err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500;
+    res.status(status).json({ success: false, message: err.message });
+  }
+});
+
+// ترحيل القيد اليومي لدفتر الأستاذ العام (Post to GL)
+router.post('/journal-entries/:id/post', requirePermission('accounting:post'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [id]);
+    if (!entry) return res.status(404).json({ success: false, message: 'القيد اليومي غير موجود' });
+
+    if (entry.status === 'posted') {
+      return res.status(400).json({ success: false, message: 'القيد مرحل مسبقاً' });
+    }
+    if (entry.status === 'reversed') {
+      return res.status(400).json({ success: false, message: 'لا يمكن ترحيل قيد تم عكسه مسبقاً' });
+    }
+
+    await FinancialControlService.assertPeriodOpen(entry.date);
+
+    // التحقق الصارم من التوازن قبل الترحيل
+    const diff = Math.abs(Number(entry.total_debit) - Number(entry.total_credit));
+    if (diff > 0.001 || Number(entry.total_debit) <= 0) {
+      return res.status(400).json({ success: false, message: `⛔ لا يمكن ترحيل قيد غير متزن! الفرق: ${diff}` });
+    }
+
+    const rawPosterId = req.user?.id || null;
+    const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
+    const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
+
+    await run(`
+      UPDATE journal_entries 
+      SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [posterId, posterName, id]);
+
+    await logAudit(req, {
+      action: 'POST',
+      entity_type: 'journal_entry',
+      entity_id: entry.entry_no,
+      old_values: { status: entry.status },
+      new_values: { status: 'posted', posted_by: posterName }
+    });
+
+    res.json({ success: true, message: `تم ترحيل القيد اليومي (${entry.entry_no}) بنجاح لدفتر الأستاذ`, status: 'posted' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء ترحيل القيد: ' + err.message });
+  }
+});
+
+// تنفيذ قيد عكسي لقيد يومي عام (Storno Reversal)
+router.post('/journal-entries/:id/reverse', requirePermission('accounting:approve,accounting:create'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason, reversal_date } = req.body;
+
+    const result = await FinancialControlService.reverseJournalEntry(id, {
+      user: req.user,
+      reason,
+      reversal_date,
+      req
+    });
+
+    res.json(result);
+  } catch (err) {
+    const status = err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500;
+    res.status(status).json({ success: false, message: err.message });
+  }
+});
+
+// حذف قيد يومي (محمي: للمسودات فقط! يمنع منعاً باتاً حذف القيود المرحلة)
+router.delete('/journal-entries/:id', requirePermission('accounting:approve'), async (req, res) => {
+  try {
+    const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [req.params.id]);
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'القيد غير موجود' });
+    }
+
+    try {
+      FinancialControlService.assertDeletable(entry);
+    } catch (dErr) {
+      return res.status(400).json({ 
+        success: false, 
+        message: dErr.message, 
+        financialControlProtected: true 
+      });
+    }
+
+    await FinancialControlService.assertPeriodOpen(entry.date);
+
+    await transaction(async (tx) => {
+      await tx.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [req.params.id]);
+      await tx.run('DELETE FROM journal_entries WHERE id = ?', [req.params.id]);
+    });
+
+    await logAudit(req, {
+      action: 'DELETE_DRAFT',
+      entity_type: 'journal_entry',
+      entity_id: entry.entry_no,
+      old_values: { entry_no: entry.entry_no, total_debit: entry.total_debit, total_credit: entry.total_credit, date: entry.date },
+      reason: req.body?.reason || 'حذف مسودة قيد غير معتمدة'
+    });
+
+    res.json({ success: true, message: 'تم حذف مسودة القيد اليومي بنجاح' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// تعديل قيد يومي (محمي: للمسودات فقط مع التحقق الصارم من التوازن وتوثيق سجل التغيرات)
+router.put('/journal-entries/:id', requirePermission('accounting:create,accounting:edit'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [id]);
+    if (!entry) return res.status(404).json({ success: false, message: 'القيد غير موجود' });
+
+    try {
+      FinancialControlService.assertMutable(entry, 'تعديل بيانات أو أطراف القيد');
+    } catch (mErr) {
+      return res.status(400).json({ success: false, message: mErr.message, immutable: true });
+    }
+
+    const { date, description, lines, reason } = req.body;
+    const targetDate = date || entry.date;
+    await FinancialControlService.assertPeriodOpen(targetDate);
+
+    // إذا أرسلت خطوط جديدة، يتم التحقق المالي الصارم من التوازن ومراكز التكلفة
+    let validated = null;
+    if (lines && Array.isArray(lines)) {
+      validated = await AccountingService.validateJournalEntryLines(lines);
+    }
+
+    const oldVals = { 
+      date: entry.date, 
+      description: entry.description, 
+      total_debit: entry.total_debit, 
+      total_credit: entry.total_credit 
+    };
+
+    const newVals = {
+      date: targetDate,
+      description: description !== undefined ? String(description).trim() : entry.description,
+      total_debit: validated ? validated.totalDebit : entry.total_debit,
+      total_credit: validated ? validated.totalCredit : entry.total_credit
+    };
+
+    await transaction(async (tx) => {
+      await tx.run(`
+        UPDATE journal_entries 
+        SET date = ?, description = ?, total_debit = ?, total_credit = ?
+        WHERE id = ?
+      `, [newVals.date, newVals.description, newVals.total_debit, newVals.total_credit, id]);
+
+      if (validated) {
+        await tx.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [id]);
+        for (const line of validated.sanitizedLines) {
+          await tx.run(`
+            INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [id, line.account_id, line.cost_center_id, line.debit, line.credit, line.description]);
+        }
+      }
+    });
+
+    await logAudit(req, {
+      action: 'UPDATE',
+      entity_type: 'journal_entry',
+      entity_id: entry.entry_no,
+      old_values: oldVals,
+      new_values: newVals,
+      reason: reason || 'تعديل مسودة قيد يومي'
+    });
+
+    res.json({
+      success: true,
+      message: 'تم تعديل مسودة القيد اليومي بنجاح وتحديث أطرافه المحاسبية',
+      entry_no: entry.entry_no,
+      total_debit: newVals.total_debit,
+      total_credit: newVals.total_credit
+    });
+  } catch (err) {
+    const status = err.message.includes('لا يمكن') || err.message.includes('غير متزن') || err.message.includes('مغلقة') ? 400 : 500;
+    res.status(status).json({ success: false, message: err.message });
+  }
+});
+
 // جلب قائمة العهد المفتوحة وغير المصفاة (للتصفية السريعة)
-router.get('/open-custodies', async (req, res) => {
+router.get('/open-custodies', requirePermission('custody:view'), async (req, res) => {
   try {
     const { employee_id } = req.query;
     let sql = `
@@ -328,7 +599,7 @@ router.get('/open-custodies', async (req, res) => {
 });
 
 // جلب النثريات والعهد مع بيانات الموظف والعهدة الأصلية
-router.get('/custodies', async (req, res) => {
+router.get('/custodies', requirePermission('custody:view'), async (req, res) => {
   try {
     const custodies = await query(`
       SELECT c.*, 
@@ -346,7 +617,7 @@ router.get('/custodies', async (req, res) => {
 });
 
 // تسجيل عهدة أو نثرية أو تصفية عهدة سابقة
-router.post('/custodies', async (req, res) => {
+router.post('/custodies', requirePermission('custody:create'), async (req, res) => {
   try {
     const {
       operation_type = 'صرف عهدة',
@@ -534,7 +805,7 @@ router.get('/cash-movements', async (req, res) => {
 // ============================================================
 
 // استعراض الفترات المحاسبية وحالتها
-router.get('/periods', async (req, res) => {
+router.get('/periods', requirePermission('accounting:view'), async (req, res) => {
   try {
     const periods = await query('SELECT * FROM accounting_periods ORDER BY fiscal_year DESC, start_date DESC');
     res.json({ success: true, data: periods });
@@ -544,7 +815,7 @@ router.get('/periods', async (req, res) => {
 });
 
 // إنشاء فترة محاسبية جديدة
-router.post('/periods', async (req, res) => {
+router.post('/periods', requirePermission('accounting:create'), async (req, res) => {
   try {
     const { period_name, fiscal_year, start_date, end_date, notes } = req.body;
     if (!period_name || !start_date || !end_date) {
@@ -573,7 +844,7 @@ router.post('/periods', async (req, res) => {
 });
 
 // إغلاق فترة محاسبية رسمياً لمنع التعديل على أي تاريخ يقع داخلها (يتطلب تفويض وكلمة مرور المدير)
-router.put('/periods/:id/close', async (req, res) => {
+router.put('/periods/:id/close', requirePermission('accounting:approve,accounting:close_period'), async (req, res) => {
   try {
     const { id } = req.params;
     const { notes, manager_password } = req.body;
@@ -652,7 +923,7 @@ router.put('/periods/:id/close', async (req, res) => {
 });
 
 // إعادة فتح فترة محاسبية مغلقة (يتطلب سبباً مبرراً وتوثيقاً في سجل التدقيق)
-router.put('/periods/:id/reopen', async (req, res) => {
+router.put('/periods/:id/reopen', requirePermission('accounting:approve'), async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -691,7 +962,7 @@ router.put('/periods/:id/reopen', async (req, res) => {
 // ============================================================
 // 📜 سجل التدقيق والرقابة المالية (Audit Log API)
 // ============================================================
-router.get('/audit-logs', async (req, res) => {
+router.get('/audit-logs', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
     const { entity_type, action, from_date, to_date, page = 1, limit = 20 } = req.query;
     let sql = 'SELECT * FROM audit_logs';

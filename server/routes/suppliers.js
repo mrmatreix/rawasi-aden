@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
+const { requirePermission } = require('../middleware/security');
 
 // جلب جميع الموردين
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('suppliers:view'), async (req, res) => {
   try {
     const suppliers = await query('SELECT * FROM suppliers ORDER BY id ASC');
     res.json({ success: true, data: suppliers });
@@ -13,7 +14,7 @@ router.get('/', async (req, res) => {
 });
 
 // إضافة مورد جديد مع التأكيد والتحقق من قاعدة البيانات
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('suppliers:create'), async (req, res) => {
   try {
     const { name, category, phone, email, address, balance = 0, currency = 'ر.ي', notes } = req.body;
     if (!name || !name.trim()) {

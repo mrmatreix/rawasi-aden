@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
 const { tafqeet } = require('../services/tafqeetService');
+const { requirePermission, requireScope } = require('../middleware/security');
+
+// فرض نطاق المشروع الإلزامي وحماية العمليات على كافة مسارات إدارة المشاريع
+router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
+  if (req.method === 'GET') {
+    return requirePermission('projects:view')(req, res, next);
+  }
+  if (req.method === 'DELETE') {
+    return requirePermission('projects:cancel')(req, res, next);
+  }
+  // اعتماد أو تعديل حالة أو أمر تغيير
+  if (req.path.includes('/status') || req.path.includes('/approve') || (req.body && req.body.status === 'معتمد')) {
+    return requirePermission('projects:approve,projects:edit')(req, res, next);
+  }
+  return requirePermission('projects:edit,projects:create')(req, res, next);
+});
 
 // ============================================================================
 // 0. ملخص شامل لجميع المتطلبات الـ 14 للمشروع المحدد

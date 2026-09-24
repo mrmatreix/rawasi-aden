@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
+const { requirePermission } = require('../middleware/security');
 
 // جلب جميع العملاء مع أرصدتهم
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('clients:view'), async (req, res) => {
   try {
     const clients = await query('SELECT * FROM clients ORDER BY id ASC');
     res.json({ success: true, data: clients });
@@ -13,7 +14,7 @@ router.get('/', async (req, res) => {
 });
 
 // جلب عميل بالمعرف
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('clients:view'), async (req, res) => {
   try {
     const client = await get('SELECT * FROM clients WHERE id = ?', [req.params.id]);
     if (!client) {
@@ -26,7 +27,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // إضافة عميل جديد مع التأكيد والتحقق من قاعدة البيانات
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('clients:create'), async (req, res) => {
   try {
     const { name, company, phone, email, address, previous_balance = 0, currency = 'ر.ي', notes } = req.body;
     if (!name || !name.trim()) {

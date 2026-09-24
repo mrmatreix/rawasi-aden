@@ -4,12 +4,13 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const PayrollService = require('../services/payrollService');
+const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 const today = () => new Date().toISOString().slice(0, 10);
 const number = value => Number(value) || 0;
 
 // مؤشرات الموارد البشرية: القوة العاملة، الحضور، الرواتب والسلف المستحقة.
-router.get('/dashboard', async (_req, res) => {
+router.get('/dashboard', requirePermission('hr:view'), async (_req, res) => {
   try {
     const [employees, attendance, payroll, advances, leaves] = await Promise.all([
       get("SELECT COUNT(*) AS count FROM employees WHERE status = 'active'"),
@@ -25,14 +26,30 @@ router.get('/dashboard', async (_req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.get('/employees', async (_req, res) => {
+router.get('/employees', requirePermission('hr:view'), async (req, res) => {
   try {
-    const rows = await query(`SELECT e.*, p.name AS project_name FROM employees e LEFT JOIN projects p ON p.id = e.project_id ORDER BY e.status = 'active' DESC, e.full_name`);
+    let sql = `SELECT e.*, p.name AS project_name FROM employees e LEFT JOIN projects p ON p.id = e.project_id`;
+    const params = [];
+    const conditions = [];
+
+    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
+    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
+      const placeholders = allowedProjects.map(() => '?').join(',');
+      conditions.push(`(e.project_id IS NULL OR e.project_id IN (${placeholders}))`);
+      params.push(...allowedProjects);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ` ORDER BY e.status = 'active' DESC, e.full_name`;
+    const rows = await query(sql, params);
     res.json({ success: true, data: rows });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.post('/employees', async (req, res) => {
+router.post('/employees', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_no, full_name, national_id, phone, job_title, department, project_id, employment_type, hire_date, basic_salary, currency, status, bank_name, bank_account, notes } = req.body;
     if (!full_name?.trim()) return res.status(400).json({ success: false, message: 'اسم الموظف مطلوب' });
@@ -44,7 +61,7 @@ router.post('/employees', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.put('/employees/:id', async (req, res) => {
+router.put('/employees/:id', requirePermission('hr:edit'), async (req, res) => {
   try {
     const fields = ['full_name','national_id','phone','job_title','department','project_id','employment_type','hire_date','basic_salary','currency','status','bank_name','bank_account','notes'];
     const values = fields.map(key => req.body[key] ?? null);
@@ -53,7 +70,7 @@ router.put('/employees/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.get('/attendance', async (req, res) => {
+router.get('/attendance', requirePermission('hr:view'), async (req, res) => {
   try {
     const date = req.query.date || today();
     const rows = await query(`SELECT a.*, e.full_name, e.employee_no FROM attendance a JOIN employees e ON e.id=a.employee_id WHERE a.date=? ORDER BY e.full_name`, [date]);
@@ -61,7 +78,7 @@ router.get('/attendance', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.post('/attendance', async (req, res) => {
+router.post('/attendance', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_id, date, status, check_in, check_out, overtime_hours, notes } = req.body;
     if (!employee_id) return res.status(400).json({ success: false, message: 'اختر الموظف' });
@@ -72,7 +89,7 @@ router.post('/attendance', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.get('/leaves', async (_req, res) => {
+router.get('/leaves', requirePermission('hr:view'), async (_req, res) => {
   try {
     const rows = await query('SELECT l.*, e.full_name FROM employee_leaves l JOIN employees e ON e.id=l.employee_id ORDER BY l.created_at DESC');
     res.json({ success: true, data: rows });
@@ -81,7 +98,7 @@ router.get('/leaves', async (_req, res) => {
   }
 });
 
-router.post('/leaves', async (req, res) => {
+router.post('/leaves', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_id, leave_type, start_date, end_date, days_count, status, notes } = req.body;
     if (!employee_id || !start_date || !end_date) return res.status(400).json({ success: false, message: 'الموظف وفترة الإجازة مطلوبان' });
@@ -93,7 +110,7 @@ router.post('/leaves', async (req, res) => {
   }
 });
 
-router.put('/leaves/:id/status', async (req, res) => {
+router.put('/leaves/:id/status', requirePermission('hr:approve'), async (req, res) => {
   try {
     await run('UPDATE employee_leaves SET status=? WHERE id=?', [req.body.status || 'approved', req.params.id]);
     res.json({ success: true, message: 'تم تحديث حالة الإجازة' });
@@ -102,7 +119,7 @@ router.put('/leaves/:id/status', async (req, res) => {
   }
 });
 
-router.get('/leave-types', async (_req, res) => {
+router.get('/leave-types', requirePermission('hr:view'), async (_req, res) => {
   try {
     const types = await query('SELECT * FROM leave_types ORDER BY is_paid DESC, id ASC');
     res.json({ success: true, data: types });
@@ -111,7 +128,7 @@ router.get('/leave-types', async (_req, res) => {
   }
 });
 
-router.post('/leave-types', async (req, res) => {
+router.post('/leave-types', requirePermission('hr:create'), async (req, res) => {
   try {
     const { name, days_per_year = 30, is_paid = 1, description = '' } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'اسم نوع الإجازة مطلوب' });
@@ -123,14 +140,14 @@ router.post('/leave-types', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.get('/advances', async (_req, res) => {
+router.get('/advances', requirePermission('hr:view'), async (_req, res) => {
   try {
     const rows = await query(`SELECT a.*, e.full_name, e.employee_no FROM employee_advances a JOIN employees e ON e.id = a.employee_id ORDER BY a.id DESC`);
     res.json({ success: true, data: rows });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.post('/advances', async (req, res) => {
+router.post('/advances', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_id, amount, request_date = today(), installment_amount, reason } = req.body;
     await run('INSERT INTO employee_advances (employee_id,amount,request_date,installment_amount,reason) VALUES (?,?,?,?,?)',
@@ -145,7 +162,7 @@ router.post('/advances', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.get('/payroll', async (req, res) => {
+router.get('/payroll', requirePermission('hr:view,hr:payroll'), async (req, res) => {
   try {
     const month = req.query.month;
     let sql = 'SELECT p.*, e.full_name, e.employee_no FROM payroll p JOIN employees e ON e.id=p.employee_id';
@@ -164,7 +181,7 @@ router.get('/payroll', async (req, res) => {
 // إعداد واحتساب مسير الرواتب وفق القواعد النظامية:
 // - استقطاع التأمينات: 6% للموظف، 9% لرب العمل على الراتب الأساسي
 // - ضريبة كسب العمل: إعفاء لأول 20,000 ر.ي، ثم 10% للشرائح التالية
-router.post('/payroll/generate', async (req, res) => {
+router.post('/payroll/generate', requirePermission('hr:create,hr:payroll'), async (req, res) => {
   try {
     const payrollMonth = req.body.payroll_month || today().slice(0, 7);
     const employees = await query("SELECT * FROM employees WHERE status='active'");
@@ -235,7 +252,7 @@ router.post('/payroll/generate', async (req, res) => {
 });
 
 // تقييمات أداء الموظفين والحوافز والخصومات
-router.get('/evaluations', async (req, res) => {
+router.get('/evaluations', requirePermission('hr:view'), async (req, res) => {
   try {
     const { employee_id } = req.query;
     let sql = `
@@ -256,7 +273,7 @@ router.get('/evaluations', async (req, res) => {
   }
 });
 
-router.post('/evaluations', async (req, res) => {
+router.post('/evaluations', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_id, evaluation_date = today(), rating = 'جيد جداً', score = 85, bonuses = 0, deductions = 0, evaluator = 'مدير الموارد البشرية', comments = '' } = req.body;
     if (!employee_id) return res.status(400).json({ success: false, message: 'اختر الموظف المراد تقييمه' });
@@ -271,7 +288,7 @@ router.post('/evaluations', async (req, res) => {
 });
 
 // معاينة القيد المحاسبي المركب لمسير الرواتب وقواعد التأمينات والضرائب قبل الترحيل
-router.get('/payroll/:month/preview-journal', async (req, res) => {
+router.get('/payroll/:month/preview-journal', requirePermission('hr:view,accounting:view'), async (req, res) => {
   try {
     const month = req.params.month;
     const records = await query('SELECT p.*, e.full_name FROM payroll p JOIN employees e ON e.id=p.employee_id WHERE p.payroll_month = ?', [month]);
@@ -359,7 +376,7 @@ router.get('/payroll/:month/preview-journal', async (req, res) => {
 });
 
 // ترحيل كشف الراتب آلياً إلى قيد محاسبي مركب متزن تماماً في سجل اليومية العامة
-router.post('/payroll/:month/post-to-journal', async (req, res) => {
+router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accounting:create,hr:payroll'), async (req, res) => {
   try {
     const month = req.params.month;
     const postDate = today();

@@ -1334,6 +1334,9 @@ const Settings = {
           } else if (u.role === 'accountant') {
             roleBadgeClass = 'badge-role-accountant';
             roleTitle = 'المحاسب المالي';
+          } else if (u.role === 'auditor') {
+            roleBadgeClass = 'badge-warning';
+            roleTitle = 'المراجع المالي (مدقق)';
           } else if (u.role === 'project_manager') {
             roleBadgeClass = 'badge-role-pm';
             roleTitle = 'مهندس المشاريع';
@@ -1345,12 +1348,24 @@ const Settings = {
           // Permissions summary
           const perms = u.permissions_list || [];
           let permsHtml = '';
-          if (u.role === 'admin' || perms.includes('all') || perms.length >= 18) {
+          if (u.role === 'admin' || perms.includes('all') || perms.length >= 25) {
             permsHtml = `<span class="badge badge-role-admin">كافة الصلاحيات (شامل)</span>`;
           } else if (perms.length === 0) {
             permsHtml = `<span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary);">صلاحيات افتراضية (${roleTitle})</span>`;
           } else {
             permsHtml = `<span class="badge badge-active" title="${perms.join(', ')}">${perms.length} صلاحية مخصصة</span>`;
+          }
+
+          // Scope summary
+          let scopeHtml = '';
+          const scopeParts = [];
+          if (u.branch) scopeParts.push(`🏢 ${u.branch}`);
+          if (u.department) scopeParts.push(`📑 ${u.department}`);
+          if (u.allowed_projects && u.allowed_projects !== 'all' && u.allowed_projects !== '*' && u.allowed_projects !== '[]') {
+            scopeParts.push(`🏗️ مشاريع محددة`);
+          }
+          if (scopeParts.length > 0) {
+            scopeHtml = `<div style="font-size: 0.72rem; color: #38bdf8; margin-top: 3px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
           }
 
           // User security & session badge
@@ -1413,6 +1428,7 @@ const Settings = {
               </td>
               <td>
                 ${permsHtml}
+                ${scopeHtml}
                 ${secBadgeHtml}
                 ${tfaBadgeHtml}
               </td>
@@ -1454,8 +1470,84 @@ const Settings = {
     }
   },
 
+  // ================== إدارة نطاق الصلاحيات (المشاريع، الفروع، الأقسام) ==================
+  async fetchScopesMeta() {
+    if (this._scopesMeta) return this._scopesMeta;
+    try {
+      const res = await fetch('/api/users/scopes-meta', {
+        headers: Auth.token ? { 'Authorization': `Bearer ${Auth.token}` } : {}
+      });
+      const data = await res.json();
+      if (data.success) {
+        this._scopesMeta = data;
+        return data;
+      }
+    } catch (e) {
+      console.error('Error fetching scopes meta:', e);
+    }
+    return null;
+  },
+
+  async renderScopesControls(user = null) {
+    const meta = await this.fetchScopesMeta();
+    const branchSelect = document.getElementById('userBranchVal');
+    const deptSelect = document.getElementById('userDepartmentVal');
+    const projectsList = document.getElementById('userProjectsCheckList');
+    const allProjChk = document.getElementById('userAllProjectsScopeChk');
+    const projContainer = document.getElementById('userProjectsScopeContainer');
+
+    if (branchSelect) {
+      const currentBranchId = user ? (user.branch_id || '') : '';
+      branchSelect.innerHTML = `<option value="">كافة الفروع (غير مقيد)</option>` +
+        (meta?.branches || []).map(b => `<option value="${b.id}" ${String(b.id) === String(currentBranchId) ? 'selected' : ''}>🏢 ${b.name} (${b.city || ''})</option>`).join('');
+    }
+
+    if (deptSelect) {
+      const currentDeptId = user ? (user.department_id || '') : '';
+      deptSelect.innerHTML = `<option value="">كافة الأقسام (غير مقيد)</option>` +
+        (meta?.departments || []).map(d => `<option value="${d.id}" ${String(d.id) === String(currentDeptId) ? 'selected' : ''}>📑 ${d.name}</option>`).join('');
+    }
+
+    if (projectsList) {
+      let allowedProjIds = [];
+      if (user && user.allowed_projects) {
+        try {
+          allowedProjIds = typeof user.allowed_projects === 'string' && (user.allowed_projects.startsWith('[') || user.allowed_projects.startsWith('{'))
+            ? JSON.parse(user.allowed_projects)
+            : String(user.allowed_projects).split(',').map(s => s.trim());
+        } catch (e) {
+          allowedProjIds = [String(user.allowed_projects)];
+        }
+      }
+
+      const isAll = !user || allowedProjIds.length === 0 || allowedProjIds.includes('*') || allowedProjIds.includes('all');
+      if (allProjChk) allProjChk.checked = isAll;
+      if (projContainer) projContainer.style.display = isAll ? 'none' : 'block';
+
+      projectsList.innerHTML = (meta?.projects || []).map(p => {
+        const checked = !isAll && allowedProjIds.some(id => String(id) === String(p.id));
+        return `
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: #f1f5f9; cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;">
+            <input type="checkbox" class="user-proj-scope-chk" value="${p.id}" ${checked ? 'checked' : ''} style="accent-color: #38bdf8;">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</span>
+          </label>
+        `;
+      }).join('');
+    }
+  },
+
+  onAllProjectsScopeToggle(isAll) {
+    const projContainer = document.getElementById('userProjectsScopeContainer');
+    if (projContainer) {
+      projContainer.style.display = isAll ? 'none' : 'block';
+    }
+    if (isAll) {
+      document.querySelectorAll('.user-proj-scope-chk').forEach(c => c.checked = false);
+    }
+  },
+
   // ================== نافذة إضافة مستخدم جديد ==================
-  openNewUserModal() {
+  async openNewUserModal() {
     const titleEl = document.getElementById('userModalTitle');
     if (titleEl) titleEl.textContent = 'إضافة مستخدم جديد وتحديد الصلاحيات';
 
@@ -1486,6 +1578,9 @@ const Settings = {
       this.applyRolePermissionsPreset('accountant');
     }
 
+    // تجهيز نطاق الصلاحيات الجغرافي والإداري (فروع، أقسام، مشاريع)
+    await this.renderScopesControls(null);
+
     // تجهيز بطاقة الأمان والجلسات المخصصة (المكان الأخضر)
     const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
     const secCard = document.getElementById('userModalSecurityCard');
@@ -1509,7 +1604,7 @@ const Settings = {
   },
 
   // ================== نافذة تعديل مستخدم ==================
-  openEditUserModal(userId) {
+  async openEditUserModal(userId) {
     const user = this._cachedUsers.find(u => u.id === userId);
     if (!user) {
       App.showToast('لم يتم العثور على بيانات المستخدم', 'error');
@@ -1544,6 +1639,9 @@ const Settings = {
     if (roleSelect) {
       roleSelect.value = user.role || 'custom';
     }
+
+    // تجهيز نطاق الصلاحيات الجغرافي والإداري لهذا المستخدم
+    await this.renderScopesControls(user);
 
     // تعبئة حقل رمز التحقق بخطوتين (2FA PIN) وحالته للمستخدم الحالي
     const editPinInput = document.getElementById('user2FaPinVal');
@@ -1849,20 +1947,39 @@ const Settings = {
         return;
       case 'accountant':
         permsToSelect = [
-          'dashboard:view',
-          'revenues:view', 'revenues:create', 'revenues:print',
-          'expenses:view', 'expenses:create',
-          'custody:view', 'custody:manage',
-          'clients:view', 'clients:manage', 'clients:statement',
-          'suppliers:view', 'suppliers:manage', 'suppliers:statement',
+          'dashboard:view', 'dashboard:export',
+          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
+          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
+          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
+          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
+          'custody:view', 'custody:create', 'custody:export',
+          'clients:view', 'clients:create', 'clients:export',
+          'suppliers:view', 'suppliers:create', 'suppliers:export',
           'cash:view',
-          'reports:view'
+          'hr:view',
+          'reports:view', 'reports:export'
+        ];
+        break;
+      case 'auditor':
+        permsToSelect = [
+          'dashboard:view', 'dashboard:export',
+          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
+          'expenses:view', 'expenses:approve', 'expenses:export',
+          'revenues:view', 'revenues:approve', 'revenues:export',
+          'billing:view', 'billing:approve', 'billing:export',
+          'custody:view', 'custody:approve', 'custody:export',
+          'projects:view', 'projects:export',
+          'inventory:view', 'inventory:export',
+          'purchases:view', 'purchases:approve', 'purchases:export',
+          'hr:view', 'hr:approve', 'hr:export',
+          'reports:view', 'reports:export',
+          'cash:view'
         ];
         break;
       case 'project_manager':
         permsToSelect = [
           'dashboard:view',
-          'projects:view', 'projects:manage', 'projects:print',
+          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export',
           'expenses:view', 'expenses:create',
           'custody:view',
           'inventory:view', 'inventory:issue',
@@ -1871,7 +1988,8 @@ const Settings = {
         break;
       case 'storekeeper':
         permsToSelect = [
-          'inventory:view', 'inventory:manage', 'inventory:issue',
+          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export',
+          'purchases:view',
           'projects:view'
         ];
         break;
@@ -2042,6 +2160,16 @@ const Settings = {
       }
     }
 
+    // قراءة وتحديد نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects)
+    const branch_id = document.getElementById('userBranchVal')?.value || null;
+    const department_id = document.getElementById('userDepartmentVal')?.value || null;
+    const allProjScope = document.getElementById('userAllProjectsScopeChk')?.checked;
+    let allowed_projects = 'all';
+    if (!allProjScope) {
+      const selectedProjIds = Array.from(document.querySelectorAll('.user-proj-scope-chk:checked')).map(c => Number(c.value));
+      allowed_projects = selectedProjIds;
+    }
+
     const payload = {
       full_name,
       username,
@@ -2051,7 +2179,10 @@ const Settings = {
       status,
       permissions: finalPerms,
       two_factor_pin: twoFactorPin || '123456',
-      two_factor_enabled: twoFactorEnabled
+      two_factor_enabled: twoFactorEnabled,
+      branch_id: branch_id ? Number(branch_id) : null,
+      department_id: department_id ? Number(department_id) : null,
+      allowed_projects
     };
 
     if (userSecuritySettings !== undefined) {

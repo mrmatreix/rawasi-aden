@@ -34,6 +34,32 @@ CREATE TABLE IF NOT EXISTS users (
     security_settings TEXT,
     two_factor_pin TEXT DEFAULT '123456',
     two_factor_enabled INTEGER DEFAULT 1,
+    branch_id INTEGER DEFAULT 1,
+    branch TEXT DEFAULT 'المركز الرئيسي',
+    department_id INTEGER DEFAULT 1,
+    department TEXT DEFAULT 'الإدارة العامة',
+    allowed_projects TEXT DEFAULT '*', -- '*' or JSON array of project IDs [1, 2]
+    allowed_branches TEXT DEFAULT '*', -- '*' or JSON array of branch codes/IDs
+    allowed_departments TEXT DEFAULT '*', -- '*' or JSON array of department codes/IDs
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جداول الفروع والأقسام لنظام الصلاحيات المقيدة (Scoped Access Control)
+CREATE TABLE IF NOT EXISTS branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    address TEXT,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS departments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    manager_name TEXT,
+    status TEXT DEFAULT 'active',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -146,6 +172,25 @@ CREATE TABLE IF NOT EXISTS expenses (
     bank_name TEXT,                     -- اسم البنك
     recipient TEXT,
     date DATE NOT NULL,
+    status TEXT DEFAULT 'posted',       -- draft, under_review, approved, posted, closed, reversed, cancelled
+    created_by INTEGER REFERENCES users(id),
+    created_by_name TEXT,
+    reviewed_by INTEGER REFERENCES users(id),
+    reviewed_by_name TEXT,
+    reviewed_at DATETIME,
+    review_notes TEXT,
+    approved_by INTEGER REFERENCES users(id),
+    approved_by_name TEXT,
+    approved_at DATETIME,
+    approval_notes TEXT,
+    posted_by INTEGER REFERENCES users(id),
+    posted_by_name TEXT,
+    posted_at DATETIME,
+    reversed_by INTEGER REFERENCES users(id),
+    reversed_by_name TEXT,
+    reversed_at DATETIME,
+    reversal_reason TEXT,
+    reversal_ref_id INTEGER,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -182,6 +227,25 @@ CREATE TABLE IF NOT EXISTS payments (
     check_no TEXT,                      -- رقم الشيك (إلزامي عند القبض أو الصرف بشيك)
     bank_name TEXT,                     -- اسم البنك
     date DATE NOT NULL,
+    status TEXT DEFAULT 'posted',       -- draft, under_review, approved, posted, closed, reversed, cancelled
+    created_by INTEGER REFERENCES users(id),
+    created_by_name TEXT,
+    reviewed_by INTEGER REFERENCES users(id),
+    reviewed_by_name TEXT,
+    reviewed_at DATETIME,
+    review_notes TEXT,
+    approved_by INTEGER REFERENCES users(id),
+    approved_by_name TEXT,
+    approved_at DATETIME,
+    approval_notes TEXT,
+    posted_by INTEGER REFERENCES users(id),
+    posted_by_name TEXT,
+    posted_at DATETIME,
+    reversed_by INTEGER REFERENCES users(id),
+    reversed_by_name TEXT,
+    reversed_at DATETIME,
+    reversal_reason TEXT,
+    reversal_ref_id INTEGER,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -252,6 +316,20 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     reference_id INTEGER,
     total_debit REAL DEFAULT 0,
     total_credit REAL DEFAULT 0,
+    status TEXT DEFAULT 'posted',       -- draft, under_review, approved, posted, closed, reversed
+    created_by INTEGER REFERENCES users(id),
+    created_by_name TEXT,
+    approved_by INTEGER REFERENCES users(id),
+    approved_by_name TEXT,
+    approved_at DATETIME,
+    posted_by INTEGER REFERENCES users(id),
+    posted_by_name TEXT,
+    posted_at DATETIME,
+    reversed_by INTEGER REFERENCES users(id),
+    reversed_by_name TEXT,
+    reversed_at DATETIME,
+    reversal_reason TEXT,
+    reversal_ref_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_journal_balance CHECK (total_debit > 0 AND abs(total_debit - total_credit) < 0.001)
 );
@@ -663,6 +741,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     entity_type TEXT NOT NULL,           -- journal_entry, payment, expense, custody, payroll, project, period
     entity_id TEXT NULL,
     details TEXT NULL,
+    old_values TEXT NULL,                -- JSON state before modification
+    new_values TEXT NULL,                -- JSON state after modification
+    reason TEXT NULL,                    -- سبب التغيير أو العكس الإلزامي
     ip_address TEXT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

@@ -919,12 +919,12 @@ const Auth = {
     }
   },
 
-  // فحص ما إذا كان المستخدم يملك صلاحية معينة
+  // فحص ما إذا كان المستخدم يملك صلاحية معينة (متطابق بالكامل مع محرك الخادم RBAC)
   hasPermission(permKey) {
     if (!this.currentUser) return false;
 
     // مدير النظام الرئيسي (Super Admin) يملك كافة الصلاحيات دائماً
-    if (this.currentUser.username === 'admin') {
+    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') {
       return true;
     }
 
@@ -937,11 +937,6 @@ const Auth = {
       }
     }
 
-    // إذا كان المستخدم يملك صلاحية 'all' أو '*'
-    if (Array.isArray(perms) && (perms.includes('*') || perms.includes('all'))) {
-      return true;
-    }
-
     // إذا كانت الصلاحيات فارغة تماماً ولم تُخصص، نطبق الصلاحيات الافتراضية حسب الدور
     if (!perms || perms.length === 0) {
       if (this.currentUser.role === 'admin') {
@@ -949,19 +944,37 @@ const Auth = {
       }
       if (this.currentUser.role === 'accountant') {
         perms = [
-          'dashboard:view',
-          'revenues:view', 'revenues:create', 'revenues:print',
-          'expenses:view', 'expenses:create',
-          'custody:view', 'custody:manage',
-          'clients:view', 'clients:manage', 'clients:statement',
-          'suppliers:view', 'suppliers:manage', 'suppliers:statement',
+          'dashboard:view', 'dashboard:export',
+          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
+          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
+          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
+          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
+          'custody:view', 'custody:create', 'custody:manage', 'custody:export',
+          'clients:view', 'clients:create', 'clients:manage', 'clients:statement',
+          'suppliers:view', 'suppliers:create', 'suppliers:manage', 'suppliers:statement',
           'cash:view',
-          'reports:view'
+          'hr:view', 'hr:payroll',
+          'reports:view', 'reports:export'
+        ];
+      } else if (this.currentUser.role === 'auditor') {
+        perms = [
+          'dashboard:view', 'dashboard:export',
+          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
+          'expenses:view', 'expenses:approve', 'expenses:export',
+          'revenues:view', 'revenues:approve', 'revenues:export',
+          'billing:view', 'billing:approve', 'billing:export',
+          'custody:view', 'custody:approve', 'custody:export',
+          'projects:view', 'projects:export',
+          'inventory:view', 'inventory:export',
+          'purchases:view', 'purchases:approve', 'purchases:export',
+          'hr:view', 'hr:approve', 'hr:export',
+          'reports:view', 'reports:export',
+          'cash:view'
         ];
       } else if (this.currentUser.role === 'project_manager') {
         perms = [
           'dashboard:view',
-          'projects:view', 'projects:manage', 'projects:print',
+          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export', 'projects:manage', 'projects:print',
           'expenses:view', 'expenses:create',
           'custody:view',
           'inventory:view', 'inventory:issue',
@@ -969,17 +982,37 @@ const Auth = {
         ];
       } else if (this.currentUser.role === 'storekeeper') {
         perms = [
-          'inventory:view', 'inventory:manage', 'inventory:issue',
+          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export', 'inventory:manage',
+          'purchases:view',
           'projects:view'
         ];
+      } else {
+        perms = ['dashboard:view'];
       }
     }
 
-    if (perms.includes('*') || perms.includes('all')) return true;
+    if (Array.isArray(perms) && (perms.includes('*') || perms.includes('all'))) {
+      return true;
+    }
 
-    // إذا كان المفتاح يحتوي خيارات مفصولة بفواصل
-    const keys = permKey.split(',').map(k => k.trim());
-    return keys.some(k => perms.includes(k));
+    // فحص المفاتيح المطلوبة مع دعم التوافقية والـ Wildcards
+    const keys = permKey.split(',').map(k => k.trim()).filter(Boolean);
+    return keys.some(key => {
+      if (perms.includes(key)) return true;
+
+      const [domain, action] = key.split(':');
+      if (perms.includes(`${domain}:*`)) return true;
+
+      if ((action === 'create' || action === 'edit') && perms.includes(`${domain}:manage`)) return true;
+      if (action === 'export' && (perms.includes(`${domain}:print`) || perms.includes(`${domain}:statement`))) return true;
+      if (action === 'view' && (perms.includes(`${domain}:manage`) || perms.includes(`${domain}:statement`))) return true;
+      if (domain === 'inventory' && (action === 'create' || action === 'issue') && (perms.includes('inventory:issue') || perms.includes('inventory:manage'))) return true;
+      if (domain === 'accounting' && (action === 'create' || action === 'edit') && perms.includes('accounting:journal')) return true;
+      if (domain === 'hr' && (action === 'post' || action === 'create') && perms.includes('hr:payroll')) return true;
+      if (domain === 'users' && perms.includes('settings:users')) return true;
+
+      return false;
+    });
   },
 
   // التحقق الأمني من صلاحية المستخدم للوصول لشاشة معينة لمنع التلاعب بالـ DOM

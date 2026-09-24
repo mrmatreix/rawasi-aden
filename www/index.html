@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20260922-bhmo">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260922-bhmo">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20260924-89im">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260924-89im">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -849,6 +849,90 @@
             </div>
             <div class="kpi-icon-wrap">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- لوحة مصفوفة الفصل المالي لقطاع المقاولات (IFRS 15 Contracting Separation Banner) -->
+        <div class="panel-card" style="margin-bottom: 22px; border: 1px solid var(--border-color); background: linear-gradient(135deg, rgba(20, 32, 48, 0.95), rgba(15, 23, 42, 0.95)); border-radius: 12px; padding: 18px;">
+          <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="background: linear-gradient(135deg, #0284c7, #0ea5e9); padding: 10px; border-radius: 10px; color: white; display: flex; align-items: center; justify-content: center;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+              </div>
+              <div>
+                <h3 class="panel-title" style="margin: 0; font-size: 1.1rem; color: #f8fafc; font-weight: 700;">مصفوفة الفصل المالي لقطاع المقاولات (IFRS 15 / POC)</h3>
+                <span style="font-size: 0.8rem; color: #94a3b8;">الفصل الصارم بين المقبوضات النقدية، الإيرادات المعترف بها، المستخلصات، الدفعات المقدمة، ومحتجز الضمان</span>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn btn-sm btn-primary" onclick="Reports.openRevenueRecognitionModal()" style="display: flex; align-items: center; gap: 6px; background: #0284c7; border-color: #0284c7;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                <span>إثبات إيراد دوري (POC)</span>
+              </button>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="Reports.openContractingSeparationModal()" style="display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3v18h18V3H3zm16 16H5V5h14v14zM11 7h2v6h-2zm0 8h2v2h-2z"/></svg>
+                <span>عرض مصفوفة المشاريع</span>
+              </button>
+            </div>
+          </div>
+          
+          <!-- شبكة ركائز المقاولات الـ 8 المفصولة بدقة -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;">
+            <!-- 1. المقبوضات النقدية -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #38bdf8; display: block; font-weight: 600; margin-bottom: 6px;">1. المقبوضات النقدية (السيولة)</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixTotalReceipts">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">نقد متوفر بالخزينة (ليس إيراداً)</span>
+            </div>
+
+            <!-- 2. الإيرادات المعترف بها -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(74, 222, 128, 0.25); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #4ade80; display: block; font-weight: 600; margin-bottom: 6px;">2. الإيرادات المعترف بها</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixRecognizedRevenue">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إنجاز مكتسب وفق نسبة POC (IFRS 15)</span>
+            </div>
+
+            <!-- 3. المستخلصات المعتمدة -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #fbbf24; display: block; font-weight: 600; margin-bottom: 6px;">3. المستخلصات المعتمدة</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixGrossBillings">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إجمالي الأعمال المفوترة للعملاء</span>
+            </div>
+
+            <!-- 4. الدفعات المقدمة -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(248, 113, 113, 0.2); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #f87171; display: block; font-weight: 600; margin-bottom: 6px;">4. الدفعات المقدمة (التزام)</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixAdvanceLiability">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">التزام تعاقدي متداول غير مستهلك</span>
+            </div>
+
+            <!-- 5. محتجز الضمان -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(192, 132, 252, 0.2); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #c084fc; display: block; font-weight: 600; margin-bottom: 6px;">5. محتجز الضمان (Retention)</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixActiveRetention">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">أصل مؤجل يسترد بعد التسليم النهائي</span>
+            </div>
+
+            <!-- 6. الأعمال تحت التنفيذ WIP -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(45, 212, 191, 0.2); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #2dd4bf; display: block; font-weight: 600; margin-bottom: 6px;">6. أعمال تحت التنفيذ (WIP)</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixContractAssetWIP">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إيراد منجز غير مفوتر (أصل عقد)</span>
+            </div>
+
+            <!-- 7. أوامر التغيير المعتمدة -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(232, 121, 249, 0.2); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #e879f9; display: block; font-weight: 600; margin-bottom: 6px;">7. أوامر التغيير المعتمدة</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixApprovedVariations">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إضافات معتمدة لقيمة العقد</span>
+            </div>
+
+            <!-- 8. صافي الأرباح الحقيقية -->
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 10px; padding: 14px; position: relative;">
+              <span style="font-size: 0.78rem; color: #34d399; display: block; font-weight: 600; margin-bottom: 6px;">8. صافي الأرباح المحاسبية</span>
+              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixTrueNetProfit">0</span>
+              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">الإيراد المعترف به - التكاليف الفعلية</span>
             </div>
           </div>
         </div>
@@ -4990,11 +5074,12 @@
           <div class="form-group">
             <label>الدور الوظيفي / القالب الافتراضي</label>
             <select id="userRoleVal" class="form-control" onchange="Settings.onRoleChange()">
-              <option value="admin">المدير العام (كافة الصلاحيات)</option>
-              <option value="accountant" selected>المحاسب المالي (المالية، السندات، التقارير)</option>
-              <option value="project_manager">مهندس / مدير المشاريع (المشاريع، المواد، المصروفات)</option>
-              <option value="storekeeper">أمين المخزن (المخزون والمواد)</option>
-              <option value="custom">مخصص (تحديد يدوي دقيق للصلاحيات)</option>
+              <option value="admin">المدير العام (كافة الصلاحيات الكاملة دون قيود)</option>
+              <option value="accountant" selected>المحاسب المالي (قيود، فواتير، سندات، تقارير - بدون اعتماد فترات)</option>
+              <option value="auditor">المراجع والمدقق الداخلي (اعتماد، مراجعة، ترحيل، منع الصرف المباشر)</option>
+              <option value="project_manager">مهندس / مدير المشاريع (نطاق مشاريعه المعتمدة فقط)</option>
+              <option value="storekeeper">أمين المخزن (المخزون وأذونات الصرف والتوريد)</option>
+              <option value="custom">مخصص (تحديد يدوي دقيق للصلاحيات والنطاق)</option>
             </select>
           </div>
         </div>
@@ -5017,42 +5102,45 @@
           </div>
         </div>
 
-        <!-- التحقق بخطوتين (2FA) - رمز الأمان (PIN) للمدير العام والمستخدمين -->
-        <div class="user-2fa-card" id="user2FaCardContainer" style="background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(15, 23, 42, 0.75)); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: var(--radius-sm); padding: 12px 16px; margin: 12px 0 16px 0;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 1.25rem;">🔐</span>
-              <div>
-                <h4 style="margin: 0; font-size: 0.92rem; color: var(--gold-light); font-weight: 700;">التحقق بخطوتين (2FA) - رمز الأمان (PIN)</h4>
-                <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
-                  حساب المدير العام محمي بطبقة أمان مضاعفة. يمكن إدخال وتغيير رمز الأمان (PIN) المكون من 6 أرقام في أي لحظة.
-                </div>
+        <!-- نطاق الصلاحيات الجغرافي والإداري (المشروع، الفرع، القسم) -->
+        <div class="user-scope-card" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.06), rgba(15, 23, 42, 0.75)); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-sm); padding: 12px 16px; margin: 12px 0 16px 0;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+            <span style="font-size: 1.25rem;">🌐</span>
+            <div>
+              <h4 style="margin: 0; font-size: 0.92rem; color: #38bdf8; font-weight: 700;">نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects Scope)</h4>
+              <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
+                تحديد الفرع، القسم، والمشاريع المصرح للمستخدم بالوصول إليها. منع الوصول افتراضياً Deny by Default لأي مشروع خارج النطاق.
               </div>
             </div>
-            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer; color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">
-              <input type="checkbox" id="user2FaEnabledVal" checked style="accent-color: var(--gold-primary); cursor: pointer;">
-              <span style="font-weight: 600;">تفعيل التحقق بخطوتين</span>
-            </label>
           </div>
 
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px;">
-            <div style="position: relative; width: 220px;">
-              <input type="password" id="user2FaPinVal" class="form-control" placeholder="123456" maxlength="6" pattern="[0-9]{6}" autocomplete="off" style="font-family: monospace; font-size: 1.15rem; letter-spacing: 5px; text-align: center; font-weight: bold; padding-left: 38px; border-color: rgba(212, 175, 55, 0.45); background: #070c18; color: #fbbf24;" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-              <button type="button" id="btnToggle2FaEye" onclick="Settings.toggle2FaPinVisibility()" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 1rem; padding: 2px;" title="إظهار / إخفاء الرمز">
-                <span id="user2FaEyeIcon">👁️</span>
-              </button>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1;">🏢 الفرع الجغرافي المصرح به:</label>
+              <select id="userBranchVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
+                <option value="">كافة الفروع (غير مقيد)</option>
+              </select>
             </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1;">📑 القسم الإداري:</label>
+              <select id="userDepartmentVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
+                <option value="">كافة الأقسام (غير مقيد)</option>
+              </select>
+            </div>
+          </div>
 
-            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.generateRandom2FaPin()" style="border-color: rgba(212, 175, 55, 0.4); color: var(--gold-light); background: rgba(212, 175, 55, 0.1); padding: 6px 12px; font-weight: 600;" title="توليد رمز أمان عشوائي جديد فوري">
-              🎲 توليد رمز جديد
-            </button>
-
-            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.resetDefault2FaPin()" style="border-color: rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 6px 10px; font-size: 0.74rem;" title="إعادة تعيين للرمز الافتراضي 123456">
-              ↺ الافتراضي (123456)
-            </button>
-
-            <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
-              <span>💡 كود الطوارئ الدائم: <code style="color: #6ee7b7; font-family: monospace; font-weight: bold; background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">889900</code></span>
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0;">🏗️ نطاق المشاريع المعتمدة (Project Scope):</label>
+              <label style="display: flex; align-items: center; gap: 5px; font-size: 0.74rem; cursor: pointer; color: var(--gold-light);">
+                <input type="checkbox" id="userAllProjectsScopeChk" checked onchange="Settings.onAllProjectsScopeToggle(this.checked)" style="accent-color: var(--gold-primary);">
+                <span>الوصول لكافة المشاريع الحالية والمستقبلية (*)</span>
+              </label>
+            </div>
+            <div id="userProjectsScopeContainer" style="display: none; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px;">
+              <div id="userProjectsCheckList" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <!-- تُعبأ المشاريع برمجياً بواسطة JS -->
+              </div>
             </div>
           </div>
         </div>
@@ -5062,7 +5150,7 @@
           <div class="permissions-header">
             <h4>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--gold-primary)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-              <span>الصلاحيات المخصصة لهذا المستخدم:</span>
+              <span>مصفوفة العمليات والصلاحيات الإجرائية (7 عمليات رئيسية):</span>
             </h4>
             <div class="perm-quick-btns">
               <button type="button" class="perm-quick-btn" onclick="Settings.selectAllPermissions(true)">تحديد الكل</button>
@@ -5076,7 +5164,11 @@
               <div class="perm-group-title">📊 لوحة التحكم والإحصائيات</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="dashboard:view" class="perm-chk">
-                <span>عرض لوحة التحكم والمؤشرات المالية</span>
+                <span>عرض المؤشرات المالية</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="dashboard:export" class="perm-chk">
+                <span>تصدير وطباعة لوحة التحكم</span>
               </label>
             </div>
 
@@ -5085,49 +5177,118 @@
               <div class="perm-group-title">🏗️ إدارة المشاريع والمقاولات</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="projects:view" class="perm-chk">
-                <span>استعراض قائمة وتفاصيل المشاريع</span>
+                <span>عرض قائمة وتفاصيل المشاريع</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:manage" class="perm-chk">
-                <span>إضافة وتعديل بيانات المشاريع</span>
+                <input type="checkbox" name="userPerm" value="projects:create" class="perm-chk">
+                <span>إضافة مشروع جديد وتحديد العقد</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:print" class="perm-chk">
-                <span>طباعة تقارير ومستخلصات المشاريع</span>
+                <input type="checkbox" name="userPerm" value="projects:edit" class="perm-chk">
+                <span>تعديل بيانات المشروع والمراحل</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="projects:approve" class="perm-chk">
+                <span>اعتماد مستخلصات ومراحل الإنجاز</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="projects:cancel" class="perm-chk">
+                <span>إلغاء أو حذف المشاريع</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="projects:export" class="perm-chk">
+                <span>تصدير وطباعة تقارير ومستندات المشاريع</span>
               </label>
             </div>
 
-            <!-- 3. الإيرادات -->
+            <!-- 3. المحاسبة والقيود -->
             <div class="perm-group-card">
-              <div class="perm-group-title">💰 الإيرادات وسندات القبض</div>
+              <div class="perm-group-title">📒 الحسابات والقيود والمالية</div>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="revenues:view" class="perm-chk">
-                <span>استعراض سجل الإيرادات والقبوضات</span>
+                <input type="checkbox" name="userPerm" value="accounting:view" class="perm-chk">
+                <span>عرض الدليل المحاسبي وميزان المراجعة</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="accounting:create" class="perm-chk">
+                <span>إنشاء قيود يومية وحسابات جديدة</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="accounting:edit" class="perm-chk">
+                <span>تعديل القيود ومراكز التكلفة والعملات</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="accounting:approve" class="perm-chk">
+                <span>اعتماد التسويات وإغلاق/إعادة فتح الفترات</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="accounting:post" class="perm-chk">
+                <span>ترحيل القيود لسجل اليومية العامة</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="accounting:export" class="perm-chk">
+                <span>تصدير القوائم المالية والميزانيات</span>
+              </label>
+            </div>
+
+            <!-- 4. الإيرادات والمستخلصات -->
+            <div class="perm-group-card">
+              <div class="perm-group-title">💰 الإيرادات وسندات القبض والمستخلصات</div>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="billing:view" class="perm-chk">
+                <span>عرض الفواتير وسندات القبض والمستخلصات</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="billing:create" class="perm-chk">
+                <span>إصدار مستخلص أو فاتورة إيراد جديدة</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="revenues:create" class="perm-chk">
-                <span>إصدار وتسجيل سند قبض جديد</span>
+                <span>إصدار وتسجيل سند قبض نقدي أو شيك</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="revenues:print" class="perm-chk">
-                <span>طباعة سندات القبض الرسمية</span>
+                <input type="checkbox" name="userPerm" value="billing:approve" class="perm-chk">
+                <span>اعتماد المستخلصات وفواتير العملاء</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="revenues:cancel" class="perm-chk">
+                <span>إلغاء سندات القبض أو المستخلصات</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="billing:export" class="perm-chk">
+                <span>طباعة وتصدير المستخلصات وسندات القبض</span>
               </label>
             </div>
 
-            <!-- 4. المصروفات -->
+            <!-- 5. المصروفات -->
             <div class="perm-group-card">
               <div class="perm-group-title">💸 المصروفات وسندات الصرف</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="expenses:view" class="perm-chk">
-                <span>استعراض سجل المصروفات</span>
+                <span>استعراض سجل المصروفات وسندات الصرف</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="expenses:create" class="perm-chk">
                 <span>تسجيل وإصدار سند صرف جديد</span>
               </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="expenses:edit" class="perm-chk">
+                <span>تعديل بيانات وتفاصيل سند الصرف</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="expenses:approve" class="perm-chk">
+                <span>اعتماد وصرف سندات نفقات المشاريع</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="expenses:cancel" class="perm-chk">
+                <span>إلغاء وحذف سند صرف</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="expenses:export" class="perm-chk">
+                <span>طباعة وتصدير كشوفات وسندات الصرف</span>
+              </label>
             </div>
 
-            <!-- 5. العهد والنثريات -->
+            <!-- 6. العهد والنثريات -->
             <div class="perm-group-card">
               <div class="perm-group-title">💼 النثريات والعهد الميدانية</div>
               <label class="perm-checkbox-item">
@@ -5135,12 +5296,70 @@
                 <span>استعراض سجل العهد والمصروفات</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:manage" class="perm-chk">
-                <span>صرف وتسوية وتصفية العهد الميدانية</span>
+                <input type="checkbox" name="userPerm" value="custody:create" class="perm-chk">
+                <span>صرف وتسجيل عهدة ميدانية جديدة</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="custody:approve" class="perm-chk">
+                <span>اعتماد تسوية وتصفية العهد الميدانية</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="custody:export" class="perm-chk">
+                <span>تصدير وطباعة كشوفات العهد</span>
               </label>
             </div>
 
-            <!-- 6. العملاء -->
+            <!-- 7. المخزون ومواد البناء -->
+            <div class="perm-group-card">
+              <div class="perm-group-title">📦 المخزون ومواد البناء</div>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:view" class="perm-chk">
+                <span>استعراض رصيد وحركات وأسعار المواد</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:create" class="perm-chk">
+                <span>إضافة وتوريد أصناف مواد جديدة للمخزن</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:edit" class="perm-chk">
+                <span>تعديل بيانات وحدات وأسعار المواد</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:issue" class="perm-chk">
+                <span>إذن صرف مواد للمشاريع وتحديث التكلفة</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:export" class="perm-chk">
+                <span>تصدير جرد المخزون وحركات الصرف</span>
+              </label>
+            </div>
+
+            <!-- 8. المشتريات والموردين -->
+            <div class="perm-group-card">
+              <div class="perm-group-title">🏢 المشتريات والموردين</div>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="purchases:view" class="perm-chk">
+                <span>عرض فواتير المشتريات والموردين</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="purchases:create" class="perm-chk">
+                <span>تسجيل فاتورة شراء مواد وتوريدها</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="purchases:approve" class="perm-chk">
+                <span>اعتماد ومصادقة أوامر وفواتير الشراء</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="suppliers:create" class="perm-chk">
+                <span>إضافة وتعديل بيانات الموردين ومقاولي الباطن</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="suppliers:export" class="perm-chk">
+                <span>كشف حساب مورد مفصل وطباعته وتصديره</span>
+              </label>
+            </div>
+
+            <!-- 9. العملاء -->
             <div class="perm-group-card">
               <div class="perm-group-title">👥 دليل العملاء والمستثمرين</div>
               <label class="perm-checkbox-item">
@@ -5148,77 +5367,76 @@
                 <span>عرض سجل العملاء وأرصدتهم</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="clients:manage" class="perm-chk">
+                <input type="checkbox" name="userPerm" value="clients:create" class="perm-chk">
                 <span>إضافة وتعديل بيانات العملاء</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="clients:statement" class="perm-chk">
-                <span>كشف حساب عميل مفصل وطباعته</span>
+                <input type="checkbox" name="userPerm" value="clients:export" class="perm-chk">
+                <span>كشف حساب عميل مفصل وطباعته وتصديره</span>
               </label>
             </div>
 
-            <!-- 7. الموردون -->
+            <!-- 10. الموارد البشرية والرواتب -->
             <div class="perm-group-card">
-              <div class="perm-group-title">🏢 الموردون ومقاولو الباطن</div>
+              <div class="perm-group-title">👔 الموارد البشرية والرواتب (HR)</div>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:view" class="perm-chk">
-                <span>عرض سجل الموردين والمستحقات</span>
+                <input type="checkbox" name="userPerm" value="hr:view" class="perm-chk">
+                <span>عرض الموظفين والحضور ومسيرات الرواتب</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:manage" class="perm-chk">
-                <span>إضافة وتعديل بيانات الموردين</span>
+                <input type="checkbox" name="userPerm" value="hr:create" class="perm-chk">
+                <span>إضافة موظفين وتسجيل الحضور والسلف</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:statement" class="perm-chk">
-                <span>كشف حساب مورد مفصل وطباعته</span>
-              </label>
-            </div>
-
-            <!-- 8. المخزون -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">📦 المخزون ومواد البناء</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:view" class="perm-chk">
-                <span>استعراض رصيد وأسعار المخزون</span>
+                <input type="checkbox" name="userPerm" value="hr:edit" class="perm-chk">
+                <span>تعديل بيانات ورواتب الموظفين</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:manage" class="perm-chk">
-                <span>إضافة وتعديل أصناف المواد</span>
+                <input type="checkbox" name="userPerm" value="hr:approve" class="perm-chk">
+                <span>اعتماد طلبات الإجازات والسلف</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:issue" class="perm-chk">
-                <span>صرف مواد للمشاريع وتحديث التكلفة</span>
+                <input type="checkbox" name="userPerm" value="hr:post" class="perm-chk">
+                <span>ترحيل مسير الرواتب إلى القيود المحاسبية</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="hr:export" class="perm-chk">
+                <span>تصدير وطباعة كشوفات الرواتب والحضور</span>
               </label>
             </div>
 
-            <!-- 9. الصندوق والبنك -->
+            <!-- 11. الصندوق والبنك -->
             <div class="perm-group-card">
               <div class="perm-group-title">🏦 حركة الصندوق والبنك</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="cash:view" class="perm-chk">
-                <span>استعراض حركة التدفقات النقدية</span>
+                <span>استعراض حركة التدفقات النقدية للصندوق</span>
               </label>
             </div>
 
-            <!-- 10. التقارير -->
+            <!-- 12. التقارير -->
             <div class="perm-group-card">
               <div class="perm-group-title">📑 مركز التقارير والأرباح</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="reports:view" class="perm-chk">
-                <span>استعراض تقارير الأرباح والميزانية</span>
+                <span>استعراض تقارير الأرباح والميزانية العمومية</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="reports:export" class="perm-chk">
+                <span>تصدير التقارير المالية إلى Excel و PDF</span>
               </label>
             </div>
 
-            <!-- 11. إعدادات النظام -->
+            <!-- 13. إعدادات النظام -->
             <div class="perm-group-card">
               <div class="perm-group-title">⚙️ إعدادات النظام والأمان</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="settings:company" class="perm-chk">
-                <span>تعديل بيانات وإعدادات الشركة</span>
+                <span>تعديل بيانات وإعدادات الشركة ومحرك البيانات</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="settings:users" class="perm-chk">
-                <span>إدارة المستخدمين ومنح الصلاحيات</span>
+                <span>إدارة المستخدمين ومنح الصلاحيات والنطاقات</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="settings:backup" class="perm-chk">
@@ -6768,16 +6986,16 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/ui-ux.js?v=1.0.0.20260922-bhmo"></script>
-  <script src="js/auth.js?v=1.0.0.20260922-bhmo"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20260924-89im"></script>
+  <script src="js/auth.js?v=1.0.0.20260924-89im"></script>
   <script src="js/events.js"></script>
-  <script src="js/app.js?v=1.0.0.20260922-bhmo"></script>
+  <script src="js/app.js?v=1.0.0.20260924-89im"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260922-bhmo')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260924-89im')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً
@@ -6963,6 +7181,131 @@
     </div>
   </div>
 </div>
+
+<!-- ================== نافذة مصفوفة الفصل المالي للمقاولات IFRS 15 ================== -->
+<div class="modal-backdrop" id="contractingSeparationModal" style="display: none; z-index: 1050;">
+  <div class="modal-dialog modal-xl" style="max-width: 95vw; width: 1300px;">
+    <div class="modal-header">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 1.5rem;">🏗️</span>
+        <div>
+          <h3 style="color: var(--gold-light); margin: 0; font-size: 1.2rem;">مصفوفة الفصل المالي الشاملة لقطاع المقاولات (IFRS 15 / POC)</h3>
+          <span style="font-size: 0.8rem; color: var(--text-secondary);">فصل معتمد: المقبوضات النقدية vs الإيرادات vs المستخلصات vs الدفعات المقدمة vs محتجز الضمان vs الأعمال تحت التنفيذ</span>
+        </div>
+      </div>
+      <button type="button" class="btn-close" onclick="App.closeModal('contractingSeparationModal')">&times;</button>
+    </div>
+    <div class="modal-body" style="padding: 20px;">
+      <!-- ملخص إحصائي سريع للمصفوفة -->
+      <div id="contractingMatrixSummaryCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px;">
+        <!-- يتم ملؤها ديناميكياً -->
+      </div>
+
+      <!-- جدول تفاصيل المشاريع -->
+      <div class="table-responsive" style="max-height: 520px; overflow-y: auto;">
+        <table class="custom-table" style="font-size: 0.82rem; white-space: nowrap;">
+          <thead>
+            <tr>
+              <th>المشروع والعميل</th>
+              <th>قيمة العقد المنقحة</th>
+              <th>التكلفة الفعلية</th>
+              <th>نسبة الإنجاز POC</th>
+              <th>الإيراد المعترف به</th>
+              <th>المستخلصات المعتمدة</th>
+              <th>أعمال تحت التنفيذ WIP</th>
+              <th>المقبوضات النقدية</th>
+              <th>دفعة مقدمة غير مستهلكة</th>
+              <th>محتجز ضمان قائم</th>
+              <th>صافي الربح الحقيقي</th>
+              <th>صافي السيولة النقدية</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="contractingMatrixTableBody">
+            <tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">جاري تحميل مصفوفة المقاولات...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: space-between;">
+      <span style="font-size: 0.8rem; color: #94a3b8;">* مطبق وفق المعيار الدولي IFRS 15 وطريقة التكلفة للتكلفة (Cost-to-Cost Method).</span>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-primary" onclick="Reports.openRevenueRecognitionModal()">+ إثبات إيراد دوري</button>
+        <button type="button" class="btn btn-secondary" onclick="App.closeModal('contractingSeparationModal')">إغلاق</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================== نافذة إثبات الإيراد الدوري للمشروع POC ================== -->
+<div class="modal-backdrop" id="revenueRecognitionModal" style="display: none; z-index: 1060;">
+  <div class="modal-dialog modal-md" style="max-width: 600px; width: 95vw;">
+    <div class="modal-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 1.3rem;">📊</span>
+        <h3 style="color: var(--gold-light); margin: 0; font-size: 1.15rem;">إثبات إيراد تعاقدي دوري (IFRS 15 POC)</h3>
+      </div>
+      <button type="button" class="btn-close" onclick="App.closeModal('revenueRecognitionModal')">&times;</button>
+    </div>
+    <form id="revenueRecognitionForm" onsubmit="Reports.submitRevenueRecognition(event)">
+      <div class="modal-body" style="padding: 20px;">
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label" style="font-weight: 600;">اختيار المشروع *</label>
+          <select id="revRecProjectId" class="form-control" required onchange="Reports.onRevenueProjectChanged(this.value)">
+            <option value="">-- اختر المشروع لتحديث المعايير ونسبة الإنجاز --</option>
+          </select>
+        </div>
+
+        <!-- بطاقة المعاينة الحسابية اللحظية -->
+        <div id="revRecPreviewCard" style="display: none; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.83rem;">
+            <div>
+              <span style="color: #94a3b8; display: block;">قيمة العقد المنقحة:</span>
+              <strong id="prevContractVal" style="color: #f8fafc;">0</strong>
+            </div>
+            <div>
+              <span style="color: #94a3b8; display: block;">التكلفة الفعلية المنفذة:</span>
+              <strong id="prevActualCost" style="color: #f8fafc;">0</strong>
+            </div>
+            <div>
+              <span style="color: #94a3b8; display: block;">نسبة الإنجاز المحاسبية (POC):</span>
+              <strong id="prevPocPct" style="color: #38bdf8;">0%</strong>
+            </div>
+            <div>
+              <span style="color: #94a3b8; display: block;">الإيراد المثبت سابقاً:</span>
+              <strong id="prevPostedRev" style="color: #fbbf24;">0</strong>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.88rem; color: #4ade80; font-weight: 700;">الإيراد المستحق للإثبات الآن:</span>
+            <span id="prevUnpostedRev" style="font-size: 1.15rem; color: #4ade80; font-weight: 800;">0</span>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label" style="font-weight: 600;">تاريخ قيد الإثبات *</label>
+          <input type="date" id="revRecDate" class="form-control" required />
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label">ملاحظات وبيان القيد</label>
+          <textarea id="revRecNotes" class="form-control" rows="2" placeholder="إثبات إيراد أعمال الفترة وفق نسبة الإنجاز المعتمدة..."></textarea>
+        </div>
+
+        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px; font-size: 0.78rem; color: #38bdf8;">
+          ℹ️ سيقوم النظام آلياً بإنشاء قيد يومية متزن:<br>
+          • <strong>مدين:</strong> أصول تعاقدية - إيرادات مستحقة غير مفوترة (1128)<br>
+          • <strong>دائن:</strong> إيرادات عقود المقاولات المعترف بها (4101)
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary" id="btnSubmitRevRec">تأكيد وترحيل قيد الإيراد</button>
+        <button type="button" class="btn btn-secondary" onclick="App.closeModal('revenueRecognitionModal')">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 
   <!-- ================== شريط التنقل السفلي للهواتف الذكية والأجهزة المحمولة (Android & iPhone Bottom Nav) ================== -->
   <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="شريط التنقل الرئيسي للجوال">

@@ -1,27 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const { query, get } = require('../database/db');
+const { requirePermission, parseScopeArray } = require('../middleware/security');
 
-// إحصائيات لوحة التحكم الحية الشاملة
-router.get('/dashboard', async (req, res) => {
+const ContractingAccountingService = require('../services/contractingAccountingService');
+
+// إحصائيات لوحة التحكم الحية الشاملة المفصولة معيارياً (IFRS 15 Contracting Dashboard)
+router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async (req, res) => {
   try {
-    // حساب المبالغ الفعلية بدقة من الجداول المحاسبية الحية
-    const paymentsSum = await get("SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE type = 'قبض'");
-    const expensesSum = await get("SELECT COALESCE(SUM(amount), 0) as total FROM expenses");
+    let allowedProjects = ['*'];
+    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+      allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
+    }
+
+    // حساب مصفوفة المقاولات المعيارية للفصل بين المقبوضات والإيرادات والمستخلصات والأرباح
+    const contractingMatrix = await ContractingAccountingService.getCompanyWideSeparationMatrix({
+      allowedProjectIds: allowedProjects
+    });
+
+    const expensesSum = await get("SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE status IN ('posted', 'approved')");
     const clientDueSum = await get("SELECT COALESCE(SUM(current_balance), 0) as total FROM clients");
     const supplierDueSum = await get("SELECT COALESCE(SUM(balance), 0) as total FROM suppliers");
     const activeProjectsCount = await get("SELECT COUNT(*) as cnt FROM projects WHERE status = 'active'");
     const totalProjectsCount = await get("SELECT COUNT(*) as cnt FROM projects");
     const lastCash = await get("SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1");
 
-    const totalIncome = paymentsSum ? Number(paymentsSum.total) : 0;
+    const summary = contractingMatrix.summary;
     const totalExpenses = expensesSum ? Number(expensesSum.total) : 0;
-    const netProfit = totalIncome - totalExpenses;
     const cashBalance = (lastCash && lastCash.current_balance !== null) ? Number(lastCash.current_balance) : 0;
     const clientReceivables = clientDueSum ? Number(clientDueSum.total) : 0;
     const supplierPayables = supplierDueSum ? Number(supplierDueSum.total) : 0;
     const activeProjects = activeProjectsCount ? Number(activeProjectsCount.cnt) : 0;
     const totalProjects = totalProjectsCount ? Number(totalProjectsCount.cnt) : 0;
+
+    // الإيرادات المعترف بها vs المقبوضات النقدية vs الأرباح الحقيقية
+    const recognizedRevenue = summary.total_recognized_revenue;
+    const cashReceipts = summary.total_cash_receipts;
+    const trueNetProfit = summary.total_true_profit;
+    const netCashFlow = summary.total_net_cash_flow;
 
     // المصروفات حسب النوع (Donut Chart) من قاعدة البيانات الفعلية
     const expStats = await query(`
@@ -84,7 +100,7 @@ router.get('/dashboard', async (req, res) => {
     `);
 
     const recentPayments = await query(`
-      SELECT p.date, p.amount, pr.name as project_name, p.notes as description, 'إيراد' as type
+      SELECT p.date, p.amount, pr.name as project_name, p.notes as description, 'سند قبض' as type
       FROM payments p
       LEFT JOIN projects pr ON p.project_id = pr.id
       WHERE p.type = 'قبض'
@@ -100,15 +116,29 @@ router.get('/dashboard', async (req, res) => {
       success: true,
       data: {
         kpis: {
-          total_income: totalIncome,
+          // الركائز الأساسية المفصولة وفق IFRS 15
+          total_income: recognizedRevenue,
+          recognized_revenue: recognizedRevenue,
+          cash_receipts: cashReceipts,
+          progress_billings: summary.total_gross_billings,
+          net_billings: summary.total_net_billings,
+          advance_payments_liability: summary.total_advance_liability,
+          retention_receivable_asset: summary.total_active_retention,
+          contract_asset_wip: summary.total_contract_asset_wip,
+          contract_liability: summary.total_contract_liability,
           total_expenses: totalExpenses,
-          net_profit: netProfit,
+          net_profit: trueNetProfit,
+          true_net_profit: trueNetProfit,
+          net_cash_flow: netCashFlow,
           cash_balance: cashBalance,
           client_receivables: clientReceivables,
           supplier_payables: supplierPayables,
           active_projects: activeProjects,
-          total_projects: totalProjects
+          total_projects: totalProjects,
+          approved_variations: summary.total_approved_variations,
+          pending_variations: summary.total_pending_variations
         },
+        contracting_summary: summary,
         expenses_by_type: expensesByType,
         monthly_trend: monthlyTrend,
         recent_transactions: recentTransactions
@@ -119,31 +149,42 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// تقرير الأرباح والخسائر لفترة محددة
-router.get('/profit-loss', async (req, res) => {
+// تقرير الأرباح والخسائر المعياري (يفصل الإيراد المكتسب POC عن المقبوضات النقدية)
+router.get('/profit-loss', requirePermission('reports:view,accounting:view'), async (req, res) => {
   try {
     const { from_date = '2024-01-01', to_date = '2026-12-31' } = req.query;
 
-    const incomeRes = await get(`
+    let allowedProjects = ['*'];
+    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+      allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
+    }
+
+    const contractingMatrix = await ContractingAccountingService.getCompanyWideSeparationMatrix({
+      allowedProjectIds: allowedProjects
+    });
+
+    const incomeReceiptsRes = await get(`
       SELECT SUM(amount) as total 
       FROM payments 
-      WHERE type = 'قبض' AND date BETWEEN ? AND ?
+      WHERE type = 'قبض' AND status != 'reversed' AND date BETWEEN ? AND ?
     `, [from_date, to_date]);
 
     const expenseRes = await get(`
       SELECT SUM(amount) as total 
       FROM expenses 
-      WHERE date BETWEEN ? AND ?
+      WHERE status IN ('posted', 'approved') AND date BETWEEN ? AND ?
     `, [from_date, to_date]);
 
-    const totalIncome = (incomeRes && incomeRes.total) ? Number(incomeRes.total) : 0;
+    const totalCashReceipts = (incomeReceiptsRes && incomeReceiptsRes.total) ? Number(incomeReceiptsRes.total) : 0;
     const totalExpenses = (expenseRes && expenseRes.total) ? Number(expenseRes.total) : 0;
-    const netProfit = totalIncome - totalExpenses;
+    const recognizedRevenue = contractingMatrix.summary.total_recognized_revenue;
+    const trueNetProfit = recognizedRevenue - totalExpenses;
+    const cashNetFlow = totalCashReceipts - totalExpenses;
 
     const expensesBreakdown = await query(`
       SELECT expense_type, SUM(amount) as total
       FROM expenses
-      WHERE date BETWEEN ? AND ?
+      WHERE status IN ('posted', 'approved') AND date BETWEEN ? AND ?
       GROUP BY expense_type
     `, [from_date, to_date]);
 
@@ -151,19 +192,46 @@ router.get('/profit-loss', async (req, res) => {
       success: true,
       data: {
         period: { from_date, to_date },
-        total_income: totalIncome,
+        accounting_standards: 'IFRS 15 / Percentage of Completion vs Cash Basis',
+        // الإيراد المحاسبي الحقيقي المعترف به
+        recognized_revenue: recognizedRevenue,
+        total_income: recognizedRevenue,
         total_expenses: totalExpenses,
-        net_profit: netProfit,
+        true_net_profit: trueNetProfit,
+        net_profit: trueNetProfit,
+        // السيولة والمقبوضات المقارنة
+        total_cash_receipts: totalCashReceipts,
+        net_cash_flow: cashNetFlow,
+        liquidity_vs_profit_gap: totalCashReceipts - recognizedRevenue,
+        separation_summary: contractingMatrix.summary,
         expenses_breakdown: expensesBreakdown
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في توليد تقرير الأرباح والخسائر', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ في توليد تقرير الأرباح والخسائر: ' + err.message, error: err.message });
+  }
+});
+
+// مصفوفة الفصل المالي لقطاع المقاولات الشاملة (IFRS 15 Separation Matrix)
+router.get('/contracting-financial-separation', requirePermission('reports:view,accounting:view,projects:view'), async (req, res) => {
+  try {
+    let allowedProjects = ['*'];
+    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+      allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
+    }
+
+    const matrix = await ContractingAccountingService.getCompanyWideSeparationMatrix({
+      allowedProjectIds: allowedProjects
+    });
+
+    res.json(matrix);
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في توليد مصفوفة المقاولات: ' + err.message });
   }
 });
 
 // كشف حساب عميل
-router.get('/client-statement/:id', async (req, res) => {
+router.get('/client-statement/:id', requirePermission('clients:view,reports:view,accounting:view'), async (req, res) => {
   try {
     const client = await get('SELECT * FROM clients WHERE id = ?', [req.params.id]);
     if (!client) {
@@ -191,7 +259,7 @@ router.get('/client-statement/:id', async (req, res) => {
 });
 
 // كشف حساب مورد
-router.get('/supplier-statement/:id', async (req, res) => {
+router.get('/supplier-statement/:id', requirePermission('suppliers:view,reports:view,accounting:view'), async (req, res) => {
   try {
     const supplier = await get('SELECT * FROM suppliers WHERE id = ?', [req.params.id]);
     if (!supplier) {
@@ -221,8 +289,17 @@ router.get('/supplier-statement/:id', async (req, res) => {
 });
 
 // تقرير ربحية المشاريع الشامل
-router.get('/projects-profitability', async (req, res) => {
+router.get('/projects-profitability', requirePermission('projects:view,reports:view'), async (req, res) => {
   try {
+    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
+    let whereClause = '';
+    const params = [];
+    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
+      const placeholders = allowedProjects.map(() => '?').join(',');
+      whereClause = ` WHERE p.id IN (${placeholders})`;
+      params.push(...allowedProjects);
+    }
+
     const projects = await query(`
       SELECT p.*, c.name as client_name,
         (p.contract_value - p.actual_cost) as calculated_actual_profit,
@@ -232,8 +309,9 @@ router.get('/projects-profitability', async (req, res) => {
         END as profit_margin_percentage
       FROM projects p
       LEFT JOIN clients c ON p.client_id = c.id
+      ${whereClause}
       ORDER BY p.contract_value DESC
-    `);
+    `, params);
     res.json({ success: true, data: projects });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب تقرير ربحية المشاريع', error: err.message });
@@ -241,7 +319,7 @@ router.get('/projects-profitability', async (req, res) => {
 });
 
 // تقرير ربحية مراكز التكلفة والمشاريع الشامل (Cost Center Profitability Report)
-router.get('/cost-centers-profitability', async (req, res) => {
+router.get('/cost-centers-profitability', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
     const { from_date, to_date } = req.query;
 
@@ -370,7 +448,7 @@ router.get('/cost-centers-profitability', async (req, res) => {
 });
 
 // تقرير الميزانية العمومية (1 أصول + 2 خصوم وحقوق ملكية)
-router.get('/balance-sheet', async (req, res) => {
+router.get('/balance-sheet', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
     const assets = await query("SELECT * FROM accounts WHERE type = 'أصول' OR code LIKE '1%' ORDER BY code ASC");
     const liabilities = await query("SELECT * FROM accounts WHERE type = 'خصوم' OR code LIKE '21%' OR code LIKE '2%' AND type != 'حقوق ملكية' ORDER BY code ASC");
@@ -406,7 +484,7 @@ router.get('/balance-sheet', async (req, res) => {
 });
 
 // تقرير ميزان المراجعة بالمجاميع والأرصدة
-router.get('/trial-balance', async (req, res) => {
+router.get('/trial-balance', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
     const { from_date, to_date } = req.query;
     const accounts = await query('SELECT * FROM accounts ORDER BY code ASC');
@@ -504,7 +582,7 @@ router.get('/trial-balance', async (req, res) => {
 });
 
 // تقرير قائمة الدخل (3 مصروفات + 4 إيرادات)
-router.get('/income-statement', async (req, res) => {
+router.get('/income-statement', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
     const { from_date = '2024-01-01', to_date = '2026-12-31' } = req.query;
 
@@ -556,7 +634,7 @@ router.get('/income-statement', async (req, res) => {
 });
 
 // تقرير التدفقات النقدية الشامل
-router.get('/cash-flow', async (req, res) => {
+router.get('/cash-flow', requirePermission('accounting:view,reports:view,cash:view'), async (req, res) => {
   try {
     const { from_date = '2024-01-01', to_date = '2026-12-31' } = req.query;
 

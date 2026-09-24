@@ -25,8 +25,8 @@ const Reports = {
       const res = await fetch('/api/reports/dashboard');
       const json = await res.json();
       if (json.success) {
-        const { kpis, expenses_by_type, monthly_trend, recent_transactions } = json.data;
-        this.updateKPIElements(kpis);
+        const { kpis, expenses_by_type, monthly_trend, recent_transactions, contracting_summary } = json.data;
+        this.updateKPIElements(kpis, contracting_summary);
         this.renderExpensesDonutChart(expenses_by_type);
         this.renderMonthlyTrendChart(monthly_trend);
         this.renderRecentOperationsTable(recent_transactions);
@@ -36,7 +36,7 @@ const Reports = {
     }
   },
 
-  updateKPIElements(k) {
+  updateKPIElements(k, contractingSummary) {
     const setTxt = (id, val) => {
       const el = document.getElementById(id);
       if (el) {
@@ -51,6 +51,17 @@ const Reports = {
     setTxt('kpiCashBalance', k.cash_balance);
     setTxt('kpiClientReceivables', k.client_receivables);
     setTxt('kpiSupplierPayables', k.supplier_payables);
+
+    // تحديث ركائز المقاولات الـ 8 المفصولة في اللوحة الرئيسية
+    const cs = contractingSummary || {};
+    setTxt('matrixTotalReceipts', k.cash_receipts ?? cs.total_cash_receipts ?? 0);
+    setTxt('matrixRecognizedRevenue', k.recognized_revenue ?? cs.total_recognized_revenue ?? 0);
+    setTxt('matrixGrossBillings', k.progress_billings ?? cs.total_gross_billings ?? 0);
+    setTxt('matrixAdvanceLiability', k.advance_payments_liability ?? cs.total_advance_liability ?? 0);
+    setTxt('matrixActiveRetention', k.retention_receivable_asset ?? cs.total_active_retention ?? 0);
+    setTxt('matrixContractAssetWIP', k.contract_asset_wip ?? cs.total_contract_asset_wip ?? 0);
+    setTxt('matrixApprovedVariations', k.approved_variations ?? cs.total_approved_variations ?? 0);
+    setTxt('matrixTrueNetProfit', k.true_net_profit ?? cs.total_true_profit ?? 0);
 
     const activeEl = document.getElementById('kpiActiveProjects');
     if (activeEl) {

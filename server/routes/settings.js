@@ -9,9 +9,10 @@ const {
   getActiveEngine, getMysqlConfig, dbPath, initializeDatabase
 } = require('../database/db');
 const { runMigration } = require('../database/migrate_to_mysql');
+const { requirePermission } = require('../middleware/security');
 
 // جلب إعدادات الشركة
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('settings:view,settings:company'), async (req, res) => {
   try {
     const settingsRows = await query('SELECT * FROM settings');
     const settingsObj = {};
@@ -26,7 +27,7 @@ router.get('/', async (req, res) => {
 });
 
 // تحديث الإعدادات
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('settings:company'), async (req, res) => {
   try {
     const updates = req.body;
     for (const [key, value] of Object.entries(updates)) {
@@ -42,7 +43,7 @@ router.post('/', async (req, res) => {
 });
 
 // جلب قائمة النسخ الاحتياطية المحفوظة محلياً
-router.get('/backups', (req, res) => {
+router.get('/backups', requirePermission('settings:backup'), (req, res) => {
   try {
     const backups = listBackups();
     res.json({ success: true, data: backups });
@@ -51,10 +52,19 @@ router.get('/backups', (req, res) => {
   }
 });
 
+const { logAudit } = require('../services/auditService');
+
 // إنشاء وتنزيل نسخة احتياطية من قاعدة البيانات
-router.get('/backup', (req, res) => {
+router.get('/backup', requirePermission('settings:backup'), async (req, res) => {
   try {
     const backup = backupDatabase();
+    await logAudit(req, {
+      action: 'BACKUP_DOWNLOAD',
+      entity_type: 'database',
+      entity_id: backup.fileName,
+      details: { fileName: backup.fileName, fileSize: backup.fileSize }
+    });
+
     res.download(backup.filePath, backup.fileName, (err) => {
       if (err) {
         console.error('Error sending backup file:', err);
@@ -66,7 +76,7 @@ router.get('/backup', (req, res) => {
 });
 
 // استعادة نسخة احتياطية من ملف محلي على السيرفر
-router.post('/restore-local', (req, res) => {
+router.post('/restore-local', requirePermission('settings:backup'), async (req, res) => {
   try {
     const { fileName } = req.body;
     if (!fileName) {
@@ -78,6 +88,14 @@ router.post('/restore-local', (req, res) => {
       return res.status(404).json({ success: false, message: 'ملف النسخة الاحتياطية غير موجود على الخادم' });
     }
     const result = restoreDatabase(filePath);
+
+    await logAudit(req, {
+      action: 'BACKUP_RESTORE_LOCAL',
+      entity_type: 'database',
+      entity_id: fileName,
+      details: { fileName }
+    });
+
     res.json({
       success: true,
       message: `تمت استعادة النسخة الاحتياطية (${fileName}) بنجاح`,
@@ -89,12 +107,20 @@ router.post('/restore-local', (req, res) => {
 });
 
 // استعادة نسخة احتياطية مرفوعة
-router.post('/restore-upload', express.raw({ type: '*/*', limit: '100mb' }), (req, res) => {
+router.post('/restore-upload', requirePermission('settings:backup'), express.raw({ type: '*/*', limit: '100mb' }), async (req, res) => {
   try {
     if (!req.body || req.body.length === 0) {
       return res.status(400).json({ success: false, message: 'لم يتم استلام أي بيانات لملف النسخة الاحتياطية' });
     }
     const result = restoreDatabase(req.body);
+
+    await logAudit(req, {
+      action: 'BACKUP_RESTORE_UPLOAD',
+      entity_type: 'database',
+      entity_id: 'uploaded_database_file',
+      details: { bytesLength: req.body.length }
+    });
+
     res.json({
       success: true,
       message: 'تمت استعادة قاعدة البيانات بنجاح من الملف المرفوع وتأكيد سلامة الجداول',
@@ -108,7 +134,7 @@ router.post('/restore-upload', express.raw({ type: '*/*', limit: '100mb' }), (re
 // =================== مسارات فحص وضبط MySQL ===================
 
 // جلب حالة إعدادات ومحرك MySQL
-router.get('/mysql-status', async (req, res) => {
+router.get('/mysql-status', requirePermission('settings:view,settings:company'), async (req, res) => {
   try {
     const activeEngine = getActiveEngine();
     const mysqlCfg = getMysqlConfig();
@@ -155,7 +181,7 @@ router.get('/mysql-status', async (req, res) => {
 });
 
 // فحص اتصال مخصص بخادم MySQL
-router.post('/test-mysql-conn', async (req, res) => {
+router.post('/test-mysql-conn', requirePermission('settings:company'), async (req, res) => {
   try {
     const { host = 'localhost', port = 3306, user = 'root', password = '', database = 'rawasi_aden' } = req.body;
     const startTime = Date.now();
@@ -188,7 +214,7 @@ router.post('/test-mysql-conn', async (req, res) => {
 });
 
 // حفظ إعدادات MySQL في config.json وإعادة الاتصال
-router.post('/save-mysql-config', async (req, res) => {
+router.post('/save-mysql-config', requirePermission('settings:company'), async (req, res) => {
   try {
     const { host, port, user, password, database } = req.body;
     const configPath = path.join(__dirname, '..', 'database', 'config.json');
@@ -222,7 +248,7 @@ router.post('/save-mysql-config', async (req, res) => {
 });
 
 // ترحيل البيانات الحالية من SQLite إلى MySQL
-router.post('/run-migration', async (req, res) => {
+router.post('/run-migration', requirePermission('settings:company'), async (req, res) => {
   try {
     await runMigration();
     res.json({
@@ -235,10 +261,20 @@ router.post('/run-migration', async (req, res) => {
 });
 
 // إنشاء نسخة احتياطية فورية عند تسجيل الخروج
-router.post('/auto-backup-logout', (req, res) => {
+router.post('/auto-backup-logout', async (req, res) => {
   try {
     const { username, mode, notes } = req.body || {};
     const backupItem = createLogoutBackup(username || 'user', { mode, notes });
+
+    if (backupItem && backupItem.fileName) {
+      await logAudit(req, {
+        action: 'AUTO_BACKUP_LOGOUT',
+        entity_type: 'database',
+        entity_id: backupItem.fileName,
+        details: { username: username || 'user', mode: mode || 'manual' }
+      });
+    }
+
     res.json({
       success: true,
       message: 'تم حفظ نسخة احتياطية بنجاح عند تسجيل الخروج',
@@ -250,7 +286,7 @@ router.post('/auto-backup-logout', (req, res) => {
 });
 
 // جلب سجل نسخ الخروج الاحتياطية
-router.get('/logout-backups', (req, res) => {
+router.get('/logout-backups', requirePermission('settings:backup'), (req, res) => {
   try {
     const list = listLogoutBackups();
     res.json({ success: true, data: list });

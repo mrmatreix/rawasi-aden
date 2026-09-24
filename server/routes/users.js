@@ -3,15 +3,30 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { query, get, run } = require('../database/db');
 const { verifyAdmin, getSecuritySettings } = require('./auth');
+const { requirePermission } = require('../middleware/security');
+
+// جلب بيانات الفروع والأقسام والمشاريع لنطاق الصلاحيات
+router.get('/scopes-meta', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const branches = await query('SELECT id, code, name FROM branches WHERE status = "active" ORDER BY id ASC');
+    const departments = await query('SELECT id, code, name FROM departments WHERE status = "active" ORDER BY id ASC');
+    const projects = await query('SELECT id, code, name, status FROM projects ORDER BY id ASC');
+    const roles = await query('SELECT id, name, display_name FROM roles ORDER BY id ASC');
+    res.json({ success: true, branches, departments, projects, roles });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب بيانات النطاقات: ' + err.message });
+  }
+});
 
 // جلب المستخدمين والأدوار وحالة الاتصال الحية
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('settings:users'), async (req, res) => {
   try {
     const ACTIVE_THRESHOLD_MS = 75 * 1000;
     const now = Date.now();
 
     const users = await query(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
+             u.branch_id, u.branch, u.department_id, u.department, u.allowed_projects, u.allowed_branches, u.allowed_departments,
              u.is_logged_in, u.last_heartbeat, u.last_login_at, u.last_login_ip, u.last_login_device,
              r.display_name as role_name
       FROM users u
@@ -41,6 +56,17 @@ router.get('/', async (req, res) => {
         } catch (e) {}
       }
 
+      let allowedPrjs = '*';
+      if (u.allowed_projects) {
+        try {
+          allowedPrjs = typeof u.allowed_projects === 'string' && (u.allowed_projects.startsWith('[') || u.allowed_projects.startsWith('{'))
+            ? JSON.parse(u.allowed_projects)
+            : u.allowed_projects;
+        } catch (e) {
+          allowedPrjs = u.allowed_projects;
+        }
+      }
+
       let isOnline = false;
       if (u.is_logged_in === 1 && u.last_heartbeat) {
         const diff = now - new Date(u.last_heartbeat).getTime();
@@ -53,6 +79,13 @@ router.get('/', async (req, res) => {
         ...u, 
         two_factor_pin: u.two_factor_pin || (u.role === 'admin' || u.username === 'admin' ? '123456' : ''),
         two_factor_enabled: u.two_factor_enabled !== undefined && u.two_factor_enabled !== null ? u.two_factor_enabled : 1,
+        branch_id: u.branch_id || 1,
+        branch: u.branch || 'المركز الرئيسي',
+        department_id: u.department_id || 1,
+        department: u.department || 'الإدارة العامة',
+        allowed_projects: allowedPrjs,
+        allowed_branches: u.allowed_branches || '*',
+        allowed_departments: u.allowed_departments || '*',
         permissions_list: perms,
         security_settings: secSettings,
         is_currently_online: isOnline
@@ -67,9 +100,13 @@ router.get('/', async (req, res) => {
 });
 
 // إضافة مستخدم جديد مع الصلاحيات
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('settings:users'), async (req, res) => {
   try {
-    const { username, password, full_name, role_id, role, email, phone, status = 'active', permissions, security_settings, two_factor_pin, two_factor_enabled } = req.body;
+    const { 
+      username, password, full_name, role_id, role, email, phone, status = 'active', 
+      permissions, security_settings, two_factor_pin, two_factor_enabled,
+      branch_id, branch, department_id, department, allowed_projects, allowed_branches, allowed_departments
+    } = req.body;
     
     if (!username || !password || !full_name) {
       return res.status(400).json({ success: false, message: 'اسم المستخدم وكلمة المرور والاسم الكامل حقول مطلوبة' });
@@ -97,13 +134,32 @@ router.post('/', async (req, res) => {
     const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions || '');
     const secString = security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null;
 
+    const allowedProjectsStr = Array.isArray(allowed_projects) 
+      ? JSON.stringify(allowed_projects) 
+      : (allowed_projects || '*');
+    const allowedBranchesStr = Array.isArray(allowed_branches) 
+      ? JSON.stringify(allowed_branches) 
+      : (allowed_branches || '*');
+    const allowedDepartmentsStr = Array.isArray(allowed_departments) 
+      ? JSON.stringify(allowed_departments) 
+      : (allowed_departments || '*');
+
     const cleanPin = two_factor_pin !== undefined ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || '123456') : '123456';
     const tfaEnabled = two_factor_enabled !== undefined ? (two_factor_enabled ? 1 : 0) : 1;
 
     const result = await run(`
-      INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status, permissions, security_settings, two_factor_pin, two_factor_enabled)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, permsString, secString, cleanPin, tfaEnabled]);
+      INSERT INTO users (
+        username, password_hash, full_name, role_id, role, email, phone, status, 
+        permissions, security_settings, two_factor_pin, two_factor_enabled,
+        branch_id, branch, department_id, department, allowed_projects, allowed_branches, allowed_departments
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, 
+      permsString, secString, cleanPin, tfaEnabled,
+      branch_id || 1, branch || 'المركز الرئيسي', department_id || 1, department || 'الإدارة العامة',
+      allowedProjectsStr, allowedBranchesStr, allowedDepartmentsStr
+    ]);
 
     if (cleanUsername === 'admin') {
       try {
@@ -114,7 +170,9 @@ router.post('/', async (req, res) => {
 
     const newId = result.insertId || result.lastInsertRowid;
     const insertedUser = await get(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at, r.display_name as role_name
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
+             u.branch_id, u.branch, u.department_id, u.department, u.allowed_projects, u.allowed_branches, u.allowed_departments,
+             r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
@@ -126,7 +184,7 @@ router.post('/', async (req, res) => {
 
     res.json({
       success: true,
-      message: `تم إضافة المستخدم (${insertedUser.full_name}) وتعيين صلاحياته بنجاح وتم التأكيد في قاعدة البيانات!`,
+      message: `تم إضافة المستخدم (${insertedUser.full_name}) وتعيين صلاحياته ونطاقه بنجاح!`,
       data: insertedUser
     });
   } catch (err) {
@@ -136,10 +194,14 @@ router.post('/', async (req, res) => {
 });
 
 // تعديل بيانات وصلاحيات مستخدم
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('settings:users'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    const { username, password, full_name, role_id, role, email, phone, status, permissions, security_settings, two_factor_pin, two_factor_enabled } = req.body;
+    const { 
+      username, password, full_name, role_id, role, email, phone, status, 
+      permissions, security_settings, two_factor_pin, two_factor_enabled,
+      branch_id, branch, department_id, department, allowed_projects, allowed_branches, allowed_departments
+    } = req.body;
 
     const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) {
@@ -167,6 +229,21 @@ router.put('/:id', async (req, res) => {
       ? (security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null)
       : user.security_settings;
 
+    const allowedProjectsStr = allowed_projects !== undefined 
+      ? (Array.isArray(allowed_projects) ? JSON.stringify(allowed_projects) : allowed_projects)
+      : user.allowed_projects;
+    const allowedBranchesStr = allowed_branches !== undefined
+      ? (Array.isArray(allowed_branches) ? JSON.stringify(allowed_branches) : allowed_branches)
+      : user.allowed_branches;
+    const allowedDepartmentsStr = allowed_departments !== undefined
+      ? (Array.isArray(allowed_departments) ? JSON.stringify(allowed_departments) : allowed_departments)
+      : user.allowed_departments;
+
+    const branchIdVal = branch_id !== undefined ? branch_id : (user.branch_id || 1);
+    const branchVal = branch !== undefined ? branch : (user.branch || 'المركز الرئيسي');
+    const deptIdVal = department_id !== undefined ? department_id : (user.department_id || 1);
+    const deptVal = department !== undefined ? department : (user.department || 'الإدارة العامة');
+
     const cleanPin = two_factor_pin !== undefined 
       ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || user.two_factor_pin || '123456')
       : (user.two_factor_pin || '123456');
@@ -179,7 +256,10 @@ router.put('/:id', async (req, res) => {
       const password_hash = bcrypt.hashSync(password, salt);
       await run(`
         UPDATE users
-        SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?
+        SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, 
+            permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?,
+            branch_id = ?, branch = ?, department_id = ?, department = ?, 
+            allowed_projects = ?, allowed_branches = ?, allowed_departments = ?
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -194,12 +274,22 @@ router.put('/:id', async (req, res) => {
         secString,
         cleanPin,
         tfaEnabled,
+        branchIdVal,
+        branchVal,
+        deptIdVal,
+        deptVal,
+        allowedProjectsStr,
+        allowedBranchesStr,
+        allowedDepartmentsStr,
         userId
       ]);
     } else {
       await run(`
         UPDATE users
-        SET username = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?
+        SET username = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, 
+            permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?,
+            branch_id = ?, branch = ?, department_id = ?, department = ?, 
+            allowed_projects = ?, allowed_branches = ?, allowed_departments = ?
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -213,6 +303,13 @@ router.put('/:id', async (req, res) => {
         secString,
         cleanPin,
         tfaEnabled,
+        branchIdVal,
+        branchVal,
+        deptIdVal,
+        deptVal,
+        allowedProjectsStr,
+        allowedBranchesStr,
+        allowedDepartmentsStr,
         userId
       ]);
     }
@@ -225,7 +322,9 @@ router.put('/:id', async (req, res) => {
     }
 
     const updatedUser = await get(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at, r.display_name as role_name
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
+             u.branch_id, u.branch, u.department_id, u.department, u.allowed_projects, u.allowed_branches, u.allowed_departments,
+             r.display_name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
@@ -233,7 +332,7 @@ router.put('/:id', async (req, res) => {
 
     res.json({
       success: true,
-      message: `تم تحديث بيانات وصلاحيات المستخدم (${updatedUser.full_name}) بنجاح!`,
+      message: `تم تحديث بيانات وصلاحيات ونطاق المستخدم (${updatedUser.full_name}) بنجاح!`,
       data: updatedUser
     });
   } catch (err) {
@@ -243,7 +342,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // تبديل حالة المستخدم (نشط / معطل)
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requirePermission('settings:users'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
@@ -270,7 +369,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // حذف مستخدم
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('settings:users'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
@@ -293,7 +392,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // إنهاء جلسة مستخدم وفصله عن النظام (Disconnect Active Session)
-router.post('/:id/disconnect', async (req, res) => {
+router.post('/:id/disconnect', requirePermission('settings:users'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const user = await get('SELECT id, username, full_name FROM users WHERE id = ?', [userId]);
@@ -311,7 +410,7 @@ router.post('/:id/disconnect', async (req, res) => {
   }
 });
 // جلب إعدادات الأمان وسياسة الجلسات المخصصة لمستخدم محدد
-router.get('/:id/security-settings', async (req, res) => {
+router.get('/:id/security-settings', requirePermission('settings:users'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const user = await get('SELECT id, username, full_name, role, security_settings FROM users WHERE id = ?', [userId]);

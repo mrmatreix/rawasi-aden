@@ -3,9 +3,10 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 // جلب جميع المواد مع حالة المخزون وتنبيهات النواقص
-router.get('/items', async (req, res) => {
+router.get('/items', requirePermission('inventory:view'), async (req, res) => {
   try {
     const items = await query(`
       SELECT *,
@@ -23,7 +24,7 @@ router.get('/items', async (req, res) => {
 });
 
 // إضافة صنف جديد للمخزن
-router.post('/items', async (req, res) => {
+router.post('/items', requirePermission('inventory:create'), async (req, res) => {
   try {
     const { name, category, unit, min_quantity = 10, current_quantity = 0, unit_price = 0, currency = 'ر.ي', notes } = req.body;
     if (!name) {
@@ -51,7 +52,7 @@ router.post('/items', async (req, res) => {
 });
 
 // جلب حركات المخزون (صرف وتوريد)
-router.get('/transactions', async (req, res) => {
+router.get('/transactions', requirePermission('inventory:view'), async (req, res) => {
   try {
     const { project_id, item_id, type } = req.query;
     let sql = `
@@ -62,6 +63,14 @@ router.get('/transactions', async (req, res) => {
     `;
     const params = [];
     const conditions = [];
+
+    // التحقق من نطاق المشاريع المصرح بها
+    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
+    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
+      const placeholders = allowedProjects.map(() => '?').join(',');
+      conditions.push(`(it.project_id IS NULL OR it.project_id IN (${placeholders}))`);
+      params.push(...allowedProjects);
+    }
 
     if (project_id) {
       conditions.push('it.project_id = ?');
@@ -89,7 +98,10 @@ router.get('/transactions', async (req, res) => {
 });
 
 // تسجيل إذن صرف أو إدخال مخزني داخل Transaction ذرية
-router.post('/transactions', async (req, res) => {
+router.post('/transactions', (req, res, next) => {
+  const reqPerm = req.body?.type === 'out' ? 'inventory:issue,inventory:create' : 'inventory:create';
+  return requirePermission(reqPerm)(req, res, next);
+}, async (req, res) => {
   try {
     const {
       item_id,
