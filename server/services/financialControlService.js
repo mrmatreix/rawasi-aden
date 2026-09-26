@@ -764,6 +764,216 @@ const FinancialControlService = {
       invoice_no: pu.invoice_no,
       amount: totalAmount
     };
+  },
+
+  // ─── SUGGESTION-4 (§12): الإقفال السنوي ─────────────────────────────────────
+  // قيد إقفال مركب بتاريخ نهاية الفترة: تصفير حسابات 4/5 في الأرباح المحتجزة،
+  // ثم قفل الفترة ذرياً. يُرفض تكرار الإقفال عبر close_entry_id.
+
+  async ensureCloseSchema() {
+    if (this._closeSchemaEnsured) return true;
+    const { getActiveEngine } = require('../database/db');
+    const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
+
+    const ensureColumn = async (table, column, sqliteDef, mysqlDef) => {
+      if (engine === 'mysql') {
+        const cols = await query(`SHOW COLUMNS FROM ${table}`);
+        const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
+        if (!names.includes(column)) {
+          await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${mysqlDef}`);
+        }
+      } else {
+        const cols = await query(`PRAGMA table_info(${table})`);
+        const names = (cols || []).map(c => c.name);
+        if (!names.includes(column)) {
+          await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqliteDef}`);
+        }
+      }
+    };
+
+    try {
+      await ensureColumn('accounting_periods', 'close_entry_id', 'INTEGER', 'INT NULL');
+      // حساب الأرباح المحتجزة (33) ابناً لحقوق الملكية (3) إن لم يوجد
+      const retained = await get("SELECT id FROM accounts WHERE code = '33'");
+      if (!retained) {
+        const parent = await get("SELECT id FROM accounts WHERE code = '3'");
+        await run(
+          'INSERT INTO accounts (code, name, type, parent_id, balance) VALUES (?, ?, ?, ?, 0)',
+          ['33', 'الأرباح المحتجزة والمرحّلة', 'حقوق ملكية', parent ? parent.id : null]
+        );
+      }
+      this._closeSchemaEnsured = true;
+      return true;
+    } catch (err) {
+      console.warn('⚠️ [YearClose] تعذر التأكد من مخطط الإقفال:', err.message);
+      throw err;
+    }
+  },
+
+  /** صافي حسابات النتيجة (4/5) بأرصدتها الكاملة حتى تاريخ معين — نفس منهج التقارير */
+  async getYearClosePreview(endDate) {
+    await this.ensureCloseSchema();
+    const accounts = await query(
+      `SELECT * FROM accounts
+       WHERE type IN ('إيرادات', 'مصروفات', 'تكاليف')
+          OR code LIKE '4%' OR code LIKE '5%'
+       ORDER BY code ASC`
+    );
+    const move = await query(`
+      SELECT jel.account_id,
+             COALESCE(SUM(jel.debit), 0) as d, COALESCE(SUM(jel.credit), 0) as c
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON jel.entry_id = je.id
+      WHERE je.status = 'posted' AND je.date <= ?
+      GROUP BY jel.account_id
+    `, [endDate]);
+    const moveMap = {};
+    (move || []).forEach(r => {
+      moveMap[r.account_id] = { d: Number(r.d) || 0, c: Number(r.c) || 0 };
+    });
+
+    const revenues = [];
+    const expenses = [];
+    for (const acc of accounts) {
+      const t = (acc.type || '').trim();
+      const code = String(acc.code || '');
+      const isRevenue = t === 'إيرادات' || (!['مصروفات', 'تكاليف'].includes(t) && code.startsWith('4'));
+      const isExpense = t === 'مصروفات' || t === 'تكاليف' ||
+        (!['إيرادات'].includes(t) && code.startsWith('5'));
+      if (!isRevenue && !isExpense) continue;
+      const m = moveMap[acc.id] || { d: 0, c: 0 };
+      const opening = Number(acc.balance) || 0;
+      let totalD = m.d;
+      let totalC = m.c;
+      if (isExpense) {
+        if (opening >= 0) totalD += opening; else totalC += -opening;
+      } else {
+        if (opening >= 0) totalC += opening; else totalD += -opening;
+      }
+      const net = isExpense ? (totalD - totalC) : (totalC - totalD);
+      if (Math.abs(net) < 0.005) continue;
+      const row = {
+        account_id: acc.id, code: acc.code, name: acc.name,
+        total_debit: totalD, total_credit: totalC, net
+      };
+      if (isRevenue) revenues.push(row); else expenses.push(row);
+    }
+    const totalRev = revenues.reduce((s, r) => s + r.net, 0);
+    const totalExp = expenses.reduce((s, r) => s + r.net, 0);
+    return { revenues, expenses, total_revenues: totalRev, total_expenses: totalExp, net: totalRev - totalExp };
+  },
+
+  /**
+   * تنفيذ الإقفال السنوي + قفل الفترة ذرياً.
+   * closedBy: اسم المفوَّض (تُتحقق كلمة المرور في المسار قبل الاستدعاء).
+   */
+  async executeYearClose(periodId, { closedBy, notes = null, req = null } = {}) {
+    await this.ensureCloseSchema();
+    const period = await get('SELECT * FROM accounting_periods WHERE id = ?', [periodId]);
+    if (!period) throw new Error('الفترة المحاسبية غير موجودة');
+    if (period.close_entry_id) {
+      const je = await get('SELECT entry_no FROM journal_entries WHERE id = ?', [period.close_entry_id]);
+      throw new Error(`تم إقفال هذه الفترة محاسبياً مسبقاً بالقيد (${je ? je.entry_no : period.close_entry_id})`);
+    }
+    if (period.status === 'closed') {
+      throw new Error('الفترة مقفلة بدون قيد إقفال — أعد فتحها ثم نفّذ الإقفال السنوي');
+    }
+    await this.assertPeriodOpen(period.end_date);
+
+    const preview = await this.getYearClosePreview(period.end_date);
+    const retained = await get("SELECT id FROM accounts WHERE code = '33'");
+    if (!retained) throw new Error('حساب الأرباح المحتجزة (33) غير موجود');
+
+    const userId = req?.user?.id || null;
+    const posterId = await this.resolveValidUserId(userId);
+    const posterName = closedBy || req?.user?.username || 'المدير العام';
+    const fYear = period.fiscal_year || String(period.end_date).slice(0, 4);
+
+    const result = await transaction(async (tx) => {
+      let jeId = null;
+      let entryNo = null;
+
+      // سطور الإقفال: تصفير كل حساب نتيجة ثم الفرق للأرباح المحتجزة
+      const closeLines = [];
+      for (const r of preview.revenues) {
+        if (r.net >= 0) closeLines.push({ account_id: r.account_id, debit: r.net, credit: 0 });
+        else closeLines.push({ account_id: r.account_id, debit: 0, credit: -r.net });
+      }
+      for (const e of preview.expenses) {
+        if (e.net >= 0) closeLines.push({ account_id: e.account_id, debit: 0, credit: e.net });
+        else closeLines.push({ account_id: e.account_id, debit: e.net, credit: 0 });
+      }
+      const lineDr = closeLines.reduce((s, l) => s + l.debit, 0);
+      const lineCr = closeLines.reduce((s, l) => s + l.credit, 0);
+      const plug = Math.round((lineDr - lineCr) * 100) / 100;
+      if (Math.abs(plug) >= 0.005) {
+        if (plug > 0) closeLines.push({ account_id: retained.id, debit: 0, credit: plug });
+        else closeLines.push({ account_id: retained.id, debit: -plug, credit: 0 });
+      }
+
+      if (closeLines.length > 0) {
+        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
+        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+        entryNo = `CLS-${fYear}-${String(jeSeq).padStart(4, '0')}`;
+        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+          jeSeq++;
+          entryNo = `CLS-${fYear}-${String(jeSeq).padStart(4, '0')}`;
+        }
+        const total = closeLines.reduce((s, l) => s + l.debit, 0);
+        const jeRes = await tx.run(`
+          INSERT INTO journal_entries (
+            entry_no, date, description, reference_type, reference_id,
+            total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, ?, ?, 'إقفال سنوي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [
+          entryNo, period.end_date,
+          `قيد الإقفال السنوي للفترة (${period.period_name}) — تصفير حسابات النتيجة في الأرباح المحتجزة`,
+          period.id, total, total, posterId, posterName, posterId, posterName
+        ]);
+        jeId = jeRes.lastInsertRowid || jeRes.insertId;
+
+        for (const l of closeLines) {
+          await tx.run(`
+            INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
+            VALUES (?, ?, ?, ?, ?)
+          `, [jeId, l.account_id, l.debit, l.credit, `إقفال ${period.period_name}`]);
+        }
+      }
+
+      await tx.run(`
+        UPDATE accounting_periods
+        SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = ?,
+            close_entry_id = ?, notes = COALESCE(?, notes)
+        WHERE id = ?
+      `, [posterName, jeId, notes || null, period.id]);
+
+      return { jeId, entryNo, lines_count: closeLines.length };
+    });
+
+    if (req) {
+      await logAudit(req, {
+        action: 'CLOSE_PERIOD',
+        entity_type: 'period',
+        entity_id: periodId,
+        details: {
+          period_name: period.period_name, closed_by: posterName,
+          close_entry_no: result.entryNo, total_revenues: preview.total_revenues,
+          total_expenses: preview.total_expenses, net: preview.net
+        }
+      });
+    }
+
+    return {
+      success: true,
+      entry_no: result.entryNo,
+      journal_entry_id: result.jeId,
+      lines_count: result.lines_count,
+      total_revenues: preview.total_revenues,
+      total_expenses: preview.total_expenses,
+      net: preview.net,
+      locked: true
+    };
   }
 };
 

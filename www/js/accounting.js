@@ -1038,11 +1038,11 @@ const Accounting = {
         const withEl = document.getElementById('cashWithdrawal');
         const curBalEl = document.getElementById('cashCurBalance');
 
-        if (prevBalEl) prevBalEl.textContent = App.formatNumber(s.initial_balance || 50000);
-        if (inEl) inEl.textContent = App.formatNumber(s.total_cash_in || 25000);
-        if (outEl) outEl.textContent = App.formatNumber(s.total_cash_out || 15000);
-        if (withEl) withEl.textContent = App.formatNumber(s.total_withdrawals || 5000);
-        if (curBalEl) curBalEl.textContent = App.formatNumber(s.current_balance || 55000);
+        if (prevBalEl) prevBalEl.textContent = App.formatNumber(s.initial_balance || 0);
+        if (inEl) inEl.textContent = App.formatNumber(s.total_cash_in || 0);
+        if (outEl) outEl.textContent = App.formatNumber(s.total_cash_out || 0);
+        if (withEl) withEl.textContent = App.formatNumber(s.total_withdrawals || 0);
+        if (curBalEl) curBalEl.textContent = App.formatNumber(s.current_balance || 0);
       }
     } catch (e) {
       console.error('Error loading cash movements:', e);

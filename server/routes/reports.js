@@ -4,6 +4,7 @@ const { query, get } = require('../database/db');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 const ContractingAccountingService = require('../services/contractingAccountingService');
+const CashBoxService = require('../services/cashBoxService');
 
 // ─── SUGGESTION-3 (§12): محرك التقارير من اليومية المرحّلة ────────────────────
 // كل التقارير المالية تُشتق من القيود المرحّلة (posted) فقط + الرصيد الافتتاحي.
@@ -74,11 +75,11 @@ router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async
     const supplierDueSum = await get("SELECT COALESCE(SUM(balance), 0) as total FROM suppliers");
     const activeProjectsCount = await get("SELECT COUNT(*) as cnt FROM projects WHERE status = 'active'");
     const totalProjectsCount = await get("SELECT COUNT(*) as cnt FROM projects");
-    const lastCash = await get("SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1");
+    // SUGGESTION-4: إجمالي النقدية = مجموع الصناديق المفصولة (لا آخر صف عام)
+    const cashBalance = await CashBoxService.getTotalBalance();
 
     const summary = contractingMatrix.summary;
     const totalExpenses = expensesSum ? Number(expensesSum.total) : 0;
-    const cashBalance = (lastCash && lastCash.current_balance !== null) ? Number(lastCash.current_balance) : 0;
     const clientReceivables = clientDueSum ? Number(clientDueSum.total) : 0;
     const supplierPayables = supplierDueSum ? Number(supplierDueSum.total) : 0;
     const activeProjects = activeProjectsCount ? Number(activeProjectsCount.cnt) : 0;
@@ -740,12 +741,9 @@ router.get('/cash-flow', requirePermission('accounting:view,reports:view,cash:vi
     // مسيرات الرواتب المصروفة
     const payrollRes = await get("SELECT COALESCE(SUM(net_salary), 0) as total FROM payroll WHERE status = 'paid'");
 
-    // رصيد الصندوق الافتتاحي والختامي
-    const firstCash = await get("SELECT previous_balance FROM cash_movements ORDER BY id ASC LIMIT 1");
-    const lastCash = await get("SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1");
-
-    const openingCash = firstCash ? Number(firstCash.previous_balance) : 100000;
-    const closingCash = lastCash ? Number(lastCash.current_balance) : 185000;
+    // رصيد الصندوق الافتتاحي والختامي — مجموع الصناديق بتاريخ الحدود (SUGGESTION-4)
+    const openingCash = await CashBoxService.getTotalBalanceAsOf({ before: from_date });
+    const closingCash = await CashBoxService.getTotalBalanceAsOf({ asOf: to_date });
 
     const opCashIn = (cashInRes ? Number(cashInRes.total) : 0) || 850000;
     const opSupplierOut = (supplierPayRes ? Number(supplierPayRes.total) : 0) || 320000;

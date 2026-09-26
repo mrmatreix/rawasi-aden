@@ -3,6 +3,7 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const CashBoxService = require('../services/cashBoxService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 const FinancialControlService = {
   ...require('../services/financialControlService')
@@ -203,18 +204,15 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
           await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, sId]);
         }
 
-        // تحديث حركة الصندوق والبنك
-        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-        const prevBal = Number(lastCash.current_balance) || 0;
-        const newBal = prevBal - parsedAmount;
-        const moveDesc = payment_method === 'شيك' 
+        // حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي) — SUGGESTION-4
+        const moveDesc = payment_method === 'شيك'
           ? `سند صرف بشيك رقم ${cleanCheckNo}: ${receipt_no} - ${expense_type}`
           : `سند صرف: ${receipt_no} - ${expense_type}`;
 
-        await tx.run(`
-          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-          VALUES (?, 0, ?, 0, ?, ?, ?, ?)
-        `, [prevBal, parsedAmount, newBal, selectedCurrency, date, moveDesc]);
+        await CashBoxService.appendMovement(tx, {
+          projectId: pId, cashOut: parsedAmount,
+          currency: selectedCurrency, date, notes: moveDesc
+        });
 
         // تسجيل قيد يومي تلقائي متزن
         const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
@@ -408,18 +406,15 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, exp.supplier_id]);
       }
 
-      // 3. تحديث حركة الصندوق والبنك
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-      const prevBal = Number(lastCash.current_balance) || 0;
-      const newBal = prevBal - parsedAmount;
-      const moveDesc = exp.payment_method === 'شيك' 
+      // 3. حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي) — SUGGESTION-4
+      const moveDesc = exp.payment_method === 'شيك'
         ? `سند صرف بشيك رقم ${exp.check_no}: ${exp.receipt_no} - ${exp.expense_type}`
         : `سند صرف: ${exp.receipt_no} - ${exp.expense_type}`;
 
-      await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, 0, ?, 0, ?, ?, ?, ?)
-      `, [prevBal, parsedAmount, newBal, exp.currency || 'ر.ي', exp.date, moveDesc]);
+      await CashBoxService.appendMovement(tx, {
+        projectId: exp.project_id ?? null, cashOut: parsedAmount,
+        currency: exp.currency || 'ر.ي', date: exp.date, notes: moveDesc
+      });
 
       // 4. تسجيل قيد يومي تلقائي متزن
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');

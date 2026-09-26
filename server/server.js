@@ -89,6 +89,13 @@ try {
   require('./services/projectCostService').ensureSchema().catch(() => {});
 } catch {}
 
+// تدفئة مخطط الصناديق وربط العهد والإقفال السنوي (SUGGESTION-4)
+try {
+  require('./services/cashBoxService').ensureSchema().catch(() => {});
+  require('./services/accountingService').ensureCustodyJournalLinks().catch(() => {});
+  require('./services/financialControlService').ensureCloseSchema().catch(() => {});
+} catch {}
+
 // أي مسار API غير معروف يرجع JSON دائماً بدلاً من صفحة HTML
 app.all('/api/*', (req, res) => {
   res.status(404).json({ success: false, message: `المسار غير موجود في الخادم: ${req.method} ${req.originalUrl}` });
