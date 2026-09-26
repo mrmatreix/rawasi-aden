@@ -1794,6 +1794,9 @@
                     <th>عدد العمال</th>
                     <th>اليومية / الفئة</th>
                     <th>إجمالي الأجر</th>
+                    <th>المسدد</th>
+                    <th>المتبقي</th>
+                    <th>الحالة</th>
                     <th>المشرف المستلم</th>
                     <th>الإجراء</th>
                   </tr>
@@ -6336,6 +6339,20 @@
           <div class="form-group">
             <label>إجمالي الأجر المستحق <span style="color: var(--accent-red);">*</span></label>
             <input type="number" id="projLaborTotal" class="form-control" required placeholder="15000">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>المبلغ المسدد نقداً / بنكياً</label>
+            <input type="number" id="projLaborPaid" class="form-control" placeholder="فارغ = حسب حالة الدفع">
+          </div>
+          <div class="form-group">
+            <label>حالة الدفع</label>
+            <select id="projLaborStatus" class="form-control">
+              <option value="مدفوع">مدفوع بالكامل</option>
+              <option value="غير مدفوع">غير مدفوع / ذمة للطاقم</option>
+            </select>
           </div>
         </div>
 

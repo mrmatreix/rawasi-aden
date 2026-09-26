@@ -37,6 +37,8 @@ let schemaEnsured = false;
  * - expenses.source_table / source_id (تحديد المرايا)
  * - project_labor_expenses.linked_expense_id (امتصاص بسند رسمي)
  * - project_purchases.linked_expense_id (امتصاص بسند رسمي)
+ * - project_labor_expenses.paid_amount (تتبع المسدد + تعبئة القديم)
+ * - accounts.215 (الأجور المستحقة — خصوم تحت 2)
  */
 async function ensureSchema() {
   if (schemaEnsured) return true;
@@ -63,6 +65,17 @@ async function ensureSchema() {
     await ensureColumn('expenses', 'source_id', 'INTEGER', 'INT NULL');
     await ensureColumn('project_labor_expenses', 'linked_expense_id', 'INTEGER', 'INT NULL');
     await ensureColumn('project_purchases', 'linked_expense_id', 'INTEGER', 'INT NULL');
+    // SUGGESTION-8: تتبع المسدد للأجور الموقعية + تعبئة القديم حسب حالته
+    await ensureColumn('project_labor_expenses', 'paid_amount', 'REAL DEFAULT NULL', 'REAL DEFAULT NULL');
+    await run(`UPDATE project_labor_expenses SET paid_amount = total_amount WHERE paid_amount IS NULL AND payment_status = 'مدفوع'`);
+    await run(`UPDATE project_labor_expenses SET paid_amount = 0 WHERE paid_amount IS NULL`);
+    // SUGGESTION-8: حساب الأجور المستحقة (215) — خصوم تحت 2
+    const wageAcc = await get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
+    if (!wageAcc) {
+      const parent = await get("SELECT id FROM accounts WHERE code = '2' LIMIT 1");
+      await run('INSERT INTO accounts (code, name, type, parent_id, balance) VALUES (?, ?, ?, ?, 0)',
+        ['215', 'أجور مستحقة الدفع (عمال وطواقم المواقع)', 'خصوم', parent ? parent.id : null]);
+    }
     schemaEnsured = true;
     return true;
   } catch (err) {
@@ -212,14 +225,13 @@ async function linkSubRecordToExpense(table, subId, expenseId, projectId, tx = n
     throw new Error(`هذا البند مربوط مسبقاً بسند آخر (رقم ${sub.linked_expense_id}) — يجب فك الربط أولاً`);
   }
 
-  // SUGGESTION-7: السند المرتبط بفاتورة سدادٌ لها — لا يتجاوز متبقيها المستحق
+  // SUGGESTION-7/8: السند المرتبط سدادٌ للبند — لا يتجاوز متبقيه المستحق
   const subTotalPre = Number(sub.total_amount) || 0;
   const expAmountPre = Number(expense.amount) || 0;
-  if (table === 'project_purchases') {
-    const outstandingPre = subTotalPre - (Number(sub.paid_amount) || 0);
-    if (expAmountPre - outstandingPre > 0.005) {
-      throw new Error(`لا يمكن ربط السند: مبلغ السند (${expAmountPre.toLocaleString('en')}) يتجاوز المتبقي المستحق للفاتورة (${outstandingPre.toLocaleString('en')})`);
-    }
+  const outstandingPre = subTotalPre - (Number(sub.paid_amount) || 0);
+  if (expAmountPre - outstandingPre > 0.005) {
+    const subKind = table === 'project_purchases' ? 'للفاتورة' : 'لبند الأجور';
+    throw new Error(`لا يمكن ربط السند: مبلغ السند (${expAmountPre.toLocaleString('en')}) يتجاوز المتبقي المستحق ${subKind} (${outstandingPre.toLocaleString('en')})`);
   }
 
   await conn.run(`UPDATE ${table} SET linked_expense_id = ? WHERE id = ?`, [eId, sId]);
@@ -754,7 +766,8 @@ async function createSettlementJournal(conn, {
 
 /** قيد الاستحقاق المرحّل لفاتورة موقعية (الأحدث أولاً) */
 async function getPayableJournal(conn, purchaseId) {
-  return conn.get(
+  const c = conn || { query, get, run };
+  return c.get(
     `SELECT * FROM journal_entries
      WHERE reference_id = ? AND reference_type = ?
        AND LOWER(status) = 'posted'
@@ -765,7 +778,8 @@ async function getPayableJournal(conn, purchaseId) {
 
 /** قيود التسوية المرحّلة لفاتورة موقعية */
 async function getSettlementJournals(conn, purchaseId) {
-  return conn.query(
+  const c = conn || { query, get, run };
+  return c.query(
     `SELECT * FROM journal_entries
      WHERE reference_id = ? AND reference_type = ?
        AND LOWER(status) = 'posted'
@@ -774,8 +788,8 @@ async function getSettlementJournals(conn, purchaseId) {
   );
 }
 
-/** بناء قيد عكسي لقيد ذمم (مشارك للاستحقاق والتسويات) */
-async function postPayableReversalJE(conn, je, { revDate, reason, user, refId }) {
+/** بناء قيد عكسي لقيد ذمم (مشارك للاستحقاق والتسويات — موردين وأجور) */
+async function postPayableReversalJE(conn, je, { revDate, reason, user, refId, label = 'لذمم الموردين' }) {
   const lines = await conn.query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [je.id]);
   if (!lines || lines.length === 0) return null;
   const revNo = await nextEntryNo(conn, 'REV', String(revDate).slice(0, 4));
@@ -789,7 +803,7 @@ async function postPayableReversalJE(conn, je, { revDate, reason, user, refId })
     )
     VALUES (?, ?, ?, 'قيد عكسي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
   `, [
-    revNo, revDate, `قيد عكسي لذمم الموردين (${je.entry_no}) — ${reason}`,
+    revNo, revDate, `قيد عكسي ${label} (${je.entry_no}) — ${reason}`,
     refId, total, total, userId, userName, userId, userName
   ]);
   const revId = revRes.lastInsertRowid || revRes.insertId;
@@ -892,6 +906,186 @@ async function reportUnbookedPayables() {
   return { rows: rows || [], count: (rows || []).length, total };
 }
 
+// ─── SUGGESTION-8 (§12): ذمم الأجور الموقعية ─────────────────────────────────
+// لا أجور آجلة بلا التزام: المتبقي غير المسدد يُثبت دائناً (215) بقيد استحقاق،
+// والسداد اللاحق (endpoint أو سند مرتبط) يخفض الالتزام. الدائن اسم العامل/الطاقم
+// (السجلات هي الأستاذ الفرعي — بلا جدول أرصدة منفصل).
+
+const WAGE_JE_TYPES = {
+  accrual: 'مستحق أجور — عمالة موقعية',
+  settlement: 'سداد مستحق أجور'
+};
+
+/** حسابات الأجور: المصروف ← 511 (فإن غاب: 5)، الالتزام ← 215، النقد ← 111 */
+async function resolveWageAccounts(conn) {
+  let exp = await conn.get("SELECT id FROM accounts WHERE code = '511' LIMIT 1");
+  if (!exp) exp = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
+  const wp = await conn.get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
+  const cash = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+  if (!exp || !wp || !cash) {
+    throw new Error('الحسابات المحاسبية للأجور (511/215/111) غير موجودة في الدليل');
+  }
+  return { wageExpAccId: exp.id, wagesPayableAccId: wp.id, cashAccId: cash.id };
+}
+
+/**
+ * قيد استحقاق الأجور داخل معاملة المتصل: مدين أجور (511) / دائن مستحقة (215).
+ * بلا حركة نقدية (استحقاق دفتري — النقد يتحرك عند السداد فقط).
+ */
+async function createWageAccrualJournal(conn, {
+  laborId, workerLabel, projectId = null, costCenterId = null,
+  amount, date, user = null
+}) {
+  const { wageExpAccId, wagesPayableAccId } = await resolveWageAccounts(conn);
+  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
+  const entryNo = await nextEntryNo(conn, 'JE-WP', year);
+  const userName = (user && user.name) || 'ترحيل آلي';
+  const userId = (user && user.id) || null;
+  const refType = WAGE_JE_TYPES.accrual;
+  const jeRes = await conn.run(`
+    INSERT INTO journal_entries (
+      entry_no, date, description, reference_type, reference_id,
+      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `, [
+    entryNo, date, `استحقاق أجور — ${workerLabel} (سجل #${laborId})`,
+    refType, laborId, amount, amount,
+    userId, userName, userId, userName
+  ]);
+  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `, [jeId, wageExpAccId, costCenterId ?? null, projectId ?? null, amount, `مصروف أجور — ${workerLabel}`]);
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, 0, ?, ?)
+  `, [jeId, wagesPayableAccId, costCenterId ?? null, projectId ?? null, amount, `أجر مستحق — ${workerLabel}`]);
+  return { jeId, entryNo };
+}
+
+/**
+ * قيد سداد المستحق داخل معاملة المتصل: مدين مستحقة (215) / دائن صندوق (111).
+ * (الحركة النقدية في صندوق المشروع مسؤولية المتصل.)
+ */
+async function createWageSettlementJournal(conn, {
+  laborId, workerLabel, projectId = null, costCenterId = null,
+  amount, date, payRef, user = null
+}) {
+  const { wagesPayableAccId, cashAccId } = await resolveWageAccounts(conn);
+  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
+  const entryNo = await nextEntryNo(conn, 'JE-WS', year);
+  const userName = (user && user.name) || 'ترحيل آلي';
+  const userId = (user && user.id) || null;
+  const refType = WAGE_JE_TYPES.settlement;
+  const jeRes = await conn.run(`
+    INSERT INTO journal_entries (
+      entry_no, date, description, reference_type, reference_id,
+      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `, [
+    entryNo, date, `سداد مستحق أجور — ${workerLabel} (${payRef})`,
+    refType, laborId, amount, amount,
+    userId, userName, userId, userName
+  ]);
+  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `, [jeId, wagesPayableAccId, costCenterId ?? null, projectId ?? null, amount, `سداد أجر مستحق — ${workerLabel}`]);
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, 0, ?, ?)
+  `, [jeId, cashAccId, costCenterId ?? null, projectId ?? null, amount, `الصندوق — ${payRef}`]);
+  return { jeId, entryNo };
+}
+
+/** قيد الاستحقاق المرحّل لسجل أجور (الأحدث أولاً) */
+async function getWageAccrualJournal(conn, laborId) {
+  const c = conn || { query, get, run };
+  return c.get(
+    `SELECT * FROM journal_entries
+     WHERE reference_id = ? AND reference_type = ?
+       AND LOWER(status) = 'posted'
+     ORDER BY id DESC LIMIT 1`,
+    [laborId, WAGE_JE_TYPES.accrual]
+  );
+}
+
+/** قيود التسوية المرحّلة لسجل أجور */
+async function getWageSettlementJournals(conn, laborId) {
+  const c = conn || { query, get, run };
+  return c.query(
+    `SELECT * FROM journal_entries
+     WHERE reference_id = ? AND reference_type = ?
+       AND LOWER(status) = 'posted'
+     ORDER BY id ASC`,
+    [laborId, WAGE_JE_TYPES.settlement]
+  );
+}
+
+/**
+ * فك أثر الأجور عند حذف السجل (داخل معاملة المتصل).
+ * يعكس قيد الاستحقاق + قيود التسوية، ويعيد النقد المسدد لصندوق المشروع.
+ * يُرمى عند إقفال فترة اليوم.
+ */
+async function reverseSiteLaborPayables(conn, labor, { user = null, reason = '', revDate = null } = {}) {
+  if (!labor || !labor.id) return { accrualReversed: 0, settlementsReversed: 0 };
+  const revDay = revDate || new Date().toISOString().split('T')[0];
+  const period = await checkPeriodOpen(revDay);
+  if (!period.isOpen) throw new Error(period.message);
+  const cleanReason = String(reason || '').trim() || 'حذف سجل الأجور وفك مستحقاته';
+
+  let accrualReversed = 0;
+  const accJe = await getWageAccrualJournal(conn, labor.id);
+  if (accJe) {
+    const rev = await postPayableReversalJE(conn, accJe, {
+      revDate: revDay, reason: cleanReason, user, refId: labor.id, label: 'لمستحقات الأجور'
+    });
+    if (rev) accrualReversed = 1;
+  }
+
+  let settlementsReversed = 0;
+  const settlements = await getWageSettlementJournals(conn, labor.id);
+  for (const s of settlements) {
+    const rev = await postPayableReversalJE(conn, s, {
+      revDate: revDay, reason: cleanReason, user, refId: labor.id, label: 'لمستحقات الأجور'
+    });
+    if (!rev) continue;
+    await CashBoxService.appendMovement(conn, {
+      projectId: labor.project_id ?? null, cashIn: rev.total,
+      currency: 'ر.ي', date: revDay, notes: `عكس سداد مستحق أجور: ${s.entry_no}`
+    });
+    settlementsReversed++;
+  }
+  return { accrualReversed, settlementsReversed };
+}
+
+/**
+ * تقرير التعرض غير المثبت للأجور: سجلات بمتبقي > 0 بلا قيد استحقاق مرحّل.
+ * قراءة فقط — تُراجع يدوياً، لا ترحيل آلي هنا.
+ */
+async function reportUnbookedWages() {
+  const rows = await query(`
+    SELECT l.id, l.project_id, l.worker_name_or_team as worker_label, l.trade,
+           l.total_amount, COALESCE(l.paid_amount, 0) as paid_amount,
+           (l.total_amount - COALESCE(l.paid_amount, 0)) as outstanding, l.date
+    FROM project_labor_expenses l
+    WHERE (l.total_amount - COALESCE(l.paid_amount, 0)) > 0.005
+      AND NOT EXISTS (
+        SELECT 1 FROM journal_entries j
+        WHERE j.reference_id = l.id
+          AND j.reference_type = '${WAGE_JE_TYPES.accrual}'
+          AND LOWER(j.status) = 'posted'
+      )
+    ORDER BY l.date ASC, l.id ASC
+  `);
+  const total = (rows || []).reduce((sum, r) => sum + (Number(r.outstanding) || 0), 0);
+  return { rows: rows || [], count: (rows || []).length, total };
+}
+
 module.exports = {
   COUNTED_EXPENSE_STATUSES,
   ensureSchema,
@@ -914,5 +1108,13 @@ module.exports = {
   getPayableJournal,
   getSettlementJournals,
   reverseSitePurchasePayables,
-  reportUnbookedPayables
+  reportUnbookedPayables,
+  WAGE_JE_TYPES,
+  resolveWageAccounts,
+  createWageAccrualJournal,
+  createWageSettlementJournal,
+  getWageAccrualJournal,
+  getWageSettlementJournals,
+  reverseSiteLaborPayables,
+  reportUnbookedWages
 };

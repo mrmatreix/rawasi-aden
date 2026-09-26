@@ -139,25 +139,28 @@ const FinancialControlService = {
     let reversingJeId = null;
     let reversingEntryNo = null;
 
-    // SUGGESTION-7: كشف سند التسوية من دليل القيد الأصلي (مدين 21) — لا استنتاج
+    // SUGGESTION-7/8: كشف سند التسوية من دليل القيد الأصلي (مدين 21/215) — لا استنتاج
     let settleInfo = null;
     const origJe = await get(
       `SELECT id FROM journal_entries WHERE reference_type = 'سند صرف' AND reference_id = ? ORDER BY id DESC LIMIT 1`,
       [exp.id]
     );
     if (origJe) {
+      const drLine = await get(
+        'SELECT account_id FROM journal_entry_lines WHERE entry_id = ? AND debit > 0 ORDER BY id ASC LIMIT 1',
+        [origJe.id]
+      );
       const apAcc = await get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
-      if (apAcc) {
-        const drAp = await get(
-          'SELECT id FROM journal_entry_lines WHERE entry_id = ? AND account_id = ? AND debit > 0 LIMIT 1',
-          [origJe.id, apAcc.id]
-        );
-        if (drAp) {
-          const pur = await get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
-          if (!pur) throw new Error('لا يمكن العكس: الفاتورة المرتبطة بسند التسوية غير موجودة');
-          if (!pur.supplier_id) throw new Error('لا يمكن العكس: فاتورة التسوية بلا مورد مسجل');
-          settleInfo = { purchase: pur, apAccId: apAcc.id };
-        }
+      const wpAcc = await get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
+      if (drLine && apAcc && Number(drLine.account_id) === Number(apAcc.id)) {
+        const pur = await get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
+        if (!pur) throw new Error('لا يمكن العكس: الفاتورة المرتبطة بسند التسوية غير موجودة');
+        if (!pur.supplier_id) throw new Error('لا يمكن العكس: فاتورة التسوية بلا مورد مسجل');
+        settleInfo = { kind: 'purchase', purchase: pur, accId: apAcc.id };
+      } else if (drLine && wpAcc && Number(drLine.account_id) === Number(wpAcc.id)) {
+        const lab = await get('SELECT * FROM project_labor_expenses WHERE linked_expense_id = ?', [exp.id]);
+        if (!lab) throw new Error('لا يمكن العكس: سجل الأجور المرتبط بسند التسوية غير موجود');
+        settleInfo = { kind: 'labor', labor: lab, accId: wpAcc.id };
       }
     }
 
@@ -171,8 +174,16 @@ const FinancialControlService = {
 
       // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة بعد تثبيت حالة reversed)
 
-      // 3. المورد: استعادة الذمة والمسدد لسند التسوية، تخفيض للسلوك الأصلي
-      if (settleInfo) {
+      // 3. الذمم والمسدد: استعادة لسند التسوية، تخفيض للسلوك الأصلي
+      if (settleInfo && settleInfo.kind === 'labor') {
+        const restoredPaid = Math.max(0, (Number(settleInfo.labor.paid_amount) || 0) - amount);
+        const restoredRemaining = Number(settleInfo.labor.total_amount) - restoredPaid;
+        const restoredStatus = restoredRemaining <= 0.005 ? 'مدفوع' : (restoredPaid > 0.005 ? 'جزئي' : 'غير مدفوع');
+        await tx.run(
+          'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
+          [restoredPaid, restoredStatus, settleInfo.labor.id]
+        );
+      } else if (settleInfo) {
         await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [amount, settleInfo.purchase.supplier_id]);
         const restoredPaid = Math.max(0, (Number(settleInfo.purchase.paid_amount) || 0) - amount);
         const restoredRemaining = Number(settleInfo.purchase.total_amount) - restoredPaid;
@@ -213,11 +224,13 @@ const FinancialControlService = {
 
       // أسطر القيد العكسي: يتم عكس الطرفين تماماً
       // المدين: الصندوق والبنك (حساب 3)
-      // الدائن: حساب المصروف الأصلي (accId أو 10) — أو الموردون (21) لسند التسوية
-      const expenseAccId = settleInfo ? settleInfo.apAccId : (exp.account_id || 10);
-      const creditNote = settleInfo
-        ? `إلغاء تسوية الذمم وإعادة الالتزام للمورد - فاتورة #${settleInfo.purchase.id} - ${cleanReason}`
-        : `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`;
+      // الدائن: حساب المصروف الأصلي (accId أو 10) — أو الموردون (21)/الأجور المستحقة (215) لسند التسوية
+      const expenseAccId = settleInfo ? settleInfo.accId : (exp.account_id || 10);
+      const creditNote = settleInfo && settleInfo.kind === 'labor'
+        ? `إلغاء تسوية الأجر وإعادة الالتزام — أجور #${settleInfo.labor.id} - ${cleanReason}`
+        : settleInfo
+          ? `إلغاء تسوية الذمم وإعادة الالتزام للمورد - فاتورة #${settleInfo.purchase.id} - ${cleanReason}`
+          : `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`;
       const finalCcId = exp.cost_center_id || 1;
 
       await tx.run(`

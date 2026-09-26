@@ -75,6 +75,24 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
           await db.run(`DELETE FROM expenses WHERE id IN (${ph})`, expIds);
         }
         await db.run('DELETE FROM inventory_transactions WHERE project_id = ?', [p.id]);
+        // SUGGESTION-8: قيود الأجور (استحقاق/تسوية/عكوسها) المرتبطة بسجلات أجور المشروع
+        const labs = await db.query('SELECT id FROM project_labor_expenses WHERE project_id = ?', [p.id]);
+        const labIds = labs.map(x => x.id);
+        if (labIds.length > 0) {
+          const lph = labIds.map(() => '?').join(',');
+          const ljes = await db.query(
+            `SELECT id FROM journal_entries WHERE reference_id IN (${lph})
+             AND (reference_type IN ('مستحق أجور — عمالة موقعية', 'سداد مستحق أجور')
+                  OR (reference_type = 'قيد عكسي' AND description LIKE '%لمستحقات الأجور%'))`,
+            labIds
+          );
+          const ljeIds = ljes.map(j => j.id);
+          if (ljeIds.length > 0) {
+            const ljph = ljeIds.map(() => '?').join(',');
+            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${ljph})`, ljeIds);
+            await db.run(`DELETE FROM journal_entries WHERE id IN (${ljph})`, ljeIds);
+          }
+        }
         await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
         // SUGGESTION-6: قيود الذمم (استحقاق/تسوية/عكوسها) المرتبطة بفواتير المشروع
         const purs = await db.query('SELECT id FROM project_purchases WHERE project_id = ?', [p.id]);

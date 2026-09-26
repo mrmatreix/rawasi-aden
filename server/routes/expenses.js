@@ -210,6 +210,22 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
             settlePurchase = lp;
           }
         }
+        // SUGGESTION-8: السند المرتبط بأجور ذات استحقاق مرحّل سدادٌ لها (تسوية لا مصروف جديد)
+        // بلا استحقاق (قديم) ← السلوك الأصلي مع تحديث المسدد (أول إثبات حقيقي للدفع)
+        let settleLabor = null;
+        let linkedLaborRow = null;
+        if (link_labor_id) {
+          linkedLaborRow = await tx.get('SELECT * FROM project_labor_expenses WHERE id = ?', [Number(link_labor_id)]);
+          if (linkedLaborRow) {
+            const labAccJe = await ProjectCostService.getWageAccrualJournal(tx, linkedLaborRow.id);
+            if (labAccJe) {
+              if (sId) {
+                throw new Error('لا يمكن ترحيل السند: السند المرتبط بأجور يسدد الطاقم مباشرة ولا يقبل مورداً');
+              }
+              settleLabor = linkedLaborRow;
+            }
+          }
+        }
         if (settlePurchase) {
           // سداد الفاتورة المرتبطة: المسدد يتراكم والحالة تُشتق والذمة تنخفض
           const newPaid = (Number(settlePurchase.paid_amount) || 0) + parsedAmount;
@@ -220,9 +236,21 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
             [newPaid, newStatus, settlePurchase.id]
           );
           await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [parsedAmount, settlePurchase.supplier_id]);
-        } else if (sId) {
-          // تحديث رصيد المورد إن كان محدداً (السلوك الأصلي لغير المرتبط)
-          await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, sId]);
+        } else {
+          // السند المرتبط بأجور يسدد مسددها دائماً (تسوية أو أول إثبات)
+          if (linkedLaborRow) {
+            const newPaid = (Number(linkedLaborRow.paid_amount) || 0) + parsedAmount;
+            const newRemaining = Number(linkedLaborRow.total_amount) - newPaid;
+            const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+            await tx.run(
+              'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
+              [newPaid, newStatus, linkedLaborRow.id]
+            );
+          }
+          // تحديث رصيد المورد إن كان محدداً (السلوك الأصلي — لا يُمس في تسوية الأجور)
+          if (sId && !settleLabor) {
+            await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, sId]);
+          }
         }
 
         // حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي) — SUGGESTION-4
@@ -253,13 +281,15 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
           entryNo, date,
           settlePurchase
             ? `تسوية ذمم مورد — سند ${receipt_no} مرتبط بفاتورة موقعية #${settlePurchase.id} - ${notes || expense_type}`
-            : `سند صرف ${receipt_no} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || expense_type}`,
+            : settleLabor
+              ? `تسوية أجور — سند ${receipt_no} مرتبط بسجل أجور #${settleLabor.id} - ${notes || expense_type}`
+              : `سند صرف ${receipt_no} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || expense_type}`,
           expenseId, parsedAmount, parsedAmount,
           creatorId, creatorName, creatorId, creatorName
         ]);
 
         const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-        // SUGGESTION-7: التسوية تدين الموردين (21) لا المصروف — المصروف مثبت بقيد الاستحقاق
+        // SUGGESTION-7/8: التسوية تدين الالتزام (21/215) لا المصروف — المصروف مثبت بقيد الاستحقاق
         let debitAccountId = accId || 10;
         let debitNote = `مصروف ${expense_type}${cleanCheckNo ? ' - شيك: ' + cleanCheckNo : ''}`;
         if (settlePurchase) {
@@ -267,6 +297,11 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
           if (!apAcc) throw new Error('حساب الموردين (21) غير موجود في الدليل — لا يمكن تسوية الذمم');
           debitAccountId = apAcc.id;
           debitNote = `تسوية ذمة المورد — فاتورة موقعية #${settlePurchase.id}`;
+        } else if (settleLabor) {
+          const wpAcc = await tx.get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
+          if (!wpAcc) throw new Error('حساب الأجور المستحقة (215) غير موجود في الدليل — لا يمكن تسوية الأجور');
+          debitAccountId = wpAcc.id;
+          debitNote = `تسوية أجر مستحق — ${settleLabor.worker_name_or_team} (#${settleLabor.id})`;
         }
 
         await tx.run(`
@@ -444,9 +479,27 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
       }
       settlePurchase = linkedPur;
     }
+    // SUGGESTION-8: المسودة المرتبطة بأجور ذات استحقاق تُرحل كتسوية؛ بلا استحقاق سلوك أصلي + مسدد
+    let settleLabor = null;
+    let linkedLaborRow = null;
+    const linkedLab = await get('SELECT * FROM project_labor_expenses WHERE linked_expense_id = ?', [exp.id]);
+    if (linkedLab) {
+      linkedLaborRow = linkedLab;
+      const labOutstanding = Number(linkedLab.total_amount) - (Number(linkedLab.paid_amount) || 0);
+      if (parsedAmount - labOutstanding > 0.005) {
+        return res.status(400).json({ success: false, message: `لا يمكن ترحيل السند: مبلغ السند (${parsedAmount.toLocaleString('en')}) يتجاوز المتبقي المستحق لبند الأجور (${labOutstanding.toLocaleString('en')})` });
+      }
+      const labAccJe = await ProjectCostService.getWageAccrualJournal(null, linkedLab.id);
+      if (labAccJe) {
+        if (exp.supplier_id) {
+          return res.status(400).json({ success: false, message: 'لا يمكن ترحيل السند: السند المرتبط بأجور يسدد الطاقم مباشرة ولا يقبل مورداً' });
+        }
+        settleLabor = linkedLab;
+      }
+    }
 
     await transaction(async (tx) => {
-      // 1. تحديث رصيد المورد (تسوية بالنقص للمرتبط، زيادة للسلوك الأصلي)
+      // 1. تحديث الذمم والمسدد (تسوية للمرتبط، زيادة للسلوك الأصلي)
       if (settlePurchase) {
         const newPaid = (Number(settlePurchase.paid_amount) || 0) + parsedAmount;
         const newRemaining = Number(settlePurchase.total_amount) - newPaid;
@@ -456,8 +509,19 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
           [newPaid, newStatus, settlePurchase.id]
         );
         await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [parsedAmount, settlePurchase.supplier_id]);
-      } else if (exp.supplier_id) {
-        await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, exp.supplier_id]);
+      } else {
+        if (linkedLaborRow) {
+          const newPaid = (Number(linkedLaborRow.paid_amount) || 0) + parsedAmount;
+          const newRemaining = Number(linkedLaborRow.total_amount) - newPaid;
+          const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+          await tx.run(
+            'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
+            [newPaid, newStatus, linkedLaborRow.id]
+          );
+        }
+        if (exp.supplier_id && !settleLabor) {
+          await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, exp.supplier_id]);
+        }
       }
 
       // 3. حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي) — SUGGESTION-4
@@ -488,13 +552,15 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         entryNo, exp.date,
         settlePurchase
           ? `تسوية ذمم مورد — سند ${exp.receipt_no} مرتبط بفاتورة موقعية #${settlePurchase.id} - ${exp.notes || exp.expense_type}`
-          : `سند صرف مرحل ${exp.receipt_no} - ${exp.notes || exp.expense_type}`,
+          : settleLabor
+            ? `تسوية أجور — سند ${exp.receipt_no} مرتبط بسجل أجور #${settleLabor.id} - ${exp.notes || exp.expense_type}`
+            : `سند صرف مرحل ${exp.receipt_no} - ${exp.notes || exp.expense_type}`,
         exp.id, parsedAmount, parsedAmount,
         posterId, posterName, posterId, posterName
       ]);
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-      // SUGGESTION-7: التسوية تدين الموردين (21) لا المصروف
+      // SUGGESTION-7/8: التسوية تدين الالتزام (21/215) لا المصروف
       let debitAccountId = exp.account_id || 10;
       let debitNote = `مصروف ${exp.expense_type}`;
       if (settlePurchase) {
@@ -502,6 +568,11 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         if (!apAcc) throw new Error('حساب الموردين (21) غير موجود في الدليل — لا يمكن تسوية الذمم');
         debitAccountId = apAcc.id;
         debitNote = `تسوية ذمة المورد — فاتورة موقعية #${settlePurchase.id}`;
+      } else if (settleLabor) {
+        const wpAcc = await tx.get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
+        if (!wpAcc) throw new Error('حساب الأجور المستحقة (215) غير موجود في الدليل — لا يمكن تسوية الأجور');
+        debitAccountId = wpAcc.id;
+        debitNote = `تسوية أجر مستحق — ${settleLabor.worker_name_or_team} (#${settleLabor.id})`;
       }
       const finalCcId = exp.cost_center_id || 1;
 
