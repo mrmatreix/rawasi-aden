@@ -661,8 +661,17 @@ router.post('/:projectId/purchases', async (req, res) => {
     // توحيد التكلفة: إعادة الاحتساب من المصادر
     await ProjectCostService.recalculateProjectCost(projectId);
 
+    // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
+    let dupWarnings = [];
+    try {
+      dupWarnings = await ProjectCostService.detectPossibleDuplicates({
+        projectId, amount: total, date: date || new Date().toISOString().split('T')[0],
+        excludeTable: 'project_purchases', excludeId: result.lastInsertRowid
+      });
+    } catch {}
+
     const created = await get('SELECT * FROM project_purchases WHERE id = ?', [result.lastInsertRowid]);
-    res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created });
+    res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created, warnings: dupWarnings });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -743,8 +752,17 @@ router.post('/:projectId/labor', async (req, res) => {
     // توحيد التكلفة: إعادة الاحتساب من المصادر
     await ProjectCostService.recalculateProjectCost(projectId);
 
+    // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
+    let dupWarnings = [];
+    try {
+      dupWarnings = await ProjectCostService.detectPossibleDuplicates({
+        projectId, amount: total, date: date || new Date().toISOString().split('T')[0],
+        excludeTable: 'project_labor_expenses', excludeId: result.lastInsertRowid
+      });
+    } catch {}
+
     const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [result.lastInsertRowid]);
-    res.json({ success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created });
+    res.json({ success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created, warnings: dupWarnings });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

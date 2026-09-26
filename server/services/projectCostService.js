@@ -5,19 +5,19 @@
  *
  * المعادلة الموحدة (تُحتسب من السجلات دائماً — لا تراكم يدوي):
  *
- *   التكلفة الفعلية = مصروفات مرحلة/معتمدة (مباشرة فقط، بلا مرايا)
+ *   التكلفة الفعلية = مصروفات مباشرة (مرحلة/معتمدة، بلا مرايا)
  *                   + صافي الصرف المخزني (صرف − مرتجع موقع)
- *                   + أجور العمالة الميدانية
- *                   + مشتريات المشروع الفرعية
+ *                   + أجور ميدانية (غير الممتصة بسند رسمي)
+ *                   + مشتريات فرعية (غير الممتصة بسند رسمي)
  *
- * ملاحظات تصميمية:
- * 1. المصروفات «المرآة» (التي تُنشأ آلياً من شاشتي الأجور والمشتريات الفرعية)
- *    تُستبعد من بند المصروفات لأن الحدث الاقتصادي نفسه يُحتسب مرة واحدة
- *    عبر جدول الأجور/المشتريات الفرعي — وذلك عبر عمودي source_table/source_id.
- * 2. تُستدعى recalculateProjectCost بعد كل عملية تغيّر التكلفة (بدل التحديث
- *    التراكمي actual_cost ± X الذي كان سبب الانحراف)، وهي idempotent وآمنة
- *    للتكرار — أي انحراف قديم يُصحح تلقائياً عند أول حركة جديدة.
- * 3. تعمل داخل المعاملات الذرية (tx) أو خارجها.
+ * منع الازدواج (Dedup):
+ * 1. المصروفات «المرآة» (المنشأة آلياً من شاشتي الأجور والمشتريات) مربوطة
+ *    بمصدرها عبر expenses.source_table/source_id وتُستبعد من بند المصروفات.
+ * 2. الربط العكسي: سند رسمي (يدوي) يمكنه «امتصاص» بند فرعي عبر
+ *    linked_expense_id — عند ترحيل السند يُحتسب السند فقط (+ متبقي البند
+ *    إن كان السند جزئياً)، وقبل الترحيل يُحتسب البند كاملاً. لا فجوة ولا ازدواج.
+ * 3. كشف الاشتباه: detectPossibleDuplicates يرصد القيود المتقاربة
+ *    (نفس المشروع + المبلغ + التاريخ) ويعيد تحذيرات غير حاجبة.
  */
 
 const db = require('../database/db');
@@ -31,127 +31,327 @@ const COUNTED_EXPENSE_STATUSES = ['posted', 'approved'];
 let schemaEnsured = false;
 
 /**
- * التأكد من وجود عمودي الربط بالمصدر على جدول المصروفات (idempotent).
- * يُستدعى خارج المعاملات (قبل بدء tx) لتجنب مشاكل DDL داخل المعاملة.
+ * التأكد من أعمدة الربط (idempotent). يُستدعى خارج المعاملات.
+ * - expenses.source_table / source_id (تحديد المرايا)
+ * - project_labor_expenses.linked_expense_id (امتصاص بسند رسمي)
+ * - project_purchases.linked_expense_id (امتصاص بسند رسمي)
  */
 async function ensureSchema() {
   if (schemaEnsured) return true;
   const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
 
-  try {
+  const ensureColumn = async (table, column, sqliteDef, mysqlDef) => {
     if (engine === 'mysql') {
-      const cols = await query('SHOW COLUMNS FROM expenses');
+      const cols = await query(`SHOW COLUMNS FROM ${table}`);
       const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
-      if (!names.includes('source_table')) {
-        await run("ALTER TABLE expenses ADD COLUMN source_table VARCHAR(60) NULL COMMENT 'جدول المصدر للمصروفات المرآة'");
-      }
-      if (!names.includes('source_id')) {
-        await run('ALTER TABLE expenses ADD COLUMN source_id INT NULL');
+      if (!names.includes(column)) {
+        await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${mysqlDef}`);
       }
     } else {
-      const cols = await query('PRAGMA table_info(expenses)');
+      const cols = await query(`PRAGMA table_info(${table})`);
       const names = (cols || []).map(c => c.name);
-      if (!names.includes('source_table')) {
-        await run('ALTER TABLE expenses ADD COLUMN source_table TEXT');
-      }
-      if (!names.includes('source_id')) {
-        await run('ALTER TABLE expenses ADD COLUMN source_id INTEGER');
+      if (!names.includes(column)) {
+        await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqliteDef}`);
       }
     }
+  };
+
+  try {
+    await ensureColumn('expenses', 'source_table', 'TEXT', 'VARCHAR(60) NULL');
+    await ensureColumn('expenses', 'source_id', 'INTEGER', 'INT NULL');
+    await ensureColumn('project_labor_expenses', 'linked_expense_id', 'INTEGER', 'INT NULL');
+    await ensureColumn('project_purchases', 'linked_expense_id', 'INTEGER', 'INT NULL');
     schemaEnsured = true;
     return true;
   } catch (err) {
-    // لا نخفي الخطأ — لكن نسمح بإعادة المحاولة لاحقاً
     console.warn('⚠️ [ProjectCost] تعذر التأكد من مخطط الربط:', err.message);
     throw err;
   }
 }
 
 /** تنفيذ قراءة عبر tx أو الاتصال العام */
-function pickReader(tx) {
-  return tx || { query, get };
+function pickConn(tx) {
+  return tx || { query, get, run };
 }
 
 /**
  * تفصيل التكلفة الفعلية لمشروع من مصادرها الأربعة.
- * @returns { expenses, inventory_out, inventory_returns, inventory_net, labor, purchases, total }
+ * البنود الفرعية المربوطة بسند مرحل/معتمد تُحتسب بمتبقيها فقط (إن وُجد).
  */
 async function getCostBreakdown(projectId, tx = null) {
   const pId = Number(projectId);
   if (!pId) throw new Error('معرف المشروع مطلوب لاحتساب التكلفة');
   if (!tx) await ensureSchema();
-  const reader = pickReader(tx);
+  const conn = pickConn(tx);
 
-  const statusPlaceholders = COUNTED_EXPENSE_STATUSES.map(() => '?').join(',');
+  const statusList = COUNTED_EXPENSE_STATUSES.map(s => `'${s}'`).join(',');
 
-  const expRow = await reader.get(
+  const expRow = await conn.get(
     `SELECT COALESCE(SUM(amount), 0) as total FROM expenses
-     WHERE project_id = ? AND status IN (${statusPlaceholders}) AND source_table IS NULL`,
-    [pId, ...COUNTED_EXPENSE_STATUSES]
+     WHERE project_id = ? AND status IN (${statusList}) AND source_table IS NULL`,
+    [pId]
   );
 
-  const outRow = await reader.get(
+  const outRow = await conn.get(
     `SELECT COALESCE(SUM(total_amount), 0) as total FROM inventory_transactions
      WHERE project_id = ? AND type = 'out'`,
     [pId]
   );
 
-  const retRow = await reader.get(
+  const retRow = await conn.get(
     `SELECT COALESCE(SUM(total_amount), 0) as total FROM inventory_returns
      WHERE project_id = ? AND return_type = 'project_return'
        AND (status IS NULL OR status NOT IN ('reversed', 'cancelled'))`,
     [pId]
   );
 
-  const laborRow = await reader.get(
-    'SELECT COALESCE(SUM(total_amount), 0) as total FROM project_labor_expenses WHERE project_id = ?',
+  // الأجور: المربوطة بسند محتسب تُسهم بمتبقيها فقط (سند جزئي)، وإلا كاملة
+  const laborRow = await conn.get(
+    `SELECT COALESCE(SUM(
+       CASE WHEN l.linked_expense_id IS NOT NULL AND e.status IN (${statusList})
+            THEN CASE WHEN l.total_amount > e.amount THEN l.total_amount - e.amount ELSE 0 END
+            ELSE l.total_amount END
+     ), 0) as total,
+     COALESCE(SUM(
+       CASE WHEN l.linked_expense_id IS NOT NULL AND e.status IN (${statusList})
+            THEN CASE WHEN e.amount > l.total_amount THEN l.total_amount ELSE e.amount END
+            ELSE 0 END
+     ), 0) as absorbed
+     FROM project_labor_expenses l LEFT JOIN expenses e ON e.id = l.linked_expense_id
+     WHERE l.project_id = ?`,
     [pId]
   );
 
-  const purchRow = await reader.get(
-    'SELECT COALESCE(SUM(total_amount), 0) as total FROM project_purchases WHERE project_id = ?',
+  const purchRow = await conn.get(
+    `SELECT COALESCE(SUM(
+       CASE WHEN p.linked_expense_id IS NOT NULL AND e.status IN (${statusList})
+            THEN CASE WHEN p.total_amount > e.amount THEN p.total_amount - e.amount ELSE 0 END
+            ELSE p.total_amount END
+     ), 0) as total,
+     COALESCE(SUM(
+       CASE WHEN p.linked_expense_id IS NOT NULL AND e.status IN (${statusList})
+            THEN CASE WHEN e.amount > p.total_amount THEN p.total_amount ELSE e.amount END
+            ELSE 0 END
+     ), 0) as absorbed
+     FROM project_purchases p LEFT JOIN expenses e ON e.id = p.linked_expense_id
+     WHERE p.project_id = ?`,
     [pId]
   );
 
-  const expenses = Number(expRow?.total) || 0;
-  const inventoryOut = Number(outRow?.total) || 0;
-  const inventoryReturns = Number(retRow?.total) || 0;
-  const inventoryNet = inventoryOut - inventoryReturns;
-  const labor = Number(laborRow?.total) || 0;
-  const purchases = Number(purchRow?.total) || 0;
+  const round = n => Math.round((Number(n) || 0) * 100) / 100;
+  const expenses = round(expRow?.total);
+  const inventoryOut = round(outRow?.total);
+  const inventoryReturns = round(retRow?.total);
+  const inventoryNet = round(inventoryOut - inventoryReturns);
+  const labor = round(laborRow?.total);
+  const laborAbsorbed = round(laborRow?.absorbed);
+  const purchases = round(purchRow?.total);
+  const purchasesAbsorbed = round(purchRow?.absorbed);
 
-  const total = Math.max(0, expenses + inventoryNet + labor + purchases);
+  const total = Math.max(0, round(expenses + inventoryNet + labor + purchases));
 
   return {
     project_id: pId,
-    expenses: Math.round(expenses * 100) / 100,
-    inventory_out: Math.round(inventoryOut * 100) / 100,
-    inventory_returns: Math.round(inventoryReturns * 100) / 100,
-    inventory_net: Math.round(inventoryNet * 100) / 100,
-    labor: Math.round(labor * 100) / 100,
-    purchases: Math.round(purchases * 100) / 100,
-    total: Math.round(total * 100) / 100,
-    formula: 'مصروفات مباشرة (مرحلة/معتمدة) + صافي الصرف المخزني + أجور ميدانية + مشتريات فرعية'
+    expenses,
+    inventory_out: inventoryOut,
+    inventory_returns: inventoryReturns,
+    inventory_net: inventoryNet,
+    labor,
+    labor_absorbed: laborAbsorbed,
+    purchases,
+    purchases_absorbed: purchasesAbsorbed,
+    total,
+    formula: 'مصروفات مباشرة (مرحلة/معتمدة) + صافي الصرف المخزني + أجور ومشتريات (بمتبقي غير الممتص بسند)'
   };
 }
 
 /**
  * إعادة احتساب التكلفة الفعلية لمشروع وحفظها في حقل projects.actual_cost.
- * تُستدعى بعد كل عملية مؤثرة (داخل tx أو خارجها).
- * @returns تفصيل التكلفة المحتسب
  */
 async function recalculateProjectCost(projectId, tx = null) {
   const pId = Number(projectId);
   if (!pId) return null;
   const breakdown = await getCostBreakdown(pId, tx);
-  const writer = tx || { run };
-  await writer.run('UPDATE projects SET actual_cost = ? WHERE id = ?', [breakdown.total, pId]);
+  const conn = pickConn(tx);
+  await conn.run('UPDATE projects SET actual_cost = ? WHERE id = ?', [breakdown.total, pId]);
   return breakdown;
 }
 
 /**
+ * ربط بند فرعي (أجور/مشتريات) بسند رسمي لامتصاصه ومنع الازدواج.
+ * @param {'project_labor_expenses'|'project_purchases'} table
+ */
+async function linkSubRecordToExpense(table, subId, expenseId, projectId, tx = null) {
+  if (!['project_labor_expenses', 'project_purchases'].includes(table)) {
+    throw new Error('جدول المصدر غير صالح للربط');
+  }
+  if (!tx) await ensureSchema();
+  const conn = pickConn(tx);
+  const sId = Number(subId);
+  const eId = Number(expenseId);
+  const pId = Number(projectId);
+  if (!sId || !eId || !pId) throw new Error('بيانات الربط غير مكتملة');
+
+  const expense = await conn.get('SELECT * FROM expenses WHERE id = ?', [eId]);
+  if (!expense) throw new Error('سند الصرف المراد الربط به غير موجود');
+  if (expense.source_table) {
+    throw new Error('لا يمكن الربط بسند مرآة آلي — الربط يكون بسند رسمي مباشر فقط');
+  }
+  if (Number(expense.project_id) !== pId) {
+    throw new Error('سند الصرف تابع لمشروع مختلف — لا يمكن الربط عبر المشاريع');
+  }
+
+  const sub = await conn.get(`SELECT * FROM ${table} WHERE id = ?`, [sId]);
+  if (!sub) throw new Error('البند الفرعي المراد ربطه غير موجود');
+  if (Number(sub.project_id) !== pId) {
+    throw new Error('البند الفرعي تابع لمشروع مختلف');
+  }
+  if (sub.linked_expense_id && Number(sub.linked_expense_id) !== eId) {
+    throw new Error(`هذا البند مربوط مسبقاً بسند آخر (رقم ${sub.linked_expense_id}) — يجب فك الربط أولاً`);
+  }
+
+  await conn.run(`UPDATE ${table} SET linked_expense_id = ? WHERE id = ?`, [eId, sId]);
+
+  const subTotal = Number(sub.total_amount) || 0;
+  const expAmount = Number(expense.amount) || 0;
+  let note = 'ربط كامل — البند مغطى بالسند بالكامل';
+  if (expAmount < subTotal) {
+    note = `ربط جزئي — السند يغطي ${expAmount.toLocaleString('en')} من أصل ${subTotal.toLocaleString('en')}، والمتبقي (${(subTotal - expAmount).toLocaleString('en')}) يبقى محتسباً حتى استكماله`;
+  } else if (expAmount > subTotal) {
+    note = `تنبيه: مبلغ السند (${expAmount.toLocaleString('en')}) يتجاوز البند (${subTotal.toLocaleString('en')}) — يُحتسب السند كاملاً`;
+  }
+  return { linked: true, expense_id: eId, sub_id: sId, note };
+}
+
+/** فك ربط بند فرعي عن سنده (يعود للاحتساب الكامل). */
+async function unlinkSubRecord(table, subId, tx = null) {
+  if (!['project_labor_expenses', 'project_purchases'].includes(table)) {
+    throw new Error('جدول المصدر غير صالح');
+  }
+  if (!tx) await ensureSchema();
+  const conn = pickConn(tx);
+  await conn.run(`UPDATE ${table} SET linked_expense_id = NULL WHERE id = ?`, [Number(subId)]);
+  return { unlinked: true };
+}
+
+/** تنظيف الروابط المعلقة عند حذف مسودة سند (حتى لا تشير لغير موجود). */
+async function clearLinksToExpense(expenseId, tx = null) {
+  if (!tx) await ensureSchema();
+  const conn = pickConn(tx);
+  const eId = Number(expenseId);
+  if (!eId) return 0;
+  let cleared = 0;
+  for (const table of ['project_labor_expenses', 'project_purchases']) {
+    const r = await conn.run(`UPDATE ${table} SET linked_expense_id = NULL WHERE linked_expense_id = ?`, [eId]);
+    cleared += Number(r?.changes ?? r?.affectedRows ?? 0);
+  }
+  return cleared;
+}
+
+/**
+ * كشف الاشتباه بالازدواج: نفس المشروع + مبلغ متقارب + تاريخ متقارب.
+ * غير حاجب — يعيد قائمة تحذيرات وصفية.
+ */
+async function detectPossibleDuplicates({ projectId, amount, date, excludeExpenseId = null, excludeTable = null, excludeId = null }, tx = null) {
+  const warnings = [];
+  const pId = Number(projectId);
+  const amt = Number(amount);
+  if (!pId || !amt || amt <= 0) return warnings;
+  if (!tx) await ensureSchema();
+  const conn = pickConn(tx);
+
+  const day = String(date || '').split('T')[0];
+  const pushWarn = (kind, row, label) => {
+    warnings.push({
+      kind,
+      label,
+      project_id: pId,
+      amount: Number(row.amount ?? row.total_amount ?? row.total ?? 0),
+      date: row.date || null,
+      ref: row.receipt_no || row.reference_no || row.invoice_no || (row.worker_name_or_team ? `أجور: ${row.worker_name_or_team}` : `#${row.id}`),
+      id: row.id
+    });
+  };
+
+  // 1. مصروفات مباشرة مقاربة (نفس المبلغ ±1، خلال ±3 أيام)
+  let expSql = `SELECT id, receipt_no, amount, date FROM expenses
+     WHERE project_id = ? AND source_table IS NULL AND status NOT IN ('reversed', 'cancelled')
+       AND ABS(amount - ?) <= 1`;
+  const expParams = [pId, amt];
+  if (excludeExpenseId) {
+    expSql += ' AND id != ?';
+    expParams.push(Number(excludeExpenseId));
+  }
+  if (day) {
+    expSql += ' AND date BETWEEN date(?, \'-3 days\') AND date(?, \'+3 days\')';
+    expParams.push(day, day);
+  }
+  expSql += ' LIMIT 5';
+  // توافق MySQL: دالة date() غير موجودة — نستخدم مقارنة نصية مباشرة
+  expSql = expSql.replace(/date\(\?, '-3 days'\)/g, '?').replace(/date\(\?, '\+3 days'\)/g, '?');
+  const expParamsFinal = [...expParams];
+  if (day) {
+    // حساب النطاق في JS ليعمل على المحركين
+    const d = new Date(day + 'T00:00:00');
+    const fmt = x => x.toISOString().split('T')[0];
+    const from = new Date(d); from.setDate(from.getDate() - 3);
+    const to = new Date(d); to.setDate(to.getDate() + 3);
+    expParamsFinal.splice(expParamsFinal.length - 2, 2, fmt(from), fmt(to));
+  }
+  const dupExpenses = await conn.query(expSql, expParamsFinal);
+  for (const row of dupExpenses || []) {
+    pushWarn('expense', row, `مصروف مباشر بنفس المبلغ تقريباً (${Number(row.amount).toLocaleString('en')}) بتاريخ ${row.date}`);
+  }
+
+  // 2. بنود فرعية غير مربوطة بنفس المبلغ
+  const checkSub = async (table, kind, labelFn) => {
+    let sql = `SELECT * FROM ${table} WHERE project_id = ? AND linked_expense_id IS NULL AND ABS(total_amount - ?) <= 1`;
+    const params = [pId, amt];
+    if (excludeTable === table && excludeId) {
+      sql += ' AND id != ?';
+      params.push(Number(excludeId));
+    }
+    if (day) {
+      const d = new Date(day + 'T00:00:00');
+      const fmt = x => x.toISOString().split('T')[0];
+      const from = new Date(d); from.setDate(from.getDate() - 3);
+      const to = new Date(d); to.setDate(to.getDate() + 3);
+      sql += ' AND date BETWEEN ? AND ?';
+      params.push(fmt(from), fmt(to));
+    }
+    sql += ' LIMIT 5';
+    const rows = await conn.query(sql, params);
+    for (const row of rows || []) pushWarn(kind, row, labelFn(row));
+  };
+
+  await checkSub('project_labor_expenses', 'labor',
+    r => `بند أجور غير مربوط بنفس المبلغ (${Number(r.total_amount).toLocaleString('en')}) — ${r.worker_name_or_team || ''} بتاريخ ${r.date}`);
+  await checkSub('project_purchases', 'purchase',
+    r => `فاتورة مشتريات فرعية غير مربوطة بنفس المبلغ (${Number(r.total_amount).toLocaleString('en')}) — ${(r.item_description || '').slice(0, 40)} بتاريخ ${r.date}`);
+
+  // 3. صرف مخزني بنفس القيمة (خلال ±7 أيام)
+  let invSql = `SELECT id, reference_no, total_amount as amount, date FROM inventory_transactions
+     WHERE project_id = ? AND type = 'out' AND ABS(total_amount - ?) <= 1`;
+  const invParams = [pId, amt];
+  if (day) {
+    const d = new Date(day + 'T00:00:00');
+    const fmt = x => x.toISOString().split('T')[0];
+    const from = new Date(d); from.setDate(from.getDate() - 7);
+    const to = new Date(d); to.setDate(to.getDate() + 7);
+    invSql += ' AND date BETWEEN ? AND ?';
+    invParams.push(fmt(from), fmt(to));
+  }
+  invSql += ' LIMIT 5';
+  const dupInv = await conn.query(invSql, invParams);
+  for (const row of dupInv || []) {
+    pushWarn('inventory', row, `صرف مخزني بنفس القيمة تقريباً (${Number(row.amount).toLocaleString('en')}) بتاريخ ${row.date} — تأكد أنه ليس نفس الحدث`);
+  }
+
+  return warnings.slice(0, 8);
+}
+
+/**
  * إعادة احتساب التكلفة لكل المشاريع (للترحيل والمعالجة الجماعية).
- * @returns تقرير { projects_count, details[] }
  */
 async function recalculateAllProjects() {
   await ensureSchema();
@@ -175,16 +375,11 @@ async function recalculateAllProjects() {
 
 /**
  * ربط المصروفات المرآة القديمة بمصادرها (لمرة واحدة بعد الترقية).
- * - EXP-LAB-<id> ← project_labor_expenses
- * - EXP-PUR-<id> ← project_purchases
- * - ملاحظة 'فاتورة مشتريات:%' مع إيصال مخصص ← project_purchases (بدون id)
- * @returns عدد الصفوف المربوطة
  */
 async function backfillMirrorLinks() {
   await ensureSchema();
   let linked = 0;
 
-  // 1. مرايا الأجور (رقم الإيصال يحمل id السجل دائماً)
   const labMirrors = await query(
     "SELECT id, receipt_no FROM expenses WHERE source_table IS NULL AND receipt_no LIKE 'EXP-LAB-%'"
   );
@@ -196,7 +391,6 @@ async function backfillMirrorLinks() {
     linked++;
   }
 
-  // 2. مرايا المشتريات بالنمط القياسي
   const purMirrors = await query(
     "SELECT id, receipt_no FROM expenses WHERE source_table IS NULL AND receipt_no LIKE 'EXP-PUR-%'"
   );
@@ -208,7 +402,6 @@ async function backfillMirrorLinks() {
     linked++;
   }
 
-  // 3. مرايا المشتريات ذات الإيصال المخصص (تُعرف من نص الملاحظة الثابت)
   const customPur = await run(
     `UPDATE expenses SET source_table = 'project_purchases'
      WHERE source_table IS NULL AND notes LIKE 'فاتورة مشتريات:%'`
@@ -221,12 +414,11 @@ async function backfillMirrorLinks() {
 /**
  * حذف المصروفات المرآة المرتبطة بسجل فرعي (عند حذف الأصل).
  * لا يحذف أي مصروف له قيد يومي مرتبط (حماية).
- * @returns عدد المحذوفات
  */
 async function deleteLinkedMirrors(sourceTable, sourceId, tx = null) {
   if (!sourceTable || !sourceId) return 0;
   if (!tx) await ensureSchema();
-  const conn = tx || { query, get, run };
+  const conn = pickConn(tx);
   const mirrors = await conn.query(
     'SELECT id FROM expenses WHERE source_table = ? AND source_id = ?',
     [sourceTable, Number(sourceId)]
@@ -237,7 +429,7 @@ async function deleteLinkedMirrors(sourceTable, sourceId, tx = null) {
       'SELECT id FROM journal_entries WHERE reference_id = ? LIMIT 1',
       [m.id]
     );
-    if (je) continue; // له قيد — لا نحذفه (يُستبعد من التكلفة فقط)
+    if (je) continue;
     await conn.run('DELETE FROM expenses WHERE id = ?', [m.id]);
     deleted++;
   }
@@ -251,5 +443,9 @@ module.exports = {
   recalculateProjectCost,
   recalculateAllProjects,
   backfillMirrorLinks,
-  deleteLinkedMirrors
+  deleteLinkedMirrors,
+  linkSubRecordToExpense,
+  unlinkSubRecord,
+  clearLinksToExpense,
+  detectPossibleDuplicates
 };

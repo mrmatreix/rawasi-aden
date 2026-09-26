@@ -106,7 +106,9 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       date = new Date().toISOString().split('T')[0],
       notes,
       recipient,
-      status: requestedStatus // 'draft' أو 'posted'
+      status: requestedStatus, // 'draft' أو 'posted'
+      link_labor_id, // ربط اختياري: امتصاص بند أجور ميدانية بهذا السند
+      link_purchase_id // ربط اختياري: امتصاص فاتورة مشتريات فرعية بهذا السند
     } = req.body;
 
     // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ السند
@@ -118,6 +120,14 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
 
     if (payment_method === 'شيك' && (!check_no || !String(check_no).trim())) {
       return res.status(400).json({ success: false, message: 'عند اختيار طريقة الدفع (شيك) يجب إدخال رقم الشيك' });
+    }
+
+    // منع الازدواج: السند الواحد يمتص بنداً فرعياً واحداً فقط، والربط يتطلب مشروعاً
+    if (link_labor_id && link_purchase_id) {
+      return res.status(400).json({ success: false, message: 'لا يمكن ربط السند ببند أجور وفاتورة مشتريات معاً — اختر بنداً واحداً يمثله هذا السند' });
+    }
+    if ((link_labor_id || link_purchase_id) && !project_id) {
+      return res.status(400).json({ success: false, message: 'ربط السند ببند فرعي يتطلب تحديد المشروع أولاً' });
     }
 
     // توليد رقم سند الصرف
@@ -174,6 +184,16 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       ]);
 
       const expenseId = result.lastInsertRowid || result.insertId;
+
+      // 1-مكرر. منع الازدواج: ربط البند الفرعي بهذا السند لامتصاصه (داخل نفس المعاملة الذرية)
+      let linkNote = null;
+      if (link_labor_id || link_purchase_id) {
+        const linkTable = link_labor_id ? 'project_labor_expenses' : 'project_purchases';
+        const linkRes = await ProjectCostService.linkSubRecordToExpense(
+          linkTable, link_labor_id || link_purchase_id, expenseId, pId, tx
+        );
+        linkNote = linkRes.note;
+      }
 
       // 2. إذا كانت مسودة، لا يتم التأثير المالي على الدفاتر العامة أو الصندوق حتى المراجعة والاعتماد
       if (finalStatus === 'posted') {
@@ -236,7 +256,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         await ProjectCostService.recalculateProjectCost(pId, tx);
       }
 
-      return result;
+      return { result, linkNote };
     });
 
     await logAudit(req, {
@@ -247,14 +267,28 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       new_values: { receipt_no, amount: parsedAmount, date, status: finalStatus, created_by: creatorName }
     });
 
+    const newExpenseId = txResult.result.lastInsertRowid || txResult.result.insertId;
+
+    // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
+    let dupWarnings = [];
+    if (pId) {
+      try {
+        dupWarnings = await ProjectCostService.detectPossibleDuplicates({
+          projectId: pId, amount: parsedAmount, date, excludeExpenseId: newExpenseId
+        });
+      } catch {}
+    }
+
     res.json({
       success: true,
-      message: finalStatus === 'draft' 
+      message: finalStatus === 'draft'
         ? `تم حفظ مسودة سند الصرف بنجاح برقم ${receipt_no} وهي جاهزة للمراجعة والاعتماد`
         : `تم حفظ وترحيل سند الصرف بنجاح برقم ${receipt_no} وتحديث الحسابات ومراكز التكلفة داخل معاملة ذرية آمنة`,
       receipt_no,
       status: finalStatus,
-      id: txResult.lastInsertRowid || txResult.insertId
+      id: newExpenseId,
+      link_note: txResult.linkNote || null,
+      warnings: dupWarnings
     });
   } catch (err) {
     const status = err.message.includes('لا يمكن') || err.message.includes('مغلقة') ? 400 : 500;
@@ -465,8 +499,31 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
 
     await FinancialControlService.assertPeriodOpen(exp.date);
 
-    const { expense_type, amount, recipient, notes, date } = req.body;
+    const { expense_type, amount, recipient, notes, date, link_labor_id, link_purchase_id, unlink } = req.body;
     const targetDate = date || exp.date;
+
+    // منع الازدواج: ربط/فك البند الفرعي (للمسودات فقط — آمن لأن المسودة بلا أثر)
+    if (link_labor_id && link_purchase_id) {
+      return res.status(400).json({ success: false, message: 'لا يمكن ربط السند ببندين معاً — اختر بنداً واحداً' });
+    }
+    let linkNote = null;
+    if (unlink) {
+      await ProjectCostService.clearLinksToExpense(id);
+      linkNote = 'تم فك ربط السند عن أي بند فرعي — البنود تعود للاحتساب الكامل';
+    } else if (link_labor_id || link_purchase_id) {
+      if (!exp.project_id) {
+        return res.status(400).json({ success: false, message: 'ربط السند ببند فرعي يتطلب أن يكون السند مربوطاً بمشروع' });
+      }
+      try {
+        const linkTable = link_labor_id ? 'project_labor_expenses' : 'project_purchases';
+        const linkRes = await ProjectCostService.linkSubRecordToExpense(
+          linkTable, link_labor_id || link_purchase_id, id, exp.project_id
+        );
+        linkNote = linkRes.note;
+      } catch (linkErr) {
+        return res.status(400).json({ success: false, message: linkErr.message });
+      }
+    }
     await FinancialControlService.assertPeriodOpen(targetDate);
 
     const oldVals = { expense_type: exp.expense_type, amount: exp.amount, notes: exp.notes, date: exp.date };
@@ -493,7 +550,7 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
       reason: req.body.reason || 'تعديل مسودة سند صرف'
     });
 
-    res.json({ success: true, message: 'تم تعديل مسودة سند الصرف بنجاح' });
+    res.json({ success: true, message: 'تم تعديل مسودة سند الصرف بنجاح', link_note: linkNote });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -540,6 +597,8 @@ router.delete('/:id', requirePermission('expenses:cancel'), async (req, res) => 
 
     await FinancialControlService.assertPeriodOpen(exp.date);
 
+    // فك أي روابط بنود فرعية تشير لهذه المسودة قبل حذفها (حتى لا تبقى معلقة)
+    await ProjectCostService.clearLinksToExpense(req.params.id);
     await run('DELETE FROM expenses WHERE id = ?', [req.params.id]);
 
     await logAudit(req, {

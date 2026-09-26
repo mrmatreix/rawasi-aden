@@ -98,6 +98,19 @@ router.get('/:id/cost-breakdown', requirePermission('projects:view', { projectPa
     }
     const breakdown = await ProjectCostService.getCostBreakdown(req.params.id);
     const stored = Number(project.actual_cost) || 0;
+    // البنود الفرعية الممتصة بسندات رسمية (لشفافية منع الازدواج)
+    const linkedItems = await query(`
+      SELECT 'labor' as kind, l.id, l.total_amount, l.date as record_date, l.linked_expense_id,
+             e.receipt_no as expense_receipt_no, e.status as expense_status, e.amount as expense_amount
+      FROM project_labor_expenses l LEFT JOIN expenses e ON e.id = l.linked_expense_id
+      WHERE l.project_id = ? AND l.linked_expense_id IS NOT NULL
+      UNION ALL
+      SELECT 'purchase' as kind, p.id, p.total_amount, p.date as record_date, p.linked_expense_id,
+             e.receipt_no, e.status, e.amount
+      FROM project_purchases p LEFT JOIN expenses e ON e.id = p.linked_expense_id
+      WHERE p.project_id = ? AND p.linked_expense_id IS NOT NULL
+      ORDER BY record_date DESC
+    `, [req.params.id, req.params.id]);
     res.json({
       success: true,
       data: {
@@ -108,7 +121,8 @@ router.get('/:id/cost-breakdown', requirePermission('projects:view', { projectPa
         unified_total: breakdown.total,
         drift: Math.round((breakdown.total - stored) * 100) / 100,
         is_consistent: Math.abs(breakdown.total - stored) < 0.01,
-        breakdown
+        breakdown,
+        linked_items: linkedItems || []
       }
     });
   } catch (err) {
