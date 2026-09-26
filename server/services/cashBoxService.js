@@ -50,8 +50,9 @@ async function ensureSchema() {
   }
 }
 
-/** الشرط المحمول للمطابقة مع NULL على المحركين (IFNULL مدعوم في SQLite وMySQL) */
-const BOX_MATCH = 'IFNULL(project_id, 0) = IFNULL(?, 0)';
+/** الشرط المحمول للمطابقة مع NULL على المحركين (IFNULL مدعوم في SQLite وMySQL).
+ *  الـ +0 يجبر المقارنة الرقمية (بدونه: INTEGER = TEXT تُرجع خطأً دائماً في SQLite). */
+const BOX_MATCH = 'IFNULL(project_id, 0) + 0 = IFNULL(?, 0) + 0';
 
 /**
  * إلحاق حركة نقدية بسلسلة صندوقها (داخل معاملة المتصل — لا DDL هنا).
@@ -61,7 +62,9 @@ async function appendMovement(conn, {
   projectId = null, cashIn = 0, cashOut = 0, withdrawals = 0,
   currency = 'ر.ي', date, notes = ''
 } = {}) {
-  const boxId = projectId ?? null;
+  // تطبيع المفتاح رقمياً (معاملات المسارات نصية — والعمود صحيح)
+  const boxId = (projectId === null || projectId === undefined || projectId === '')
+    ? null : Number(projectId);
   const last = await conn.get(
     `SELECT current_balance FROM cash_movements WHERE ${BOX_MATCH} ORDER BY id DESC LIMIT 1`,
     [boxId]

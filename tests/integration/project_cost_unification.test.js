@@ -205,12 +205,13 @@ test('Project Cost Unification - Single Source of Truth', async (t) => {
     proj = await db.get('SELECT actual_cost FROM projects WHERE id = ?', [projectId]);
     assert.strictEqual(Number(proj.actual_cost), 140000, 'التكلفة بعد العكس');
 
-    // 9. حذف الأجور ← يحذف المرآة اليتيمة والتكلفة = 90,000
+    // 9. حذف الأجور ← عكس المرآة ذات القيد (لا حذف فيزيائي) والتكلفة = 90,000
     r = await api('DELETE', `/api/project-hub/${projectId}/labor/${laborId}`);
     assert.strictEqual(r.status, 200, 'حذف الأجور: ' + JSON.stringify(r.data));
 
-    const orphan = await db.get("SELECT id FROM expenses WHERE receipt_no = 'EXP-LAB-" + laborId + "'");
-    assert.strictEqual(orphan, null, 'المصروف المرآة اليتيم يجب أن يُحذف مع الأصل');
+    const orphan = await db.get("SELECT id, status FROM expenses WHERE receipt_no = 'EXP-LAB-" + laborId + "'");
+    assert.ok(orphan, 'المرآة ذات القيد تُعكس ولا تُحذف فيزيائياً');
+    assert.strictEqual(orphan.status, 'reversed', 'حالة المرآة بعد حذف الأصل: معكوسة');
 
     proj = await db.get('SELECT actual_cost FROM projects WHERE id = ?', [projectId]);
     assert.strictEqual(Number(proj.actual_cost), 90000, 'التكلفة بعد حذف الأجور والمرآة');

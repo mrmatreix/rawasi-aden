@@ -21,6 +21,8 @@
  */
 
 const db = require('../database/db');
+const CashBoxService = require('./cashBoxService');
+const { checkPeriodOpen } = require('./periodService');
 
 const { query, get, run, transaction, getActiveEngine } = db;
 
@@ -436,6 +438,203 @@ async function deleteLinkedMirrors(sourceTable, sourceId, tx = null) {
   return deleted;
 }
 
+// ─── SUGGESTION-5 (§12): قيود المرايا (no-voucher-without-JE) ─────────────────
+// كل مصروف مرآة مرحّل له قيد يومي متزن: مدين مصروف / دائن صندوق، + حركة صندوق.
+// حذف الأصل يعكس المرآة (لا حذف فيزيائي لما عليه قيد).
+
+const MIRROR_JE_TYPES = {
+  project_labor_expenses: 'مصروف مرآة عمالة',
+  project_purchases: 'مصروف مرآة مشتريات'
+};
+
+/** حسابات المرآة: العمالة ← 511 (فإن غاب: 5)، المشتريات ← 5، الدائن ← 111 */
+async function resolveMirrorAccounts(conn, sourceTable) {
+  let debitAcc = null;
+  if (sourceTable === 'project_labor_expenses') {
+    debitAcc = await conn.get("SELECT id FROM accounts WHERE code = '511' LIMIT 1");
+  }
+  if (!debitAcc) {
+    debitAcc = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
+  }
+  const cashAcc = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+  if (!debitAcc || !cashAcc) {
+    throw new Error('الحسابات المحاسبية للمرايا (5/111) غير موجودة في الدليل');
+  }
+  return { debitAccId: debitAcc.id, cashAccId: cashAcc.id };
+}
+
+/**
+ * إنشاء قيد المرآة داخل معاملة المتصل (لا DDL هنا).
+ * user = { id, name } — قد يكونا null في الباكفيل (يُسجل 'ترحيل آلي').
+ */
+async function createMirrorJournal(conn, {
+  sourceTable, expenseId, projectId = null, costCenterId = null,
+  amount, date, receiptNo, label, user = null
+}) {
+  const refType = MIRROR_JE_TYPES[sourceTable];
+  if (!refType) throw new Error('نوع مصدر المرآة غير معروف: ' + sourceTable);
+  const { debitAccId, cashAccId } = await resolveMirrorAccounts(conn, sourceTable);
+  const countRes = await conn.get('SELECT COUNT(*) as cnt FROM journal_entries');
+  let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
+  let entryNo = `JE-MIR-${year}-${String(jeSeq).padStart(4, '0')}`;
+  while (await conn.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+    jeSeq++;
+    entryNo = `JE-MIR-${year}-${String(jeSeq).padStart(4, '0')}`;
+  }
+  const userName = (user && user.name) || 'ترحيل آلي';
+  const userId = (user && user.id) || null;
+  const jeRes = await conn.run(`
+    INSERT INTO journal_entries (
+      entry_no, date, description, reference_type, reference_id,
+      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `, [
+    entryNo, date, `${refType} ${receiptNo} — ${label}`,
+    refType, expenseId, amount, amount,
+    userId, userName, userId, userName
+  ]);
+  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `, [jeId, debitAccId, costCenterId ?? null, projectId ?? null, amount, `${refType} ${receiptNo}`]);
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, 0, ?, ?)
+  `, [jeId, cashAccId, costCenterId ?? null, projectId ?? null, amount, `الصندوق — ${refType} ${receiptNo}`]);
+  return { jeId, entryNo };
+}
+
+/** قيد المرآة المرتبط بمصروف (مطابقة دقيقة بالنوع + المرجع) */
+async function getMirrorJournal(conn, expenseId) {
+  return conn.get(
+    `SELECT * FROM journal_entries
+     WHERE reference_id = ? AND reference_type IN ('مصروف مرآة عمالة', 'مصروف مرآة مشتريات')
+     ORDER BY id ASC LIMIT 1`,
+    [expenseId]
+  );
+}
+
+/**
+ * عكس مرايا سجل فرعي محذوف (داخل معاملة المتصل — ذري مع حذف الأصل).
+ * ينشئ قيد REV + يعكس الأصلي + يقلب المرآة + يعيد النقد لصندوق المشروع.
+ */
+async function reverseLinkedMirrors(sourceTable, sourceId, { tx = null, user = null, reason = '', reversalDate = null } = {}) {
+  if (!sourceTable || !sourceId) return 0;
+  if (!tx) await ensureSchema();
+  const conn = pickConn(tx);
+  const revDate = reversalDate || new Date().toISOString().split('T')[0];
+  const period = await checkPeriodOpen(revDate);
+  if (!period.isOpen) throw new Error(period.message);
+  const cleanReason = String(reason || '').trim() || 'حذف سجل الأصل المرتبط بالمرآة';
+  const userName = (user && user.name) || 'النظام';
+  const userId = (user && user.id) || null;
+
+  const mirrors = await conn.query(
+    `SELECT * FROM expenses WHERE source_table = ? AND source_id = ? AND status IN ('posted', 'approved')`,
+    [sourceTable, Number(sourceId)]
+  );
+  let reversed = 0;
+  for (const m of mirrors) {
+    const je = await getMirrorJournal(conn, m.id);
+    if (!je || (je.status || '').toLowerCase() !== 'posted') continue;
+    const lines = await conn.query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [je.id]);
+    if (!lines || lines.length === 0) continue;
+
+    const countRes = await conn.get('SELECT COUNT(*) as cnt FROM journal_entries');
+    let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+    let revNo = `REV-${revDate.slice(0, 4)}-${String(jeSeq).padStart(4, '0')}`;
+    while (await conn.get('SELECT id FROM journal_entries WHERE entry_no = ?', [revNo])) {
+      jeSeq++;
+      revNo = `REV-${revDate.slice(0, 4)}-${String(jeSeq).padStart(4, '0')}`;
+    }
+    const total = Number(je.total_debit) || 0;
+    const revRes = await conn.run(`
+      INSERT INTO journal_entries (
+        entry_no, date, description, reference_type, reference_id,
+        total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+      )
+      VALUES (?, ?, ?, 'قيد عكسي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [
+      revNo, revDate, `قيد عكسي للمرآة ${m.receipt_no} (${je.entry_no}) — ${cleanReason}`,
+      m.id, total, total, userId, userName, userId, userName
+    ]);
+    const revId = revRes.lastInsertRowid || revRes.insertId;
+    for (const l of lines) {
+      await conn.run(`
+        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [revId, l.account_id, l.cost_center_id ?? null, l.project_id ?? null,
+          Number(l.credit) || 0, Number(l.debit) || 0, `عكس: ${l.notes || ''}`]);
+    }
+    await conn.run(`
+      UPDATE journal_entries
+      SET status = 'reversed', reversed_by = ?, reversed_by_name = ?,
+          reversed_at = CURRENT_TIMESTAMP, reversal_reason = ?, reversal_ref_id = ?
+      WHERE id = ?
+    `, [userId, userName, cleanReason, revId, je.id]);
+    await conn.run(`
+      UPDATE expenses
+      SET status = 'reversed', reversed_by = ?, reversed_by_name = ?,
+          reversed_at = CURRENT_TIMESTAMP, reversal_reason = ?, reversal_ref_id = ?
+      WHERE id = ?
+    `, [userId, userName, cleanReason, revId, m.id]);
+    // إعادة النقد لصندوق المشروع (تعويض حركة الصرف الأصلية)
+    await CashBoxService.appendMovement(conn, {
+      projectId: m.project_id ?? null, cashIn: Number(m.amount) || 0,
+      currency: m.currency || 'ر.ي', date: revDate, notes: `عكس مرآة: ${m.receipt_no}`
+    });
+    reversed++;
+  }
+  return reversed;
+}
+
+/**
+ * باكفيل قيود المرايا القديمة (idempotent — كل مرآة بمعاملتها).
+ * يتخطى مرايا الفترات المقفلة مع الإبلاغ (لا يمكن الترحيل فيها).
+ */
+async function backfillMirrorJEs() {
+  await ensureSchema();
+  const mirrors = await query(`
+    SELECT e.* FROM expenses e
+    WHERE e.source_table IS NOT NULL AND e.status IN ('posted', 'approved')
+      AND NOT EXISTS (
+        SELECT 1 FROM journal_entries j
+        WHERE j.reference_id = e.id
+          AND j.reference_type IN ('مصروف مرآة عمالة', 'مصروف مرآة مشتريات')
+      )
+    ORDER BY e.id ASC
+  `);
+  let created = 0;
+  let skippedClosed = 0;
+  for (const m of mirrors) {
+    const period = await checkPeriodOpen(m.date);
+    if (!period.isOpen) { skippedClosed++; continue; }
+    await transaction(async (tx) => {
+      let ccId = null;
+      if (m.project_id) {
+        const prjCc = await tx.get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [m.project_id]);
+        if (prjCc) ccId = prjCc.id;
+      }
+      if (!ccId) ccId = 1;
+      await createMirrorJournal(tx, {
+        sourceTable: m.source_table, expenseId: m.id,
+        projectId: m.project_id ?? null, costCenterId: ccId,
+        amount: Number(m.amount) || 0, date: m.date,
+        receiptNo: m.receipt_no, label: m.notes || m.expense_type, user: null
+      });
+      await CashBoxService.appendMovement(tx, {
+        projectId: m.project_id ?? null, cashOut: Number(m.amount) || 0,
+        currency: m.currency || 'ر.ي', date: m.date, notes: `مصروف مرآة: ${m.receipt_no} (باكفيل)`
+      });
+    });
+    created++;
+  }
+  return { total: mirrors.length, created, skipped_closed: skippedClosed };
+}
+
 module.exports = {
   COUNTED_EXPENSE_STATUSES,
   ensureSchema,
@@ -447,5 +646,8 @@ module.exports = {
   linkSubRecordToExpense,
   unlinkSubRecord,
   clearLinksToExpense,
-  detectPossibleDuplicates
+  detectPossibleDuplicates,
+  createMirrorJournal,
+  reverseLinkedMirrors,
+  backfillMirrorJEs
 };

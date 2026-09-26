@@ -4,6 +4,9 @@ const { query, get, run, transaction } = require('../database/db');
 const { tafqeet } = require('../services/tafqeetService');
 const { requirePermission, requireScope } = require('../middleware/security');
 const ProjectCostService = require('../services/projectCostService');
+const FinancialControlService = require('../services/financialControlService');
+const CashBoxService = require('../services/cashBoxService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 // فرض نطاق المشروع الإلزامي وحماية العمليات على كافة مسارات إدارة المشاريع
 router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
@@ -635,42 +638,81 @@ router.post('/:projectId/purchases', async (req, res) => {
     const qty = Number(quantity) || 1;
     const price = Number(unit_price) || 0;
     const total = total_amount ? Number(total_amount) : (qty * price);
+    const paid = Number(paid_amount) || 0;
+    const recDate = date || new Date().toISOString().split('T')[0];
+    const willMirror = paid > 0;
 
-    const result = await run(`
-      INSERT INTO project_purchases (
-        project_id, invoice_no, supplier_id, supplier_name, item_description,
-        quantity, unit, unit_price, total_amount, paid_amount,
-        payment_status, payment_method, date, receipt_no, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      projectId, invoice_no ?? null, supplier_id ? Number(supplier_id) : null, supplier_name ?? null, item_description,
-      qty, unit ?? null, price, total, Number(paid_amount) || 0,
-      payment_status, payment_method, date || new Date().toISOString().split('T')[0], receipt_no ?? null, notes ?? null
-    ]);
-
-    // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
-    // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
-    if (Number(paid_amount) > 0) {
-      const expReceipt = receipt_no || `EXP-PUR-${result.lastInsertRowid}`;
-      await run(`
-        INSERT INTO expenses (receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes, source_table, source_id)
-        VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?, 'project_purchases', ?)
-      `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, Number(paid_amount), payment_method, date || new Date().toISOString().split('T')[0], `فاتورة مشتريات: ${item_description}`, result.lastInsertRowid]);
+    // SUGGESTION-5: المرآة المدفوعة أثر مالي — فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
+    let creatorId = null;
+    let creatorName = 'النظام';
+    let mirrorCcId = null;
+    if (willMirror) {
+      const period = await checkPeriodOpen(recDate);
+      if (!period.isOpen) {
+        return res.status(403).json({ success: false, message: period.message });
+      }
+      creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+      creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
+      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
+      mirrorCcId = prjCc ? prjCc.id : 1;
     }
 
-    // توحيد التكلفة: إعادة الاحتساب من المصادر
-    await ProjectCostService.recalculateProjectCost(projectId);
+    // السجل الفرعي + المرآة + قيدها + حركتها النقدية + إعادة الاحتساب — ذرياً
+    const txResult = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO project_purchases (
+          project_id, invoice_no, supplier_id, supplier_name, item_description,
+          quantity, unit, unit_price, total_amount, paid_amount,
+          payment_status, payment_method, date, receipt_no, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        projectId, invoice_no ?? null, supplier_id ? Number(supplier_id) : null, supplier_name ?? null, item_description,
+        qty, unit ?? null, price, total, paid,
+        payment_status, payment_method, recDate, receipt_no ?? null, notes ?? null
+      ]);
+      const purchaseId = result.lastInsertRowid || result.insertId;
+
+      // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
+      // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
+      if (willMirror) {
+        const expReceipt = receipt_no || `EXP-PUR-${purchaseId}`;
+        const mirrorRes = await tx.run(`
+          INSERT INTO expenses (
+            receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes,
+            source_table, source_id, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?, 'project_purchases', ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, paid, payment_method, recDate,
+            `فاتورة مشتريات: ${item_description}`, purchaseId, creatorId, creatorName, creatorId, creatorName]);
+        const mirrorId = mirrorRes.lastInsertRowid || mirrorRes.insertId;
+        // قيد المرآة على الجزء المدفوع فقط: مدين مصروف / دائن صندوق + حركة صندوق المشروع
+        await ProjectCostService.createMirrorJournal(tx, {
+          sourceTable: 'project_purchases', expenseId: mirrorId,
+          projectId, costCenterId: mirrorCcId, amount: paid, date: recDate,
+          receiptNo: expReceipt, label: item_description,
+          user: { id: creatorId, name: creatorName }
+        });
+        await CashBoxService.appendMovement(tx, {
+          projectId, cashOut: paid,
+          currency: 'ر.ي', date: recDate, notes: `مصروف مرآة مشتريات: ${expReceipt}`
+        });
+      }
+
+      // توحيد التكلفة: إعادة الاحتساب من المصادر
+      await ProjectCostService.recalculateProjectCost(projectId, tx);
+      return { purchaseId };
+    });
 
     // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
     let dupWarnings = [];
     try {
       dupWarnings = await ProjectCostService.detectPossibleDuplicates({
-        projectId, amount: total, date: date || new Date().toISOString().split('T')[0],
-        excludeTable: 'project_purchases', excludeId: result.lastInsertRowid
+        projectId, amount: total, date: recDate,
+        excludeTable: 'project_purchases', excludeId: txResult.purchaseId
       });
     } catch {}
 
-    const created = await get('SELECT * FROM project_purchases WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_purchases WHERE id = ?', [txResult.purchaseId]);
     res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created, warnings: dupWarnings });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -680,17 +722,25 @@ router.post('/:projectId/purchases', async (req, res) => {
 router.delete('/:projectId/purchases/:id', async (req, res) => {
   try {
     await ProjectCostService.ensureSchema();
-    const removedMirrors = await transaction(async (tx) => {
+    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const actorName = req.user?.username || req.user?.full_name || 'النظام';
+    const txResult = await transaction(async (tx) => {
       await tx.run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-      // حذف المصروف المرآة اليتيم (إن وُجد ولا قيد عليه) ثم إعادة احتساب التكلفة
+      // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
+      const reversed = await ProjectCostService.reverseLinkedMirrors('project_purchases', req.params.id, {
+        tx, user: { id: actorId, name: actorName }, reason: 'حذف فاتورة المشتريات الأصل من المشروع'
+      });
       const removed = await ProjectCostService.deleteLinkedMirrors('project_purchases', req.params.id, tx);
       await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
-      return removed;
+      return { reversed, removed };
     });
+    const parts = [];
+    if (txResult.reversed > 0) parts.push(`عكس ${txResult.reversed} مرآة`);
+    if (txResult.removed > 0) parts.push(`حذف ${txResult.removed} مرآة يتيمة`);
     res.json({
       success: true,
-      message: removedMirrors > 0
-        ? `تم حذف الفاتورة والمصروف المرتبط بها (${removedMirrors}) وتحديث تكلفة المشروع`
+      message: parts.length > 0
+        ? `تم حذف الفاتورة (${parts.join('، ')}) وتحديث تكلفة المشروع`
         : 'تم حذف الفاتورة وتحديث تكلفة المشروع بنجاح'
     });
   } catch (err) {
@@ -727,41 +777,79 @@ router.post('/:projectId/labor', async (req, res) => {
     const rate = Number(daily_rate) || 0;
     const days = Number(days_or_hours) || 1;
     const total = total_amount ? Number(total_amount) : (count * rate * days);
+    const recDate = date || new Date().toISOString().split('T')[0];
+    const willMirror = payment_status === 'مدفوع' && total > 0;
 
-    const result = await run(`
-      INSERT INTO project_labor_expenses (
-        project_id, date, worker_name_or_team, trade, workers_count,
-        daily_rate, days_or_hours, total_amount, expense_category,
-        payment_status, supervisor_name, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      projectId, date || new Date().toISOString().split('T')[0], worker_name_or_team, trade ?? null,
-      count, rate, days, total, expense_category, payment_status, supervisor_name ?? null, notes ?? null
-    ]);
-
-    // تسجيل مصروف آلي في جدول المصروفات العام
-    // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
-    if (payment_status === 'مدفوع' && total > 0) {
-      const expReceipt = `EXP-LAB-${result.lastInsertRowid}`;
-      await run(`
-        INSERT INTO expenses (receipt_no, expense_type, project_id, amount, payment_method, date, notes, source_table, source_id)
-        VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?, 'project_labor_expenses', ?)
-      `, [expReceipt, projectId, total, date || new Date().toISOString().split('T')[0], `أجور ${trade}: ${worker_name_or_team}`, result.lastInsertRowid]);
+    // SUGGESTION-5: المرآة المدفوعة أثر مالي — فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
+    let creatorId = null;
+    let creatorName = 'النظام';
+    let mirrorCcId = null;
+    if (willMirror) {
+      const period = await checkPeriodOpen(recDate);
+      if (!period.isOpen) {
+        return res.status(403).json({ success: false, message: period.message });
+      }
+      creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+      creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
+      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
+      mirrorCcId = prjCc ? prjCc.id : 1;
     }
 
-    // توحيد التكلفة: إعادة الاحتساب من المصادر
-    await ProjectCostService.recalculateProjectCost(projectId);
+    // السجل الفرعي + المرآة + قيدها + حركتها النقدية + إعادة الاحتساب — ذرياً
+    const txResult = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO project_labor_expenses (
+          project_id, date, worker_name_or_team, trade, workers_count,
+          daily_rate, days_or_hours, total_amount, expense_category,
+          payment_status, supervisor_name, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        projectId, recDate, worker_name_or_team, trade ?? null,
+        count, rate, days, total, expense_category, payment_status, supervisor_name ?? null, notes ?? null
+      ]);
+      const laborId = result.lastInsertRowid || result.insertId;
+
+      // تسجيل مصروف آلي في جدول المصروفات العام
+      // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
+      if (willMirror) {
+        const expReceipt = `EXP-LAB-${laborId}`;
+        const mirrorRes = await tx.run(`
+          INSERT INTO expenses (
+            receipt_no, expense_type, project_id, amount, payment_method, date, notes,
+            source_table, source_id, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?, 'project_labor_expenses', ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [expReceipt, projectId, total, recDate, `أجور ${trade}: ${worker_name_or_team}`, laborId,
+            creatorId, creatorName, creatorId, creatorName]);
+        const mirrorId = mirrorRes.lastInsertRowid || mirrorRes.insertId;
+        // قيد المرآة: مدين أجور / دائن صندوق + حركة صندوق المشروع
+        await ProjectCostService.createMirrorJournal(tx, {
+          sourceTable: 'project_labor_expenses', expenseId: mirrorId,
+          projectId, costCenterId: mirrorCcId, amount: total, date: recDate,
+          receiptNo: expReceipt, label: `${trade}: ${worker_name_or_team}`,
+          user: { id: creatorId, name: creatorName }
+        });
+        await CashBoxService.appendMovement(tx, {
+          projectId, cashOut: total,
+          currency: 'ر.ي', date: recDate, notes: `مصروف مرآة عمالة: ${expReceipt}`
+        });
+      }
+
+      // توحيد التكلفة: إعادة الاحتساب من المصادر
+      await ProjectCostService.recalculateProjectCost(projectId, tx);
+      return { laborId };
+    });
 
     // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
     let dupWarnings = [];
     try {
       dupWarnings = await ProjectCostService.detectPossibleDuplicates({
-        projectId, amount: total, date: date || new Date().toISOString().split('T')[0],
-        excludeTable: 'project_labor_expenses', excludeId: result.lastInsertRowid
+        projectId, amount: total, date: recDate,
+        excludeTable: 'project_labor_expenses', excludeId: txResult.laborId
       });
     } catch {}
 
-    const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [result.lastInsertRowid]);
+    const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [txResult.laborId]);
     res.json({ success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created, warnings: dupWarnings });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -771,17 +859,25 @@ router.post('/:projectId/labor', async (req, res) => {
 router.delete('/:projectId/labor/:id', async (req, res) => {
   try {
     await ProjectCostService.ensureSchema();
-    const removedMirrors = await transaction(async (tx) => {
+    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const actorName = req.user?.username || req.user?.full_name || 'النظام';
+    const txResult = await transaction(async (tx) => {
       await tx.run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-      // حذف المصروف المرآة اليتيم (إن وُجد ولا قيد عليه) ثم إعادة احتساب التكلفة
+      // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
+      const reversed = await ProjectCostService.reverseLinkedMirrors('project_labor_expenses', req.params.id, {
+        tx, user: { id: actorId, name: actorName }, reason: 'حذف سجل الأجور الأصل من المشروع'
+      });
       const removed = await ProjectCostService.deleteLinkedMirrors('project_labor_expenses', req.params.id, tx);
       await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
-      return removed;
+      return { reversed, removed };
     });
+    const parts = [];
+    if (txResult.reversed > 0) parts.push(`عكس ${txResult.reversed} مرآة`);
+    if (txResult.removed > 0) parts.push(`حذف ${txResult.removed} مرآة يتيمة`);
     res.json({
       success: true,
-      message: removedMirrors > 0
-        ? `تم حذف السجل والمصروف المرتبط به (${removedMirrors}) وتحديث تكلفة المشروع`
+      message: parts.length > 0
+        ? `تم حذف السجل (${parts.join('، ')}) وتحديث تكلفة المشروع`
         : 'تم حذف السجل وتحديث تكلفة المشروع بنجاح'
     });
   } catch (err) {

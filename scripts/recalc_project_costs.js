@@ -3,7 +3,8 @@
  * ============================================================================
  * 1. يضيف عمودي الربط بالمصدر (source_table/source_id) لجدول المصروفات.
  * 2. يربط المصروفات المرآة القديمة (EXP-LAB / EXP-PUR) بمصادرها.
- * 3. يعيد احتساب actual_cost لكل المشاريع من المصادر الموحدة.
+ * 3. ينشئ قيود المرايا المفقودة مع حركاتها النقدية (يتخطى الفترات المقفلة).
+ * 4. يعيد احتساب actual_cost لكل المشاريع من المصادر الموحدة.
  *
  * التشغيل: npm run costs:recalc
  * آمن للتكرار (idempotent).
@@ -16,15 +17,19 @@ async function main() {
   console.log('🔧 ترحيل توحيد التكلفة الفعلية للمشاريع');
   console.log('════════════════════════════════════════════════════════════');
 
-  console.log('\n[1/3] التأكد من مخطط الربط (source_table/source_id)...');
+  console.log('\n[1/4] التأكد من مخطط الربط (source_table/source_id)...');
   await ProjectCostService.ensureSchema();
   console.log('      ✅ المخطط جاهز');
 
-  console.log('\n[2/3] ربط المصروفات المرآة القديمة بمصادرها...');
+  console.log('\n[2/4] ربط المصروفات المرآة القديمة بمصادرها...');
   const linked = await ProjectCostService.backfillMirrorLinks();
   console.log(`      ✅ تم ربط ${linked} مصروف مرآة`);
 
-  console.log('\n[3/3] إعادة احتساب التكلفة الفعلية لكل المشاريع...');
+  console.log('\n[3/4] إنشاء قيود المرايا المفقودة (باكفيل no-voucher-without-JE)...');
+  const mirrorJEs = await ProjectCostService.backfillMirrorJEs();
+  console.log(`      ✅ قيود منشأة: ${mirrorJEs.created} — متخطاة (فترة مقفلة): ${mirrorJEs.skipped_closed}`);
+
+  console.log('\n[4/4] إعادة احتساب التكلفة الفعلية لكل المشاريع...');
   const report = await ProjectCostService.recalculateAllProjects();
   console.log(`      ✅ تمت معالجة ${report.projects_count} مشروع\n`);
 
