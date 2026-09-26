@@ -212,6 +212,16 @@ async function linkSubRecordToExpense(table, subId, expenseId, projectId, tx = n
     throw new Error(`هذا البند مربوط مسبقاً بسند آخر (رقم ${sub.linked_expense_id}) — يجب فك الربط أولاً`);
   }
 
+  // SUGGESTION-7: السند المرتبط بفاتورة سدادٌ لها — لا يتجاوز متبقيها المستحق
+  const subTotalPre = Number(sub.total_amount) || 0;
+  const expAmountPre = Number(expense.amount) || 0;
+  if (table === 'project_purchases') {
+    const outstandingPre = subTotalPre - (Number(sub.paid_amount) || 0);
+    if (expAmountPre - outstandingPre > 0.005) {
+      throw new Error(`لا يمكن ربط السند: مبلغ السند (${expAmountPre.toLocaleString('en')}) يتجاوز المتبقي المستحق للفاتورة (${outstandingPre.toLocaleString('en')})`);
+    }
+  }
+
   await conn.run(`UPDATE ${table} SET linked_expense_id = ? WHERE id = ?`, [eId, sId]);
 
   const subTotal = Number(sub.total_amount) || 0;

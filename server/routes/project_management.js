@@ -856,6 +856,16 @@ router.delete('/:projectId/purchases/:id', async (req, res) => {
     const doomed = await get(
       'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]
     );
+    // SUGGESTION-7: منع حذف فاتورة ممتصة بسند حي (يُعكس/يُفك أولاً)
+    if (doomed && doomed.linked_expense_id) {
+      const linkedExp = await get('SELECT id, status FROM expenses WHERE id = ?', [doomed.linked_expense_id]);
+      if (linkedExp && !['reversed', 'cancelled'].includes((linkedExp.status || '').toLowerCase())) {
+        const isDraft = (linkedExp.status || '').toLowerCase() === 'draft';
+        return res.status(400).json({ success: false, message: isDraft
+          ? 'لا يمكن حذف الفاتورة: مرتبطة بسند غير مرحل — فك الربط أولاً ثم احذف'
+          : 'لا يمكن حذف الفاتورة: مرتبطة بسند مرحل — اعكس السند أولاً ثم احذف' });
+      }
+    }
     const txResult = await transaction(async (tx) => {
       await tx.run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
       // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
@@ -1002,6 +1012,19 @@ router.delete('/:projectId/labor/:id', async (req, res) => {
     await ProjectCostService.ensureSchema();
     const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
     const actorName = req.user?.username || req.user?.full_name || 'النظام';
+    // SUGGESTION-7: منع حذف بند ممتص بسند حي (يُعكس/يُفك أولاً)
+    const doomedLabor = await get(
+      'SELECT * FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]
+    );
+    if (doomedLabor && doomedLabor.linked_expense_id) {
+      const linkedExp = await get('SELECT id, status FROM expenses WHERE id = ?', [doomedLabor.linked_expense_id]);
+      if (linkedExp && !['reversed', 'cancelled'].includes((linkedExp.status || '').toLowerCase())) {
+        const isDraft = (linkedExp.status || '').toLowerCase() === 'draft';
+        return res.status(400).json({ success: false, message: isDraft
+          ? 'لا يمكن حذف البند: مرتبط بسند غير مرحل — فك الربط أولاً ثم احذف'
+          : 'لا يمكن حذف البند: مرتبط بسند مرحل — اعكس السند أولاً ثم احذف' });
+      }
+    }
     const txResult = await transaction(async (tx) => {
       await tx.run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
       // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب

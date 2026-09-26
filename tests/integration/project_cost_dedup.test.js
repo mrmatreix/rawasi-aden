@@ -31,6 +31,7 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
   const today = new Date().toISOString().split('T')[0];
   const PROJECT_NAME = 'TEST-DEDUP مشروع اختبار منع الازدواج';
   const SUPPLIER_NAME = 'TEST-SUP-DEDUP مورد اختبار الازدواج';
+  const SUPPLIER2_NAME = 'TEST-SUP-DEDUP-2 مورد التعارض';
 
   const adminHeaders = {
     'Content-Type': 'application/json',
@@ -54,6 +55,8 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
     return { status: res.status, data };
   };
 
+  // SUGGESTION-7: الفواتير المحذوفة عبر API تُتتبع لتنظيف قيود ذممها (صفوفها تزول)
+  const deadPurchaseIds = [];
   const cleanup = async () => {
     try {
       const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
@@ -75,7 +78,7 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
         await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
         // SUGGESTION-6: قيود الذمم (استحقاق/تسوية/عكوسها) المرتبطة بفواتير المشروع
         const purs = await db.query('SELECT id FROM project_purchases WHERE project_id = ?', [p.id]);
-        const purIds = purs.map(x => x.id);
+        const purIds = [...purs.map(x => x.id), ...deadPurchaseIds];
         if (purIds.length > 0) {
           const pph = purIds.map(() => '?').join(',');
           const pjes = await db.query(
@@ -95,6 +98,7 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
         await db.run('DELETE FROM projects WHERE id = ?', [p.id]);
       }
       await db.run('DELETE FROM suppliers WHERE name = ?', [SUPPLIER_NAME]);
+      await db.run('DELETE FROM suppliers WHERE name = ?', [SUPPLIER2_NAME]);
       await db.run('DELETE FROM users WHERE id = ?', [testerId]);
     } catch {}
   };
@@ -119,6 +123,10 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
       `INSERT INTO suppliers (name, category, balance) VALUES (?, 'مواد بناء', 0)`, [SUPPLIER_NAME]
     );
     const supplierId = supRes.lastInsertRowid || supRes.insertId;
+    const supRes2 = await db.run(
+      `INSERT INTO suppliers (name, category, balance) VALUES (?, 'مواد بناء', 0)`, [SUPPLIER2_NAME]
+    );
+    const supplier2Id = supRes2.lastInsertRowid || supRes2.insertId;
 
     // 2. أجور غير مدفوعة 60,000 (بلا مرآة) ← التكلفة = 60,000
     r = await api('POST', `/api/project-hub/${projectId}/labor`, {
@@ -188,6 +196,7 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
     });
     assert.strictEqual(r.status, 200, 'سند جزئي: ' + JSON.stringify(r.data));
     assert.match(r.data.link_note || '', /جزئي/, 'ملاحظة الربط الجزئي');
+    const linkedPurExpenseId = r.data.id;
 
     r = await api('GET', `/api/projects/${projectId}/cost-breakdown`);
     const bd = r.data.data.breakdown;
@@ -235,7 +244,88 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
     assert.ok(r.data.warnings.length > 0, 'يجب وجود تحذير اشتباه');
     assert.ok(r.data.warnings.some(w => w.kind === 'expense'), 'التحذير يشير للمصروف المشابه');
 
-    console.log('✅ منع الازدواج: جميع الفحوصات (10) ناجحة');
+    // 11. السند المرتبط سدادٌ: الذمة تنخفض والمسدد يتراكم والقيد مدين 21 (SUGGESTION-7)
+    const acc21 = (await db.get("SELECT id FROM accounts WHERE code = '21'")).id;
+    const acc111 = (await db.get("SELECT id FROM accounts WHERE code = '111'")).id;
+    const acc5 = (await db.get("SELECT id FROM accounts WHERE code = '5'")).id;
+    const suppAfter = await db.get('SELECT balance FROM suppliers WHERE id = ?', [supplierId]);
+    assert.strictEqual(Number(suppAfter.balance), 50000, 'الذمة = 80k استحقاق − 30k تسوية');
+    const purAfter = await db.get('SELECT paid_amount, payment_status FROM project_purchases WHERE id = ?', [purchaseId]);
+    assert.strictEqual(Number(purAfter.paid_amount), 30000, 'مسدد الفاتورة تراكمي');
+    assert.strictEqual(purAfter.payment_status, 'جزئي');
+    const settleJe = await db.get(
+      `SELECT * FROM journal_entries WHERE reference_type = 'سند صرف' AND reference_id = ?`, [linkedPurExpenseId]
+    );
+    assert.ok(settleJe, 'قيد السند المرتبط موجود');
+    const settleLines = await db.query('SELECT account_id, debit, credit FROM journal_entry_lines WHERE entry_id = ?', [settleJe.id]);
+    assert.ok(settleLines.find(l => l.account_id === acc21 && Number(l.debit) === 30000), 'مدين 21 بالتسوية');
+    assert.ok(settleLines.find(l => l.account_id === acc111 && Number(l.credit) === 30000), 'دائن 111 بالتسوية');
+    assert.ok(!settleLines.find(l => l.account_id === acc5 && Number(l.debit) > 0), 'لا مدين 5 ثانيةً (لا ازدواج GL)');
+    const apStill = await db.get(
+      `SELECT status FROM journal_entries WHERE reference_type = 'مستحق مورد — مشتريات موقعية' AND reference_id = ?`, [purchaseId]
+    );
+    assert.strictEqual(apStill.status, 'posted', 'قيد الاستحقاق الأصلي قائم');
+
+    // 12. ربط فوق المتبقي ← 400 (فاتورة نقدية مكتملة: المتبقي صفر)
+    r = await api('POST', `/api/project-hub/${projectId}/purchases`, {
+      item_description: 'رمل الازدواج', total_amount: 20000,
+      paid_amount: 20000, date: today
+    });
+    assert.strictEqual(r.status, 200, 'فاتورة خطوة 12: ' + JSON.stringify(r.data));
+    const fullCashPurId = r.data.data.id;
+    r = await api('POST', '/api/expenses', {
+      expense_type: 'مواد بناء', project_id: projectId, amount: 5000,
+      payment_method: 'نقدي', date: today, link_purchase_id: fullCashPurId
+    });
+    assert.strictEqual(r.status, 400, 'الربط فوق المتبقي مرفوض');
+    assert.match(r.data.message || '', /يتجاوز المتبقي/, 'سبب الرفض: تجاوز المتبقي');
+
+    // 13. مورد السند يخالف مورد الفاتورة ← 400 (فاتورة مستقلة ثم حذفها لفك أثرها)
+    r = await api('POST', `/api/project-hub/${projectId}/purchases`, {
+      item_description: 'حديد التعارض', total_amount: 80000,
+      paid_amount: 0, supplier_id: supplierId, date: today
+    });
+    assert.strictEqual(r.status, 200, 'فاتورة خطوة 13: ' + JSON.stringify(r.data));
+    const clashPurId = r.data.data.id;
+    r = await api('POST', '/api/expenses', {
+      expense_type: 'مواد بناء', project_id: projectId, amount: 10000, supplier_id: supplier2Id,
+      payment_method: 'نقدي', date: today, link_purchase_id: clashPurId
+    });
+    assert.strictEqual(r.status, 400, 'تعارض المورد مرفوض');
+    assert.match(r.data.message || '', /لا يطابق/, 'سبب الرفض: عدم التطابق');
+    r = await api('DELETE', `/api/project-hub/${projectId}/purchases/${clashPurId}`);
+    assert.strictEqual(r.status, 200, 'حذف فاتورة التعارض يفك استحقاقها');
+    deadPurchaseIds.push(clashPurId);
+    const suppClash = await db.get('SELECT balance FROM suppliers WHERE id = ?', [supplierId]);
+    assert.strictEqual(Number(suppClash.balance), 50000, 'الذمة عادت لوضعها بعد فك الاستحقاق');
+
+    // 14. حذف الممتص محظور حتى العكس ← ثم الفك الكامل
+    r = await api('DELETE', `/api/project-hub/${projectId}/purchases/${purchaseId}`);
+    assert.strictEqual(r.status, 400, 'حذف الفاتورة المرتبطة بسند مرحل مرفوض');
+    assert.match(r.data.message || '', /مرتبطة بسند مرحل/, 'سبب الرفض: سند مرحل');
+    r = await api('POST', `/api/expenses/${linkedPurExpenseId}/reverse`, {
+      reason: 'اختبار استعادة التسوية بالعكس', reversal_date: today
+    });
+    assert.strictEqual(r.status, 200, 'عكس سند التسوية: ' + JSON.stringify(r.data));
+    const suppRev = await db.get('SELECT balance FROM suppliers WHERE id = ?', [supplierId]);
+    assert.strictEqual(Number(suppRev.balance), 80000, 'العكس يستعيد الذمة كاملة');
+    const purRev = await db.get('SELECT paid_amount, payment_status FROM project_purchases WHERE id = ?', [purchaseId]);
+    assert.strictEqual(Number(purRev.paid_amount), 0, 'العكس يستعيد المسدد');
+    assert.strictEqual(purRev.payment_status, 'غير مدفوع');
+    const revJe = await db.get(
+      `SELECT * FROM journal_entries WHERE reference_type = 'قيد عكسي سند صرف' AND reference_id = ?`, [linkedPurExpenseId]
+    );
+    assert.ok(revJe, 'القيد العكسي موجود');
+    const revLines = await db.query('SELECT account_id, debit, credit FROM journal_entry_lines WHERE entry_id = ?', [revJe.id]);
+    assert.ok(revLines.find(l => l.account_id === acc111 && Number(l.debit) === 30000), 'العكس مدين 111');
+    assert.ok(revLines.find(l => l.account_id === acc21 && Number(l.credit) === 30000), 'العكس دائن 21');
+    r = await api('DELETE', `/api/project-hub/${projectId}/purchases/${purchaseId}`);
+    assert.strictEqual(r.status, 200, 'الحذف بعد العكس مسموح: ' + JSON.stringify(r.data));
+    deadPurchaseIds.push(purchaseId);
+    const suppDel = await db.get('SELECT balance FROM suppliers WHERE id = ?', [supplierId]);
+    assert.strictEqual(Number(suppDel.balance), 0, 'حذف الفاتورة يصفّر ذمتها');
+
+    console.log('✅ منع الازدواج: جميع الفحوصات (14) ناجحة');
   } finally {
     await cleanup();
   }

@@ -12,6 +12,7 @@ const { get, query, run, transaction } = require('../database/db');
 const { checkPeriodOpen } = require('./periodService');
 const { logAudit } = require('./auditService');
 const ProjectCostService = require('./projectCostService');
+const CashBoxService = require('./cashBoxService');
 
 const DOCUMENT_STATUSES = {
   DRAFT: 'draft',               // مسودة (قابلة للتعديل والحذف دون أثر مالي)
@@ -138,22 +139,49 @@ const FinancialControlService = {
     let reversingJeId = null;
     let reversingEntryNo = null;
 
-    await transaction(async (tx) => {
-      // 1. إعادة رصيد الصندوق / حركة البنك بالطرف المعاكس
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-      const prevBal = Number(lastCash.current_balance) || 0;
-      const newBal = prevBal + amount;
-      const cashNotes = `قيد عكسي لسند الصرف ${exp.receipt_no}: ${cleanReason}`;
+    // SUGGESTION-7: كشف سند التسوية من دليل القيد الأصلي (مدين 21) — لا استنتاج
+    let settleInfo = null;
+    const origJe = await get(
+      `SELECT id FROM journal_entries WHERE reference_type = 'سند صرف' AND reference_id = ? ORDER BY id DESC LIMIT 1`,
+      [exp.id]
+    );
+    if (origJe) {
+      const apAcc = await get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
+      if (apAcc) {
+        const drAp = await get(
+          'SELECT id FROM journal_entry_lines WHERE entry_id = ? AND account_id = ? AND debit > 0 LIMIT 1',
+          [origJe.id, apAcc.id]
+        );
+        if (drAp) {
+          const pur = await get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
+          if (!pur) throw new Error('لا يمكن العكس: الفاتورة المرتبطة بسند التسوية غير موجودة');
+          if (!pur.supplier_id) throw new Error('لا يمكن العكس: فاتورة التسوية بلا مورد مسجل');
+          settleInfo = { purchase: pur, apAccId: apAcc.id };
+        }
+      }
+    }
 
-      await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, 0, 0, ?, ?, ?, ?)
-      `, [prevBal, amount, newBal, exp.currency || 'ر.ي', revDate, cashNotes]);
+    await transaction(async (tx) => {
+      // 1. تعويض نقدي في صندوق المشروع (SUGGESTION-7: واعٍ بالصناديق بدل الإدخال الخام العام)
+      const cashNotes = `قيد عكسي لسند الصرف ${exp.receipt_no}: ${cleanReason}`;
+      await CashBoxService.appendMovement(tx, {
+        projectId: exp.project_id ?? null, cashIn: amount,
+        currency: exp.currency || 'ر.ي', date: revDate, notes: cashNotes
+      });
 
       // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة بعد تثبيت حالة reversed)
 
-      // 3. تخفيض رصيد المورد إن كان محدداً
-      if (exp.supplier_id) {
+      // 3. المورد: استعادة الذمة والمسدد لسند التسوية، تخفيض للسلوك الأصلي
+      if (settleInfo) {
+        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [amount, settleInfo.purchase.supplier_id]);
+        const restoredPaid = Math.max(0, (Number(settleInfo.purchase.paid_amount) || 0) - amount);
+        const restoredRemaining = Number(settleInfo.purchase.total_amount) - restoredPaid;
+        const restoredStatus = restoredRemaining <= 0.005 ? 'مدفوع' : (restoredPaid > 0.005 ? 'جزئي' : 'غير مدفوع');
+        await tx.run(
+          'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+          [restoredPaid, restoredStatus, settleInfo.purchase.id]
+        );
+      } else if (exp.supplier_id) {
         await tx.run(`
           UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?
         `, [amount, exp.supplier_id]);
@@ -185,8 +213,11 @@ const FinancialControlService = {
 
       // أسطر القيد العكسي: يتم عكس الطرفين تماماً
       // المدين: الصندوق والبنك (حساب 3)
-      // الدائن: حساب المصروف الأصلي (accId أو 10)
-      const expenseAccId = exp.account_id || 10;
+      // الدائن: حساب المصروف الأصلي (accId أو 10) — أو الموردون (21) لسند التسوية
+      const expenseAccId = settleInfo ? settleInfo.apAccId : (exp.account_id || 10);
+      const creditNote = settleInfo
+        ? `إلغاء تسوية الذمم وإعادة الالتزام للمورد - فاتورة #${settleInfo.purchase.id} - ${cleanReason}`
+        : `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`;
       const finalCcId = exp.cost_center_id || 1;
 
       await tx.run(`
@@ -197,7 +228,7 @@ const FinancialControlService = {
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, ?, 0, ?, ?)
-      `, [reversingJeId, expenseAccId, finalCcId, exp.project_id, amount, `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`]);
+      `, [reversingJeId, expenseAccId, finalCcId, exp.project_id, amount, creditNote]);
 
       // 5. تحديث حالة سند الصرف الأصلي إلى "معكوس" مع حفظ بيانات العكس
       await tx.run(`
@@ -275,18 +306,15 @@ const FinancialControlService = {
     let reversingEntryNo = null;
 
     await transaction(async (tx) => {
-      // 1. عكس حركة الصندوق والبنك
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-      const prevBal = Number(lastCash.current_balance) || 0;
-      const newBal = isReceipt ? (prevBal - amount) : (prevBal + amount);
+      // 1. عكس حركة الصندوق في سلسلة صندوق المشروع (SUGGESTION-7: واعٍ بالصناديق)
       const cashIn = isReceipt ? 0 : amount;
       const cashOut = isReceipt ? amount : 0;
       const cashNotes = `قيد عكسي لسند ${pay.type} ${pay.receipt_no}: ${cleanReason}`;
 
-      await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?)
-      `, [prevBal, cashIn, cashOut, newBal, pay.currency || 'ر.ي', revDate, cashNotes]);
+      await CashBoxService.appendMovement(tx, {
+        projectId: pay.project_id ?? null, cashIn, cashOut,
+        currency: pay.currency || 'ر.ي', date: revDate, notes: cashNotes
+      });
 
       // 2. عكس أرصدة العميل أو المورد
       if (isReceipt && pay.client_id) {
@@ -676,15 +704,12 @@ const FinancialControlService = {
         await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [remaining, pu.supplier_id]);
       }
 
-      // 2. إعادة النقدية للصندوق إن كان هناك جزء مدفوع نقداً
+      // 2. إعادة النقدية لصندوق المشروع إن كان هناك جزء مدفوع نقداً (SUGGESTION-7: واعٍ بالصناديق)
       if (paidAmount > 0) {
-        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-        const prevBal = Number(lastCash.current_balance) || 0;
-        const newBal = prevBal + paidAmount;
-        await tx.run(`
-          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-          VALUES (?, ?, 0, 0, ?, ?, ?, ?)
-        `, [prevBal, paidAmount, newBal, pu.currency || 'ر.ي', revDate, `قيد عكسي لمشتريات ${pu.invoice_no}: ${cleanReason}`]);
+        await CashBoxService.appendMovement(tx, {
+          projectId: pu.project_id ?? null, cashIn: paidAmount,
+          currency: pu.currency || 'ر.ي', date: revDate, notes: `قيد عكسي لمشتريات ${pu.invoice_no}: ${cleanReason}`
+        });
       }
 
       // 3. توليد قيد يومي عكسي متزن

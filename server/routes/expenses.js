@@ -199,8 +199,29 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       // 2. إذا كانت مسودة، لا يتم التأثير المالي على الدفاتر العامة أو الصندوق حتى المراجعة والاعتماد
       if (finalStatus === 'posted') {
         // (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
-        // تحديث رصيد المورد إن كان محدداً
-        if (sId) {
+        // SUGGESTION-7: السند المرتبط بفاتورة ذات مورد سدادٌ لها (تسوية ذمم لا مصروف جديد)
+        let settlePurchase = null;
+        if (link_purchase_id) {
+          const lp = await tx.get('SELECT * FROM project_purchases WHERE id = ?', [Number(link_purchase_id)]);
+          if (lp && lp.supplier_id) {
+            if (sId && Number(sId) !== Number(lp.supplier_id)) {
+              throw new Error('لا يمكن ترحيل السند: مورد السند لا يطابق مورد الفاتورة المرتبطة');
+            }
+            settlePurchase = lp;
+          }
+        }
+        if (settlePurchase) {
+          // سداد الفاتورة المرتبطة: المسدد يتراكم والحالة تُشتق والذمة تنخفض
+          const newPaid = (Number(settlePurchase.paid_amount) || 0) + parsedAmount;
+          const newRemaining = Number(settlePurchase.total_amount) - newPaid;
+          const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+          await tx.run(
+            'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+            [newPaid, newStatus, settlePurchase.id]
+          );
+          await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [parsedAmount, settlePurchase.supplier_id]);
+        } else if (sId) {
+          // تحديث رصيد المورد إن كان محدداً (السلوك الأصلي لغير المرتبط)
           await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, sId]);
         }
 
@@ -230,18 +251,28 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
           VALUES (?, ?, ?, 'سند صرف', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `, [
           entryNo, date,
-          `سند صرف ${receipt_no} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || expense_type}`,
+          settlePurchase
+            ? `تسوية ذمم مورد — سند ${receipt_no} مرتبط بفاتورة موقعية #${settlePurchase.id} - ${notes || expense_type}`
+            : `سند صرف ${receipt_no} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || expense_type}`,
           expenseId, parsedAmount, parsedAmount,
           creatorId, creatorName, creatorId, creatorName
         ]);
 
         const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-        const debitAccountId = accId || 10;
+        // SUGGESTION-7: التسوية تدين الموردين (21) لا المصروف — المصروف مثبت بقيد الاستحقاق
+        let debitAccountId = accId || 10;
+        let debitNote = `مصروف ${expense_type}${cleanCheckNo ? ' - شيك: ' + cleanCheckNo : ''}`;
+        if (settlePurchase) {
+          const apAcc = await tx.get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
+          if (!apAcc) throw new Error('حساب الموردين (21) غير موجود في الدليل — لا يمكن تسوية الذمم');
+          debitAccountId = apAcc.id;
+          debitNote = `تسوية ذمة المورد — فاتورة موقعية #${settlePurchase.id}`;
+        }
 
         await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
           VALUES (?, ?, ?, ?, ?, 0, ?)
-        `, [jeId, debitAccountId, finalCcId, pId, parsedAmount, `مصروف ${expense_type}${cleanCheckNo ? ' - شيك: ' + cleanCheckNo : ''}`]);
+        `, [jeId, debitAccountId, finalCcId, pId, parsedAmount, debitNote]);
 
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
@@ -400,9 +431,32 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
     // تجهيز مخطط توحيد التكلفة قبل بدء المعاملة
     await ProjectCostService.ensureSchema();
 
+    // SUGGESTION-7: المسودة المرتبطة بفاتورة ذات مورد تُرحل كتسوية (مع إعادة فحص المتبقي)
+    let settlePurchase = null;
+    const linkedPur = await get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
+    if (linkedPur && linkedPur.supplier_id) {
+      if (exp.supplier_id && Number(exp.supplier_id) !== Number(linkedPur.supplier_id)) {
+        return res.status(400).json({ success: false, message: 'لا يمكن ترحيل السند: مورد السند لا يطابق مورد الفاتورة المرتبطة' });
+      }
+      const outstanding = Number(linkedPur.total_amount) - (Number(linkedPur.paid_amount) || 0);
+      if (parsedAmount - outstanding > 0.005) {
+        return res.status(400).json({ success: false, message: `لا يمكن ترحيل السند: مبلغ السند (${parsedAmount.toLocaleString('en')}) يتجاوز المتبقي المستحق للفاتورة (${outstanding.toLocaleString('en')})` });
+      }
+      settlePurchase = linkedPur;
+    }
+
     await transaction(async (tx) => {
-      // 1. تحديث رصيد المورد
-      if (exp.supplier_id) {
+      // 1. تحديث رصيد المورد (تسوية بالنقص للمرتبط، زيادة للسلوك الأصلي)
+      if (settlePurchase) {
+        const newPaid = (Number(settlePurchase.paid_amount) || 0) + parsedAmount;
+        const newRemaining = Number(settlePurchase.total_amount) - newPaid;
+        const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+        await tx.run(
+          'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+          [newPaid, newStatus, settlePurchase.id]
+        );
+        await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [parsedAmount, settlePurchase.supplier_id]);
+      } else if (exp.supplier_id) {
         await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, exp.supplier_id]);
       }
 
@@ -432,19 +486,29 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         VALUES (?, ?, ?, 'سند صرف', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
         entryNo, exp.date,
-        `سند صرف مرحل ${exp.receipt_no} - ${exp.notes || exp.expense_type}`,
+        settlePurchase
+          ? `تسوية ذمم مورد — سند ${exp.receipt_no} مرتبط بفاتورة موقعية #${settlePurchase.id} - ${exp.notes || exp.expense_type}`
+          : `سند صرف مرحل ${exp.receipt_no} - ${exp.notes || exp.expense_type}`,
         exp.id, parsedAmount, parsedAmount,
         posterId, posterName, posterId, posterName
       ]);
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-      const debitAccountId = exp.account_id || 10;
+      // SUGGESTION-7: التسوية تدين الموردين (21) لا المصروف
+      let debitAccountId = exp.account_id || 10;
+      let debitNote = `مصروف ${exp.expense_type}`;
+      if (settlePurchase) {
+        const apAcc = await tx.get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
+        if (!apAcc) throw new Error('حساب الموردين (21) غير موجود في الدليل — لا يمكن تسوية الذمم');
+        debitAccountId = apAcc.id;
+        debitNote = `تسوية ذمة المورد — فاتورة موقعية #${settlePurchase.id}`;
+      }
       const finalCcId = exp.cost_center_id || 1;
 
       await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, ?, ?, 0, ?)
-      `, [jeId, debitAccountId, finalCcId, exp.project_id, parsedAmount, `مصروف ${exp.expense_type}`]);
+      `, [jeId, debitAccountId, finalCcId, exp.project_id, parsedAmount, debitNote]);
 
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
