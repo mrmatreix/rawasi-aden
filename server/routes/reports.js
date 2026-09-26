@@ -5,6 +5,57 @@ const { requirePermission, parseScopeArray } = require('../middleware/security')
 
 const ContractingAccountingService = require('../services/contractingAccountingService');
 
+// ─── SUGGESTION-3 (§12): محرك التقارير من اليومية المرحّلة ────────────────────
+// كل التقارير المالية تُشتق من القيود المرحّلة (posted) فقط + الرصيد الافتتاحي.
+// المسودات لا أثر مالي لها، والمعكوسة مستبعدة لأن عكسها قيد REV مرحّل مستقل.
+
+// تصنيف الحساب: النوع أولاً ثم بادئة الكود.
+// (ملاحظة: 3 = حقوق ملكية و5 = مصروفات في هذا الدليل — وليس العكس)
+function classifyAccount(acc) {
+  const t = (acc.type || '').trim();
+  if (t === 'أصول') return 'asset';
+  if (t === 'خصوم') return 'liability';
+  if (t === 'حقوق ملكية') return 'equity';
+  if (t === 'إيرادات') return 'revenue';
+  if (t === 'مصروفات' || t === 'تكاليف') return 'expense';
+  const code = String(acc.code || '');
+  if (code.startsWith('1')) return 'asset';
+  if (code.startsWith('22')) return 'equity';
+  if (code.startsWith('2')) return 'liability';
+  if (code.startsWith('3')) return 'equity';
+  if (code.startsWith('4')) return 'revenue';
+  if (code.startsWith('5')) return 'expense';
+  return 'asset';
+}
+
+function isDebitNormalKind(kind) {
+  return kind === 'asset' || kind === 'expense';
+}
+
+// حركة الحسابات من القيود المرحّلة فقط ضمن نطاق تاريخ اختياري.
+// ترجع خريطة account_id ← {debit, credit} — تعمل على SQLite وMySQL.
+async function getPostedMovement({ fromDate = null, toDate = null, beforeDate = null } = {}) {
+  let cond = "je.status = 'posted'";
+  const params = [];
+  if (fromDate) { cond += ' AND je.date >= ?'; params.push(fromDate); }
+  if (toDate) { cond += ' AND je.date <= ?'; params.push(toDate); }
+  if (beforeDate) { cond += ' AND je.date < ?'; params.push(beforeDate); }
+  const rows = await query(`
+    SELECT jel.account_id,
+           COALESCE(SUM(jel.debit), 0) as total_debit,
+           COALESCE(SUM(jel.credit), 0) as total_credit
+    FROM journal_entry_lines jel
+    JOIN journal_entries je ON jel.entry_id = je.id
+    WHERE ${cond}
+    GROUP BY jel.account_id
+  `, params);
+  const map = {};
+  (rows || []).forEach(r => {
+    map[r.account_id] = { debit: Number(r.total_debit) || 0, credit: Number(r.total_credit) || 0 };
+  });
+  return map;
+}
+
 // إحصائيات لوحة التحكم الحية الشاملة المفصولة معيارياً (IFRS 15 Contracting Dashboard)
 router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async (req, res) => {
   try {
@@ -448,24 +499,60 @@ router.get('/cost-centers-profitability', requirePermission('accounting:view,rep
 });
 
 // تقرير الميزانية العمومية (1 أصول + 2 خصوم وحقوق ملكية)
+// تقرير الميزانية العمومية — أرصدة محسوبة (افتتاحي + قيود مرحّلة حتى as_of)
 router.get('/balance-sheet', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
-    const assets = await query("SELECT * FROM accounts WHERE type = 'أصول' OR code LIKE '1%' ORDER BY code ASC");
-    const liabilities = await query("SELECT * FROM accounts WHERE type = 'خصوم' OR code LIKE '21%' OR code LIKE '2%' AND type != 'حقوق ملكية' ORDER BY code ASC");
-    const equity = await query("SELECT * FROM accounts WHERE type = 'حقوق ملكية' OR code LIKE '22%' ORDER BY code ASC");
+    const asOf = String(req.query.as_of || new Date().toISOString().split('T')[0]).split('T')[0];
+    const accounts = await query('SELECT * FROM accounts ORDER BY code ASC');
+    const movement = await getPostedMovement({ toDate: asOf });
 
-    // احتساب صافي الدخل غير الموزع لإضافته لحقوق الملكية
-    const incRes = await get("SELECT SUM(amount) as total FROM payments WHERE type = 'قبض'");
-    const expRes = await get("SELECT SUM(amount) as total FROM expenses");
-    const netPeriodIncome = ((incRes ? Number(incRes.total) : 0) || 0) - ((expRes ? Number(expRes.total) : 0) || 0);
+    const assets = [];
+    const liabilities = [];
+    const equity = [];
+    let revenueNet = 0;
+    let expenseNet = 0;
 
-    const totalAssets = assets.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const totalLiabilities = liabilities.reduce((sum, l) => sum + (Number(l.balance) || 0), 0);
-    const totalEquity = equity.reduce((sum, e) => sum + (Number(e.balance) || 0), 0) + netPeriodIncome;
+    for (const acc of accounts) {
+      const move = movement[acc.id] || { debit: 0, credit: 0 };
+      const kind = classifyAccount(acc);
+      const debitNormal = isDebitNormalKind(kind);
+      const opening = Number(acc.balance) || 0;
+      let totalDebit = move.debit;
+      let totalCredit = move.credit;
+      if (opening >= 0) {
+        if (debitNormal) totalDebit += opening; else totalCredit += opening;
+      } else {
+        if (debitNormal) totalCredit += -opening; else totalDebit += -opening;
+      }
+      const net = debitNormal ? (totalDebit - totalCredit) : (totalCredit - totalDebit);
+      const row = {
+        id: acc.id, code: acc.code, name: acc.name, type: acc.type,
+        parent_id: acc.parent_id, balance: net
+      };
+      if (kind === 'asset') assets.push(row);
+      else if (kind === 'liability') liabilities.push(row);
+      else if (kind === 'equity') equity.push(row);
+      else if (kind === 'revenue') revenueNet += net;
+      else expenseNet += net;
+    }
+
+    // صافي الدخل من نفس المصدر (حسابات 4 − 5 بأرصدتها الكاملة) — صف محسوب للتربيع المرئي
+    const netPeriodIncome = revenueNet - expenseNet;
+    equity.push({
+      id: null, code: '—', name: 'صافي دخل الفترة (غير موزّع)', type: 'حقوق ملكية',
+      parent_id: null, balance: netPeriodIncome, computed: true
+    });
+
+    const totalAssets = assets.reduce((s, a) => s + (Number(a.balance) || 0), 0);
+    const totalLiabilities = liabilities.reduce((s, l) => s + (Number(l.balance) || 0), 0);
+    const totalEquity = equity.reduce((s, e) => s + (Number(e.balance) || 0), 0);
+    const liabEquity = totalLiabilities + totalEquity;
+    const difference = totalAssets - liabEquity;
 
     res.json({
       success: true,
       data: {
+        as_of: asOf,
         assets,
         liabilities,
         equity,
@@ -474,7 +561,9 @@ router.get('/balance-sheet', requirePermission('accounting:view,reports:view'), 
           assets: totalAssets,
           liabilities: totalLiabilities,
           equity: totalEquity,
-          liabilities_plus_equity: totalLiabilities + totalEquity
+          liabilities_plus_equity: liabEquity,
+          difference,
+          is_balanced: Math.abs(difference) < 1.0
         }
       }
     });
@@ -489,35 +578,9 @@ router.get('/trial-balance', requirePermission('accounting:view,reports:view'), 
     const { from_date, to_date } = req.query;
     const accounts = await query('SELECT * FROM accounts ORDER BY code ASC');
 
-    let jeCondition = '1=1';
-    const params = [];
-    if (from_date) {
-      jeCondition += ' AND je.date >= ?';
-      params.push(from_date);
-    }
-    if (to_date) {
-      jeCondition += ' AND je.date <= ?';
-      params.push(to_date);
-    }
-
-    const linesAgg = await query(`
-      SELECT 
-        jel.account_id,
-        COALESCE(SUM(jel.debit), 0) as total_debit,
-        COALESCE(SUM(jel.credit), 0) as total_credit
-      FROM journal_entry_lines jel
-      JOIN journal_entries je ON jel.entry_id = je.id
-      WHERE ${jeCondition}
-      GROUP BY jel.account_id
-    `, params);
-
-    const aggMap = {};
-    linesAgg.forEach(item => {
-      aggMap[item.account_id] = {
-        debit: Number(item.total_debit) || 0,
-        credit: Number(item.total_credit) || 0
-      };
-    });
+    // الحركة المرحّلة داخل الفترة + حركة ما قبل بدايتها (تُضاف للافتتاحي)
+    const movement = await getPostedMovement({ fromDate: from_date || null, toDate: to_date || null });
+    const preMovement = from_date ? await getPostedMovement({ beforeDate: from_date }) : {};
 
     let sumDebit = 0;
     let sumCredit = 0;
@@ -525,17 +588,24 @@ router.get('/trial-balance', requirePermission('accounting:view,reports:view'), 
     let sumBalanceCredit = 0;
 
     const trialList = accounts.map(acc => {
-      const agg = aggMap[acc.id] || { debit: 0, credit: 0 };
-      const initBal = Number(acc.balance) || 0;
-      const isDebitNormal = acc.type === 'أصول' || acc.type === 'مصروفات' || acc.type === 'تكاليف' || (acc.code && (acc.code.startsWith('1') || acc.code.startsWith('3') || acc.code.startsWith('5')));
-      
-      let totalDebit = agg.debit;
-      let totalCredit = agg.credit;
+      const move = movement[acc.id] || { debit: 0, credit: 0 };
+      const pre = preMovement[acc.id] || { debit: 0, credit: 0 };
+      const debitNormal = isDebitNormalKind(classifyAccount(acc));
+      const opening = Number(acc.balance) || 0;
 
-      if (initBal > 0) {
-        if (isDebitNormal) totalDebit += initBal;
-        else totalCredit += initBal;
+      let openDebit = pre.debit;
+      let openCredit = pre.credit;
+      if (opening >= 0) {
+        if (debitNormal) openDebit += opening;
+        else openCredit += opening;
+      } else {
+        // رصيد افتتاحي عكسي الطبيعة يوضع في الجانب المقابل
+        if (debitNormal) openCredit += -opening;
+        else openDebit += -opening;
       }
+
+      const totalDebit = openDebit + move.debit;
+      const totalCredit = openCredit + move.credit;
 
       let balDebit = 0;
       let balCredit = 0;
@@ -556,6 +626,8 @@ router.get('/trial-balance', requirePermission('accounting:view,reports:view'), 
         name: acc.name,
         type: acc.type,
         parent_code: acc.parent_code,
+        opening_debit: openDebit,
+        opening_credit: openCredit,
         total_debit: totalDebit,
         total_credit: totalCredit,
         balance_debit: balDebit,
@@ -567,11 +639,14 @@ router.get('/trial-balance', requirePermission('accounting:view,reports:view'), 
       success: true,
       data: {
         accounts: trialList,
+        filters: { from_date: from_date || null, to_date: to_date || null, posted_only: true },
         totals: {
           total_debit: sumDebit,
           total_credit: sumCredit,
           balance_debit: sumBalanceDebit,
           balance_credit: sumBalanceCredit,
+          difference: sumDebit - sumCredit,
+          balance_difference: sumBalanceDebit - sumBalanceCredit,
           is_balanced: Math.abs(sumDebit - sumCredit) < 1.0 && Math.abs(sumBalanceDebit - sumBalanceCredit) < 1.0
         }
       }
@@ -581,50 +656,66 @@ router.get('/trial-balance', requirePermission('accounting:view,reports:view'), 
   }
 });
 
-// تقرير قائمة الدخل (3 مصروفات + 4 إيرادات)
+// تقرير قائمة الدخل (5 مصروفات + 4 إيرادات) — أساس نقدي معلن، وبدون أي أرقام افتراضية
 router.get('/income-statement', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
     const { from_date = '2024-01-01', to_date = '2026-12-31' } = req.query;
 
-    // الإيرادات
-    const revenues = await query(`
-      SELECT 'إيرادات مشاريع ومستخلصات' as name, COALESCE(SUM(amount), 0) as amount
-      FROM payments WHERE type = 'قبض' AND date BETWEEN ? AND ?
+    // الإيرادات: سندات القبض المرحّلة/المعتمدة في الفترة (أساس نقدي — وليست مستخلصات)
+    const revenueRow = await get(`
+      SELECT COALESCE(SUM(amount), 0) as amount
+      FROM payments
+      WHERE type = 'قبض' AND status IN ('posted', 'approved') AND date BETWEEN ? AND ?
     `, [from_date, to_date]);
 
-    // المصروفات العمومية والتكاليف المباشرة
+    // المصروفات المرحّلة/المعتمدة في الفترة (تشمل سندات المرايا: التكلفة المعترف بها فعلاً)
     const expensesByType = await query(`
       SELECT expense_type as name, COALESCE(SUM(amount), 0) as amount
       FROM expenses
-      WHERE date BETWEEN ? AND ?
+      WHERE status IN ('posted', 'approved') AND date BETWEEN ? AND ?
       GROUP BY expense_type
       ORDER BY amount DESC
     `, [from_date, to_date]);
 
-    // الرواتب والأجور المسددة
-    const payrollPaid = await get(`
-      SELECT COALESCE(SUM(net_salary), 0) as amount
-      FROM payroll WHERE status = 'paid'
-    `);
+    // التكاليف المباشرة: مصروفات المشاريع فقط (للمجمل الحقيقي)
+    const directRow = await get(`
+      SELECT COALESCE(SUM(amount), 0) as amount
+      FROM expenses
+      WHERE status IN ('posted', 'approved') AND project_id IS NOT NULL AND date BETWEEN ? AND ?
+    `, [from_date, to_date]);
 
-    const totalRevenues = revenues.reduce((s, r) => s + (Number(r.amount) || 0), 0) || 1250000;
-    const totalExpenses = expensesByType.reduce((s, e) => s + (Number(e.amount) || 0), 0) + ((payrollPaid ? Number(payrollPaid.amount) : 0) || 0);
+    // الرواتب المسددة بتاريخ سداد داخل الفترة
+    const payrollRow = await get(`
+      SELECT COALESCE(SUM(net_salary), 0) as amount
+      FROM payroll
+      WHERE status = 'paid' AND COALESCE(paid_date, DATE(created_at)) BETWEEN ? AND ?
+    `, [from_date, to_date]);
+
+    const totalRevenues = Number(revenueRow ? revenueRow.amount : 0) || 0;
+    const expensesTotal = expensesByType.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const payrollTotal = Number(payrollRow ? payrollRow.amount : 0) || 0;
+    const directCosts = Number(directRow ? directRow.amount : 0) || 0;
+    const totalExpenses = expensesTotal + payrollTotal;
+    const grossProfit = totalRevenues - directCosts;
     const netProfit = totalRevenues - totalExpenses;
 
     res.json({
       success: true,
       data: {
         period: { from_date, to_date },
+        basis: 'cash',
+        basis_note: 'الإيرادات = سندات القبض المرحّلة (أساس نقدي). للاعتراف المحاسبي بالإيراد (IFRS 15) راجع تقرير الأرباح والخسائر.',
         revenues: [
-          { name: 'إيرادات المقاولات والمشاريع (مستخلصات معتمدة)', amount: totalRevenues }
+          { name: 'مقبوضات نقدية من العملاء (سندات قبض مرحّلة)', amount: totalRevenues }
         ],
         total_revenues: totalRevenues,
         expenses: [
           ...expensesByType.map(e => ({ name: e.name, amount: Number(e.amount) || 0 })),
-          { name: 'المرتبات والأجور التشغيلية المسددة', amount: (payrollPaid ? Number(payrollPaid.amount) : 0) || 450000 }
+          { name: 'المرتبات والأجور المسددة في الفترة', amount: payrollTotal }
         ],
+        direct_costs: directCosts,
         total_expenses: totalExpenses,
-        gross_profit: totalRevenues * 0.35,
+        gross_profit: grossProfit,
         net_profit: netProfit
       }
     });

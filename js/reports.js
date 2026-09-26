@@ -1004,7 +1004,7 @@ const Reports = {
     }
   },
 
-  // 6. تقرير قائمة الدخل (3 مصروفات + 4 إيرادات)
+  // 6. تقرير قائمة الدخل (5 مصروفات + 4 إيرادات)
   async loadIncomeStatement() {
     const fromDate = document.getElementById('isFromDate')?.value || '2024-01-01';
     const toDate = document.getElementById('isToDate')?.value || '';
@@ -1063,7 +1063,7 @@ const Reports = {
               </tr>
             `).join('') + `
               <tr style="background: rgba(239,68,68,0.08); font-weight: bold;">
-                <td>إجمالي التكاليف والمصروفات (3)</td>
+                <td>إجمالي التكاليف والمصروفات (5)</td>
                 <td style="color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_expenses)} ر.ي</td>
               </tr>
             `;
