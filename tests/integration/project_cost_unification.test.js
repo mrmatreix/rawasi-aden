@@ -30,6 +30,7 @@ test('Project Cost Unification - Single Source of Truth', async (t) => {
   const today = new Date().toISOString().split('T')[0];
   const PROJECT_NAME = 'TEST-UNIFIED-COST مشروع اختبار توحيد التكلفة';
   const ITEM_NAME = 'TEST-ITEM-UNIFIED-COST';
+  const SUPPLIER_NAME = 'TEST-SUP-UNIFIED-COST مورد اختبار التوحيد';
 
   const adminHeaders = {
     'Content-Type': 'application/json',
@@ -72,10 +73,29 @@ test('Project Cost Unification - Single Source of Truth', async (t) => {
         }
         await db.run('DELETE FROM inventory_transactions WHERE project_id = ?', [p.id]);
         await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
+        // SUGGESTION-6: قيود الذمم (استحقاق/تسوية/عكوسها) المرتبطة بفواتير المشروع
+        const purs = await db.query('SELECT id FROM project_purchases WHERE project_id = ?', [p.id]);
+        const purIds = purs.map(x => x.id);
+        if (purIds.length > 0) {
+          const pph = purIds.map(() => '?').join(',');
+          const pjes = await db.query(
+            `SELECT id FROM journal_entries WHERE reference_id IN (${pph})
+             AND (reference_type IN ('مستحق مورد — مشتريات موقعية', 'سداد مستحق موقعية')
+                  OR (reference_type = 'قيد عكسي' AND description LIKE '%ذمم الموردين%'))`,
+            purIds
+          );
+          const pjeIds = pjes.map(j => j.id);
+          if (pjeIds.length > 0) {
+            const pjph = pjeIds.map(() => '?').join(',');
+            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds);
+            await db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds);
+          }
+        }
         await db.run('DELETE FROM project_purchases WHERE project_id = ?', [p.id]);
         await db.run('DELETE FROM projects WHERE id = ?', [p.id]);
       }
       await db.run('DELETE FROM items WHERE name = ?', [ITEM_NAME]);
+      await db.run('DELETE FROM suppliers WHERE name = ?', [SUPPLIER_NAME]);
       await db.run('DELETE FROM users WHERE id = ?', [testerId]);
     } catch {}
   };
@@ -98,6 +118,12 @@ test('Project Cost Unification - Single Source of Truth', async (t) => {
     assert.strictEqual(r.status, 200, 'إنشاء المشروع: ' + JSON.stringify(r.data));
     const projectId = r.data.id;
     assert.ok(projectId, 'يجب أن يرجع معرف المشروع');
+
+    // SUGGESTION-6: مورد الفواتير الآجلة
+    const supRes = await db.run(
+      `INSERT INTO suppliers (name, category, balance) VALUES (?, 'مواد بناء', 0)`, [SUPPLIER_NAME]
+    );
+    const supplierId = supRes.lastInsertRowid || supRes.insertId;
 
     let proj = await db.get('SELECT actual_cost FROM projects WHERE id = ?', [projectId]);
     assert.strictEqual(Number(proj.actual_cost), 0, 'التكلفة اليدوية يجب أن تُتجاهل وتبدأ صفراً');
@@ -153,6 +179,7 @@ test('Project Cost Unification - Single Source of Truth', async (t) => {
       unit_price: 800,
       total_amount: 80000,
       paid_amount: 30000,
+      supplier_id: supplierId,
       date: today
     });
     assert.strictEqual(r.status, 200, 'فاتورة المشتريات: ' + JSON.stringify(r.data));

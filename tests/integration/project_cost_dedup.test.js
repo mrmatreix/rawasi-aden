@@ -30,6 +30,7 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
   const testerId = 7202;
   const today = new Date().toISOString().split('T')[0];
   const PROJECT_NAME = 'TEST-DEDUP مشروع اختبار منع الازدواج';
+  const SUPPLIER_NAME = 'TEST-SUP-DEDUP مورد اختبار الازدواج';
 
   const adminHeaders = {
     'Content-Type': 'application/json',
@@ -72,9 +73,28 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
         }
         await db.run('DELETE FROM inventory_transactions WHERE project_id = ?', [p.id]);
         await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
+        // SUGGESTION-6: قيود الذمم (استحقاق/تسوية/عكوسها) المرتبطة بفواتير المشروع
+        const purs = await db.query('SELECT id FROM project_purchases WHERE project_id = ?', [p.id]);
+        const purIds = purs.map(x => x.id);
+        if (purIds.length > 0) {
+          const pph = purIds.map(() => '?').join(',');
+          const pjes = await db.query(
+            `SELECT id FROM journal_entries WHERE reference_id IN (${pph})
+             AND (reference_type IN ('مستحق مورد — مشتريات موقعية', 'سداد مستحق موقعية')
+                  OR (reference_type = 'قيد عكسي' AND description LIKE '%ذمم الموردين%'))`,
+            purIds
+          );
+          const pjeIds = pjes.map(j => j.id);
+          if (pjeIds.length > 0) {
+            const pjph = pjeIds.map(() => '?').join(',');
+            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds);
+            await db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds);
+          }
+        }
         await db.run('DELETE FROM project_purchases WHERE project_id = ?', [p.id]);
         await db.run('DELETE FROM projects WHERE id = ?', [p.id]);
       }
+      await db.run('DELETE FROM suppliers WHERE name = ?', [SUPPLIER_NAME]);
       await db.run('DELETE FROM users WHERE id = ?', [testerId]);
     } catch {}
   };
@@ -93,6 +113,12 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
     });
     assert.strictEqual(r.status, 200, 'إنشاء المشروع: ' + JSON.stringify(r.data));
     const projectId = r.data.id;
+
+    // SUGGESTION-6: مورد الفواتير الآجلة
+    const supRes = await db.run(
+      `INSERT INTO suppliers (name, category, balance) VALUES (?, 'مواد بناء', 0)`, [SUPPLIER_NAME]
+    );
+    const supplierId = supRes.lastInsertRowid || supRes.insertId;
 
     // 2. أجور غير مدفوعة 60,000 (بلا مرآة) ← التكلفة = 60,000
     r = await api('POST', `/api/project-hub/${projectId}/labor`, {
@@ -151,7 +177,7 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
     // 8. ربط جزئي: فاتورة 80,000 + سند 30,000 ← 30k سند + 50k متبقي
     r = await api('POST', `/api/project-hub/${projectId}/purchases`, {
       item_description: 'حديد للازدواج', total_amount: 80000,
-      paid_amount: 0, payment_status: 'غير مدفوع', date: today
+      paid_amount: 0, supplier_id: supplierId, date: today
     });
     assert.strictEqual(r.status, 200, 'الفاتورة: ' + JSON.stringify(r.data));
     const purchaseId = r.data.data.id;

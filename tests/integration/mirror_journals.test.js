@@ -33,6 +33,7 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
   const csrfToken = 'mirror-test-csrf-token-123456789012345678901234567890123';
   const testerId = 7205;
   const PROJECT_NAME = 'TEST-MIR مشروع اختبار قيود المرايا';
+  const SUPPLIER_NAME = 'TEST-SUP-MIR مورد اختبار المرايا';
 
   const adminHeaders = {
     'Content-Type': 'application/json',
@@ -58,7 +59,13 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
 
   // تنظيف معزول: مشاريع الاختبار (كل بياناتها) + 2032 + فترات 2032 + المستخدم
   // (قيود العكس مؤرخة بتاريخ اليوم لذا تُحذف عبر مرجع المرآة لا التاريخ)
+  // SUGGESTION-6: الفواتير المحذوفة عبر API تُتتبع لتنظيف عكوس ذممها
+  const deadPurchaseIds = [];
   const cleanup = async () => {
+    // أولاً: قيود النطاق المؤرخ (سطورها تشير للمشروع وتمنع حذفه FK — قبل حذف المشروع)
+    // عكوس الذمم بتاريخ اليوم تُنظف عبر deadPurchaseIds داخل الحلقة (بلا كنس شامل يهدد التوازي)
+    await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2032%')`);
+    await db.run(`DELETE FROM journal_entries WHERE date LIKE '2032%'`);
     const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
     for (const p of projs) {
       const exps = await db.query('SELECT id FROM expenses WHERE project_id = ?', [p.id]);
@@ -75,12 +82,28 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
         await db.run(`DELETE FROM expenses WHERE id IN (${ph})`, expIds);
       }
       await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
+      // SUGGESTION-6: عكوس الذمم بتاريخ اليوم (خارج نطاق تنظيف 2032)
+      const purs = await db.query('SELECT id FROM project_purchases WHERE project_id = ?', [p.id]);
+      const purIds = [...purs.map(x => x.id), ...deadPurchaseIds];
+      if (purIds.length > 0) {
+        const pph = purIds.map(() => '?').join(',');
+        const pjes = await db.query(
+          `SELECT id FROM journal_entries WHERE reference_id IN (${pph})
+           AND (reference_type = 'قيد عكسي' AND description LIKE '%ذمم الموردين%')`,
+          purIds
+        );
+        const pjeIds = pjes.map(j => j.id);
+        if (pjeIds.length > 0) {
+          const pjph = pjeIds.map(() => '?').join(',');
+          await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds);
+          await db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds);
+        }
+      }
       await db.run('DELETE FROM project_purchases WHERE project_id = ?', [p.id]);
       await db.run('DELETE FROM projects WHERE id = ?', [p.id]);
     }
-    await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2032%')`);
-    await db.run(`DELETE FROM journal_entries WHERE date LIKE '2032%'`);
     await db.run(`DELETE FROM accounting_periods WHERE fiscal_year = 2032`);
+    await db.run('DELETE FROM suppliers WHERE name = ?', [SUPPLIER_NAME]);
     await db.run('DELETE FROM users WHERE id = ?', [testerId]);
   };
   t.after(() => cleanup().catch(() => {}));
@@ -104,6 +127,12 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
   });
   assert.strictEqual(r.status, 200, 'إنشاء المشروع: ' + JSON.stringify(r.data));
   const projectId = r.data.data.id;
+
+  // SUGGESTION-6: مورد الفواتير الآجلة
+  const supRes = await db.run(
+    `INSERT INTO suppliers (name, category, balance) VALUES (?, 'مواد بناء', 0)`, [SUPPLIER_NAME]
+  );
+  const supplierId = supRes.lastInsertRowid || supRes.insertId;
 
   // 1. أجور مدفوعة 25,000 ← مرآة + قيد + صندوق
   r = await api('POST', `/api/project-hub/${projectId}/labor`, {
@@ -139,7 +168,7 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
   // 2. مشتريات 20,000 (مدفوع 15,000) ← القيد على المدفوع فقط
   r = await api('POST', `/api/project-hub/${projectId}/purchases`, {
     item_description: 'إسمنت المرايا', total_amount: 20000,
-    paid_amount: 15000, date: '2032-01-11'
+    paid_amount: 15000, supplier_id: supplierId, date: '2032-01-11'
   });
   assert.strictEqual(r.status, 200, 'فاتورة المشتريات: ' + JSON.stringify(r.data));
   const purchaseId = r.data.data.id;
@@ -196,6 +225,7 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
   // 5. حذف المشتريات ← عكس + الصندوق يعود صفراً
   r = await api('DELETE', `/api/project-hub/${projectId}/purchases/${purchaseId}`);
   assert.strictEqual(r.status, 200, 'حذف المشتريات: ' + JSON.stringify(r.data));
+  deadPurchaseIds.push(purchaseId);
   const revMirrorPur = await db.get('SELECT status FROM expenses WHERE id = ?', [mirrorPur.id]);
   assert.strictEqual(revMirrorPur.status, 'reversed', 'مرآة المشتريات معكوسة');
   const boxZero = await db.get('SELECT current_balance FROM cash_movements WHERE project_id = ? ORDER BY id DESC LIMIT 1', [projectId]);

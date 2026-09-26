@@ -1034,6 +1034,9 @@ const ProjectHub = {
           <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.paid_amount)} <small>${curr}</small></td>
           <td><span class="drawing-badge-status ${p.payment_status === 'مدفوع' ? 'approved' : 'pending'}">${p.payment_status}</span></td>
           <td>
+            ${(Number(p.total_amount) - (Number(p.paid_amount) || 0)) > 0.005
+              ? `<button class="btn btn-success btn-sm" onclick="ProjectHub.payPurchase(${p.id}, ${(Number(p.total_amount) - (Number(p.paid_amount) || 0))})" title="سداد المستحق">💰</button> `
+              : ''}
             <button class="btn btn-danger btn-sm" onclick="ProjectHub.deletePurchase(${p.id})" title="حذف">🗑️</button>
           </td>
         </tr>
@@ -1081,6 +1084,14 @@ const ProjectHub = {
       notes: document.getElementById('projPurNotes').value
     };
 
+    // SUGGESTION-6: الآجل يتطلب مورداً (فحص مبكر — الخادم يفرض أيضاً)
+    const purTotal = Number(payload.total_amount) || 0;
+    const purPaid = Number(payload.paid_amount) || 0;
+    if (purTotal - purPaid > 0.005 && !payload.supplier_id) {
+      App.showToast('المشتريات الآجلة (غير المسددة بالكامل) تتطلب تحديد المورد أولاً', 'error');
+      return;
+    }
+
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/purchases`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1094,6 +1105,26 @@ const ProjectHub = {
       await this.loadProjectData();
     } else {
       App.showToast(json.message || 'فشل في حفظ الفاتورة', 'error');
+    }
+  },
+
+  async payPurchase(id, outstanding) {
+    const val = prompt(`المتبقي المستحق: ${App.formatNumber(outstanding)}\nأدخل مبلغ السداد:`, String(Math.round(outstanding * 1000) / 1000));
+    if (val === null) return;
+    const amount = Number(val);
+    if (!(amount > 0)) { App.showToast('مبلغ السداد يجب أن يكون أكبر من الصفر', 'error'); return; }
+    if (amount - outstanding > 0.005) { App.showToast('المبلغ يتجاوز المتبقي المستحق', 'error'); return; }
+    const res = await fetch(`/api/project-hub/${this.currentProjectId}/purchases/${id}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, date: new Date().toISOString().split('T')[0] })
+    });
+    const json = await res.json();
+    if (json.success) {
+      App.showToast(json.message || 'تم تسجيل السداد', 'success');
+      await this.loadProjectData();
+    } else {
+      App.showToast(json.message || 'فشل في تسجيل السداد', 'error');
     }
   },
 

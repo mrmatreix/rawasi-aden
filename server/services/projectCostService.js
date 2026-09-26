@@ -635,6 +635,253 @@ async function backfillMirrorJEs() {
   return { total: mirrors.length, created, skipped_closed: skippedClosed };
 }
 
+// ─── SUGGESTION-6 (§12): ذمم الموردين لمشتريات المواقع ────────────────────────
+// لا مشتريات آجلة بلا التزام: المتبقي غير المسدد من الفاتورة الموقعية يُثبت
+// دائناً للمورد (21) بقيد استحقاق + رصيد مورد، والسداد اللاحق يخفض الالتزام
+// بقيد تسوية (مدين 21 / دائن 111) + حركة صندوق. حذف الفاتورة يفك كل الأثر.
+
+const AP_JE_TYPES = {
+  accrual: 'مستحق مورد — مشتريات موقعية',
+  settlement: 'سداد مستحق موقعية'
+};
+
+/** حسابات الذمم: المصروف ← 5، الالتزام ← 21، النقد ← 111 */
+async function resolvePayableAccounts(conn) {
+  const exp = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
+  const ap = await conn.get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
+  const cash = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+  if (!exp || !ap || !cash) {
+    throw new Error('الحسابات المحاسبية للذمم (5/21/111) غير موجودة في الدليل');
+  }
+  return { expenseAccId: exp.id, apAccId: ap.id, cashAccId: cash.id };
+}
+
+/** ترقيم قيود ببادئة مخصصة (مع ضمان الفرادة) */
+async function nextEntryNo(conn, prefix, year) {
+  const countRes = await conn.get('SELECT COUNT(*) as cnt FROM journal_entries');
+  let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+  let entryNo = `${prefix}-${year}-${String(jeSeq).padStart(4, '0')}`;
+  while (await conn.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+    jeSeq++;
+    entryNo = `${prefix}-${year}-${String(jeSeq).padStart(4, '0')}`;
+  }
+  return entryNo;
+}
+
+/**
+ * قيد استحقاق المورد داخل معاملة المتصل: مدين مصروف (5) / دائن موردون (21).
+ * بلا حركة نقدية (استحقاق دفتري — النقد يتحرك عند السداد فقط).
+ */
+async function createPayableJournal(conn, {
+  purchaseId, supplierId, projectId = null, costCenterId = null,
+  amount, date, invoiceRef, user = null
+}) {
+  const { expenseAccId, apAccId } = await resolvePayableAccounts(conn);
+  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
+  const entryNo = await nextEntryNo(conn, 'JE-AP', year);
+  const userName = (user && user.name) || 'ترحيل آلي';
+  const userId = (user && user.id) || null;
+  const refType = AP_JE_TYPES.accrual;
+  const jeRes = await conn.run(`
+    INSERT INTO journal_entries (
+      entry_no, date, description, reference_type, reference_id,
+      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `, [
+    entryNo, date, `استحقاق مورد — فاتورة موقعية ${invoiceRef}`,
+    refType, purchaseId, amount, amount,
+    userId, userName, userId, userName
+  ]);
+  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `, [jeId, expenseAccId, costCenterId ?? null, projectId ?? null, amount, `مصروف مواد — ${invoiceRef}`]);
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, 0, ?, ?)
+  `, [jeId, apAccId, costCenterId ?? null, projectId ?? null, amount, `ذمة المورد — ${invoiceRef}`]);
+  return { jeId, entryNo };
+}
+
+/**
+ * قيد سداد المستحق داخل معاملة المتصل: مدين موردون (21) / دائن صندوق (111).
+ * (الحركة النقدية في صندوق المشروع مسؤولية المتصل — كالمرايا.)
+ */
+async function createSettlementJournal(conn, {
+  purchaseId, supplierId, projectId = null, costCenterId = null,
+  amount, date, payRef, user = null
+}) {
+  const { apAccId, cashAccId } = await resolvePayableAccounts(conn);
+  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
+  const entryNo = await nextEntryNo(conn, 'JE-SET', year);
+  const userName = (user && user.name) || 'ترحيل آلي';
+  const userId = (user && user.id) || null;
+  const refType = AP_JE_TYPES.settlement;
+  const jeRes = await conn.run(`
+    INSERT INTO journal_entries (
+      entry_no, date, description, reference_type, reference_id,
+      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `, [
+    entryNo, date, `سداد مستحق موقعية — ${payRef}`,
+    refType, purchaseId, amount, amount,
+    userId, userName, userId, userName
+  ]);
+  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `, [jeId, apAccId, costCenterId ?? null, projectId ?? null, amount, `سداد ذمة المورد — ${payRef}`]);
+  await conn.run(`
+    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+    VALUES (?, ?, ?, ?, 0, ?, ?)
+  `, [jeId, cashAccId, costCenterId ?? null, projectId ?? null, amount, `الصندوق — ${payRef}`]);
+  return { jeId, entryNo };
+}
+
+/** قيد الاستحقاق المرحّل لفاتورة موقعية (الأحدث أولاً) */
+async function getPayableJournal(conn, purchaseId) {
+  return conn.get(
+    `SELECT * FROM journal_entries
+     WHERE reference_id = ? AND reference_type = ?
+       AND LOWER(status) = 'posted'
+     ORDER BY id DESC LIMIT 1`,
+    [purchaseId, AP_JE_TYPES.accrual]
+  );
+}
+
+/** قيود التسوية المرحّلة لفاتورة موقعية */
+async function getSettlementJournals(conn, purchaseId) {
+  return conn.query(
+    `SELECT * FROM journal_entries
+     WHERE reference_id = ? AND reference_type = ?
+       AND LOWER(status) = 'posted'
+     ORDER BY id ASC`,
+    [purchaseId, AP_JE_TYPES.settlement]
+  );
+}
+
+/** بناء قيد عكسي لقيد ذمم (مشارك للاستحقاق والتسويات) */
+async function postPayableReversalJE(conn, je, { revDate, reason, user, refId }) {
+  const lines = await conn.query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [je.id]);
+  if (!lines || lines.length === 0) return null;
+  const revNo = await nextEntryNo(conn, 'REV', String(revDate).slice(0, 4));
+  const total = Number(je.total_debit) || 0;
+  const userName = (user && user.name) || 'النظام';
+  const userId = (user && user.id) || null;
+  const revRes = await conn.run(`
+    INSERT INTO journal_entries (
+      entry_no, date, description, reference_type, reference_id,
+      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+    )
+    VALUES (?, ?, ?, 'قيد عكسي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `, [
+    revNo, revDate, `قيد عكسي لذمم الموردين (${je.entry_no}) — ${reason}`,
+    refId, total, total, userId, userName, userId, userName
+  ]);
+  const revId = revRes.lastInsertRowid || revRes.insertId;
+  for (const l of lines) {
+    await conn.run(`
+      INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [revId, l.account_id, l.cost_center_id ?? null, l.project_id ?? null,
+        Number(l.credit) || 0, Number(l.debit) || 0, `عكس: ${l.notes || ''}`]);
+  }
+  await conn.run(`
+    UPDATE journal_entries
+    SET status = 'reversed', reversed_by = ?, reversed_by_name = ?,
+        reversed_at = CURRENT_TIMESTAMP, reversal_reason = ?, reversal_ref_id = ?
+    WHERE id = ?
+  `, [userId, userName, reason, revId, je.id]);
+  return { revId, revNo, total };
+}
+
+/**
+ * فك أثر الذمم عند حذف الفاتورة الموقعية (داخل معاملة المتصل).
+ * يعكس قيد الاستحقاق + قيود التسوية، يعيد النقد المسدد لصندوق المشروع،
+ * ويعيد رصيد المورد لوضعه قبل الفاتورة. يُرمى عند إقفال فترة اليوم.
+ */
+async function reverseSitePurchasePayables(conn, purchase, { user = null, reason = '', revDate = null } = {}) {
+  if (!purchase || !purchase.id) return { apReversed: 0, settlementsReversed: 0, balanceDelta: 0 };
+  const revDay = revDate || new Date().toISOString().split('T')[0];
+  const period = await checkPeriodOpen(revDay);
+  if (!period.isOpen) throw new Error(period.message);
+  const cleanReason = String(reason || '').trim() || 'حذف الفاتورة الموقعية وفك ذممها';
+  const supplierId = purchase.supplier_id ? Number(purchase.supplier_id) : null;
+
+  let apReversed = 0;
+  let apBooked = 0;
+  const apJe = await getPayableJournal(conn, purchase.id);
+  if (apJe) {
+    const rev = await postPayableReversalJE(conn, apJe, {
+      revDate: revDay, reason: cleanReason, user, refId: purchase.id
+    });
+    if (rev) { apReversed = 1; apBooked = rev.total; }
+  }
+
+  let settlementsReversed = 0;
+  let settledSum = 0;
+  const settlements = await getSettlementJournals(conn, purchase.id);
+  for (const s of settlements) {
+    const rev = await postPayableReversalJE(conn, s, {
+      revDate: revDay, reason: cleanReason, user, refId: purchase.id
+    });
+    if (!rev) continue;
+    // إعادة النقد المسدد لصندوق المشروع (تعويض حركة السداد الأصلية)
+    await CashBoxService.appendMovement(conn, {
+      projectId: purchase.project_id ?? null, cashIn: rev.total,
+      currency: 'ر.ي', date: revDay, notes: `عكس سداد مستحق موقعية: ${s.entry_no}`
+    });
+    settlementsReversed++;
+    settledSum += rev.total;
+  }
+
+  // إعادة رصيد المورد لوضع ما قبل الفاتورة: −المثبت +المسدد
+  let balanceDelta = 0;
+  if (supplierId && Math.abs(apBooked - settledSum) > 0.005) {
+    const delta = apBooked - settledSum;
+    if (delta > 0) {
+      await conn.run(
+        'UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?',
+        [delta, supplierId]
+      );
+      balanceDelta = -delta;
+    } else {
+      await conn.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [-delta, supplierId]);
+      balanceDelta = -delta;
+    }
+  }
+  return { apReversed, settlementsReversed, balanceDelta };
+}
+
+/**
+ * تقرير التعرض غير المثبت: فواتير موقعية بمتبقي > 0 بلا قيد استحقاق مرحّل.
+ * قراءة فقط — تُراجع يدوياً وتُثبت كأرصدة افتتاحية، لا ترحيل آلي لمجهول الدائنين.
+ */
+async function reportUnbookedPayables() {
+  const rows = await query(`
+    SELECT pp.id, pp.project_id, pp.invoice_no,
+           COALESCE(s.name, pp.supplier_name, 'بلا مورد') as supplier_label,
+           pp.total_amount, COALESCE(pp.paid_amount, 0) as paid_amount,
+           (pp.total_amount - COALESCE(pp.paid_amount, 0)) as outstanding, pp.date
+    FROM project_purchases pp
+    LEFT JOIN suppliers s ON s.id = pp.supplier_id
+    WHERE (pp.total_amount - COALESCE(pp.paid_amount, 0)) > 0.005
+      AND NOT EXISTS (
+        SELECT 1 FROM journal_entries j
+        WHERE j.reference_id = pp.id
+          AND j.reference_type = '${AP_JE_TYPES.accrual}'
+          AND LOWER(j.status) = 'posted'
+      )
+    ORDER BY pp.date ASC, pp.id ASC
+  `);
+  const total = (rows || []).reduce((sum, r) => sum + (Number(r.outstanding) || 0), 0);
+  return { rows: rows || [], count: (rows || []).length, total };
+}
+
 module.exports = {
   COUNTED_EXPENSE_STATUSES,
   ensureSchema,
@@ -649,5 +896,13 @@ module.exports = {
   detectPossibleDuplicates,
   createMirrorJournal,
   reverseLinkedMirrors,
-  backfillMirrorJEs
+  backfillMirrorJEs,
+  AP_JE_TYPES,
+  resolvePayableAccounts,
+  createPayableJournal,
+  createSettlementJournal,
+  getPayableJournal,
+  getSettlementJournals,
+  reverseSitePurchasePayables,
+  reportUnbookedPayables
 };

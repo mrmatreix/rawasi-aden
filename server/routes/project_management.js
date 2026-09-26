@@ -641,12 +641,39 @@ router.post('/:projectId/purchases', async (req, res) => {
     const paid = Number(paid_amount) || 0;
     const recDate = date || new Date().toISOString().split('T')[0];
     const willMirror = paid > 0;
+    const remaining = total - paid;
 
-    // SUGGESTION-5: المرآة المدفوعة أثر مالي — فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
+    if (!(total > 0)) return res.status(400).json({ success: false, message: 'إجمالي الفاتورة يجب أن يكون أكبر من الصفر' });
+    if (!(paid >= 0)) return res.status(400).json({ success: false, message: 'المبلغ المدفوع لا يمكن أن يكون سالباً' });
+    if (paid - total > 0.005) return res.status(400).json({ success: false, message: 'المبلغ المدفوع يتجاوز إجمالي الفاتورة' });
+
+    // SUGGESTION-6: الآجل يتطلب مورداً مسجلاً — لا التزام بلا دائن
+    let resolvedSupplierId = supplier_id ? Number(supplier_id) : null;
+    let resolvedSupplierName = supplier_name ? String(supplier_name).trim() || null : null;
+    if (remaining > 0.005) {
+      if (resolvedSupplierId) {
+        const s = await get('SELECT id, name FROM suppliers WHERE id = ?', [resolvedSupplierId]);
+        if (!s) return res.status(400).json({ success: false, message: 'المورد المحدد غير مسجل في سجل الموردين' });
+        resolvedSupplierName = s.name;
+      } else if (resolvedSupplierName) {
+        const s = await get('SELECT id, name FROM suppliers WHERE name = ? LIMIT 1', [resolvedSupplierName]);
+        if (!s) return res.status(400).json({ success: false, message: 'المشتريات الآجلة تتطلب مورداً مسجلاً — أنشئ المورد في سجل الموردين أولاً ثم أعد إدخال الفاتورة' });
+        resolvedSupplierId = s.id;
+        resolvedSupplierName = s.name;
+      } else {
+        return res.status(400).json({ success: false, message: 'المشتريات الآجلة تتطلب تحديد المورد — لا يمكن إثبات التزام بلا دائن' });
+      }
+    }
+
+    // الحالة تُشتق من المبالغ دائماً (لا ثقة بإدخال العميل)
+    const derivedStatus = remaining <= 0.005 ? 'مدفوع' : (paid > 0.005 ? 'جزئي' : 'غير مدفوع');
+
+    // SUGGESTION-5/6: أي أثر مالي (مرآة أو استحقاق) يتطلب فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
     let creatorId = null;
     let creatorName = 'النظام';
     let mirrorCcId = null;
-    if (willMirror) {
+    const hasFinancialEffect = willMirror || remaining > 0.005;
+    if (hasFinancialEffect) {
       const period = await checkPeriodOpen(recDate);
       if (!period.isOpen) {
         return res.status(403).json({ success: false, message: period.message });
@@ -666,9 +693,9 @@ router.post('/:projectId/purchases', async (req, res) => {
           payment_status, payment_method, date, receipt_no, notes
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        projectId, invoice_no ?? null, supplier_id ? Number(supplier_id) : null, supplier_name ?? null, item_description,
+        projectId, invoice_no ?? null, resolvedSupplierId, resolvedSupplierName, item_description,
         qty, unit ?? null, price, total, paid,
-        payment_status, payment_method, recDate, receipt_no ?? null, notes ?? null
+        derivedStatus, payment_method, recDate, receipt_no ?? null, notes ?? null
       ]);
       const purchaseId = result.lastInsertRowid || result.insertId;
 
@@ -682,7 +709,7 @@ router.post('/:projectId/purchases', async (req, res) => {
             source_table, source_id, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
           )
           VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?, 'project_purchases', ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, paid, payment_method, recDate,
+        `, [expReceipt, projectId, resolvedSupplierId, paid, payment_method, recDate,
             `فاتورة مشتريات: ${item_description}`, purchaseId, creatorId, creatorName, creatorId, creatorName]);
         const mirrorId = mirrorRes.lastInsertRowid || mirrorRes.insertId;
         // قيد المرآة على الجزء المدفوع فقط: مدين مصروف / دائن صندوق + حركة صندوق المشروع
@@ -695,6 +722,17 @@ router.post('/:projectId/purchases', async (req, res) => {
         await CashBoxService.appendMovement(tx, {
           projectId, cashOut: paid,
           currency: 'ر.ي', date: recDate, notes: `مصروف مرآة مشتريات: ${expReceipt}`
+        });
+      }
+
+      // SUGGESTION-6: إثبات المتبقي التزاماً على المورد (دفتري — بلا حركة نقدية)
+      if (remaining > 0.005) {
+        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, resolvedSupplierId]);
+        await ProjectCostService.createPayableJournal(tx, {
+          purchaseId, supplierId: resolvedSupplierId,
+          projectId, costCenterId: mirrorCcId, amount: remaining, date: recDate,
+          invoiceRef: invoice_no || `#${purchaseId}`,
+          user: { id: creatorId, name: creatorName }
         });
       }
 
@@ -713,7 +751,97 @@ router.post('/:projectId/purchases', async (req, res) => {
     } catch {}
 
     const created = await get('SELECT * FROM project_purchases WHERE id = ?', [txResult.purchaseId]);
-    res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created, warnings: dupWarnings });
+    res.json({
+      success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created, warnings: dupWarnings,
+      payable: remaining > 0.005 ? { supplier_id: resolvedSupplierId, amount: remaining } : null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// SUGGESTION-6: سداد مستحق فاتورة موقعية (جزئي أو كامل)
+router.post('/:projectId/purchases/:id/pay', async (req, res) => {
+  try {
+    const { projectId, id } = req.params;
+    const {
+      amount, supplier_id, supplier_name,
+      payment_method = 'نقدي', date, notes
+    } = req.body;
+
+    const purchase = await get(
+      'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [id, projectId]
+    );
+    if (!purchase) return res.status(404).json({ success: false, message: 'فاتورة المشتريات غير موجودة' });
+
+    const payAmount = Number(amount) || 0;
+    if (!(payAmount > 0)) return res.status(400).json({ success: false, message: 'مبلغ السداد يجب أن يكون أكبر من الصفر' });
+    const outstanding = Number(purchase.total_amount) - (Number(purchase.paid_amount) || 0);
+    if (outstanding <= 0.005) return res.status(400).json({ success: false, message: 'الفاتورة مسددة بالكامل — لا متبقي للسداد' });
+    if (payAmount - outstanding > 0.005) {
+      return res.status(400).json({ success: false, message: `مبلغ السداد يتجاوز المتبقي (${outstanding})` });
+    }
+
+    const payDate = date || new Date().toISOString().split('T')[0];
+    const period = await checkPeriodOpen(payDate);
+    if (!period.isOpen) {
+      return res.status(403).json({ success: false, message: period.message });
+    }
+
+    // المورد: مورد الفاتورة، أو يُحل من الطلب للفواتير القديمة بلا مورد
+    let paySupplierId = purchase.supplier_id ? Number(purchase.supplier_id) : null;
+    if (!paySupplierId) {
+      if (supplier_id) {
+        const s = await get('SELECT id FROM suppliers WHERE id = ?', [Number(supplier_id)]);
+        if (!s) return res.status(400).json({ success: false, message: 'المورد المحدد للسداد غير مسجل' });
+        paySupplierId = s.id;
+      } else if (supplier_name && String(supplier_name).trim()) {
+        const s = await get('SELECT id FROM suppliers WHERE name = ? LIMIT 1', [String(supplier_name).trim()]);
+        if (!s) return res.status(400).json({ success: false, message: 'الفاتورة بلا مورد مسجل — حدد المورد المستلم للسداد' });
+        paySupplierId = s.id;
+      } else {
+        return res.status(400).json({ success: false, message: 'الفاتورة بلا مورد مسجل — حدد المورد المستلم للسداد' });
+      }
+    } else if (supplier_id && Number(supplier_id) !== paySupplierId) {
+      return res.status(400).json({ success: false, message: 'مورد السداد لا يطابق مورد الفاتورة' });
+    }
+
+    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const actorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
+    const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
+    const ccId = prjCc ? prjCc.id : 1;
+
+    const newPaid = (Number(purchase.paid_amount) || 0) + payAmount;
+    const newRemaining = Number(purchase.total_amount) - newPaid;
+    const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+
+    await transaction(async (tx) => {
+      await tx.run(
+        'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+        [newPaid, newStatus, purchase.id]
+      );
+      // توثيق المورد على الفاتورة القديمة بلا مورد
+      if (!purchase.supplier_id) {
+        await tx.run('UPDATE project_purchases SET supplier_id = ? WHERE id = ?', [paySupplierId, purchase.id]);
+      }
+      await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [payAmount, paySupplierId]);
+      await ProjectCostService.createSettlementJournal(tx, {
+        purchaseId: purchase.id, supplierId: paySupplierId,
+        projectId, costCenterId: ccId, amount: payAmount, date: payDate,
+        payRef: `فاتورة #${purchase.id}${purchase.invoice_no ? ' (' + purchase.invoice_no + ')' : ''}${notes ? ' — ' + notes : ''}`,
+        user: { id: actorId, name: actorName }
+      });
+      await CashBoxService.appendMovement(tx, {
+        projectId, cashOut: payAmount,
+        currency: 'ر.ي', date: payDate, notes: `سداد مستحق موقعية: فاتورة #${purchase.id}`
+      });
+    });
+
+    const updated = await get('SELECT * FROM project_purchases WHERE id = ?', [purchase.id]);
+    res.json({
+      success: true, message: `تم تسجيل سداد ${payAmount} — المتبقي: ${Math.max(0, newRemaining)}`,
+      data: updated, outstanding: Math.max(0, newRemaining)
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -724,18 +852,31 @@ router.delete('/:projectId/purchases/:id', async (req, res) => {
     await ProjectCostService.ensureSchema();
     const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
     const actorName = req.user?.username || req.user?.full_name || 'النظام';
+    // SUGGESTION-6: صف الفاتورة لازم لفك ذممها قبل حذفها
+    const doomed = await get(
+      'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]
+    );
     const txResult = await transaction(async (tx) => {
       await tx.run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
       // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
       const reversed = await ProjectCostService.reverseLinkedMirrors('project_purchases', req.params.id, {
         tx, user: { id: actorId, name: actorName }, reason: 'حذف فاتورة المشتريات الأصل من المشروع'
       });
+      // SUGGESTION-6: فك أثر الذمم (عكس الاستحقاق والتسويات + إعادة رصيد المورد)
+      let payables = { apReversed: 0, settlementsReversed: 0, balanceDelta: 0 };
+      if (doomed) {
+        payables = await ProjectCostService.reverseSitePurchasePayables(tx, doomed, {
+          user: { id: actorId, name: actorName }, reason: 'حذف الفاتورة الموقعية وفك ذممها'
+        });
+      }
       const removed = await ProjectCostService.deleteLinkedMirrors('project_purchases', req.params.id, tx);
       await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
-      return { reversed, removed };
+      return { reversed, removed, payables };
     });
     const parts = [];
     if (txResult.reversed > 0) parts.push(`عكس ${txResult.reversed} مرآة`);
+    if (txResult.payables.apReversed > 0) parts.push('عكس استحقاق المورد');
+    if (txResult.payables.settlementsReversed > 0) parts.push(`عكس ${txResult.payables.settlementsReversed} سداد`);
     if (txResult.removed > 0) parts.push(`حذف ${txResult.removed} مرآة يتيمة`);
     res.json({
       success: true,
