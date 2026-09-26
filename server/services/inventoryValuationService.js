@@ -17,6 +17,7 @@
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('./auditService');
 const { assertPeriodOpen, resolveValidUserId } = require('./financialControlService');
+const ProjectCostService = require('./projectCostService');
 
 const INVENTORY_ACCOUNTS = {
   INVENTORY_ASSET: 11,               // حـ/ المخزون العام للمواد
@@ -266,6 +267,7 @@ const InventoryValuationService = {
     }
 
     await assertPeriodOpen(date);
+    await ProjectCostService.ensureSchema(); // تجهيز مخطط توحيد التكلفة قبل المعاملة
 
     const userId = await resolveValidUserId(user?.id);
     const parsedQty = Number(quantity);
@@ -288,8 +290,7 @@ const InventoryValuationService = {
           updated_at = CURRENT_TIMESTAMP
       `, [warehouse_id, item_id, parsedQty, returnPrice, returnPrice]);
 
-      // 2. تخفيض التكلفة الفعلية للمشروع
-      await tx.run('UPDATE projects SET actual_cost = MAX(0, actual_cost - ?) WHERE id = ?', [totalAmount, project_id]);
+      // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
 
       // 3. إنشاء قيد محاسبي متزن: من حـ/ المخزون إلى حـ/ تكاليف ومصروفات المشاريع
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
@@ -338,6 +339,9 @@ const InventoryValuationService = {
           details: { return_no, project_id, item_id, quantity: parsedQty, totalAmount, entry_no }
         });
       }
+
+      // توحيد التكلفة: إعادة احتساب تكلفة المشروع من مصادرها بعد تثبيت المرتجع
+      await ProjectCostService.recalculateProjectCost(project_id, tx);
 
       return {
         id: retRes.lastInsertRowid || retRes.insertId,
@@ -523,6 +527,7 @@ const InventoryValuationService = {
 
     await assertPeriodOpen(date);
     await this.assertNoNegativeStock(warehouse_id, item_id, quantity);
+    await ProjectCostService.ensureSchema();
 
     const userId = await resolveValidUserId(user?.id);
     const parsedQty = Number(quantity);
@@ -557,8 +562,7 @@ const InventoryValuationService = {
       await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
       await tx.run('UPDATE warehouse_stocks SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND item_id = ?', [parsedQty, warehouse_id, item_id]);
 
-      // 2. زيادة التكلفة الفعلية للمشروع
-      await tx.run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [totalAmount, project_id]);
+      // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
 
       // 3. تسجيل حركة الصرف مع ربط بند الـ BOQ
       const txRes = await tx.run(`
@@ -580,6 +584,9 @@ const InventoryValuationService = {
           details: { reference_no, project_id, boq_item_id, item_id, quantity: parsedQty, totalAmount, boqWarning }
         });
       }
+
+      // توحيد التكلفة: إعادة احتساب تكلفة المشروع من مصادرها بعد تثبيت الصرف
+      await ProjectCostService.recalculateProjectCost(project_id, tx);
 
       return {
         id: txRes.lastInsertRowid || txRes.insertId,

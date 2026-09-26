@@ -4,6 +4,7 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
+const ProjectCostService = require('../services/projectCostService');
 
 // جلب جميع المواد مع حالة المخزون وتنبيهات النواقص
 router.get('/items', requirePermission('inventory:view'), async (req, res) => {
@@ -125,6 +126,10 @@ router.post('/transactions', (req, res, next) => {
     }
 
     const parsedQty = Number(quantity);
+    const pId = project_id ? Number(project_id) : null;
+
+    // تجهيز مخطط توحيد التكلفة قبل بدء المعاملة
+    if (pId) await ProjectCostService.ensureSchema();
 
     const refPrefix = type === 'out' ? 'MAT-OUT' : 'MAT-IN';
     const countRes = await get('SELECT COUNT(*) as cnt FROM inventory_transactions WHERE type = ?', [type]);
@@ -145,11 +150,7 @@ router.post('/transactions', (req, res, next) => {
         }
         // إنقاص رصيد المخزن
         await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
-
-        // إذا كان الصرف لمشروع، زيادة التكلفة الفعلية للمشروع
-        if (project_id) {
-          await tx.run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [totalAmount, project_id]);
-        }
+        // (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
       } else if (type === 'in') {
         // زيادة رصيد المخزن
         await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [parsedQty, item_id]);
@@ -164,6 +165,11 @@ router.post('/transactions', (req, res, next) => {
         item_id, project_id || null, type, parsedQty, parsedPrice, totalAmount,
         reference_no, recipient || '', date, notes || ''
       ]);
+
+      // توحيد التكلفة: إعادة احتساب تكلفة المشروع من مصادرها بعد تثبيت الحركة
+      if (pId) {
+        await ProjectCostService.recalculateProjectCost(pId, tx);
+      }
 
       return { result, totalAmount, parsedPrice };
     });

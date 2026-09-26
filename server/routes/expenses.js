@@ -7,6 +7,7 @@ const { requirePermission, parseScopeArray } = require('../middleware/security')
 const FinancialControlService = {
   ...require('../services/financialControlService')
 };
+const ProjectCostService = require('../services/projectCostService');
 
 // جلب جميع المصروفات مع بيانات الحساب ومركز التكلفة والمشروع والمورد مع تطبيق النطاق
 router.get('/', requirePermission('expenses:view'), async (req, res) => {
@@ -150,6 +151,9 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
     const creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
     const finalStatus = (requestedStatus === 'draft') ? 'draft' : 'posted';
 
+    // تجهيز مخطط توحيد التكلفة قبل بدء المعاملة (خارج tx لتجنب DDL داخلها)
+    await ProjectCostService.ensureSchema();
+
     const txResult = await transaction(async (tx) => {
       // 1. تسجيل سند الصرف مع هوية المنشئ وحالة دورة المستند
       const result = await tx.run(`
@@ -173,11 +177,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
 
       // 2. إذا كانت مسودة، لا يتم التأثير المالي على الدفاتر العامة أو الصندوق حتى المراجعة والاعتماد
       if (finalStatus === 'posted') {
-        // تحديث التكلفة الفعلية للمشروع إن وجد
-        if (pId) {
-          await tx.run(`UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?`, [parsedAmount, pId]);
-        }
-
+        // (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
         // تحديث رصيد المورد إن كان محدداً
         if (sId) {
           await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, sId]);
@@ -229,6 +229,11 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
           VALUES (?, 3, ?, ?, 0, ?, ?)
         `, [jeId, finalCcId, pId, parsedAmount, `الصندوق الرئيسي / البنك - طريقة الدفع: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
+      }
+
+      // توحيد التكلفة: إعادة احتساب التكلفة الفعلية للمشروع من مصادرها (تُصحح أي انحراف تلقائياً)
+      if (pId) {
+        await ProjectCostService.recalculateProjectCost(pId, tx);
       }
 
       return result;
@@ -360,13 +365,11 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
     const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
     const parsedAmount = Number(exp.amount);
 
-    await transaction(async (tx) => {
-      // 1. تحديث التكلفة الفعلية للمشروع
-      if (exp.project_id) {
-        await tx.run(`UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?`, [parsedAmount, exp.project_id]);
-      }
+    // تجهيز مخطط توحيد التكلفة قبل بدء المعاملة
+    await ProjectCostService.ensureSchema();
 
-      // 2. تحديث رصيد المورد
+    await transaction(async (tx) => {
+      // 1. تحديث رصيد المورد
       if (exp.supplier_id) {
         await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, exp.supplier_id]);
       }
@@ -425,6 +428,11 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [posterId, posterName, exp.id]);
+
+      // 6. توحيد التكلفة: إعادة الاحتساب من المصادر بعد تثبيت الحالة الجديدة
+      if (exp.project_id) {
+        await ProjectCostService.recalculateProjectCost(exp.project_id, tx);
+      }
     });
 
     await logAudit(req, {

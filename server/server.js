@@ -84,6 +84,11 @@ app.get('/api/version', (req, res) => {
   });
 });
 
+// تدفئة مخطط توحيد التكلفة عند الإقلاع (غير حاجبة — تُعاد تلقائياً عند أول طلب عند الحاجة)
+try {
+  require('./services/projectCostService').ensureSchema().catch(() => {});
+} catch {}
+
 // أي مسار API غير معروف يرجع JSON دائماً بدلاً من صفحة HTML
 app.all('/api/*', (req, res) => {
   res.status(404).json({ success: false, message: `المسار غير موجود في الخادم: ${req.method} ${req.originalUrl}` });

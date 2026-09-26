@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../database/db');
+const { query, get, run, transaction } = require('../database/db');
 const { tafqeet } = require('../services/tafqeetService');
 const { requirePermission, requireScope } = require('../middleware/security');
+const ProjectCostService = require('../services/projectCostService');
 
 // فرض نطاق المشروع الإلزامي وحماية العمليات على كافة مسارات إدارة المشاريع
 router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
@@ -629,6 +630,8 @@ router.post('/:projectId/purchases', async (req, res) => {
 
     if (!item_description) return res.status(400).json({ success: false, message: 'وصف المواد المشتراة مطلوب' });
 
+    await ProjectCostService.ensureSchema();
+
     const qty = Number(quantity) || 1;
     const price = Number(unit_price) || 0;
     const total = total_amount ? Number(total_amount) : (qty * price);
@@ -640,19 +643,23 @@ router.post('/:projectId/purchases', async (req, res) => {
         payment_status, payment_method, date, receipt_no, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      projectId, invoice_no, supplier_id ? Number(supplier_id) : null, supplier_name, item_description,
-      qty, unit, price, total, Number(paid_amount) || 0,
-      payment_status, payment_method, date || new Date().toISOString().split('T')[0], receipt_no, notes
+      projectId, invoice_no ?? null, supplier_id ? Number(supplier_id) : null, supplier_name ?? null, item_description,
+      qty, unit ?? null, price, total, Number(paid_amount) || 0,
+      payment_status, payment_method, date || new Date().toISOString().split('T')[0], receipt_no ?? null, notes ?? null
     ]);
 
     // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
+    // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
     if (Number(paid_amount) > 0) {
       const expReceipt = receipt_no || `EXP-PUR-${result.lastInsertRowid}`;
       await run(`
-        INSERT INTO expenses (receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes)
-        VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?)
-      `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, Number(paid_amount), payment_method, date || new Date().toISOString().split('T')[0], `فاتورة مشتريات: ${item_description}`]);
+        INSERT INTO expenses (receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes, source_table, source_id)
+        VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?, 'project_purchases', ?)
+      `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, Number(paid_amount), payment_method, date || new Date().toISOString().split('T')[0], `فاتورة مشتريات: ${item_description}`, result.lastInsertRowid]);
     }
+
+    // توحيد التكلفة: إعادة الاحتساب من المصادر
+    await ProjectCostService.recalculateProjectCost(projectId);
 
     const created = await get('SELECT * FROM project_purchases WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created });
@@ -663,8 +670,20 @@ router.post('/:projectId/purchases', async (req, res) => {
 
 router.delete('/:projectId/purchases/:id', async (req, res) => {
   try {
-    await run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-    res.json({ success: true, message: 'تم حذف الفاتورة بنجاح' });
+    await ProjectCostService.ensureSchema();
+    const removedMirrors = await transaction(async (tx) => {
+      await tx.run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+      // حذف المصروف المرآة اليتيم (إن وُجد ولا قيد عليه) ثم إعادة احتساب التكلفة
+      const removed = await ProjectCostService.deleteLinkedMirrors('project_purchases', req.params.id, tx);
+      await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
+      return removed;
+    });
+    res.json({
+      success: true,
+      message: removedMirrors > 0
+        ? `تم حذف الفاتورة والمصروف المرتبط بها (${removedMirrors}) وتحديث تكلفة المشروع`
+        : 'تم حذف الفاتورة وتحديث تكلفة المشروع بنجاح'
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -693,6 +712,8 @@ router.post('/:projectId/labor', async (req, res) => {
 
     if (!worker_name_or_team) return res.status(400).json({ success: false, message: 'اسم العامل أو الطاقم مطلوب' });
 
+    await ProjectCostService.ensureSchema();
+
     const count = Number(workers_count) || 1;
     const rate = Number(daily_rate) || 0;
     const days = Number(days_or_hours) || 1;
@@ -705,18 +726,22 @@ router.post('/:projectId/labor', async (req, res) => {
         payment_status, supervisor_name, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      projectId, date || new Date().toISOString().split('T')[0], worker_name_or_team, trade,
-      count, rate, days, total, expense_category, payment_status, supervisor_name, notes
+      projectId, date || new Date().toISOString().split('T')[0], worker_name_or_team, trade ?? null,
+      count, rate, days, total, expense_category, payment_status, supervisor_name ?? null, notes ?? null
     ]);
 
     // تسجيل مصروف آلي في جدول المصروفات العام
+    // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
     if (payment_status === 'مدفوع' && total > 0) {
       const expReceipt = `EXP-LAB-${result.lastInsertRowid}`;
       await run(`
-        INSERT INTO expenses (receipt_no, expense_type, project_id, amount, payment_method, date, notes)
-        VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?)
-      `, [expReceipt, projectId, total, date || new Date().toISOString().split('T')[0], `أجور ${trade}: ${worker_name_or_team}`]);
+        INSERT INTO expenses (receipt_no, expense_type, project_id, amount, payment_method, date, notes, source_table, source_id)
+        VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?, 'project_labor_expenses', ?)
+      `, [expReceipt, projectId, total, date || new Date().toISOString().split('T')[0], `أجور ${trade}: ${worker_name_or_team}`, result.lastInsertRowid]);
     }
+
+    // توحيد التكلفة: إعادة الاحتساب من المصادر
+    await ProjectCostService.recalculateProjectCost(projectId);
 
     const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created });
@@ -727,8 +752,20 @@ router.post('/:projectId/labor', async (req, res) => {
 
 router.delete('/:projectId/labor/:id', async (req, res) => {
   try {
-    await run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-    res.json({ success: true, message: 'تم حذف السجل بنجاح' });
+    await ProjectCostService.ensureSchema();
+    const removedMirrors = await transaction(async (tx) => {
+      await tx.run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+      // حذف المصروف المرآة اليتيم (إن وُجد ولا قيد عليه) ثم إعادة احتساب التكلفة
+      const removed = await ProjectCostService.deleteLinkedMirrors('project_labor_expenses', req.params.id, tx);
+      await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
+      return removed;
+    });
+    res.json({
+      success: true,
+      message: removedMirrors > 0
+        ? `تم حذف السجل والمصروف المرتبط به (${removedMirrors}) وتحديث تكلفة المشروع`
+        : 'تم حذف السجل وتحديث تكلفة المشروع بنجاح'
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

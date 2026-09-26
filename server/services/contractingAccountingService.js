@@ -17,6 +17,7 @@
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('./auditService');
 const { checkPeriodOpen } = require('./periodService');
+const ProjectCostService = require('./projectCostService');
 
 // معرفات الحسابات المعيارية لعقود المقاولات في دليل الحسابات
 const CONTRACT_ACCOUNTS = {
@@ -81,27 +82,10 @@ const ContractingAccountingService = {
     const revisedContractValue = baseContractValue + approvedVariationsAmount;
 
     // 3. التكاليف الفعلية المتكبدة حتى تاريخه (Cumulative Incurred Actual Cost)
-    const expRow = await get(`
-      SELECT COALESCE(SUM(amount), 0) as total 
-      FROM expenses 
-      WHERE project_id = ? AND status IN ('posted', 'approved')
-    `, [pId]);
-    const purchasesRow = await get(`
-      SELECT COALESCE(SUM(total_amount), 0) as total 
-      FROM project_purchases 
-      WHERE project_id = ?
-    `, [pId]);
-    const laborRow = await get(`
-      SELECT COALESCE(SUM(total_amount), 0) as total 
-      FROM project_labor_expenses 
-      WHERE project_id = ?
-    `, [pId]);
-
-    const directCostFromRecords = (expRow ? Number(expRow.total) : 0) +
-                                  (purchasesRow ? Number(purchasesRow.total) : 0) +
-                                  (laborRow ? Number(laborRow.total) : 0);
-
-    const cumulativeActualCost = Math.max(Number(proj.actual_cost) || 0, directCostFromRecords);
+    // من المصدر الموحد الوحيد — نفس المعادلة المستخدمة في projects.actual_cost
+    // (مصروفات مباشرة مرحلة/معتمدة + صافي الصرف المخزني + أجور + مشتريات فرعية، بلا ازدواج)
+    const costBreakdown = await ProjectCostService.getCostBreakdown(pId);
+    const cumulativeActualCost = costBreakdown.total;
 
     // تقدير التكلفة الإجمالية المنقحة (Revised Estimated Total Cost)
     // إذا لم يحدد المستخدم تكلفة تقديرية، نستخدم هامش تحفظ افتراضي (80% من قيمة العقد)
@@ -254,6 +238,7 @@ const ContractingAccountingService = {
       revised_contract_value: revisedContractValue,
       revised_estimated_cost: revisedEstimatedCost,
       cumulative_actual_cost: cumulativeActualCost,
+      cost_breakdown: costBreakdown,
 
       // نسب الإنجاز المقارنة
       engineering_progress_pct: engineeringProgress,

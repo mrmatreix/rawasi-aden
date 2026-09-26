@@ -11,6 +11,7 @@
 const { get, query, run, transaction } = require('../database/db');
 const { checkPeriodOpen } = require('./periodService');
 const { logAudit } = require('./auditService');
+const ProjectCostService = require('./projectCostService');
 
 const DOCUMENT_STATUSES = {
   DRAFT: 'draft',               // مسودة (قابلة للتعديل والحذف دون أثر مالي)
@@ -126,6 +127,7 @@ const FinancialControlService = {
 
     const revDate = reversal_date || new Date().toISOString().split('T')[0];
     await this.assertPeriodOpen(revDate);
+    await ProjectCostService.ensureSchema(); // تجهيز مخطط توحيد التكلفة قبل المعاملة
 
     const revUser = user || (req ? req.user : null) || { id: null, username: 'المدير المالي' };
     const revUserId = await this.resolveValidUserId(revUser.id);
@@ -148,12 +150,7 @@ const FinancialControlService = {
         VALUES (?, ?, 0, 0, ?, ?, ?, ?)
       `, [prevBal, amount, newBal, exp.currency || 'ر.ي', revDate, cashNotes]);
 
-      // 2. تخفيض تكلفة المشروع إن كان مرتبطاً بمشروع
-      if (exp.project_id) {
-        await tx.run(`
-          UPDATE projects SET actual_cost = GREATEST(0, actual_cost - ?) WHERE id = ?
-        `, [amount, exp.project_id]);
-      }
+      // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة بعد تثبيت حالة reversed)
 
       // 3. تخفيض رصيد المورد إن كان محدداً
       if (exp.supplier_id) {
@@ -213,6 +210,11 @@ const FinancialControlService = {
             reversal_ref_id = ?
         WHERE id = ?
       `, [revUserId, revUserName, cleanReason, reversingJeId, exp.id]);
+
+      // 6. توحيد التكلفة: إعادة الاحتساب من المصادر بعد تثبيت حالة reversed
+      if (exp.project_id) {
+        await ProjectCostService.recalculateProjectCost(exp.project_id, tx);
+      }
     });
 
     // 6. تسجيل العملية بدقة في سجل التدقيق الرقابي مع بيانات القيمة السابقة والجديدة والسبب
