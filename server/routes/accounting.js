@@ -8,47 +8,167 @@ const AccountingService = require('../services/accountingService');
 const FinancialControlService = require('../services/financialControlService');
 const { requirePermission } = require('../middleware/security');
 
-// دليل الحسابات الشجري
+// دليل الحسابات الشجري مع دعم الهرمية، الرتب، والحسابات التحليلية الطرفية
 router.get('/accounts', requirePermission('accounting:view'), async (req, res) => {
   try {
-    const accounts = await query('SELECT * FROM accounts ORDER BY code ASC');
-    res.json({ success: true, data: accounts });
+    const { leaf_only, usable_only, active_only } = req.query;
+    let sql = `
+      SELECT a.*, 
+             p.code as parent_code, 
+             p.name as parent_name,
+             (SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) as children_count
+      FROM accounts a
+      LEFT JOIN accounts p ON a.parent_id = p.id
+    `;
+    const conditions = [];
+    const params = [];
+
+    if (active_only === 'true') {
+      conditions.push("(a.status IS NULL OR a.status = 'active')");
+    }
+
+    if (leaf_only === 'true' || usable_only === 'true') {
+      // فقط الحسابات الطرفية النشطة (التي ليس لها أبناء وتكون من الرتبة الثالثة فما فوق)
+      conditions.push("(SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) = 0");
+      conditions.push("(a.status IS NULL OR a.status = 'active')");
+      conditions.push("(a.level >= 3 OR LENGTH(a.code) >= 3 OR a.parent_id IS NOT NULL)");
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ' ORDER BY a.code ASC';
+    const accounts = await query(sql, params);
+    const enriched = accounts.map(a => ({
+      ...a,
+      is_leaf: (Number(a.children_count) === 0 && (Number(a.level) >= 3 || String(a.code).length >= 3)),
+      status: a.status || 'active'
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب دليل الحسابات', error: err.message });
   }
 });
 
-// إضافة حساب جديد إلى الدليل المحاسبي
+// اقتراح رقم وكود حساب آلي من الرتبة الثالثة فما فوق
+router.get('/accounts/suggest-code', requirePermission('accounting:view'), async (req, res) => {
+  try {
+    const { parent_id, type } = req.query;
+    let suggestedCode = '1111';
+    let level = 3;
+
+    if (parent_id) {
+      const parent = await get('SELECT id, code, level FROM accounts WHERE id = ?', [parent_id]);
+      if (parent) {
+        const pCode = String(parent.code).trim();
+        const pLen = pCode.length;
+        // البحث عن الحسابات الفرعية الحالية لنفس الأب
+        const siblings = await query('SELECT code FROM accounts WHERE parent_id = ? ORDER BY code DESC', [parent.id]);
+        if (pLen === 1) {
+          // أب رتبة 1 (مثل 1) -> نقترح رتبة 3 (مثل 111 أو 115)
+          level = 3;
+          if (siblings.length > 0) {
+            const lastCode = siblings[0].code;
+            const num = parseInt(lastCode, 10);
+            suggestedCode = !isNaN(num) ? String(num + 1) : `${pCode}11`;
+          } else {
+            suggestedCode = `${pCode}11`;
+          }
+        } else if (pLen === 2) {
+          // أب رتبة 2 (مثل 11 أو 21) -> نقترح رتبة 3 بثلاث خانات (مثل 115)
+          level = 3;
+          if (siblings.length > 0) {
+            const lastCode = siblings[0].code;
+            const num = parseInt(lastCode, 10);
+            suggestedCode = !isNaN(num) ? String(num + 1) : `${pCode}1`;
+          } else {
+            suggestedCode = `${pCode}1`;
+          }
+        } else {
+          // أب رتبة 3 أو أكثر -> نقترح رتبة 4 بأربع خانات
+          level = Math.max(4, pLen + 1);
+          if (siblings.length > 0) {
+            const lastCode = siblings[0].code;
+            const num = parseInt(lastCode, 10);
+            suggestedCode = !isNaN(num) ? String(num + 1) : `${pCode}01`;
+          } else {
+            suggestedCode = `${pCode}01`;
+          }
+        }
+      }
+    } else if (type) {
+      // افتراضي حسب النوع
+      const prefixMap = { 'أصول': '111', 'خصوم': '211', 'حقوق ملكية': '311', 'إيرادات': '411', 'مصروفات': '511', 'تكاليف': '521' };
+      const basePrefix = prefixMap[type] || '111';
+      level = 3;
+      const existing = await query('SELECT code FROM accounts WHERE code LIKE ? ORDER BY code DESC LIMIT 1', [`${basePrefix}%`]);
+      if (existing && existing.length > 0) {
+        const num = parseInt(existing[0].code, 10);
+        suggestedCode = !isNaN(num) ? String(num + 1) : `${basePrefix}1`;
+      } else {
+        suggestedCode = `${basePrefix}1`;
+      }
+    }
+
+    res.json({ success: true, suggested_code: suggestedCode, level });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في توليد كود الحساب', error: err.message });
+  }
+});
+
+// إضافة حساب جديد إلى الدليل المحاسبي مع الترقيم من الرتبة الثالثة
 router.post('/accounts', requirePermission('accounting:create,settings:company'), async (req, res) => {
   try {
-    const { code, name, type, parent_code = '', balance = 0 } = req.body;
+    const { code, name, type, parent_code = '', parent_id: reqParentId, balance = 0, status = 'active' } = req.body;
     if (!code || !name || !type) {
       return res.status(400).json({ success: false, message: 'رقم الحساب، الاسم، والنوع حقول إلزامية' });
     }
-    const existing = await get('SELECT id FROM accounts WHERE code = ?', [code.trim()]);
+    const cleanCode = String(code).trim();
+    const existing = await get('SELECT id FROM accounts WHERE code = ?', [cleanCode]);
     if (existing) {
-      return res.status(400).json({ success: false, message: 'رقم الحساب موجود مسبقاً' });
+      return res.status(400).json({ success: false, message: `رقم الحساب (${cleanCode}) موجود مسبقاً` });
     }
 
-    let parent_id = null;
-    if (parent_code) {
-      const parent = await get('SELECT id FROM accounts WHERE code = ?', [parent_code.trim()]);
+    let parent_id = reqParentId ? Number(reqParentId) : null;
+    if (!parent_id && parent_code) {
+      const parent = await get('SELECT id FROM accounts WHERE code = ?', [String(parent_code).trim()]);
       if (parent) parent_id = parent.id;
     }
 
+    // حساب المستوى وتأكيد الرتبة
+    let level = 3;
+    if (!parent_id && cleanCode.length === 1) {
+      level = 1;
+    } else if (cleanCode.length === 2) {
+      level = 2;
+    } else if (cleanCode.length === 3) {
+      level = 3;
+    } else {
+      level = 4;
+    }
+
     const result = await run(`
-      INSERT INTO accounts (code, name, type, parent_id, balance)
-      VALUES (?, ?, ?, ?, ?)
-    `, [code.trim(), name.trim(), type, parent_id, Number(balance || 0)]);
+      INSERT INTO accounts (code, name, type, parent_id, balance, status, level)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [cleanCode, name.trim(), type, parent_id, Number(balance || 0), status || 'active', level]);
+
+    const newId = result.lastInsertRowid || result.insertId;
 
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'account',
-      entity_id: code.trim(),
-      details: { code: code.trim(), name: name.trim(), type }
+      entity_id: cleanCode,
+      details: { id: newId, code: cleanCode, name: name.trim(), type, status, level }
     });
 
-    res.json({ success: true, message: 'تمت إضافة الحساب بنجاح', id: result.lastInsertRowid || result.insertId });
+    res.json({ 
+      success: true, 
+      message: `تمت إضافة الحساب [${cleanCode} - ${name.trim()}] بنجاح`, 
+      id: newId,
+      data: { id: newId, code: cleanCode, name: name.trim(), type, status, level }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إضافة الحساب: ' + err.message });
   }
@@ -58,26 +178,136 @@ router.post('/accounts', requirePermission('accounting:create,settings:company')
 router.put('/accounts/:id', requirePermission('accounting:edit,settings:company'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, type, parent_id } = req.body;
+    const { code, name, type, parent_id, balance, status } = req.body;
     if (!name || !type) {
       return res.status(400).json({ success: false, message: 'اسم الحساب والنوع مطلوبان' });
     }
+
+    const current = await get('SELECT * FROM accounts WHERE id = ?', [id]);
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'الحساب غير موجود' });
+    }
+
+    const cleanCode = code ? String(code).trim() : current.code;
+    if (cleanCode !== current.code) {
+      const duplicate = await get('SELECT id FROM accounts WHERE code = ? AND id != ?', [cleanCode, id]);
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: `كود الحساب [${cleanCode}] مسجل مسبقاً لحساب آخر` });
+      }
+    }
+
+    const pId = parent_id !== undefined && parent_id !== '' ? (parent_id ? Number(parent_id) : null) : current.parent_id;
+    const accStatus = status || current.status || 'active';
+    const accBalance = balance !== undefined ? Number(balance) : current.balance;
+    const level = cleanCode.length >= 4 ? 4 : (cleanCode.length === 3 ? 3 : (cleanCode.length === 2 ? 2 : 1));
+
     await run(`
       UPDATE accounts 
-      SET name = ?, type = ?, parent_id = ?
+      SET code = ?, name = ?, type = ?, parent_id = ?, balance = ?, status = ?, level = ?
       WHERE id = ?
-    `, [name.trim(), type, parent_id ? Number(parent_id) : null, id]);
+    `, [cleanCode, name.trim(), type, pId, accBalance, accStatus, level, id]);
 
     await logAudit(req, {
       action: 'UPDATE',
       entity_type: 'account',
-      entity_id: id,
-      details: { name: name.trim(), type, parent_id }
+      entity_id: String(id),
+      details: { id, code: cleanCode, name: name.trim(), type, status: accStatus }
     });
 
-    res.json({ success: true, message: 'تم تحديث بيانات الحساب بنجاح' });
+    res.json({ success: true, message: `تم تحديث بيانات الحساب [${cleanCode} - ${name.trim()}] بنجاح` });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في تحديث الحساب: ' + err.message });
+  }
+});
+
+// تبديل حالة الحساب (تقييد / توقيف أو تنشيط)
+router.patch('/accounts/:id/toggle-status', requirePermission('accounting:edit'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const account = await get('SELECT * FROM accounts WHERE id = ?', [id]);
+    if (!account) {
+      return res.status(404).json({ success: false, message: 'الحساب غير موجود' });
+    }
+
+    const newStatus = (account.status === 'restricted' || account.status === 'inactive') ? 'active' : 'restricted';
+    await run('UPDATE accounts SET status = ? WHERE id = ?', [newStatus, id]);
+
+    const statusLabel = newStatus === 'active' ? 'تنشيط' : 'تقييد وإيقاف';
+    await logAudit(req, {
+      action: 'UPDATE_STATUS',
+      entity_type: 'account',
+      entity_id: String(id),
+      details: { id, code: account.code, old_status: account.status, new_status: newStatus }
+    });
+
+    res.json({ 
+      success: true, 
+      message: `تم ${statusLabel} الحساب [${account.code} - ${account.name}] بنجاح`,
+      status: newStatus 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في تغيير حالة الحساب: ' + err.message });
+  }
+});
+
+// حذف حساب من دليل الحسابات مع الفحص المحاسبي الصارم
+router.delete('/accounts/:id', requirePermission('accounting:delete,settings:company'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const account = await get('SELECT * FROM accounts WHERE id = ?', [id]);
+    if (!account) {
+      return res.status(404).json({ success: false, message: 'الحساب المراد حذفه غير موجود' });
+    }
+
+    // 1. التحقق من عدم وجود حسابات متفرعة منه (Parent check)
+    const child = await get('SELECT COUNT(*) as cnt FROM accounts WHERE parent_id = ?', [id]);
+    if (child && child.cnt > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `لا يمكن حذف الحساب [${account.code} - ${account.name}] لوجود (${child.cnt}) حسابات فرعية متفرعة منه. يرجى نقلها أو حذفها أولاً.` 
+      });
+    }
+
+    // 2. التحقق من عدم وجود قيود يومية مسجلة عليه
+    const jeCheck = await get('SELECT COUNT(*) as cnt FROM journal_entry_lines WHERE account_id = ?', [id]);
+    if (jeCheck && jeCheck.cnt > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `لا يمكن حذف الحساب [${account.code} - ${account.name}] نظراً لوجود (${jeCheck.cnt}) سطور قيود محاسبية مسجلة عليه في دفتر اليومية. يمكنك تقييده/إيقافه بدلاً من الحذف لسلامة السجلات.` 
+      });
+    }
+
+    // 3. التحقق من سندات القبض أو الصرف
+    const payCheck = await get('SELECT COUNT(*) as cnt FROM payments WHERE account_id = ?', [id]);
+    if (payCheck && payCheck.cnt > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `لا يمكن حذف الحساب لارتباطه بـ (${payCheck.cnt}) سندات قبض أو صرف. يمكنك تقييد الحساب بدلاً من حذفه.` 
+      });
+    }
+
+    // 4. التحقق من المصروفات
+    const expCheck = await get('SELECT COUNT(*) as cnt FROM expenses WHERE account_id = ?', [id]);
+    if (expCheck && expCheck.cnt > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `لا يمكن حذف الحساب لارتباطه بـ (${expCheck.cnt}) سندات مصروفات مسجلة.` 
+      });
+    }
+
+    // الحذف الفعلي إن كان خالياً تماماً من الحركات
+    await run('DELETE FROM accounts WHERE id = ?', [id]);
+
+    await logAudit(req, {
+      action: 'DELETE',
+      entity_type: 'account',
+      entity_id: account.code,
+      details: { id, code: account.code, name: account.name, type: account.type }
+    });
+
+    res.json({ success: true, message: `تم حذف الحساب [${account.code} - ${account.name}] نهائياً بنجاح` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حذف الحساب: ' + err.message });
   }
 });
 
@@ -193,6 +423,156 @@ router.post('/cost-centers', requirePermission('accounting:create'), async (req,
   }
 });
 
+// تعديل بيانات مركز تكلفة
+router.put('/cost-centers/:id', requirePermission('accounting:edit'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { code, name, type = 'مشروع', project_id, notes, status } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'اسم مركز التكلفة مطلوب' });
+    }
+
+    const current = await get('SELECT * FROM cost_centers WHERE id = ?', [id]);
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'مركز التكلفة غير موجود' });
+    }
+
+    const cleanCode = code ? String(code).trim() : current.code;
+    if (cleanCode !== current.code) {
+      const duplicate = await get('SELECT id FROM cost_centers WHERE code = ? AND id != ?', [cleanCode, id]);
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: `كود مركز التكلفة [${cleanCode}] مسجل مسبقاً` });
+      }
+    }
+
+    const pId = project_id !== undefined && project_id !== '' ? (project_id ? Number(project_id) : null) : current.project_id;
+    const ccStatus = status || current.status || 'active';
+
+    await run(`
+      UPDATE cost_centers 
+      SET code = ?, name = ?, type = ?, project_id = ?, notes = ?, status = ?
+      WHERE id = ?
+    `, [cleanCode, name.trim(), type, pId, notes || '', ccStatus, id]);
+
+    await logAudit(req, {
+      action: 'UPDATE',
+      entity_type: 'cost_center',
+      entity_id: String(id),
+      details: { id, code: cleanCode, name: name.trim(), type, status: ccStatus }
+    });
+
+    res.json({ success: true, message: `تم تحديث مركز التكلفة [${cleanCode} - ${name.trim()}] بنجاح` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في تحديث مركز التكلفة: ' + err.message });
+  }
+});
+
+// حذف مركز تكلفة مع فحص العمليات المرتبطة
+router.delete('/cost-centers/:id', requirePermission('accounting:delete'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cc = await get('SELECT * FROM cost_centers WHERE id = ?', [id]);
+    if (!cc) {
+      return res.status(404).json({ success: false, message: 'مركز التكلفة المراد حذفه غير موجود' });
+    }
+
+    // فحص القيود اليومية
+    const jeCheck = await get('SELECT COUNT(*) as cnt FROM journal_entry_lines WHERE cost_center_id = ?', [id]);
+    if (jeCheck && jeCheck.cnt > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `لا يمكن حذف مركز التكلفة [${cc.code} - ${cc.name}] لارتباطه بـ (${jeCheck.cnt}) سطور قيود محاسبية. يمكنك إيقافه وتغيير حالته إلى موقوف بدلاً من الحذف.` 
+      });
+    }
+
+    // فحص السندات
+    const payCheck = await get('SELECT COUNT(*) as cnt FROM payments WHERE cost_center_id = ?', [id]);
+    if (payCheck && payCheck.cnt > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `لا يمكن حذف مركز التكلفة لارتباطه بـ (${payCheck.cnt}) سندات مسجلة.` 
+      });
+    }
+
+    // فحص المصروفات
+    const expCheck = await get('SELECT COUNT(*) as cnt FROM expenses WHERE cost_center_id = ?', [id]);
+    if (expCheck && expCheck.cnt > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `لا يمكن حذف مركز التكلفة لارتباطه بـ (${expCheck.cnt}) سندات مصروفات.` 
+      });
+    }
+
+    await run('DELETE FROM cost_centers WHERE id = ?', [id]);
+
+    await logAudit(req, {
+      action: 'DELETE',
+      entity_type: 'cost_center',
+      entity_id: cc.code,
+      details: { id, code: cc.code, name: cc.name }
+    });
+
+    res.json({ success: true, message: `تم حذف مركز التكلفة [${cc.code} - ${cc.name}] بنجاح` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حذف مركز التكلفة: ' + err.message });
+  }
+});
+
+// استعلام الأرقام المتسلسلة التالية للسندات والقيود للعرض الفوري في الشاشات
+router.get('/next-numbers', requirePermission('accounting:view,expenses:view,revenues:view'), async (req, res) => {
+  try {
+    const currentYear = new Date().getFullYear();
+
+    // 1. سند قبض
+    const rcCount = await get('SELECT COUNT(*) as cnt FROM payments WHERE type = "قبض"');
+    let rcSeq = ((rcCount ? rcCount.cnt : 0) || 0) + 1;
+    let nextRc = `RC-${currentYear}-${String(rcSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM payments WHERE receipt_no = ?', [nextRc])) {
+      rcSeq++;
+      nextRc = `RC-${currentYear}-${String(rcSeq).padStart(4, '0')}`;
+    }
+
+    // 2. سند صرف (payments)
+    const pvCount = await get('SELECT COUNT(*) as cnt FROM payments WHERE type = "صرف"');
+    let pvSeq = ((pvCount ? pvCount.cnt : 0) || 0) + 1;
+    let nextPv = `PV-${currentYear}-${String(pvSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM payments WHERE receipt_no = ?', [nextPv])) {
+      pvSeq++;
+      nextPv = `PV-${currentYear}-${String(pvSeq).padStart(4, '0')}`;
+    }
+
+    // 3. سند صرف مصروفات (expenses)
+    const expCount = await get('SELECT COUNT(*) as cnt FROM expenses');
+    let expSeq = ((expCount ? expCount.cnt : 0) || 0) + 1;
+    let nextExp = `EP-${currentYear}-${String(expSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM expenses WHERE receipt_no = ?', [nextExp])) {
+      expSeq++;
+      nextExp = `EP-${currentYear}-${String(expSeq).padStart(4, '0')}`;
+    }
+
+    // 4. قيد يومية
+    const jeCount = await get('SELECT COUNT(*) as cnt FROM journal_entries');
+    let jeSeq = ((jeCount ? jeCount.cnt : 0) || 0) + 1;
+    let nextJe = `JV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM journal_entries WHERE entry_no = ?', [nextJe])) {
+      jeSeq++;
+      nextJe = `JV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        receipt_voucher: nextRc,
+        payment_voucher: nextPv,
+        expense_voucher: nextExp,
+        journal_entry: nextJe
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب أرقام السندات', error: err.message });
+  }
+});
+
 // جلب قيود اليومية العامة
 router.get('/journal-entries', requirePermission('accounting:view'), async (req, res) => {
   try {
@@ -228,6 +608,85 @@ router.get('/journal-entries', requirePermission('accounting:view'), async (req,
     res.json({ success: true, data: entries });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب قيود اليومية', error: err.message });
+  }
+});
+
+// جلب بيانات قيود اليومية التفصيلية لتصدير إكسل والتقارير الشاملة
+router.get('/journal-entries/export-data', requirePermission('accounting:view'), async (req, res) => {
+  try {
+    const { from_date, to_date, status, reference_type } = req.query;
+    let sql = `
+      SELECT 
+        je.id as entry_id,
+        je.entry_no,
+        je.date as entry_date,
+        je.description as entry_description,
+        je.reference_type,
+        je.reference_id,
+        je.status as entry_status,
+        COALESCE(je.created_by_name, '') as created_by_name,
+        jel.id as line_id,
+        jel.account_id,
+        COALESCE(a.code, '') as account_code,
+        COALESCE(a.name, '') as account_name,
+        jel.debit,
+        jel.credit,
+        COALESCE(jel.notes, '') as line_notes,
+        COALESCE(cc.code, '') as cost_center_code,
+        COALESCE(cc.name, '') as cost_center_name,
+        COALESCE(p.name, '') as project_name,
+        COALESCE(cl.name, pm.client_name, '') as client_name,
+        COALESCE(sp.name, ex.supplier_name, ex.recipient, '') as supplier_name,
+        COALESCE(pm.currency, ex.currency, 'ر.ي') as currency,
+        COALESCE(pm.exchange_rate, ex.exchange_rate, 1) as exchange_rate,
+        CASE 
+          WHEN jel.debit > 0 THEN jel.debit * COALESCE(pm.exchange_rate, ex.exchange_rate, 1)
+          ELSE 0 
+        END as local_debit,
+        CASE 
+          WHEN jel.credit > 0 THEN jel.credit * COALESCE(pm.exchange_rate, ex.exchange_rate, 1)
+          ELSE 0 
+        END as local_credit
+      FROM journal_entries je
+      JOIN journal_entry_lines jel ON je.id = jel.entry_id
+      LEFT JOIN accounts a ON jel.account_id = a.id
+      LEFT JOIN cost_centers cc ON jel.cost_center_id = cc.id
+      LEFT JOIN projects p ON jel.project_id = p.id
+      LEFT JOIN payments pm ON (je.reference_type IN ('سند قبض', 'payment') AND (je.reference_id = pm.id OR je.entry_no = pm.receipt_no))
+      LEFT JOIN clients cl ON pm.client_id = cl.id
+      LEFT JOIN expenses ex ON (je.reference_type IN ('سند صرف', 'expense') AND (je.reference_id = ex.id OR je.entry_no = ex.receipt_no))
+      LEFT JOIN suppliers sp ON ex.supplier_id = sp.id
+    `;
+    const conditions = [];
+    const params = [];
+
+    if (from_date) {
+      conditions.push('je.date >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('je.date <= ?');
+      params.push(to_date);
+    }
+    if (status) {
+      conditions.push('je.status = ?');
+      params.push(status);
+    }
+    if (reference_type) {
+      conditions.push('je.reference_type = ?');
+      params.push(reference_type);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ' ORDER BY je.date DESC, je.id DESC, jel.id ASC';
+
+    const rows = await query(sql, params);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب بيانات تصدير القيود: ' + err.message });
   }
 });
 
@@ -598,15 +1057,19 @@ router.get('/open-custodies', requirePermission('custody:view'), async (req, res
   }
 });
 
-// جلب النثريات والعهد مع بيانات الموظف والعهدة الأصلية
+// جلب النثريات والعهد مع بيانات الموظف والعهدة الأصلية والحساب المالي
 router.get('/custodies', requirePermission('custody:view'), async (req, res) => {
   try {
     const custodies = await query(`
       SELECT c.*, 
+             COALESCE(c.account_code, a.code) as account_code,
+             COALESCE(c.account_name, a.name) as account_name,
+             COALESCE(c.payment_method, 'نقدي') as payment_method,
              e.employee_no as emp_code, 
              e.full_name as emp_full_name, 
              e.job_title as emp_job_title
       FROM custodies c
+      LEFT JOIN accounts a ON c.account_id = a.id
       LEFT JOIN employees e ON c.employee_id = e.id
       ORDER BY c.date DESC, c.id DESC
     `);
@@ -616,7 +1079,7 @@ router.get('/custodies', requirePermission('custody:view'), async (req, res) => 
   }
 });
 
-// تسجيل عهدة أو نثرية أو تصفية عهدة سابقة
+// تسجيل عهدة أو نثرية أو تصفية عهدة سابقة مع ربط الحساب المالي وحركة الصندوق/البنك
 router.post('/custodies', requirePermission('custody:create'), async (req, res) => {
   try {
     const {
@@ -628,7 +1091,11 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       spent_amount = 0,
       currency = 'ر.ي',
       date = new Date().toISOString().split('T')[0],
-      notes
+      notes,
+      account_id,
+      account_code,
+      account_name,
+      payment_method = 'نقدي'
     } = req.body;
 
     // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ العهدة
@@ -656,6 +1123,18 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
 
     if (!empName) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد الموظف أو كتابة اسمه' });
+    }
+
+    // 3. استخراج بيانات الحساب المالي المرتبط
+    let accId = account_id ? Number(account_id) : null;
+    let accCode = account_code || null;
+    let accName = account_name || null;
+    if (accId && (!accCode || !accName)) {
+      const acc = await get('SELECT id, code, name FROM accounts WHERE id = ?', [accId]);
+      if (acc) {
+        accCode = acc.code;
+        accName = acc.name;
+      }
     }
 
     const currentYear = new Date().getFullYear();
@@ -707,12 +1186,14 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
           INSERT INTO custodies (
             custody_no, operation_type, related_custody_id, related_custody_no,
             employee_id, employee_no, employee_name,
-            total_amount, spent_amount, remaining_amount, currency, status, date, notes
-          ) VALUES (?, 'تصفية عهدة', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'تمت التصفية', ?, ?)
+            total_amount, spent_amount, remaining_amount, currency, status, date, notes,
+            account_id, account_code, account_name, payment_method
+          ) VALUES (?, 'تصفية عهدة', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'تمت التصفية', ?, ?, ?, ?, ?, ?)
         `, [
           custody_no, origCustody.id, origCustody.custody_no,
           empId || origCustody.employee_id, empNo || origCustody.employee_no, empName || origCustody.employee_name,
-          settleAmount, settleAmount, 0, selectedCurrency, date, notes || `تصفية للعهدة رقم ${origCustody.custody_no}`
+          settleAmount, settleAmount, 0, selectedCurrency, date, notes || `تصفية للعهدة رقم ${origCustody.custody_no}`,
+          accId || origCustody.account_id, accCode || origCustody.account_code, accName || origCustody.account_name, payment_method || 'نقدي'
         ]);
 
         return { result, newRemaining, newStatus };
@@ -754,23 +1235,49 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
     const result = await run(`
       INSERT INTO custodies (
         custody_no, operation_type, employee_id, employee_no, employee_name,
-        total_amount, spent_amount, remaining_amount, currency, status, date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?)
+        total_amount, spent_amount, remaining_amount, currency, status, date, notes,
+        account_id, account_code, account_name, payment_method
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?, ?, ?, ?, ?)
     `, [
       custody_no, operation_type, empId, empNo, empName,
-      parsedAmount, parsedSpent, remaining, selectedCurrency, date, notes || ''
+      parsedAmount, parsedSpent, remaining, selectedCurrency, date, notes || '',
+      accId, accCode, accName, payment_method || 'نقدي'
+    ]);
+
+    // تسجيل حركة صرف العهدة في حركة الصندوق والبنك
+    const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || payment_method === 'بنك') ? 'بنك' : 'نقدي';
+    const lastCash = await get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1');
+    const prevBal = (lastCash && lastCash.current_balance != null) ? Number(lastCash.current_balance) : 0;
+    const currentBal = prevBal - parsedAmount;
+
+    await run(`
+      INSERT INTO cash_movements (
+        date, cash_in, cash_out, previous_balance, current_balance, notes,
+        movement_type, payment_method, reference_no, account_id
+      )
+      VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      date,
+      parsedAmount,
+      prevBal,
+      currentBal,
+      `${operation_type}: ${custody_no} للموظف (${empName})${accName ? ' - حساب: ' + accName : ''}`,
+      moveType,
+      payment_method || 'نقدي',
+      custody_no,
+      accId
     ]);
 
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'custody',
       entity_id: custody_no,
-      details: { custody_no, operation_type, empName, total_amount: parsedAmount }
+      details: { custody_no, operation_type, empName, total_amount: parsedAmount, account_id: accId, account_code: accCode }
     });
 
     res.json({
       success: true,
-      message: `تم تسجيل ${operation_type} بنجاح برقم ${custody_no}`,
+      message: `تم تسجيل ${operation_type} بنجاح برقم ${custody_no} وإدراج حركة الصرف في حركة الصندوق والبنك`,
       custody_no,
       id: result.lastInsertRowid || result.insertId,
       remaining
@@ -780,11 +1287,40 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
   }
 });
 
-// حركة الصندوق والبنك
+// حركة الصندوق والبنك مع الفلترة حسب نوع الحركة (نقدي / بنك / الكل) والتاريخ
 router.get('/cash-movements', async (req, res) => {
   try {
-    const movements = await query('SELECT * FROM cash_movements ORDER BY date DESC, id DESC LIMIT 50');
-    const summary = await get(`
+    const { type, from_date, to_date, all } = req.query;
+    let sql = 'SELECT * FROM cash_movements';
+    const conditions = [];
+    const params = [];
+
+    if (type && type !== 'الكل' && type !== 'all') {
+      conditions.push('movement_type = ?');
+      params.push(type);
+    }
+    if (from_date) {
+      conditions.push('date >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('date <= ?');
+      params.push(to_date);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ' ORDER BY date DESC, id DESC';
+    if (!all && all !== 'true') {
+      sql += ' LIMIT 100';
+    }
+
+    const movements = await query(sql, params);
+
+    // ملخص الحركة
+    let summarySql = `
       SELECT 
         (SELECT previous_balance FROM cash_movements ORDER BY id ASC LIMIT 1) as initial_balance,
         SUM(cash_in) as total_cash_in,
@@ -792,7 +1328,32 @@ router.get('/cash-movements', async (req, res) => {
         SUM(withdrawals) as total_withdrawals,
         (SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1) as current_balance
       FROM cash_movements
-    `) || { initial_balance: 50000, total_cash_in: 25000, total_cash_out: 15000, total_withdrawals: 5000, current_balance: 55000 };
+    `;
+    let summaryConditions = [];
+    let summaryParams = [];
+    if (type && type !== 'الكل' && type !== 'all') {
+      summaryConditions.push('movement_type = ?');
+      summaryParams.push(type);
+    }
+    if (from_date) {
+      summaryConditions.push('date >= ?');
+      summaryParams.push(from_date);
+    }
+    if (to_date) {
+      summaryConditions.push('date <= ?');
+      summaryParams.push(to_date);
+    }
+    if (summaryConditions.length > 0) {
+      summarySql += ' WHERE ' + summaryConditions.join(' AND ');
+    }
+
+    const summary = await get(summarySql, summaryParams) || { 
+      initial_balance: 0, 
+      total_cash_in: 0, 
+      total_cash_out: 0, 
+      total_withdrawals: 0, 
+      current_balance: 0 
+    };
 
     res.json({ success: true, data: movements, summary });
   } catch (err) {
@@ -840,6 +1401,232 @@ router.post('/periods', requirePermission('accounting:create'), async (req, res)
     res.json({ success: true, message: 'تم إنشاء الفترة المحاسبية بنجاح', id: periodId });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إنشاء الفترة المحاسبية: ' + err.message });
+  }
+});
+
+// فحص كافة القيود والسندات غير المرحلة في نطاق الفترة المحاسبية قبل إقفالها
+router.get('/periods/:id/unposted-items', requirePermission('accounting:view'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const period = await get('SELECT * FROM accounting_periods WHERE id = ?', [id]);
+    if (!period) return res.status(404).json({ success: false, message: 'الفترة غير موجودة' });
+
+    const startDate = period.start_date;
+    const endDate = period.end_date;
+
+    const unpostedJournals = await query(`
+      SELECT id, entry_no, date, description, total_debit, status 
+      FROM journal_entries 
+      WHERE date BETWEEN ? AND ? AND (status != 'posted' AND status != 'reversed')
+      ORDER BY date ASC
+    `, [startDate, endDate]);
+
+    const unpostedExpenses = await query(`
+      SELECT id, receipt_no, date, expense_type, recipient, supplier_name, amount, currency, status 
+      FROM expenses 
+      WHERE date BETWEEN ? AND ? AND (status != 'posted' AND status != 'reversed')
+      ORDER BY date ASC
+    `, [startDate, endDate]);
+
+    const unpostedPayments = await query(`
+      SELECT id, receipt_no, type, date, client_name, amount, currency, status 
+      FROM payments 
+      WHERE date BETWEEN ? AND ? AND (status != 'posted' AND status != 'reversed')
+      ORDER BY date ASC
+    `, [startDate, endDate]);
+
+    const totalUnposted = unpostedJournals.length + unpostedExpenses.length + unpostedPayments.length;
+
+    res.json({
+      success: true,
+      period,
+      total_unposted: totalUnposted,
+      unposted_journals: unpostedJournals,
+      unposted_expenses: unpostedExpenses,
+      unposted_payments: unpostedPayments
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في فحص المعاملات غير المرحلة: ' + err.message });
+  }
+});
+
+// ترحيل كافة السندات والقيود غير المرحلة التابعة للفترة المحاسبية دفعة واحدة
+router.post('/periods/:id/post-all', requirePermission('accounting:post'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const period = await get('SELECT * FROM accounting_periods WHERE id = ?', [id]);
+    if (!period) return res.status(404).json({ success: false, message: 'الفترة غير موجودة' });
+
+    if (period.status === 'closed') {
+      return res.status(400).json({ success: false, message: 'الفترة المحاسبية مغلقة مسبقاً' });
+    }
+
+    const posterId = req.user?.id || 1;
+    const posterName = req.user?.username || req.user?.full_name || 'مدير الحسابات';
+    const startDate = period.start_date;
+    const endDate = period.end_date;
+
+    let postedJournalsCount = 0;
+    let postedExpensesCount = 0;
+    let postedPaymentsCount = 0;
+
+    await transaction(async (tx) => {
+      // 1. ترحيل قيود اليومية غير المرحلة المتزنة
+      const unpostedJournals = await tx.query(`
+        SELECT * FROM journal_entries 
+        WHERE date BETWEEN ? AND ? AND status != 'posted' AND status != 'reversed'
+      `, [startDate, endDate]);
+
+      for (const je of unpostedJournals) {
+        const diff = Math.abs(Number(je.total_debit) - Number(je.total_credit));
+        if (diff <= 0.001 && Number(je.total_debit) > 0) {
+          await tx.run(`
+            UPDATE journal_entries 
+            SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [posterId, posterName, je.id]);
+          postedJournalsCount++;
+        }
+      }
+
+      // 2. ترحيل سندات الصرف غير المرحلة
+      const unpostedExpenses = await tx.query(`
+        SELECT * FROM expenses 
+        WHERE date BETWEEN ? AND ? AND status != 'posted' AND status != 'reversed'
+      `, [startDate, endDate]);
+
+      for (const exp of unpostedExpenses) {
+        const parsedAmount = Number(exp.amount) || 0;
+        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
+        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+        let entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+          jeSeq++;
+          entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+        }
+        const jeRes = await tx.run(`
+          INSERT INTO journal_entries (
+            entry_no, date, description, reference_type, reference_id, 
+            total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, ?, ?, 'سند صرف', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [
+          entryNo, exp.date,
+          `سند صرف مرحل ${exp.receipt_no} - ${exp.notes || exp.expense_type || ''}`,
+          exp.id, parsedAmount, parsedAmount,
+          posterId, posterName, posterId, posterName
+        ]);
+        const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+        const debitAccountId = exp.account_id || 10;
+        const finalCcId = exp.cost_center_id || 1;
+
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+          VALUES (?, ?, ?, ?, ?, 0, ?)
+        `, [jeId, debitAccountId, finalCcId, exp.project_id, parsedAmount, `مصروف ${exp.expense_type || ''}`]);
+
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+          VALUES (?, 3, ?, ?, 0, ?, ?)
+        `, [jeId, finalCcId, exp.project_id, parsedAmount, `الصندوق / البنك - ترحيل سند صرف`]);
+
+        await tx.run(`
+          UPDATE expenses 
+          SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `, [posterId, posterName, exp.id]);
+        postedExpensesCount++;
+      }
+
+      // 3. ترحيل سندات القبض غير المرحلة
+      const unpostedPayments = await tx.query(`
+        SELECT * FROM payments 
+        WHERE date BETWEEN ? AND ? AND status != 'posted' AND status != 'reversed'
+      `, [startDate, endDate]);
+
+      for (const pay of unpostedPayments) {
+        const parsedAmount = Number(pay.amount) || 0;
+        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
+        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+        let entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+          jeSeq++;
+          entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+        }
+        const jeRes = await tx.run(`
+          INSERT INTO journal_entries (
+            entry_no, date, description, reference_type, reference_id, 
+            total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [
+          entryNo, pay.date,
+          `سند ${pay.type} مرحل ${pay.receipt_no} - ${pay.notes || ''}`,
+          `سند ${pay.type}`, pay.id,
+          parsedAmount, parsedAmount,
+          posterId, posterName, posterId, posterName
+        ]);
+        const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+        const finalCcId = pay.cost_center_id || 1;
+
+        if (pay.type === 'قبض') {
+          await tx.run(`
+            INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+            VALUES (?, 3, ?, ?, ?, 0, ?)
+          `, [jeId, finalCcId, pay.project_id, parsedAmount, `قبض في الصندوق / البنك`]);
+
+          let creditAcc = pay.account_id || 4;
+          await tx.run(`
+            INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+            VALUES (?, ?, ?, ?, 0, ?, ?)
+          `, [jeId, creditAcc, finalCcId, pay.project_id, parsedAmount, 'تخفيض ذمة العميل']);
+        } else {
+          const debitAcc = pay.account_id || 7;
+          await tx.run(`
+            INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+            VALUES (?, ?, ?, ?, ?, 0, ?)
+          `, [jeId, debitAcc, finalCcId, pay.project_id, parsedAmount, `سداد للمورد`]);
+
+          await tx.run(`
+            INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
+            VALUES (?, 3, ?, ?, 0, ?, ?)
+          `, [jeId, finalCcId, pay.project_id, parsedAmount, `صرف من الصندوق / البنك`]);
+        }
+
+        await tx.run(`
+          UPDATE payments 
+          SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `, [posterId, posterName, pay.id]);
+        postedPaymentsCount++;
+      }
+    });
+
+    await logAudit(req, {
+      action: 'BATCH_POST_PERIOD',
+      entity_type: 'period',
+      entity_id: id,
+      details: {
+        period_name: period.period_name,
+        postedJournalsCount,
+        postedExpensesCount,
+        postedPaymentsCount,
+        total: postedJournalsCount + postedExpensesCount + postedPaymentsCount
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `تم ترحيل كافة السندات والقيود بنجاح (قيود: ${postedJournalsCount}، صرف: ${postedExpensesCount}، قبض: ${postedPaymentsCount})`,
+      counts: {
+        journals: postedJournalsCount,
+        expenses: postedExpensesCount,
+        payments: postedPaymentsCount,
+        total: postedJournalsCount + postedExpensesCount + postedPaymentsCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء ترحيل السندات والقيود: ' + err.message });
   }
 });
 

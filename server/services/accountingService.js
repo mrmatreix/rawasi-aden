@@ -41,9 +41,13 @@ const AccountingService = {
       }
 
       // التحقق من طبيعة الحساب وإلزامية مركز التكلفة لقائمة الدخل
-      const account = await get('SELECT id, code, name, type FROM accounts WHERE id = ?', [accountId]);
+      const account = await get('SELECT id, code, name, type, status FROM accounts WHERE id = ?', [accountId]);
       if (!account) {
         throw new Error(`السطر رقم ${i + 1}: الحساب المالي غير موجود في الدليل`);
+      }
+
+      if (account.status === 'restricted' || account.status === 'inactive') {
+        throw new Error(`السطر رقم ${i + 1}: الحساب [${account.code} - ${account.name}] موقوف ومقيد، ولا يمكن تسجيل قيود يومية عليه`);
       }
 
       const isNominal = account.type === 'مصروفات' || account.type === 'إيرادات' || 
