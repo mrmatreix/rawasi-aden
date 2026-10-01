@@ -68,6 +68,7 @@ test('Labor Payables - Accrual on Credit, Settlement, Settle-Voucher, Unwind, Ex
     await db.run(`DELETE FROM journal_entries WHERE date LIKE '2034%'`);
     const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
     for (const p of projs) {
+      await db.run('DELETE FROM cash_movements WHERE project_id = ?', [p.id]);
       const labs = await db.query('SELECT id FROM project_labor_expenses WHERE project_id = ?', [p.id]);
       const labIds = [...labs.map(x => x.id), ...deadLaborIds];
       if (labIds.length > 0) {

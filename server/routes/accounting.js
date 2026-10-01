@@ -686,10 +686,14 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
         });
       }
 
-      // توليد رقم عملية التصفية
+      // توليد رقم عملية التصفية (حلقة فرادة: COUNT+1 وحده يصطدم بعد أي حذف)
       const countRes = await get('SELECT COUNT(*) as cnt FROM custodies');
-      const seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      const custody_no = `STL-${currentYear}-${String(seq).padStart(4, '0')}`;
+      let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+      let custody_no = `STL-${currentYear}-${String(seq).padStart(4, '0')}`;
+      while (await get('SELECT id FROM custodies WHERE custody_no = ?', [custody_no])) {
+        seq += 1;
+        custody_no = `STL-${currentYear}-${String(seq).padStart(4, '0')}`;
+      }
 
       // SUGGESTION-4: حساب المصروف (اختياري — الافتراضي 5) + حساب العهد + صندوق المشروع الموروث
       await AccountingService.ensureCustodyJournalLinks();

@@ -35,7 +35,12 @@ const ProcurementService = {
 
     return await transaction(async (tx) => {
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM purchase_requisitions');
-      const pr_no = `PR-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let prSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+      let pr_no = `PR-${new Date().getFullYear()}-${String(prSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM purchase_requisitions WHERE pr_no = ?', [pr_no])) {
+        prSeq += 1;
+        pr_no = `PR-${new Date().getFullYear()}-${String(prSeq).padStart(4, '0')}`;
+      }
 
       let estimatedTotal = 0;
       for (const itm of items) {
@@ -132,7 +137,12 @@ const ProcurementService = {
 
     return await transaction(async (tx) => {
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM rfqs');
-      const rfq_no = `RFQ-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let rfqSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+      let rfq_no = `RFQ-${new Date().getFullYear()}-${String(rfqSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM rfqs WHERE rfq_no = ?', [rfq_no])) {
+        rfqSeq += 1;
+        rfq_no = `RFQ-${new Date().getFullYear()}-${String(rfqSeq).padStart(4, '0')}`;
+      }
 
       // اختيار العرض الأفضل تلقائياً إن وُجدت عروض
       let winnerSupplierId = null;
@@ -218,7 +228,12 @@ const ProcurementService = {
 
     return await transaction(async (tx) => {
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM purchase_orders');
-      const po_no = `PO-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let poSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+      let po_no = `PO-${new Date().getFullYear()}-${String(poSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM purchase_orders WHERE po_no = ?', [po_no])) {
+        poSeq += 1;
+        po_no = `PO-${new Date().getFullYear()}-${String(poSeq).padStart(4, '0')}`;
+      }
 
       let subtotal = 0;
       let taxAmount = 0;
@@ -352,7 +367,12 @@ const ProcurementService = {
 
     return await transaction(async (tx) => {
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM goods_receipt_notes');
-      const grn_no = `GRN-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let grnSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+      let grn_no = `GRN-${new Date().getFullYear()}-${String(grnSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM goods_receipt_notes WHERE grn_no = ?', [grn_no])) {
+        grnSeq += 1;
+        grn_no = `GRN-${new Date().getFullYear()}-${String(grnSeq).padStart(4, '0')}`;
+      }
 
       const grnRes = await tx.run(`
         INSERT INTO goods_receipt_notes (

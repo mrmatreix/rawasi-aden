@@ -136,7 +136,12 @@ const TaxAndGuaranteeService = {
 
       // 4. تسجيل شهادة الخصم في جدول الضرائب (tax_withholdings)
       const whtCount = await tx.get('SELECT COUNT(*) as cnt FROM tax_withholdings');
-      const withholding_no = `WHT-REC-${new Date().getFullYear()}-${String(((whtCount ? whtCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let whtSeq = (((whtCount ? whtCount.cnt : 0) || 0)) + 1;
+      let withholding_no = `WHT-REC-${new Date().getFullYear()}-${String(whtSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM tax_withholdings WHERE withholding_no = ?', [withholding_no])) {
+        whtSeq += 1;
+        withholding_no = `WHT-REC-${new Date().getFullYear()}-${String(whtSeq).padStart(4, '0')}`;
+      }
       const taxPeriod = bill.date.substring(0, 7); // YYYY-MM
 
       await tx.run(`

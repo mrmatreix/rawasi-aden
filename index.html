@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20260926-rvty">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260926-rvty">
+  <link rel="manifest" href="manifest.json?v=1c6a3d66">
+  <link rel="stylesheet" href="css/style.css?v=7faae3b8">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -7434,17 +7434,17 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/ui-ux.js?v=1.0.0.20260926-rvty"></script>
-  <script src="js/auth.js?v=1.0.0.20260926-rvty"></script>
-  <script src="js/events.js"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20260926-rvty"></script>
-  <script src="js/app.js?v=1.0.0.20260926-rvty"></script>
+  <script src="js/ui-ux.js?v=1632e5be"></script>
+  <script src="js/auth.js?v=548b5e15"></script>
+  <script src="js/events.js?v=032539a3"></script>
+  <script src="js/project_control_ui.js?v=e9e5fc1e"></script>
+  <script src="js/app.js?v=9d1c4d08"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260926-rvty')
+        navigator.serviceWorker.register('./sw.js?v=5f710add')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

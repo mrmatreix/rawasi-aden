@@ -447,7 +447,12 @@ const BankReconciliationService = {
     const isBalanced = Math.abs(variance) < 0.01;
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM bank_reconciliations');
-    const reconciliation_no = `BRS-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    let brsSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+    let reconciliation_no = `BRS-${new Date().getFullYear()}-${String(brsSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM bank_reconciliations WHERE reconciliation_no = ?', [reconciliation_no])) {
+      brsSeq += 1;
+      reconciliation_no = `BRS-${new Date().getFullYear()}-${String(brsSeq).padStart(4, '0')}`;
+    }
 
     const userId = user ? await resolveValidUserId(user?.id) : null;
 

@@ -63,8 +63,10 @@ test('Financial Reports - Posted-only TB, Live BS, Honest IS', async (t) => {
     await db.run(`DELETE FROM expenses WHERE date LIKE '2030%'`);
     await db.run(`DELETE FROM payments WHERE date LIKE '2030%'`);
     await db.run(`DELETE FROM payroll WHERE paid_date LIKE '2030%' OR payroll_month LIKE '2030%'`);
+    await db.run(`DELETE FROM cash_movements WHERE date LIKE '2030%' OR project_id IN (SELECT id FROM projects WHERE name = ?)`, [PROJECT_NAME]);
     await db.run('DELETE FROM projects WHERE name = ?', [PROJECT_NAME]);
     await db.run('DELETE FROM users WHERE id = ?', [testerId]);
+    await db.run(`DELETE FROM employees WHERE employee_no = 'TEST-FINREP-001'`);
   };
   t.after(() => cleanup().catch(() => {}));
   await cleanup();
@@ -176,7 +178,9 @@ test('Financial Reports - Posted-only TB, Live BS, Honest IS', async (t) => {
   });
   assert.strictEqual(r.status, 200, 'سند قبض: ' + JSON.stringify(r.data));
 
-  const emp = await db.get('SELECT id FROM employees LIMIT 1');
+  await db.run(`INSERT OR IGNORE INTO employees (employee_no, full_name, job_title, basic_salary, status)
+    VALUES ('TEST-FINREP-001', 'موظف اختبار التقارير', 'محاسب', 30000, 'active')`);
+  const emp = await db.get(`SELECT id FROM employees WHERE employee_no = 'TEST-FINREP-001'`);
   await db.run(
     `INSERT INTO payroll (employee_id, payroll_month, basic_salary, net_salary, status, paid_date)
      VALUES (?, '2030-06', 30000, 30000, 'paid', '2030-06-20')`,

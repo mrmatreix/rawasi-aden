@@ -158,7 +158,12 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
 
     // توليد كود المشروع تلقائياً
     const countRes = await get('SELECT COUNT(*) as cnt FROM projects');
-    const code = `PRJ-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(3, '0')}`;
+    let prjSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+    let code = `PRJ-${String(prjSeq).padStart(3, '0')}`;
+    while (await get('SELECT id FROM projects WHERE code = ?', [code])) {
+      prjSeq += 1;
+      code = `PRJ-${String(prjSeq).padStart(3, '0')}`;
+    }
 
     const result = await run(`
       INSERT INTO projects (

@@ -46,7 +46,7 @@ const config = {
   version,
   appName: 'نظام رواسي عدن للهندسة والمقاولات',
   cors: {
-    origin: isProd ? false : true,
+    origin: (isProd || isStaging) ? false : true,
     credentials: true
   },
   logging: {

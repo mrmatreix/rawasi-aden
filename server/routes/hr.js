@@ -56,8 +56,16 @@ router.post('/employees', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_no, full_name, national_id, phone, job_title, department, project_id, employment_type, hire_date, basic_salary, currency, status, bank_name, bank_account, notes } = req.body;
     if (!full_name?.trim()) return res.status(400).json({ success: false, message: 'اسم الموظف مطلوب' });
-    const count = await get('SELECT COUNT(*) AS count FROM employees');
-    const code = employee_no?.trim() || `EMP-${String(number(count?.count) + 1).padStart(4, '0')}`;
+    let code = employee_no?.trim() || null;
+    if (!code) {
+      const count = await get('SELECT COUNT(*) AS count FROM employees');
+      let empSeq = number(count?.count) + 1;
+      code = `EMP-${String(empSeq).padStart(4, '0')}`;
+      while (await get('SELECT id FROM employees WHERE employee_no = ?', [code])) {
+        empSeq += 1;
+        code = `EMP-${String(empSeq).padStart(4, '0')}`;
+      }
+    }
     const result = await run(`INSERT INTO employees (employee_no, full_name, national_id, phone, job_title, department, project_id, employment_type, hire_date, basic_salary, currency, status, bank_name, bank_account, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [code, full_name.trim(), national_id || '', phone || '', job_title || '', department || '', project_id || null, employment_type || 'دوام كامل', hire_date || today(), number(basic_salary), currency || 'ر.ي', status || 'active', bank_name || '', bank_account || '', notes || '']);
     res.json({ success: true, id: result.lastInsertRowid || result.insertId, message: 'تمت إضافة الموظف بنجاح' });

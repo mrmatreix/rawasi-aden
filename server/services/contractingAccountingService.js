@@ -17,6 +17,7 @@
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('./auditService');
 const { checkPeriodOpen } = require('./periodService');
+const { resolveValidUserId } = require('./financialControlService');
 const ProjectCostService = require('./projectCostService');
 
 // معرفات الحسابات المعيارية لعقود المقاولات في دليل الحسابات
@@ -473,14 +474,18 @@ const ContractingAccountingService = {
     let entryNo = '';
     let jeId = null;
 
-    const creatorId = user?.id || null;
+    const creatorId = await resolveValidUserId(user?.id);
     const creatorName = user?.username || user?.full_name || 'مدير الحسابات';
 
     await transaction(async (tx) => {
       // 1. توليد رقم تسلسلي لإثبات الإيراد
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM contract_revenue_recognitions');
-      const recSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      const recNo = `REV-REC-${new Date().getFullYear()}-${String(recSeq).padStart(4, '0')}`;
+      let recSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+      let recNo = `REV-REC-${new Date().getFullYear()}-${String(recSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM contract_revenue_recognitions WHERE recognition_no = ?', [recNo])) {
+        recSeq += 1;
+        recNo = `REV-REC-${new Date().getFullYear()}-${String(recSeq).padStart(4, '0')}`;
+      }
 
       // 2. توليد قيد اليومية العام لإثبات الإيراد المعترف به
       // الطرف المدين: 1128 - أصول تعاقدية / أعمال منجزة غير مفوترة (Contract Asset / WIP)

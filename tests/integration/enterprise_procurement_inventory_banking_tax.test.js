@@ -16,13 +16,14 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
   const testSuffix = 'ENTFIX';
   const CLIENT_NAME = `شركة الأفق العقارية - ${testSuffix}`;
   const SUPP_NAME = `مؤسسة النصر لمواد البناء - ${testSuffix}`;
+  const SUPP2_NAME = `مؤسسة الاتحاد للتوريدات - ${testSuffix}`;
   const PROJ_NAME = `مشروع برج الرقابة المالية المتكامل - ${testSuffix}`;
   const ITEM_CODE = `ITM-TEST-${testSuffix}`;
   const BILL_NO = `IPC-TAX-${testSuffix}`;
   const CHEQUE_NO = `CHQ-${testSuffix}`;
   const LG_NO = `LG-PB-${testSuffix}`;
 
-  let testProjectId, testSupplierId, testClientId, testItemId, testBoqId;
+  let testProjectId, testSupplierId, testSupplier2Id, testClientId, testItemId, testBoqId;
   let prId, rfqId, poId, grnId, stmtId, chequeId, billId, guaranteeId;
   // مُلتقطات التنظيف: معرفات الصفوف وأرقام القيود (قيد العمولة البنكية بلا أب — لا يُحل إلا برقمه)
   let transferId, retId, retJeNo, adjId, adjJeNo, chargeJeNo, bounceJeNo, taxJeNo, lgJeNo, relJeNo, brsId;
@@ -39,7 +40,8 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     const projIds = withCaptured(await idSet('SELECT id FROM projects WHERE name = ?', [PROJ_NAME]), testProjectId);
     const itemIds = withCaptured(await idSet('SELECT id FROM items WHERE code = ?', [ITEM_CODE]), testItemId);
     const clientIds = withCaptured(await idSet('SELECT id FROM clients WHERE name = ?', [CLIENT_NAME]), testClientId);
-    const suppIds = withCaptured(await idSet('SELECT id FROM suppliers WHERE name = ?', [SUPP_NAME]), testSupplierId);
+    const suppIds = withCaptured(await idSet('SELECT id FROM suppliers WHERE name IN (?, ?)', [SUPP_NAME, SUPP2_NAME]), testSupplierId);
+    withCaptured(suppIds, testSupplier2Id);
     const billIds = withCaptured(await idSet('SELECT id FROM bills WHERE bill_no = ?', [BILL_NO]), billId);
     const chqIds = withCaptured(await idSet('SELECT id FROM cheques WHERE cheque_no = ?', [CHEQUE_NO]), chequeId);
     const lgIds = withCaptured(await idSet('SELECT id FROM bank_guarantees WHERE guarantee_no = ?', [LG_NO]), guaranteeId);
@@ -205,6 +207,12 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     `, [`مؤسسة النصر لمواد البناء - ${testSuffix}`, `TIN-SUP-${testSuffix}`]);
     testSupplierId = suppRes.lastInsertRowid || suppRes.insertId;
 
+    const supp2Res = await run(`
+      INSERT INTO suppliers (name, category, balance, tax_number)
+      VALUES (?, 'حديد وأسمنت', 0, ?)
+    `, [`مؤسسة الاتحاد للتوريدات - ${testSuffix}`, `TIN-SUP2-${testSuffix}`]);
+    testSupplier2Id = supp2Res.lastInsertRowid || supp2Res.insertId;
+
     // 2. مشروع وبند جدول كميات BOQ
     const projRes = await run(`
       INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status)
@@ -281,7 +289,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
       closing_date: '2026-10-05',
       vendor_quotes: [
         { supplier_id: testSupplierId, total_price: 12800000, delivery_days: 2, quote_reference: 'Q-NASR-01' },
-        { supplier_id: 1, total_price: 13200000, delivery_days: 4, quote_reference: 'Q-OTHER-02' }
+        { supplier_id: testSupplier2Id, total_price: 13200000, delivery_days: 4, quote_reference: 'Q-OTHER-02' }
       ],
       user: makerUser
     });

@@ -388,8 +388,16 @@ router.post('/:projectId/quotations', async (req, res) => {
       currency = 'ر.ي', payment_terms, delivery_period, status = 'مسودة', notes
     } = req.body;
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
-    const autoNo = quotation_no || `QUO-2024-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
+    let autoNo = (quotation_no || '').trim() || null;
+    if (!autoNo) {
+      const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
+      let qSeq = (countRes.cnt || 0) + 1;
+      autoNo = `QUO-${new Date().getFullYear()}-${String(qSeq).padStart(3, '0')}`;
+      while (await get('SELECT id FROM project_quotations WHERE quotation_no = ?', [autoNo])) {
+        qSeq += 1;
+        autoNo = `QUO-${new Date().getFullYear()}-${String(qSeq).padStart(3, '0')}`;
+      }
+    }
 
     const result = await run(`
       INSERT INTO project_quotations (

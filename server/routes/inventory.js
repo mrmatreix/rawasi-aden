@@ -33,7 +33,12 @@ router.post('/items', requirePermission('inventory:create'), async (req, res) =>
     }
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM items');
-    const code = `ITM-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(2, '0')}`;
+    let itemSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+    let code = `ITM-${String(itemSeq).padStart(2, '0')}`;
+    while (await get('SELECT id FROM items WHERE code = ?', [code])) {
+      itemSeq += 1;
+      code = `ITM-${String(itemSeq).padStart(2, '0')}`;
+    }
     const selectedCurrency = currency || 'ر.ي';
 
     const result = await run(`

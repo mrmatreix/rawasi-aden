@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const path = require('path');
 
@@ -9,12 +10,24 @@ const app = express();
 const PORT = config.port;
 
 // البرمجيات الوسيطة (Middleware)
-app.use(cors());
-// أرشفة الماسح الضوئي ترسل PDF/صورة بصيغة Base64 (حتى 25MB)،
-// لذلك نحتاج هامشاً فوق الحجم الأصلي بسبب زيادة Base64 بنحو الثلث.
-app.use(express.json({ limit: '40mb' }));
-app.use(express.text({ type: ['text/plain', 'application/json'], limit: '40mb' }));
-app.use(express.urlencoded({ extended: true, limit: '40mb' }));
+app.use(compression()); // ضغط gzip: يقلص index.html (~500KB) وملفات JS (~1MB) لأقل من الربع
+// CORS صارم: نفس-الأصل في الإنتاج، مع سماح صريح عبر CORS_ORIGINS (مفصول بفواصل) عند الحاجة
+// (مثال: الواجهة على Cloudflare Pages والـ API عبر نفق). التطوير يبقى مفتوحاً للراحة.
+{
+  const extraOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  app.use(cors(extraOrigins.length > 0 ? { origin: extraOrigins, credentials: true } : config.cors));
+}
+// حد عام متواضع للأجسام (5MB قابلة للضبط عبر JSON_BODY_LIMIT) — أرشفة الماسح (Base64 حتى 25MB)
+// وحفظ التقارير يحملان حدّهما الخاص 40MB على مساريهما فقط (project_files.js).
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '5mb';
+const _jsonParser = express.json({ limit: JSON_BODY_LIMIT });
+const _textParser = express.text({ type: ['text/plain', 'application/json'], limit: JSON_BODY_LIMIT });
+// المساران الثقيلان يتجاوزان المحلل العام (يحملان محللهما 40MB) — وإلا رُفضا بـ 413 قبل الوصول إليه.
+const BIG_BODY_SUFFIX = ['/scan-archive', '/save-report'];
+const _isBigBody = (req) => typeof req.path === 'string' && BIG_BODY_SUFFIX.some(sfx => req.path.endsWith(sfx));
+app.use((req, res, next) => (_isBigBody(req) ? next() : _jsonParser(req, res, next)));
+app.use((req, res, next) => (_isBigBody(req) ? next() : _textParser(req, res, next)));
+app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
 app.use((req, res, next) => {
   if (typeof req.body === 'string') {
     try { req.body = JSON.parse(req.body); } catch {}
@@ -24,9 +37,18 @@ app.use((req, res, next) => {
 
 const { verifyCsrfToken, requireAuth } = require('./middleware/security');
 
-// خدمة الملفات الثابتة للواجهة الأمامية (HTML, CSS, JS, Images)
+// خدمة الواجهة الأمامية فقط — قائمة سماح صارمة للأصول العامة.
+// (كانت خدمة الجذر الكاملة تكشف قاعدة البيانات وشفرة الخادم عبر HTTP — علة حرجة أُغلقت)
 const publicDir = path.join(__dirname, '..');
-app.use(express.static(publicDir));
+{
+  const frontOpts = { dotfiles: 'deny', index: false, maxAge: '1h' };
+  for (const dir of ['css', 'js', 'images', 'assets']) {
+    app.use('/' + dir, express.static(path.join(publicDir, dir), frontOpts));
+  }
+  for (const file of ['manifest.json', 'sw.js']) {
+    app.get('/' + file, (req, res) => res.sendFile(path.join(publicDir, file)));
+  }
+}
 
 // حماية مسارات الـ API بـ CSRF Token
 app.use('/api', verifyCsrfToken);

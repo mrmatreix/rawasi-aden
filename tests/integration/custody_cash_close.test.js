@@ -57,15 +57,18 @@ test('Custody Cash Close - JE Links, Cash Boxes, Year Close', async (t) => {
   };
 
   // تنظيف معزول (2031 + أسماء الاختبار) — استباقي + تلقائي عند الخروج
-  // (صفوف الصندوق لا تُحذف أبداً حفاظاً على السلاسل)
+  // ترتيب FK آمن: السطور ← الأبناء (عهد/سلف/مصروف/قبض/مسير) ← الموظف ← القيود ← الصندوق ← المشاريع ← المستخدم
+  // (صفوف الصندوق المعزولة بالتاريخ/المشروع تُحذف — ذيل معزول زمنياً، لا يكسر سلاسل حقيقية)
   const cleanup = async () => {
-    await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2031%')`);
-    await db.run(`DELETE FROM journal_entries WHERE date LIKE '2031%'`);
+    await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2031%' OR description LIKE '%2031-02%')`);
     await db.run(`DELETE FROM custodies WHERE date LIKE '2031%'`);
     await db.run(`DELETE FROM employee_advances WHERE date LIKE '2031%'`);
     await db.run(`DELETE FROM expenses WHERE date LIKE '2031%'`);
     await db.run(`DELETE FROM payments WHERE date LIKE '2031%'`);
     await db.run(`DELETE FROM payroll WHERE payroll_month LIKE '2031%'`);
+    await db.run(`DELETE FROM employees WHERE employee_no = 'TEST-CUST-001'`);
+    await db.run(`DELETE FROM journal_entries WHERE date LIKE '2031%' OR description LIKE '%2031-02%'`);
+    await db.run(`DELETE FROM cash_movements WHERE date LIKE '2031%' OR notes LIKE '%2031-02%' OR project_id IN (SELECT id FROM projects WHERE name IN (?, ?))`, [PROJ_A, PROJ_B]);
     await db.run(`DELETE FROM accounting_periods WHERE fiscal_year = 2031`);
     await db.run('DELETE FROM projects WHERE name IN (?, ?)', [PROJ_A, PROJ_B]);
     await db.run('DELETE FROM users WHERE id = ?', [testerId]);
@@ -80,8 +83,9 @@ test('Custody Cash Close - JE Links, Cash Boxes, Year Close', async (t) => {
      VALUES (?, 'custody_tester', ?, 'admin', 'مختبِر العهد', 'active', '["*"]')`,
     [testerId, passwordHash]
   );
-  await db.run(`UPDATE employees SET status = 'active' WHERE id = 1`);
-  const emp = await db.get('SELECT id FROM employees WHERE id = 1');
+  await db.run(`INSERT OR IGNORE INTO employees (employee_no, full_name, job_title, department, basic_salary, status)
+    VALUES ('TEST-CUST-001', 'موظف اختبار العهد', 'مهندس موقع', 'المشاريع', 150000, 'active')`);
+  const emp = await db.get(`SELECT id FROM employees WHERE employee_no = 'TEST-CUST-001'`);
 
   const acc = async (code) => (await db.get('SELECT id FROM accounts WHERE code = ?', [code])).id;
   const acc111 = await acc('111');

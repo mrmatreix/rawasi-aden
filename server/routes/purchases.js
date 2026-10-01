@@ -78,7 +78,12 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
     }
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM purchases');
-    const invoice_no = `PO-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    let purSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+    let invoice_no = `PO-${new Date().getFullYear()}-${String(purSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM purchases WHERE invoice_no = ?', [invoice_no])) {
+      purSeq += 1;
+      invoice_no = `PO-${new Date().getFullYear()}-${String(purSeq).padStart(4, '0')}`;
+    }
 
     const parsedTotal = Number(total_amount);
     const parsedPaid = Number(paid_amount);

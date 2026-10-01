@@ -637,14 +637,8 @@ function initSqlite() {
       sqliteDb.exec("ALTER TABLE payroll ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
     }
 
-    // 5. تهيئة عينة لمشاريع تحت الدراسة إن لم تكن موجودة
-    const studyProj = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM projects WHERE status = 'under_study'").get();
-    if (!studyProj || studyProj.cnt === 0) {
-      sqliteDb.exec(`
-        INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status, notes)
-        VALUES ('مشروع مجمع خورمكسر الطبي (قيد الدراسة والتسعير)', 1, 65000000, 52000000, 0, 0, 'under_study', 'مشروع قيد إعداد جدول الكميات BOQ والتسعير الهندسي للعطاء المنافس');
-      `);
-    }
+    // 5. (نُقلت عينة مشروع الدراسة إلى seed.js — بيانات العرض لا تنتمي للإقلاع،
+    // وكانت تُسقط الإقلاع على قاعدة جديدة بخطأ FOREIGN KEY لعدم وجود العميل 1)
 
     // 6. إضافة أعمدة تصنيف المستخلصات ودورة المستند والفصل المحاسبي للمقاولات
     const billCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
@@ -724,8 +718,37 @@ function initSqlite() {
       END;
     `);
 
+    // 6b. دليل الحسابات الأساسي (1-10) + حسابات الرواتب والتأمينات النظامية (11-15).
+    // يجب أن تُزرع هنا (بأرصدة صفرية) لأن حسابات المقاولات (16+) تشير إليها كمجلدات أب —
+    // بدونها يفشل الإقلاع على قاعدة جديدة بخطأ FOREIGN KEY ويُجهض باقي المخطط.
+    // البيانات التجريبية بالأرصدة الدفترية تبقى في seed.js (يمسح ويعيد البذر بأرصدة العرض).
+    try {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
+        (1, '1', 'الأصول', 'أصول', NULL, 0),
+        (2, '11', 'الأصول المتداولة', 'أصول', 1, 0),
+        (3, '111', 'الصندوق الرئيسي والبنك', 'أصول', 2, 0),
+        (4, '112', 'العملاء (الذمم المدينة)', 'أصول', 2, 0),
+        (5, '113', 'المخزون السلعي', 'أصول', 2, 0),
+        (6, '2', 'الخصوم', 'خصوم', NULL, 0),
+        (7, '21', 'الموردون', 'خصوم', 6, 0),
+        (8, '3', 'حقوق الملكية', 'حقوق ملكية', NULL, 0),
+        (9, '4', 'الإيرادات', 'إيرادات', NULL, 0),
+        (10, '5', 'المصروفات وتكاليف المشاريع', 'مصروفات', NULL, 0),
+        (11, '114', 'سلف وعهد الموظفين', 'أصول', 2, 0),
+        (12, '213', 'أمانات مصلحة الضرائب (ضريبة كسب العمل)', 'خصوم', 6, 0),
+        (13, '214', 'الهيئة العامة للتأمينات والمعاشات', 'خصوم', 6, 0),
+        (14, '511', 'مصروف الرواتب والأجور الأساسية والبدلات', 'مصروفات', 10, 0),
+        (15, '512', 'مصروف مساهمة الشركة في التأمينات الاجتماعية', 'مصروفات', 10, 0);
+      `);
+    } catch (err) {
+      console.warn('Base accounts seed note (SQLite):', err.message);
+    }
+
     // 7. إنشاء دليل حسابات المقاولات المعياري (IFRS 15 Construction Accounts)
-    sqliteDb.exec(`
+    // (مغلّف ذاتياً: فشل البذر يجب ألا يُجهض إنشاء المخطط)
+    try {
+      sqliteDb.exec(`
       INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
       (16, '1125', 'محتجزات ضمان لدى العملاء (Retention Receivables)', 'أصول', 2, 0),
       (17, '1128', 'أصول تعاقدية - أعمال منجزة غير مفوترة (Contract Assets / WIP)', 'أصول', 2, 0),
@@ -733,7 +756,10 @@ function initSqlite() {
       (19, '2115', 'التزامات تعاقدية - فواتير تزيد عن التكلفة والإنجاز (Contract Liabilities)', 'خصوم', 6, 0),
       (20, '4101', 'إيرادات عقود المقاولات المعترف بها (Recognized Contract Revenue)', 'إيرادات', 9, 0),
       (21, '4102', 'إيرادات أوامر التغيير المعتمدة (Approved Variation Orders)', 'إيرادات', 9, 0);
-    `);
+      `);
+    } catch (err) {
+      console.warn('Contracting accounts seed note (SQLite):', err.message);
+    }
 
     // 8. جدول إثبات وتسجيل الإيرادات التعاقدية ونسب الإنجاز (Contract Revenue Recognitions)
     sqliteDb.exec(`
@@ -791,16 +817,21 @@ function initSqlite() {
     if (!invTxCols.includes('serial_number')) sqliteDb.exec("ALTER TABLE inventory_transactions ADD COLUMN serial_number TEXT;");
 
     // 10. حسابات الضرائب والضمانات وعجز/فائض المخزون في شجرة الحسابات
-    sqliteDb.exec(`
-      INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
+    // (مغلّف ذاتياً: فشل البذر يجب ألا يُجهض إنشاء المخطط)
+    try {
+      sqliteDb.exec(`
+        INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
       (22, '1115', 'غطاء خطابات ضمان لدى البنوك (Restricted Cash Collateral)', 'أصول', 3, 0),
       (23, '1130', 'أرصدة ضريبية مدينة - ضرائب مخصومة من المنبع (WHT Receivable)', 'أصول', 2, 0),
       (24, '2130', 'ضرائب مستحقة الدفع - مصلحة الضرائب (WHT Payable)', 'خصوم', 6, 0),
       (25, '5205', 'رسوم وعمولات خطابات الضمان البنكية (Bank Guarantee Fees)', 'مصروفات', 10, 0),
       (26, '5210', 'عمولات ومصاريف بنكية عامة (Bank Charges & Commissions)', 'مصروفات', 10, 0),
       (27, '5105', 'خسائر عجز وتسويات المخزون (Inventory Shrinkage & Losses)', 'مصروفات', 10, 0),
-      (28, '4205', 'أرباح وفائض تسويات المخزون (Inventory Gain & Surpluses)', 'إيرادات', 9, 0);
-    `);
+        (28, '4205', 'أرباح وفائض تسويات المخزون (Inventory Gain & Surpluses)', 'إيرادات', 9, 0);
+      `);
+    } catch (err) {
+      console.warn('Tax/inventory accounts seed note (SQLite):', err.message);
+    }
 
     // 11. جداول دورة المشتريات المتقدمة (PR -> RFQ -> PO -> GRN -> 3-Way Match)
     sqliteDb.exec(`
@@ -1189,7 +1220,9 @@ function initSqlite() {
     `);
 
     // 15. تهيئة بذور البيانات الافتراضية للمستودعات والحساب البنكي وإعدادات الضرائب اليمنية
-    sqliteDb.exec(`
+    // (مغلّفة ذاتياً: فشل البذر يجب ألا يُجهض إنشاء المخطط)
+    try {
+      sqliteDb.exec(`
       INSERT OR IGNORE INTO warehouses (id, code, name, type, location, manager_name) VALUES
       (1, 'WH-MAIN', 'المستودع المركزي الرئيسي - خورمكسر', 'central', 'عدن - خورمكسر', 'أمين المستودع العام'),
       (2, 'WH-SITE-1', 'مستودع موقع مشروع برج الصالح', 'site', 'عدن - المعلا', 'مهندس الموقع');
@@ -1201,8 +1234,24 @@ function initSqlite() {
       INSERT OR IGNORE INTO tax_configs (id, tax_code, tax_name, rate_percentage, type, law_reference, legal_disclaimer) VALUES
       (1, 'WHT-CONT-3', 'ضريبة أرباح تجارية وصناعية - مقاولات (3%)', 3.0, 'wht_contracting', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
       (2, 'WHT-SUPP-1', 'ضريبة خصم من المنبع - توريدات ومشتريات (1%)', 1.0, 'wht_supplies', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
-      (3, 'VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية', 'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
-    `);
+        (3, 'VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية', 'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
+      `);
+    } catch (err) {
+      console.warn('Warehouses/bank/tax seed note (SQLite):', err.message);
+    }
+
+    // 15b. مصالحة الانحراف التاريخي: أعمدة أُضيفت لقاعدة التطوير يدوياً ولم تدخل المخطط —
+    // بدونها يفشل الإقلاع على قاعدة جديدة (no such column) رغم نجاح القديمة.
+    for (const t of ['bills', 'cash_movements', 'clients', 'items', 'projects', 'purchases', 'suppliers']) {
+      const cols = sqliteDb.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+      if (!cols.includes('currency')) sqliteDb.exec(`ALTER TABLE ${t} ADD COLUMN currency TEXT DEFAULT 'ر.ي';`);
+    }
+    {
+      const cols = sqliteDb.prepare('PRAGMA table_info(payroll)').all().map(c => c.name);
+      for (const [name, def] of [['allowances', 'REAL DEFAULT 0'], ['insurance_employee', 'REAL DEFAULT 0'], ['insurance_employer', 'REAL DEFAULT 0'], ['tax_amount', 'REAL DEFAULT 0'], ['gross_salary', 'REAL DEFAULT 0']]) {
+        if (!cols.includes(name)) sqliteDb.exec(`ALTER TABLE payroll ADD COLUMN ${name} ${def};`);
+      }
+    }
   } catch (err) {
     console.warn('Accounting migration note (SQLite):', err.message);
   }
@@ -1350,6 +1399,26 @@ function initSqlite() {
  */
 async function initializeDatabase() {
   appConfig = loadConfig();
+
+  // اختيار المحرك الصريح عبر DB_ENGINE: sqlite | mysql | auto (الافتراضي = السلوك التاريخي).
+  // - sqlite: محلي مباشرة بلا محاولة MySQL (إقلاع أنظف).
+  // - mysql: يفشل بصوت عالٍ عند تعذر الاتصال (للإنتاج — لا سقوط صامت على المحرك الخطأ).
+  // - auto: يجرب MySQL ثم يسقط لمحلي مع تحذير (للتوافق الخلفي).
+  const enginePref = (process.env.DB_ENGINE || 'auto').toLowerCase().trim();
+  if (!['auto', 'sqlite', 'mysql'].includes(enginePref)) {
+    throw new Error(`FATAL: invalid DB_ENGINE='${process.env.DB_ENGINE}' (expected sqlite|mysql|auto).`);
+  }
+  if (enginePref === 'sqlite') {
+    initSqlite();
+    return;
+  }
+  if (enginePref === 'mysql') {
+    await initMysql();
+    return;
+  }
+  if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
+    console.warn('⚠️  [Rawasi DB] DB_ENGINE is not set in production — using auto (MySQL first, silent SQLite fallback). Set DB_ENGINE explicitly.');
+  }
 
   if (appConfig.dbEngine === 'mysql') {
     try {
@@ -1680,7 +1749,8 @@ function getMysqlConfig() {
 }
 
 module.exports = {
-  db: sqliteDb,
+  // مقبض حي (getter) بدل القيمة الملتقطة null — كان `db` دائماً null بعد جعل التهيئة لاإقفالية
+  get db() { initSqliteInstance(); return sqliteDb; },
   mysqlPool,
   query,
   get,

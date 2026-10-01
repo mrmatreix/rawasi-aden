@@ -12,7 +12,14 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'rawasi_aden_secret_key_2024';
+// مفتاح التوقيع: إلزامي من البيئة في الإنتاج (يفشل الإقلاع بدونه)، وافتراضي تحذيري في التطوير/الفحص فقط.
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'rawasi_aden_secret_key_2024');
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set in production. Refusing to boot with a known default secret.');
+}
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️  [Security] JWT_SECRET is not set — using insecure development default. NEVER expose this instance publicly.');
+}
 
 // ==========================================
 // 1. نظام محدد محاولات الدخول (Rate Limiting)

@@ -68,6 +68,7 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
     await db.run(`DELETE FROM journal_entries WHERE date LIKE '2032%'`);
     const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
     for (const p of projs) {
+      await db.run('DELETE FROM cash_movements WHERE project_id = ?', [p.id]);
       const exps = await db.query('SELECT id FROM expenses WHERE project_id = ?', [p.id]);
       const expIds = exps.map(e => e.id);
       if (expIds.length > 0) {

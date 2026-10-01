@@ -58,6 +58,7 @@ test('Project Cost Unification - Single Source of Truth', async (t) => {
     try {
       const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
       for (const p of projs) {
+      await db.run('DELETE FROM cash_movements WHERE project_id = ?', [p.id]);
         const exps = await db.query('SELECT id FROM expenses WHERE project_id = ?', [p.id]);
         const expIds = exps.map(e => e.id);
         if (expIds.length > 0) {

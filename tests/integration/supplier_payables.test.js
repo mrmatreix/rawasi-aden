@@ -67,6 +67,7 @@ test('Supplier Payables - Accrual on Credit, Settlement, Unwind on Delete, Expos
     await db.run(`DELETE FROM journal_entries WHERE date LIKE '2033%'`);
     const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
     for (const p of projs) {
+      await db.run('DELETE FROM cash_movements WHERE project_id = ?', [p.id]);
       const purs = await db.query('SELECT id FROM project_purchases WHERE project_id = ?', [p.id]);
       const purIds = [...purs.map(x => x.id), ...deadPurchaseIds];
       if (purIds.length > 0) {
