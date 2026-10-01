@@ -30,3 +30,4 @@ if (!fs.existsSync(dest)) {
 });
 
 console.log('✓ www build completed successfully for Cloudflare Pages!');
+process.exit(0);

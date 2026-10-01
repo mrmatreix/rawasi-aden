@@ -1,5 +1,5 @@
 {
-  "dbEngine": "mysql",
+  "dbEngine": "sqlite",
   "mysql": {
     "host": "localhost",
     "port": 3306,
@@ -11,6 +11,6 @@
     "queueLimit": 0
   },
   "dbPath": "server/database/rawasi_aden.db",
-  "port": 5500,
+  "port": 3000,
   "systemName": "رواسي عدن للهندسة والمقاولات"
 }

@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20260927-991i',
+  assetVersion: '1.0.0.20261001-nwpx',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,16 +11,16 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20260927-991i',
-    projects: 'js/projects.js?v=1.0.0.20260927-991i',
-    projectHub: 'js/project_hub.js?v=1.0.0.20260927-991i',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20260927-991i',
-    accounting: 'js/accounting.js?v=1.0.0.20260927-991i',
-    hr: 'js/hr.js?v=1.0.0.20260927-991i',
-    reports: 'js/reports.js?v=1.0.0.20260927-991i',
-    inventory: 'js/inventory.js?v=1.0.0.20260927-991i',
-    settings: 'js/settings.js?v=1.0.0.20260927-991i',
-    excelExport: 'js/excel-export.js?v=1.0.0.20260927-991i'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261001-nwpx',
+    projects: 'js/projects.js?v=1.0.0.20261001-nwpx',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261001-nwpx',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261001-nwpx',
+    accounting: 'js/accounting.js?v=1.0.0.20261001-nwpx',
+    hr: 'js/hr.js?v=1.0.0.20261001-nwpx',
+    reports: 'js/reports.js?v=1.0.0.20261001-nwpx',
+    inventory: 'js/inventory.js?v=1.0.0.20261001-nwpx',
+    settings: 'js/settings.js?v=1.0.0.20261001-nwpx',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261001-nwpx'
   },
   _loadedModules: {},
   _loadingPromises: {},

@@ -14,7 +14,7 @@ const configPath = path.join(__dirname, 'config.json');
 
 function loadConfig() {
   const defaults = {
-    dbEngine: 'mysql', // 'mysql' | 'sqlite'
+    dbEngine: process.env.DB_ENGINE || (process.env.MYSQL_HOST ? 'mysql' : 'sqlite'), // 'mysql' | 'sqlite'
     mysql: {
       host: process.env.MYSQL_HOST || 'localhost',
       port: Number(process.env.MYSQL_PORT) || 3306,

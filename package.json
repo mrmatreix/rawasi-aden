@@ -7,13 +7,11 @@
     "start": "node server/server.js",
     "start:staging": "node scripts/run_staging.js",
     "build": "node build_www.js",
-    "dev": "node --watch server/server.js",
+    "dev": "node server/server.js",
     "test": "node --test --test-concurrency=1 tests/**/*.test.js",
     "test:unit": "node --test --test-concurrency=1 tests/unit/**/*.test.js",
     "test:integration": "node --test --test-concurrency=1 tests/integration/**/*.test.js",
-    "seed": "node server/database/seed.js",
-    "android:sync": "node build_www.js && npx cap sync android",
-    "android:open": "npx cap open android"
+    "seed": "node server/database/seed.js"
   },
   "keywords": [
     "rawasi-aden",
@@ -26,16 +24,12 @@
   "author": "رواسي عدن للهندسة والمقاولات",
   "license": "ISC",
   "dependencies": {
-    "@capacitor/android": "^8.5.1",
-    "@capacitor/cli": "^8.5.1",
-    "@capacitor/core": "^8.5.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "docx": "^9.7.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.24.4",
-    "pdf-lib": "^1.17.1",
-    "puppeteer-core": "^25.10.0"
+    "pdf-lib": "^1.17.1"
   }
 }
