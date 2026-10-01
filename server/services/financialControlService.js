@@ -939,7 +939,8 @@ const FinancialControlService = {
       }
       for (const e of preview.expenses) {
         if (e.net >= 0) closeLines.push({ account_id: e.account_id, debit: 0, credit: e.net });
-        else closeLines.push({ account_id: e.account_id, debit: e.net, credit: 0 });
+        // المصروف الدائن (net سالب) يُصفَّر بمدين موجب — لا مدين سالب (كان يكسر اتزان الفرق)
+        else closeLines.push({ account_id: e.account_id, debit: -e.net, credit: 0 });
       }
       const lineDr = closeLines.reduce((s, l) => s + l.debit, 0);
       const lineCr = closeLines.reduce((s, l) => s + l.credit, 0);

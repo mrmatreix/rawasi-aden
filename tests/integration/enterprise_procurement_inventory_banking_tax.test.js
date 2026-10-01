@@ -437,7 +437,8 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
   });
 
   await t.test('4.3. Periodic Tax Declaration report aggregates WHT certificates', async () => {
-    const currentPeriod = new Date().toISOString().substring(0, 7);
+    // فترة الفاتورة الثابتة في 4.2 — لا الشهر الجاري (كان يقلب مع التقويم في 2026-10)
+    const currentPeriod = '2026-09';
     const dec = await TaxAndGuaranteeService.getTaxDeclarationReport(currentPeriod);
 
     assert.equal(dec.tax_period, currentPeriod);
