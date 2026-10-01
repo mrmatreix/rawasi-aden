@@ -609,8 +609,8 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
       INSERT INTO bills (
         bill_no, project_id, client_id, gross_amount, amount, advance_deduction,
         retention_deduction, net_amount, status, date
-      ) VALUES (?, ?, ?, 20000000, 20000000, 2000000, 2000000, 15400000, 'approved', '2026-09-24')
-    `, [bill_no, testProjectId, testClientId]);
+      ) VALUES (?, ?, ?, 20000000, 20000000, 2000000, 2000000, 15400000, 'approved', ?)
+    `, [bill_no, testProjectId, testClientId, new Date().toISOString().split('T')[0]]);
     billId = billRes.lastInsertRowid || billRes.insertId;
 
     const taxResult = await TaxAndGuaranteeService.processBillTaxDeduction(billId, 3.0, checkerUser);
@@ -628,8 +628,8 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
   });
 
   await t.test('4.3. Periodic Tax Declaration report aggregates WHT certificates', async () => {
-    // فترة الفاتورة الثابتة في 4.2 — لا الشهر الجاري (كان يقلب مع التقويم في 2026-10)
-    const currentPeriod = '2026-09';
+    // الفاتورة في 4.2 بتاريخ اليوم — الفترة هي الشهر الجاري ديناميكياً (منسجم مع التقويم دائماً)
+    const currentPeriod = new Date().toISOString().substring(0, 7);
     const dec = await TaxAndGuaranteeService.getTaxDeclarationReport(currentPeriod);
 
     assert.equal(dec.tax_period, currentPeriod);

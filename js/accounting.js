@@ -598,7 +598,7 @@ const Accounting = {
         
         // تحديث جميع الجداول والشاشات فوراً
         App.loadRevenuesTable();
-        Reports.loadDashboardKPIs();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         this.loadCashMovement();
         
         // إمكانية الطباعة الفورية
@@ -679,7 +679,7 @@ const Accounting = {
         App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no})`, 'success');
         this.resetReceiptForm();
         App.loadRevenuesTable();
-        Reports.loadDashboardKPIs();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         this.loadCashMovement();
         // إمكانية الطباعة الفورية
         if (confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
@@ -768,7 +768,7 @@ const Accounting = {
       if (data.success) {
         App.showToast(`تم حفظ سند الصرف بنجاح (${data.receipt_no})`, 'success');
         this.resetExpenseForm();
-        Reports.loadDashboardKPIs();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         Projects.loadProjects();
         this.loadCashMovement();
       } else {
@@ -1010,7 +1010,7 @@ const Accounting = {
         if (form) form.reset();
 
         App.loadExpensesTable();
-        Reports.loadDashboardKPIs();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         if (typeof Projects !== 'undefined' && Projects.loadProjects) {
           Projects.loadProjects();
         }
@@ -3306,6 +3306,10 @@ const Accounting = {
   },
 
   // ================== سجل التدقيق والرقابة المالية (Audit Log) ==================
+  async showAuditLogsModal() {
+    return this.openAuditLogModal();
+  },
+
   async openAuditLogModal() {
     let modal = document.getElementById('auditLogModal');
     if (!modal) {
@@ -3822,4 +3826,11 @@ const Accounting = {
     }
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.Accounting = Accounting;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Accounting;
+}
 

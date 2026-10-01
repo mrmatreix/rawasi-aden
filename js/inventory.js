@@ -139,7 +139,9 @@ const Inventory = {
         App.closeModal('issueMaterialModal');
         document.getElementById('issueMaterialForm').reset();
         await this.loadItems();
-        await Projects.loadProjects();
+        if (typeof Projects !== 'undefined' && Projects.loadProjects) {
+          await Projects.loadProjects();
+        }
       } else {
         App.showToast(data.message || 'خطأ', 'error');
       }
@@ -148,3 +150,10 @@ const Inventory = {
     }
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.Inventory = Inventory;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Inventory;
+}

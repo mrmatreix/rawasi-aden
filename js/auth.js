@@ -154,19 +154,19 @@ const Auth = {
     this.fetchSecuritySettings();
     this.fetchCsrfToken();
 
-    // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها في هذه النافذة الحالية
-    const isSessionActive = sessionStorage.getItem('rawasi_session_active') === 'true';
-    const savedToken = isSessionActive ? (sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token')) : null;
-    const savedUserStr = isSessionActive ? (sessionStorage.getItem('rawasi_user') || localStorage.getItem('rawasi_user')) : null;
+    // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها
+    const savedToken = sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token');
+    const savedUserStr = sessionStorage.getItem('rawasi_user') || localStorage.getItem('rawasi_user');
 
     if (savedToken && savedUserStr) {
       try {
         this.token = savedToken;
         this.currentUser = JSON.parse(savedUserStr);
+        sessionStorage.setItem('rawasi_session_active', 'true');
         sessionStorage.setItem('rawasi_token', savedToken);
         sessionStorage.setItem('rawasi_user', savedUserStr);
-        localStorage.removeItem('rawasi_token');
-        localStorage.removeItem('rawasi_user');
+        localStorage.setItem('rawasi_token', savedToken);
+        localStorage.setItem('rawasi_user', savedUserStr);
 
         // إذا كانت الشاشة مقفلة قبل إعادة تحميل الصفحة
         if (sessionStorage.getItem('rawasi_is_locked') === 'true') {
@@ -479,9 +479,9 @@ const Auth = {
         sessionStorage.setItem('rawasi_session_active', 'true');
         sessionStorage.setItem('rawasi_token', this.token);
         sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+        localStorage.setItem('rawasi_token', this.token);
+        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         sessionStorage.removeItem('rawasi_is_locked');
-        localStorage.removeItem('rawasi_token');
-        localStorage.removeItem('rawasi_user');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || username);
 
@@ -707,9 +707,9 @@ const Auth = {
         sessionStorage.setItem('rawasi_session_active', 'true');
         sessionStorage.setItem('rawasi_token', this.token);
         sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+        localStorage.setItem('rawasi_token', this.token);
+        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         sessionStorage.removeItem('rawasi_is_locked');
-        localStorage.removeItem('rawasi_token');
-        localStorage.removeItem('rawasi_user');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || 'admin');
 
@@ -1992,39 +1992,13 @@ const Auth = {
   }
 };
 
-// =================== معالجة الإغلاق من زر (X) أعلى النافذة ===================
-// 1. عند محاولة إغلاق النافذة من زر X: إظهار رسالة تأكيد للمستخدم
-window.addEventListener('beforeunload', (e) => {
+// =================== الحفاظ على الجلسة وسلامة البيانات ===================
+// معالجة هادئة بدون حظر الإغلاق أو قطع الجلسة القسري في بيئات الـ iFrame
+window.addEventListener('beforeunload', () => {
+  // حفظ آخر نشاط محلياً بسلاسة
   if (Auth && Auth.currentUser && Auth.token) {
-    e.preventDefault();
-    const msg = 'هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن؟ سيتم أخذ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.';
-    e.returnValue = msg;
-    return msg;
-  }
-});
-
-// 2. عند موافقة المستخدم وتأكيد الإغلاق: أخذ نسخة احتياطية تلقائية وإنهاء الجلسة في الخادم
-window.addEventListener('pagehide', () => {
-  try {
-    if (Auth && Auth.currentUser && Auth.token) {
-      const username = Auth.currentUser.username || Auth.currentUser.full_name || 'admin';
-      const userId = Auth.currentUser.id;
-      const isOnline = (typeof App !== 'undefined' && App.dbStatus) ? App.dbStatus.isOnline : false;
-      const data = JSON.stringify({
-        username: username,
-        mode: isOnline ? 'online' : 'offline',
-        notes: `نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: ${username}`
-      });
-
-      if (navigator.sendBeacon) {
-        const blob = new Blob([data], { type: 'application/json' });
-        navigator.sendBeacon('/api/settings/shutdown-app', blob);
-
-        const logoutBlob = new Blob([JSON.stringify({ username: username, userId: userId })], { type: 'application/json' });
-        navigator.sendBeacon('/api/auth/logout', logoutBlob);
-      }
-    }
-  } catch (e) {
-    console.warn('Backup/logout on exit note:', e);
+    try {
+      localStorage.setItem('rawasi_last_active_time', Date.now().toString());
+    } catch (e) {}
   }
 });

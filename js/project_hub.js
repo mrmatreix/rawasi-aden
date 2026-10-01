@@ -221,6 +221,16 @@ const ProjectHub = {
     const activePane = document.getElementById(`hubPane_${tabId}`);
     if (activePane) activePane.style.display = 'block';
 
+    // ضمان توفر معرف المشروع المعتمد
+    if (!this.currentProjectId) {
+      const select = document.getElementById('hubProjectSelect');
+      if (select && select.value) {
+        this.currentProjectId = Number(select.value);
+      } else if (window.Projects && Projects.list && Projects.list.length > 0 && Projects.list[0].id) {
+        this.currentProjectId = Projects.list[0].id;
+      }
+    }
+
     // التبويبات المستقلة التي تجلب بياناتها ذاتياً
     if (tabId === 'integrated-quotation') {
       this.renderIntegratedQuotation();
@@ -4068,4 +4078,11 @@ const ProjectHub = {
     setTimeout(cleanup, 60000);
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.ProjectHub = ProjectHub;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = ProjectHub;
+}
 

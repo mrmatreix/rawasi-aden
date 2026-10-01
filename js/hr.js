@@ -882,3 +882,10 @@ const HR = {
     } else alert(j.message);
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.HR = HR;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = HR;
+}

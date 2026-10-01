@@ -4,6 +4,10 @@
 
 const Projects = {
   list: [],
+  allProjects: [],
+  filteredList: [],
+  currentStatusFilter: 'all',
+  currentClientFilter: 'all',
 
   async init() {
     await this.loadProjects();
@@ -21,20 +25,225 @@ const Projects = {
       const res = await fetch('/api/projects');
       const json = await res.json();
       if (json.success) {
-        this.list = json.data;
-        this.allProjects = json.data;
-        if (this.currentStatusFilter && this.currentStatusFilter !== 'all') {
-          this.filterStatus(this.currentStatusFilter);
-        } else {
-          this.renderProjectsTable();
-        }
+        this.list = json.data || [];
+        this.allProjects = json.data || [];
+        this.populateClientFilterOptions();
+        this.applyFilters();
       }
     } catch (e) {
       console.error('Error loading projects:', e);
     }
   },
 
-  currentStatusFilter: 'all',
+  populateClientFilterOptions() {
+    const clientSelect = document.getElementById('projFilterClient');
+    if (!clientSelect) return;
+
+    const currentVal = clientSelect.value || 'all';
+    const clientMap = new Map();
+
+    (this.allProjects || []).forEach(p => {
+      if (p.client_id && p.client_name) {
+        clientMap.set(String(p.client_id), p.client_name);
+      }
+    });
+
+    let options = `<option value="all">جميع العملاء (${clientMap.size})</option>`;
+    Array.from(clientMap.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], 'ar'))
+      .forEach(([id, name]) => {
+        options += `<option value="${id}">${name}</option>`;
+      });
+
+    clientSelect.innerHTML = options;
+    if (clientMap.has(currentVal) || currentVal === 'all') {
+      clientSelect.value = currentVal;
+    }
+  },
+
+  applyFilters() {
+    const searchInput = document.getElementById('projSearchInput');
+    const statusSelect = document.getElementById('projFilterStatus');
+    const clientSelect = document.getElementById('projFilterClient');
+    const dateFromInput = document.getElementById('projFilterDateFrom');
+    const dateToInput = document.getElementById('projFilterDateTo');
+    const clearBtn = document.getElementById('projSearchClearBtn');
+
+    const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    const status = statusSelect ? statusSelect.value : (this.currentStatusFilter || 'all');
+    const client = clientSelect ? clientSelect.value : 'all';
+    const dateFrom = dateFromInput ? dateFromInput.value : '';
+    const dateTo = dateToInput ? dateToInput.value : '';
+
+    if (clearBtn) {
+      clearBtn.style.display = query ? 'inline-block' : 'none';
+    }
+
+    const filtered = (this.allProjects || []).filter(p => {
+      // 1. فلتر الحالة
+      if (status !== 'all') {
+        const pStatus = p.status || 'active';
+        if (pStatus !== status) return false;
+      }
+
+      // 2. فلتر العميل
+      if (client !== 'all') {
+        if (String(p.client_id) !== String(client)) return false;
+      }
+
+      // 3. فلتر النطاق الزمني
+      const pStart = p.start_date || (p.created_at ? p.created_at.substring(0, 10) : '');
+      const pEnd = p.end_date || pStart;
+
+      if (dateFrom) {
+        // يجب أن يمتد المشروع أو يبدأ في أو بعد تاريخ البداية
+        const isValidDate = (pEnd && pEnd >= dateFrom) || (pStart && pStart >= dateFrom);
+        if (!isValidDate) return false;
+      }
+
+      if (dateTo) {
+        // يجب أن يبدأ المشروع في أو قبل تاريخ النهاية
+        const isValidDate = (pStart && pStart <= dateTo) || (pEnd && pEnd <= dateTo);
+        if (!isValidDate) return false;
+      }
+
+      // 4. حقل البحث النصي المتقدم
+      if (query) {
+        const matchName = p.name && p.name.toLowerCase().includes(query);
+        const matchCode = p.code && p.code.toLowerCase().includes(query);
+        const matchClient = p.client_name && p.client_name.toLowerCase().includes(query);
+        const matchNotes = p.notes && p.notes.toLowerCase().includes(query);
+        if (!matchName && !matchCode && !matchClient && !matchNotes) return false;
+      }
+
+      return true;
+    });
+
+    this.filteredList = filtered;
+
+    // تحديث عدادات النتائج
+    const filteredCountEl = document.getElementById('projFilteredCount');
+    const totalCountEl = document.getElementById('projTotalCount');
+    if (filteredCountEl) filteredCountEl.textContent = App.formatNumber ? App.formatNumber(filtered.length) : filtered.length;
+    if (totalCountEl) totalCountEl.textContent = App.formatNumber ? App.formatNumber(this.allProjects.length) : this.allProjects.length;
+
+    // تحديث الجدول المعروض
+    this.renderProjectsTable(filtered);
+  },
+
+  clearSearchInput() {
+    const input = document.getElementById('projSearchInput');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    this.applyFilters();
+  },
+
+  onFilterStatusChange(status) {
+    this.currentStatusFilter = status;
+
+    // مزامنة التبويبات العلوية
+    document.querySelectorAll('#projectsView .report-tab-btn').forEach(btn => btn.classList.remove('active'));
+    const matchingTab = document.getElementById('tabBtn_proj_' + status);
+    if (matchingTab) {
+      matchingTab.classList.add('active');
+    }
+
+    this.applyFilters();
+  },
+
+  filterStatus(status, clickedBtn) {
+    this.currentStatusFilter = status;
+
+    // تحديث التبويب النشط
+    const btn = clickedBtn || document.getElementById('tabBtn_proj_' + status) || document.querySelector(`.report-tab-btn[onclick*="'${status}'"]`);
+    if (btn) {
+      const parent = btn.parentElement;
+      if (parent) {
+        parent.querySelectorAll('.report-tab-btn').forEach(b => b.classList.remove('active'));
+      }
+      btn.classList.add('active');
+    }
+
+    // مزامنة القائمة المنسدلة
+    const statusSelect = document.getElementById('projFilterStatus');
+    if (statusSelect) {
+      statusSelect.value = status;
+    }
+
+    this.applyFilters();
+  },
+
+  resetFilters() {
+    const searchInput = document.getElementById('projSearchInput');
+    const statusSelect = document.getElementById('projFilterStatus');
+    const clientSelect = document.getElementById('projFilterClient');
+    const dateFromInput = document.getElementById('projFilterDateFrom');
+    const dateToInput = document.getElementById('projFilterDateTo');
+    const clearBtn = document.getElementById('projSearchClearBtn');
+
+    if (searchInput) searchInput.value = '';
+    if (statusSelect) statusSelect.value = 'all';
+    if (clientSelect) clientSelect.value = 'all';
+    if (dateFromInput) dateFromInput.value = '';
+    if (dateToInput) dateToInput.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    this.currentStatusFilter = 'all';
+
+    // إعادة ضبط التبويبات
+    document.querySelectorAll('#projectsView .report-tab-btn').forEach(b => b.classList.remove('active'));
+    const allTab = document.getElementById('tabBtn_proj_all');
+    if (allTab) allTab.classList.add('active');
+
+    // إعادة ضبط أزرار الفترات السريعة
+    document.querySelectorAll('.filter-preset-btn').forEach(b => b.classList.remove('active'));
+
+    this.applyFilters();
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast('تم إلغاء جميع الفلاتر وعرض كافة المشاريع', 'info');
+    }
+  },
+
+  setDatePreset(preset) {
+    const fromInput = document.getElementById('projFilterDateFrom');
+    const toInput = document.getElementById('projFilterDateTo');
+    if (!fromInput || !toInput) return;
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const formatDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    // إزالة التنشيط من جميع أزرار الفترات
+    document.querySelectorAll('.filter-preset-btn').forEach(b => b.classList.remove('active'));
+
+    if (preset === 'this_month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      fromInput.value = formatDate(startOfMonth);
+      toInput.value = formatDate(endOfMonth);
+    } else if (preset === 'last_3_months') {
+      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      fromInput.value = formatDate(threeMonthsAgo);
+      toInput.value = formatDate(now);
+    } else if (preset === 'this_year') {
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      const endOfYear = new Date(now.getFullYear(), 11, 31);
+      fromInput.value = formatDate(startOfYear);
+      toInput.value = formatDate(endOfYear);
+    } else if (preset === 'all') {
+      fromInput.value = '';
+      toInput.value = '';
+    }
+
+    const clickedBtn = document.querySelector(`.filter-preset-btn[onclick*="'${preset}'"]`);
+    if (clickedBtn && preset !== 'all') {
+      clickedBtn.classList.add('active');
+    }
+
+    this.applyFilters();
+  },
 
   renderProjectsTable(projectsToRender = null) {
     const tableBodyDashboard = document.getElementById('projectsTableBody');
@@ -42,16 +251,32 @@ const Projects = {
 
     if (!tableBodyDashboard && !tableBodyFull) return;
 
-    const data = projectsToRender || this.list;
+    const data = projectsToRender !== null ? projectsToRender : (this.filteredList || this.list);
     if (data.length === 0) {
-      if (tableBodyDashboard) tableBodyDashboard.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
-      if (tableBodyFull) tableBodyFull.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
+      const emptyDashboard = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
+      const emptyFull = `
+        <tr>
+          <td colspan="10" style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+            <div style="font-size: 2.2rem; margin-bottom: 8px; opacity: 0.7;">🔍</div>
+            <div style="font-weight: 700; font-size: 1rem; margin-bottom: 6px; color: var(--text-primary);">لا توجد مشاريع تطابق معايير الفلترة والبحث المحددة</div>
+            <div style="font-size: 0.82rem; margin-bottom: 14px; max-width: 480px; margin-inline: auto;">
+              يرجى التحقق من مصطلحات البحث، أو تغيير حالة المشروع أو العميل، أو إعادة ضبط النطاق الزمني.
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="Projects.resetFilters()" style="display: inline-flex; align-items: center; gap: 6px;">
+              <span>↺</span><span>إلغاء الفلاتر وعرض كافة المشاريع</span>
+            </button>
+          </td>
+        </tr>
+      `;
+      if (tableBodyDashboard) tableBodyDashboard.innerHTML = emptyDashboard;
+      if (tableBodyFull) tableBodyFull.innerHTML = emptyFull;
       return;
     }
 
     const getStatusBadge = (s) => {
       if (s === 'under_study') return '<span class="badge badge-info">تحت الدراسة والتسعير</span>';
       if (s === 'completed') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);">مكتمل ومستلم</span>';
+      if (s === 'paused') return '<span class="badge" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">متوقف مؤقتاً</span>';
       return '<span class="badge badge-active">جاري التنفيذ</span>';
     };
 
@@ -106,11 +331,18 @@ const Projects = {
       tableBodyFull.innerHTML = data.map(p => {
         const progress = p.progress_percentage || 0;
         const curr = p.currency || 'ر.ي';
+        const dateDisplay = (p.start_date || p.end_date)
+          ? `<span style="font-size: 0.70rem; color: var(--text-secondary); opacity: 0.85;">📅 ${p.start_date || 'غير محدد'} → ${p.end_date || 'مستمر'}</span>`
+          : '';
+
         return `
           <tr>
             <td>
               <strong>${p.name}</strong>
-              <div style="font-size: 0.72rem; color: var(--text-secondary);">${p.code || ''}</div>
+              <div style="font-size: 0.72rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px;">
+                <span>${p.code || ''}</span>
+                ${dateDisplay}
+              </div>
             </td>
             <td>${p.client_name || 'عميل مباشر'}</td>
             <td>${getStatusBadge(p.status)}</td>
@@ -151,25 +383,6 @@ const Projects = {
           </tr>
         `;
       }).join('');
-    }
-  },
-
-  filterStatus(status, clickedBtn) {
-    this.currentStatusFilter = status;
-    const btn = clickedBtn || document.getElementById('tabBtn_proj_' + status) || document.querySelector(`.report-tab-btn[onclick*="'${status}'"]`);
-    if (btn) {
-      const parent = btn.parentElement;
-      if (parent) {
-        parent.querySelectorAll('.report-tab-btn').forEach(b => b.classList.remove('active'));
-      }
-      btn.classList.add('active');
-    }
-
-    if (status === 'all') {
-      this.renderProjectsTable(this.list);
-    } else {
-      const filtered = this.list.filter(p => (p.status || 'active') === status);
-      this.renderProjectsTable(filtered);
     }
   },
 
@@ -699,7 +912,9 @@ const Projects = {
         const data = await res.json();
         if (data.success) {
           App.showToast('تم حذف المشروع بنجاح', 'info');
-          Reports.loadDashboardKPIs();
+          if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) {
+            Reports.loadDashboardKPIs();
+          }
         }
       } catch (e) {
         App.showToast('خطأ أثناء الحذف', 'error');
@@ -708,3 +923,10 @@ const Projects = {
     }
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.Projects = Projects;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Projects;
+}

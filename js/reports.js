@@ -1198,5 +1198,169 @@ const Reports = {
       console.error('Error loading cash flow:', e);
       App.showToast('فشل تحميل التدفقات النقدية', 'error');
     }
+  },
+
+  // ================== مصفوفة الفصل المالي وإثبات إيراد المقاولات IFRS 15 ==================
+  async openContractingSeparationModal() {
+    App.openModal('contractingSeparationModal');
+    const tbody = document.getElementById('contractingMatrixTableBody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">جاري تحميل مصفوفة المقاولات المالية (IFRS 15)...</td></tr>';
+    }
+
+    try {
+      const res = await fetch('/api/billing/contracting-matrix');
+      const json = await res.json();
+      if (!res.ok || !json.projects) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--accent-red); padding: 20px;">${json.message || 'فشل جلب بيانات مصفوفة المقاولات'}</td></tr>`;
+        return;
+      }
+
+      if (json.projects.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">لا توجد مشاريع مسجلة في مصفوفة المقاولات</td></tr>';
+        return;
+      }
+
+      if (tbody) {
+        tbody.innerHTML = json.projects.map(p => {
+          const contractVal = p.revised_contract_value || p.base_contract_value || 0;
+          const actualCost = p.cumulative_actual_cost || 0;
+          const pocPct = (p.cost_to_cost_poc_pct || 0).toFixed(1);
+          const recRev = p.recognized_revenue?.cumulative || 0;
+          const billed = p.progress_billings?.gross || 0;
+          const wip = p.contract_assets?.work_in_progress_wip || 0;
+          const cash = p.cash_receipts?.total || 0;
+          const adv = p.contract_liabilities?.unamortized_advance || 0;
+          const ret = p.contract_assets?.retention_receivable || 0;
+          const profit = p.performance_comparison?.net_profit || 0;
+          const netCash = p.performance_comparison?.net_cash_flow || 0;
+
+          return `
+            <tr>
+              <td><strong>${p.project_name}</strong><br><small style="color: var(--text-secondary);">${p.project_code || ''}</small></td>
+              <td>${p.client_name || '-'}</td>
+              <td style="color: var(--gold-light); font-weight: 600;">${App.formatNumber(contractVal)}</td>
+              <td style="color: var(--accent-red);">${App.formatNumber(actualCost)}</td>
+              <td><strong>${pocPct}%</strong></td>
+              <td style="color: #38bdf8; font-weight: 600;">${App.formatNumber(recRev)}</td>
+              <td style="color: var(--accent-green);">${App.formatNumber(billed)}</td>
+              <td>${App.formatNumber(wip)}</td>
+              <td style="color: #4ade80;">${App.formatNumber(cash)}</td>
+              <td style="color: #facc15;">${App.formatNumber(adv)}</td>
+              <td style="color: #94a3b8;">${App.formatNumber(ret)}</td>
+              <td style="color: ${profit >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${App.formatNumber(profit)}</td>
+              <td style="color: ${netCash >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${App.formatNumber(netCash)}</td>
+              <td style="text-align: center;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="Reports.openRevenueRecognitionModal(${p.project_id})" title="إثبات إيراد دوري" style="padding: 3px 8px; font-size: 0.75rem; white-space: nowrap;">
+                  إثبات POC
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    } catch (e) {
+      console.error(e);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--accent-red); padding: 20px;">خطأ في الاتصال بالخادم</td></tr>`;
+    }
+  },
+
+  async openRevenueRecognitionModal(preselectedProjectId = null) {
+    App.openModal('revenueRecognitionModal');
+    const select = document.getElementById('revRecProjectId');
+    const dateInput = document.getElementById('revRecDate');
+    const previewCard = document.getElementById('revRecPreviewCard');
+    if (previewCard) previewCard.style.display = 'none';
+    if (dateInput && !dateInput.value) {
+      dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    if (select) {
+      try {
+        const res = await fetch('/api/projects');
+        const json = await res.json();
+        if (json.success && json.data) {
+          select.innerHTML = '<option value="">-- اختر المشروع لتحديث المعايير ونسبة الإنجاز --</option>' +
+            json.data.map(p => `<option value="${p.id}">${p.name} (${p.code || p.id})</option>`).join('');
+
+          if (preselectedProjectId) {
+            select.value = String(preselectedProjectId);
+            this.onRevenueProjectChanged(preselectedProjectId);
+          }
+        }
+      } catch (e) {
+        console.error('Error populating projects:', e);
+      }
+    }
+  },
+
+  async onRevenueProjectChanged(projectId) {
+    const previewCard = document.getElementById('revRecPreviewCard');
+    if (!projectId) {
+      if (previewCard) previewCard.style.display = 'none';
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/billing/contracting-matrix/${projectId}`);
+      const json = await res.json();
+      if (json.success && json.data && previewCard) {
+        const d = json.data;
+        previewCard.style.display = 'block';
+        const setTxt = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = typeof val === 'number' ? App.formatNumber(val) : (val || '0');
+        };
+        setTxt('prevContractVal', d.revised_contract_value || d.base_contract_value || 0);
+        setTxt('prevActualCost', d.cumulative_actual_cost || 0);
+        setTxt('prevPocPct', (d.cost_to_cost_poc_pct || 0).toFixed(1) + '%');
+        setTxt('prevPostedRev', d.recognized_revenue?.previously_posted || 0);
+        setTxt('prevUnpostedRev', d.recognized_revenue?.unposted_period_revenue || 0);
+      }
+    } catch (e) {
+      console.error('Error fetching project metrics:', e);
+    }
+  },
+
+  async submitRevenueRecognition(event) {
+    if (event) event.preventDefault();
+    const projectId = document.getElementById('revRecProjectId')?.value;
+    const periodDate = document.getElementById('revRecDate')?.value || new Date().toISOString().split('T')[0];
+    const notes = document.getElementById('revRecNotes')?.value || '';
+
+    if (!projectId) {
+      App.showToast('يرجى اختيار المشروع', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/billing/recognize-revenue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          period_date: periodDate,
+          notes
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم إثبات الإيراد المحاسبي بنجاح', 'success');
+        App.closeModal('revenueRecognitionModal');
+        this.openContractingSeparationModal();
+      } else {
+        App.showToast(json.message || 'فشل إثبات الإيراد المحاسبي', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      App.showToast('حدث خطأ أثناء الاتصال بالخادم', 'error');
+    }
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.Reports = Reports;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Reports;
+}
