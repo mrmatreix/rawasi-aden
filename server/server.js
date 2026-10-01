@@ -119,6 +119,16 @@ if (require.main === module) {
     console.log(`🌐 System URL: http://localhost:${PORT}`);
     console.log(`💼 Port:       ${PORT}`);
     console.log('===========================================================');
+
+    // بدء خدمة الجدولة التلقائية للنسخ الاحتياطي
+    try {
+      const backupSchedulerService = require('./services/backupSchedulerService');
+      backupSchedulerService.init().catch(err => {
+        console.error('⚠️ [BackupScheduler] Error initializing scheduler:', err.message);
+      });
+    } catch (e) {
+      console.error('⚠️ [BackupScheduler] Failed to load backupSchedulerService:', e.message);
+    }
   });
 
   server.on('error', (err) => {

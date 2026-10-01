@@ -295,4 +295,56 @@ router.get('/logout-backups', requirePermission('settings:backup'), (req, res) =
   }
 });
 
+// =================== الجدولة التلقائية للنسخ الاحتياطي (Scheduled Auto-Backup) ===================
+const backupSchedulerService = require('../services/backupSchedulerService');
+
+// جلب حالة الجدولة التلقائية الحالية (مفتوح لكافة المستخدمين المصرحين لتحديث الهيدر)
+router.get('/auto-backup/status', async (req, res) => {
+  try {
+    const status = backupSchedulerService.getStatus();
+    res.json({ success: true, data: status });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب حالة الجدولة التلقائية: ' + err.message });
+  }
+});
+
+// حفظ وتحديث إعدادات الجدولة التلقائية والمسار
+router.post('/auto-backup/config', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const result = await backupSchedulerService.saveConfig(req.body, req.user?.username || 'admin', req);
+    res.json({
+      success: true,
+      message: 'تم حفظ وتطبيق إعدادات الجدولة التلقائية ومسار التخزين بنجاح 🛡️',
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حفظ إعدادات الجدولة: ' + err.message });
+  }
+});
+
+// تشغيل نسخة احتياطية مجدولة فوراً الآن
+router.post('/auto-backup/run-now', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const result = await backupSchedulerService.executeBackup('manual_instant', req.user?.username || 'admin', req);
+    res.json({
+      success: true,
+      message: `تم إنشاء النسخة التلقائية المجدولة بنجاح وحفظها بالمسار المحدد (${result.fileName}) 🚀`,
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'فشل تنفيذ النسخ التلقائي الآن: ' + err.message });
+  }
+});
+
+// اختبار وفحص مسار التخزين المخصص
+router.post('/auto-backup/test-path', requirePermission('settings:backup'), (req, res) => {
+  try {
+    const { path: testPath } = req.body || {};
+    const result = backupSchedulerService.testStoragePath(testPath);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء اختبار المسار: ' + err.message });
+  }
+});
+
 module.exports = router;

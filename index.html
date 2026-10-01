@@ -13,8 +13,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261001-n2kc">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261001-n2kc">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261001-syke">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261001-syke">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -244,6 +244,63 @@
         <span class="theme-icon-light">☀️</span>
         <span class="theme-toggle-label" id="themeToggleLabel">ليلي</span>
       </button>
+
+      <!-- زر ومؤشر حالة النسخ الاحتياطي التلقائي المجدول في الهيدر -->
+      <div class="header-backup-status-wrap" id="headerBackupStatusWrap">
+        <button type="button" class="header-backup-status-btn" id="btnHeaderBackupStatus" onclick="App.toggleBackupStatusDropdown(event)" title="حالة النسخ الاحتياطي التلقائي المجدول ومسار التخزين">
+          <div class="backup-status-icon-wrap">
+            <span class="backup-status-icon" id="headerBackupIcon">🛡️</span>
+            <span class="backup-status-pulse" id="headerBackupPulse"></span>
+          </div>
+          <div class="backup-status-text">
+            <span class="backup-status-title" id="headerBackupTitle">النسخ الآلي: مجدول</span>
+            <span class="backup-status-sub" id="headerBackupSub">يومي | محمي</span>
+          </div>
+        </button>
+
+        <!-- لوحة تفاصيل وحالة النسخ التلقائي المنسدلة -->
+        <div class="backup-status-dropdown" id="backupStatusDropdown">
+          <div class="backup-dropdown-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">🛡️</span>
+              <strong style="color: var(--gold-light); font-size: 0.95rem;">النسخ الاحتياطي الآلي المجدول</strong>
+            </div>
+            <span class="badge" id="headerBackupBadge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4);">مفعل</span>
+          </div>
+
+          <div class="backup-dropdown-body">
+            <div class="backup-info-row">
+              <span class="backup-info-label">الجدولة الدورية:</span>
+              <strong class="backup-info-val" id="dropdownBackupInterval">يومياً (الساعة 02:00)</strong>
+            </div>
+            <div class="backup-info-row">
+              <span class="backup-info-label">مسار التخزين المعتمد:</span>
+              <code class="backup-info-val backup-path-code" id="dropdownBackupPath" title="مسار حفظ النسخ الاحتياطية">server/database/backups</code>
+            </div>
+            <div class="backup-info-row">
+              <span class="backup-info-label">آخر نسخة محفوظة:</span>
+              <span class="backup-info-val" id="dropdownBackupLastTime" style="color: #4ade80;">-</span>
+            </div>
+            <div class="backup-info-row">
+              <span class="backup-info-label">حجم الملف:</span>
+              <span class="backup-info-val" id="dropdownBackupLastSize">-</span>
+            </div>
+            <div class="backup-info-row">
+              <span class="backup-info-label">النسخة القادمة:</span>
+              <strong class="backup-info-val" id="dropdownBackupNextTime" style="color: var(--accent-blue);">-</strong>
+            </div>
+          </div>
+
+          <div class="backup-dropdown-footer">
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.triggerAutoBackupNow(event)" id="btnHeaderRunBackupNow" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span>⚡ نسخ احتياطي الآن</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="App.openBackupSettingsTab()" title="إدارة الجدولة والمسار في الإعدادات">
+              <span>⚙️ الإعدادات</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- زر وقائمة الإشعارات المنسدلة (تتضمن حالة وشعارات الاتصال بالمشروع بعد تسجيل الدخول) -->
       <div class="notifications-wrapper" id="notificationsWrapper">
@@ -4059,6 +4116,130 @@
             <div id="mysqlMigrationResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); margin-top: 16px;"></div>
           </div>
 
+          <!-- بطاقة: الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين المعتمد -->
+          <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold); background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(15, 23, 42, 0.6) 100%);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+                  🛡️
+                </div>
+                <div>
+                  <h3 style="color: var(--gold-light); font-size: 1.1rem; margin: 0; font-weight: 700;">
+                    الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين (Automatic Backup Schedule)
+                  </h3>
+                  <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">
+                    حفظ نسخ احتياطية دورية لقاعدة البيانات آلياً في فترات يومية أو أسبوعية محددة إلى مسار التخزين المعتمد
+                  </p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadAutoBackupSchedule()">🔄 تحديث الحالة</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="Settings.runAutoBackupNow()" id="btnSettingsRunBackupNow" style="background: #10b981; border-color: #10b981;">⚡ نسخ احتياطي فوري الآن</button>
+              </div>
+            </div>
+
+            <!-- بطاقة الحالة اللحظية للنسخ المجدول -->
+            <div id="autoBackupStatusBox" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 20px;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+                <div>
+                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">حالة الجدولة الآلية:</span>
+                  <strong id="liveBackupStatusBadge" style="font-size: 0.95rem; color: #4ade80;">🟢 مفعل ومنتظم</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">التكرار والموعد:</span>
+                  <strong id="liveBackupIntervalText" style="font-size: 0.95rem; color: #f8fafc;">يومياً في تمام 02:00 ص</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">آخر نسخة تم حفظها:</span>
+                  <strong id="liveBackupLastRunText" style="font-size: 0.95rem; color: var(--gold-light);">-</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">موعد النسخة القادمة:</span>
+                  <strong id="liveBackupNextRunText" style="font-size: 0.95rem; color: var(--accent-blue);">-</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- نموذج إعدادات الجدولة والمسار -->
+            <form id="autoBackupScheduleForm" onsubmit="Settings.saveAutoBackupSchedule(event)">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                <!-- تفعيل / تعطيل -->
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="cfgAutoBackupEnabled" style="font-weight: 600;">تفعيل النسخ الاحتياطي التلقائي</label>
+                  <select id="cfgAutoBackupEnabled" class="form-control" onchange="Settings.toggleAutoBackupFields()">
+                    <option value="true">✅ نعم - تفعيل الجدولة التلقائية</option>
+                    <option value="false">❌ تعطيل الجدولة التلقائية مؤقتاً</option>
+                  </select>
+                </div>
+
+                <!-- الفاصل الزمني (يومي / أسبوعي) -->
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="cfgAutoBackupInterval" style="font-weight: 600;">فترة التكرار المجدولة</label>
+                  <select id="cfgAutoBackupInterval" class="form-control" onchange="Settings.toggleAutoBackupFields()">
+                    <option value="daily">📅 يومياً (Daily)</option>
+                    <option value="weekly">📆 أسبوعياً (Weekly)</option>
+                  </select>
+                </div>
+
+                <!-- يوم الأسبوع (في حال أسبوعي) -->
+                <div class="form-group" id="cfgAutoBackupDayGroup" style="margin-bottom: 0; display: none;">
+                  <label for="cfgAutoBackupDayOfWeek" style="font-weight: 600;">يوم التنفيذ الأسبوعي</label>
+                  <select id="cfgAutoBackupDayOfWeek" class="form-control">
+                    <option value="5">الجمعة (موصى به في نهاية أسبوع العمل)</option>
+                    <option value="4">الخميس</option>
+                    <option value="6">السبت</option>
+                    <option value="0">الأحد</option>
+                    <option value="1">الاثنين</option>
+                    <option value="2">الثلاثاء</option>
+                    <option value="3">الأربعاء</option>
+                  </select>
+                </div>
+
+                <!-- وقت التنفيذ -->
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="cfgAutoBackupTime" style="font-weight: 600;">وقت تنفيذ النسخ (الساعة والدقيقة)</label>
+                  <input type="time" id="cfgAutoBackupTime" class="form-control" value="02:00" required>
+                  <small style="color: var(--text-secondary); font-size: 0.72rem; display: block; margin-top: 4px;">يُفضل اختيار وقت هدوء النظام كالساعة 02:00 صباحاً.</small>
+                </div>
+
+                <!-- أقصى عدد نسخ للاحتفاظ بها -->
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="cfgAutoBackupMaxFiles" style="font-weight: 600;">سياسة الاحتفاظ (عدد النسخ)</label>
+                  <select id="cfgAutoBackupMaxFiles" class="form-control">
+                    <option value="7">الاحتفاظ بآخر 7 نسخ</option>
+                    <option value="14" selected>الاحتفاظ بآخر 14 نسخة (أسبوعين)</option>
+                    <option value="30">الاحتفاظ بآخر 30 نسخة (شهر)</option>
+                    <option value="60">الاحتفاظ بآخر 60 نسخة (شهرين)</option>
+                  </select>
+                  <small style="color: var(--text-secondary); font-size: 0.72rem; display: block; margin-top: 4px;">يتم حذف النسخ الأقدم تلقائياً للحفاظ على مساحة القرص.</small>
+                </div>
+              </div>
+
+              <!-- مسار التخزين المعتمد -->
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label for="cfgAutoBackupPath" style="font-weight: 600; display: flex; justify-content: space-between;">
+                  <span>مسار التخزين على القرص (Configured Storage Path)</span>
+                  <span id="cfgAutoBackupPathStatus" style="font-size: 0.8rem; font-weight: normal;"></span>
+                </label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="cfgAutoBackupPath" class="form-control" placeholder="مثال: server/database/backups أو مسار مخصص على القرص" style="direction: ltr; font-family: monospace;" required>
+                  <button type="button" class="btn btn-secondary" onclick="Settings.testStoragePath()" style="white-space: nowrap;">📁 فحص المسار</button>
+                  <button type="button" class="btn btn-secondary" onclick="Settings.resetDefaultStoragePath()" title="استعادة المسار الافتراضي" style="white-space: nowrap;">↩️ افتراضي</button>
+                </div>
+                <small style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-top: 4px;">
+                  يمكن تحديد أي مجلد على السيرفر أو القرص المحلي. سيقوم النظام بإنشاء المجلد تلقائياً والتأكد من أذونات الكتابة.
+                </small>
+              </div>
+
+              <div id="autoBackupTestResultBox" style="display: none; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 16px; font-size: 0.82rem;"></div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="submit" class="btn btn-primary" id="btnSaveAutoBackupConfig">
+                  <span>💾 حفظ وتطبيق إعدادات الجدولة والمسار</span>
+                </button>
+              </div>
+            </form>
+          </div>
 
           <!-- بطاقة 2: تحميل واستعادة النسخ العامة -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
@@ -7766,26 +7947,26 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/ui-ux.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/auth.js?v=1.0.0.20261001-n2kc"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/auth.js?v=1.0.0.20261001-syke"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/projects.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/accounting.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/inventory.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/hr.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/settings.js?v=1.0.0.20261001-n2kc"></script>
-  <script src="js/app.js?v=1.0.0.20261001-n2kc"></script>
+  <script src="js/reports.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/projects.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/accounting.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/inventory.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/hr.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/settings.js?v=1.0.0.20261001-syke"></script>
+  <script src="js/app.js?v=1.0.0.20261001-syke"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261001-n2kc')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261001-syke')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

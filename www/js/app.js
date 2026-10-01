@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261001-n2kc',
+  assetVersion: '1.0.0.20261001-syke',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,16 +11,16 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261001-n2kc',
-    projects: 'js/projects.js?v=1.0.0.20261001-n2kc',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261001-n2kc',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261001-n2kc',
-    accounting: 'js/accounting.js?v=1.0.0.20261001-n2kc',
-    hr: 'js/hr.js?v=1.0.0.20261001-n2kc',
-    reports: 'js/reports.js?v=1.0.0.20261001-n2kc',
-    inventory: 'js/inventory.js?v=1.0.0.20261001-n2kc',
-    settings: 'js/settings.js?v=1.0.0.20261001-n2kc',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261001-n2kc'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261001-syke',
+    projects: 'js/projects.js?v=1.0.0.20261001-syke',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261001-syke',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261001-syke',
+    accounting: 'js/accounting.js?v=1.0.0.20261001-syke',
+    hr: 'js/hr.js?v=1.0.0.20261001-syke',
+    reports: 'js/reports.js?v=1.0.0.20261001-syke',
+    inventory: 'js/inventory.js?v=1.0.0.20261001-syke',
+    settings: 'js/settings.js?v=1.0.0.20261001-syke',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261001-syke'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -131,6 +131,7 @@ const App = {
     this.setupDatePickers();
     this.setupNetworkWatchers();
     this.setupHardwareBackButton();
+    this.initAutoBackupHeader();
 
     // تهيئة مسار التنقل الدلالي ووحدة تجربة المستخدم والتحميل الكسول
     if (window.UI && UI.Breadcrumbs) UI.Breadcrumbs.update(this.activeView);
@@ -162,6 +163,13 @@ const App = {
       const dropdown = document.getElementById('notificationsDropdown');
       if (dropdown && dropdown.classList.contains('active') && wrapper && !wrapper.contains(e.target)) {
         dropdown.classList.remove('active');
+      }
+
+      // إغلاق قائمة حالة النسخ الاحتياطي التلقائي عند النقر خارجها
+      const backupWrap = document.getElementById('headerBackupStatusWrap');
+      const backupDropdown = document.getElementById('backupStatusDropdown');
+      if (backupDropdown && backupDropdown.classList.contains('active') && backupWrap && !backupWrap.contains(e.target)) {
+        backupDropdown.classList.remove('active');
       }
     });
 
@@ -1295,6 +1303,174 @@ const App = {
         btn.innerHTML = 'إعادة فحص الاتصال الآن 🔄';
       }
     }
+  },
+
+  // ================== إدارة حالة النسخ الاحتياطي التلقائي في الهيدر ==================
+  async initAutoBackupHeader() {
+    await this.fetchAutoBackupStatus();
+    // تحديث دوري كل 60 ثانية
+    setInterval(() => this.fetchAutoBackupStatus(), 60 * 1000);
+  },
+
+  async fetchAutoBackupStatus() {
+    try {
+      const res = await fetch('/api/settings/auto-backup/status');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.updateAutoBackupHeaderUI(json.data);
+      }
+    } catch (e) {
+      // إهمال أخطاء الشبكة المؤقتة
+    }
+  },
+
+  updateAutoBackupHeaderUI(d) {
+    const iconEl = document.getElementById('headerBackupIcon');
+    const pulseEl = document.getElementById('headerBackupPulse');
+    const titleEl = document.getElementById('headerBackupTitle');
+    const subEl = document.getElementById('headerBackupSub');
+    const badgeEl = document.getElementById('headerBackupBadge');
+
+    const intervalEl = document.getElementById('dropdownBackupInterval');
+    const pathEl = document.getElementById('dropdownBackupPath');
+    const lastTimeEl = document.getElementById('dropdownBackupLastTime');
+    const lastSizeEl = document.getElementById('dropdownBackupLastSize');
+    const nextTimeEl = document.getElementById('dropdownBackupNextTime');
+
+    if (!iconEl) return;
+
+    if (!d.enabled) {
+      if (pulseEl) pulseEl.className = 'backup-status-pulse warning';
+      if (titleEl) titleEl.textContent = 'النسخ الآلي: معطل';
+      if (subEl) subEl.textContent = 'تنبيه الأمان';
+      if (badgeEl) {
+        badgeEl.textContent = 'معطل';
+        badgeEl.style.background = 'rgba(234, 179, 8, 0.2)';
+        badgeEl.style.color = '#facc15';
+        badgeEl.style.borderColor = 'rgba(234, 179, 8, 0.4)';
+      }
+    } else if (d.lastStatus === 'failed') {
+      if (pulseEl) pulseEl.className = 'backup-status-pulse danger';
+      if (titleEl) titleEl.textContent = 'النسخ الآلي: فشل';
+      if (subEl) subEl.textContent = 'مطلوب المراجعة ⚠️';
+      if (badgeEl) {
+        badgeEl.textContent = 'خطأ';
+        badgeEl.style.background = 'rgba(239, 68, 68, 0.2)';
+        badgeEl.style.color = '#f87171';
+        badgeEl.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      }
+    } else {
+      if (pulseEl) pulseEl.className = 'backup-status-pulse';
+      if (titleEl) titleEl.textContent = `النسخ الآلي: ${d.intervalLabel || 'مجدول'}`;
+      if (subEl) subEl.textContent = d.lastRun ? 'محمي ومحدث 🛡️' : 'مجدول ونشط 🛡️';
+      if (badgeEl) {
+        badgeEl.textContent = 'مفعل';
+        badgeEl.style.background = 'rgba(34, 197, 94, 0.2)';
+        badgeEl.style.color = '#4ade80';
+        badgeEl.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+      }
+    }
+
+    if (intervalEl) {
+      intervalEl.textContent = d.interval === 'weekly' 
+        ? `أسبوعياً (كل ${d.dayOfWeekName || 'جمعة'} - ${d.time || '02:00'})`
+        : `يومياً (الساعة ${d.time || '02:00'})`;
+    }
+
+    if (pathEl) {
+      pathEl.textContent = d.storagePath || 'server/database/backups';
+      pathEl.title = d.storagePath || '';
+    }
+
+    if (lastTimeEl) {
+      if (d.lastRun) {
+        const lrDate = new Date(d.lastRun);
+        lastTimeEl.innerHTML = `${lrDate.toLocaleDateString('ar-YE')} ${lrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })} ${d.lastStatus === 'success' ? '✅' : '❌'}`;
+      } else {
+        lastTimeEl.textContent = 'بانتظار أول موعد';
+      }
+    }
+
+    if (lastSizeEl) {
+      lastSizeEl.textContent = d.lastSize ? `${(d.lastSize / (1024 * 1024)).toFixed(2)} MB` : '-';
+    }
+
+    if (nextTimeEl) {
+      if (d.nextRun && d.enabled) {
+        const nrDate = new Date(d.nextRun);
+        nextTimeEl.innerHTML = `${nrDate.toLocaleDateString('ar-YE')} ${nrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })} <span style="font-size:0.75rem; color:#94a3b8;">(${d.countdownText || ''})</span>`;
+      } else {
+        nextTimeEl.textContent = d.enabled ? 'جاري الحساب...' : 'الجدولة متوقفة';
+      }
+    }
+  },
+
+  toggleBackupStatusDropdown(e) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const dropdown = document.getElementById('backupStatusDropdown');
+    if (!dropdown) return;
+    const isActive = dropdown.classList.contains('active');
+    // إغلاق إشعارات النظام الأخرى إن كانت مفتوحة
+    this.closeNotificationsDropdown();
+    if (isActive) {
+      dropdown.classList.remove('active');
+    } else {
+      this.fetchAutoBackupStatus();
+      dropdown.classList.add('active');
+    }
+  },
+
+  closeBackupStatusDropdown() {
+    const dropdown = document.getElementById('backupStatusDropdown');
+    if (dropdown) dropdown.classList.remove('active');
+  },
+
+  async triggerAutoBackupNow(e) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const btn = document.getElementById('btnHeaderRunBackupNow');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>جاري النسخ... ⏳</span>';
+    }
+
+    try {
+      const res = await fetch('/api/settings/auto-backup/run-now', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        this.showToast(json.message || 'تم إنشاء النسخة التلقائية بنجاح 🛡️', 'success');
+        await this.fetchAutoBackupStatus();
+        if (this.activeView === 'settings' && typeof Settings !== 'undefined' && Settings.loadAutoBackupSchedule) {
+          Settings.loadAutoBackupSchedule();
+        }
+      } else {
+        this.showToast(json.message || 'فشل تشغيل النسخ التلقائي', 'error');
+      }
+    } catch (err) {
+      this.showToast('خطأ في الاتصال بالخادم أثناء النسخ', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  openBackupSettingsTab() {
+    this.closeBackupStatusDropdown();
+    this.navigate('settings');
+    setTimeout(() => {
+      if (typeof Settings !== 'undefined' && Settings.switchTab) {
+        Settings.switchTab('backup');
+      }
+    }, 250);
   }
 };
 

@@ -35,6 +35,7 @@ const Settings = {
       this.loadPrintSettings();
     } else if (tab === 'backup') {
       this.loadDbConfig();
+      this.loadAutoBackupSchedule();
       this.loadLogoutBackups();
       this.loadMysqlStatus();
     }
@@ -2658,6 +2659,236 @@ const Settings = {
     }
     this.selectServerBackup(fileName);
     this.executeRestore();
+  },
+
+  // ================== الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين ==================
+  async loadAutoBackupSchedule() {
+    try {
+      const res = await fetch('/api/settings/auto-backup/status');
+      const json = await res.json();
+      if (!json.success || !json.data) return;
+      const d = json.data;
+
+      // ملء حقول النموذج
+      const enabledSel = document.getElementById('cfgAutoBackupEnabled');
+      const intervalSel = document.getElementById('cfgAutoBackupInterval');
+      const daySel = document.getElementById('cfgAutoBackupDayOfWeek');
+      const timeInp = document.getElementById('cfgAutoBackupTime');
+      const maxFilesSel = document.getElementById('cfgAutoBackupMaxFiles');
+      const pathInp = document.getElementById('cfgAutoBackupPath');
+
+      if (enabledSel) enabledSel.value = d.enabled ? 'true' : 'false';
+      if (intervalSel) intervalSel.value = d.interval || 'daily';
+      if (daySel) daySel.value = String(d.dayOfWeek !== undefined ? d.dayOfWeek : 5);
+      if (timeInp) timeInp.value = d.time || '02:00';
+      if (maxFilesSel) maxFilesSel.value = String(d.maxFiles || 14);
+      if (pathInp) {
+        pathInp.value = d.storagePath || d.defaultStoragePath || '';
+        pathInp.dataset.defaultPath = d.defaultStoragePath || '';
+      }
+
+      this.toggleAutoBackupFields();
+
+      // تحديث بطاقة الحالة الحية
+      const statusBadge = document.getElementById('liveBackupStatusBadge');
+      const intervalText = document.getElementById('liveBackupIntervalText');
+      const lastRunText = document.getElementById('liveBackupLastRunText');
+      const nextRunText = document.getElementById('liveBackupNextRunText');
+      const pathStatus = document.getElementById('cfgAutoBackupPathStatus');
+
+      if (statusBadge) {
+        if (!d.enabled) {
+          statusBadge.innerHTML = '🟡 معطل مؤقتاً';
+          statusBadge.style.color = '#facc15';
+        } else if (d.lastStatus === 'failed') {
+          statusBadge.innerHTML = '🔴 فشل آخر نسخ';
+          statusBadge.style.color = '#f87171';
+        } else {
+          statusBadge.innerHTML = '🟢 مفعل ومنتظم';
+          statusBadge.style.color = '#4ade80';
+        }
+      }
+
+      if (intervalText) {
+        intervalText.textContent = d.interval === 'weekly'
+          ? `أسبوعياً (كل ${d.dayOfWeekName || 'جمعة'} في تمام ${d.time || '02:00'})`
+          : `يومياً في تمام ${d.time || '02:00'}`;
+      }
+
+      if (lastRunText) {
+        if (d.lastRun) {
+          const lrDate = new Date(d.lastRun);
+          const sizeMb = d.lastSize ? `(${(d.lastSize / (1024 * 1024)).toFixed(2)} MB)` : '';
+          lastRunText.innerHTML = `${lrDate.toLocaleDateString('ar-YE')} ${lrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })} ${sizeMb} ${d.lastStatus === 'success' ? '✅' : '❌'}`;
+        } else {
+          lastRunText.textContent = 'لا توجد نسخ سابقة';
+        }
+      }
+
+      if (nextRunText) {
+        if (d.nextRun && d.enabled) {
+          const nrDate = new Date(d.nextRun);
+          const nextTime = `${nrDate.toLocaleDateString('ar-YE')} ${nrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}`;
+          nextRunText.innerHTML = `${nextTime} <span style="font-size:0.8rem; color:#94a3b8;">(${d.countdownText || ''})</span>`;
+        } else {
+          nextRunText.textContent = d.enabled ? 'جاري الحساب...' : 'الجدولة متوقفة';
+        }
+      }
+
+      if (pathStatus) {
+        if (d.storagePathExists && d.storagePathWritable) {
+          pathStatus.innerHTML = '<span style="color:#4ade80;">(مسار صالح ومؤكد ✅)</span>';
+        } else if (d.storagePathExists) {
+          pathStatus.innerHTML = '<span style="color:#facc15;">(المسار موجود - يتطلب فحص الصلاحيات)</span>';
+        } else {
+          pathStatus.innerHTML = '<span style="color:#38bdf8;">(سيتم إنشاء المجلد تلقائياً)</span>';
+        }
+      }
+    } catch (e) {
+      console.error('Error loading auto backup schedule:', e);
+    }
+  },
+
+  toggleAutoBackupFields() {
+    const enabled = document.getElementById('cfgAutoBackupEnabled')?.value === 'true';
+    const interval = document.getElementById('cfgAutoBackupInterval')?.value;
+    const dayGroup = document.getElementById('cfgAutoBackupDayGroup');
+
+    if (dayGroup) {
+      dayGroup.style.display = (enabled && interval === 'weekly') ? 'block' : 'none';
+    }
+  },
+
+  async saveAutoBackupSchedule(event) {
+    if (event) event.preventDefault();
+    const btn = document.getElementById('btnSaveAutoBackupConfig');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>جاري الحفظ... ⏳</span>';
+    }
+
+    const payload = {
+      enabled: document.getElementById('cfgAutoBackupEnabled')?.value === 'true',
+      interval: document.getElementById('cfgAutoBackupInterval')?.value || 'daily',
+      dayOfWeek: Number(document.getElementById('cfgAutoBackupDayOfWeek')?.value || 5),
+      time: document.getElementById('cfgAutoBackupTime')?.value || '02:00',
+      maxFiles: Number(document.getElementById('cfgAutoBackupMaxFiles')?.value || 14),
+      storagePath: document.getElementById('cfgAutoBackupPath')?.value?.trim() || ''
+    };
+
+    try {
+      const res = await fetch('/api/settings/auto-backup/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم حفظ إعدادات الجدولة التلقائية بنجاح 🛡️', 'success');
+        await this.loadAutoBackupSchedule();
+        if (typeof App !== 'undefined' && App.fetchAutoBackupStatus) {
+          App.fetchAutoBackupStatus();
+        }
+      } else {
+        App.showToast(json.message || 'فشل حفظ الإعدادات', 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء حفظ إعدادات الجدولة', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  async runAutoBackupNow() {
+    const btn = document.getElementById('btnSettingsRunBackupNow');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>جاري التنفيذ... ⏳</span>';
+    }
+
+    try {
+      const res = await fetch('/api/settings/auto-backup/run-now', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم إنشاء النسخة التلقائية المجدولة بنجاح وحفظها 🛡️', 'success');
+        await this.loadAutoBackupSchedule();
+        if (typeof App !== 'undefined' && App.fetchAutoBackupStatus) {
+          App.fetchAutoBackupStatus();
+        }
+      } else {
+        App.showToast(json.message || 'فشل تنفيذ النسخ التلقائي', 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء تشغيل النسخ التلقائي', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  async testStoragePath() {
+    const pathInp = document.getElementById('cfgAutoBackupPath');
+    const resultBox = document.getElementById('autoBackupTestResultBox');
+    const pathStatus = document.getElementById('cfgAutoBackupPathStatus');
+    const pathVal = pathInp?.value?.trim();
+
+    if (!pathVal) {
+      App.showToast('يرجى إدخال مسار التخزين أولاً', 'warning');
+      return;
+    }
+
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.style.background = 'rgba(255,255,255,0.05)';
+      resultBox.style.color = '#94a3b8';
+      resultBox.innerHTML = 'جاري اختبار المسار وصلاحيات الكتابة... ⏳';
+    }
+
+    try {
+      const res = await fetch('/api/settings/auto-backup/test-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: pathVal })
+      });
+      const json = await res.json();
+      if (resultBox) {
+        if (json.success) {
+          resultBox.style.background = 'rgba(34, 197, 94, 0.15)';
+          resultBox.style.color = '#4ade80';
+          resultBox.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+          resultBox.innerHTML = `<strong>${json.message}</strong><br><small style="direction:ltr; display:block; color:#f8fafc; font-family:monospace;">${json.resolvedPath}</small>`;
+          if (pathStatus) pathStatus.innerHTML = '<span style="color:#4ade80;">(مسار صالح ومؤكد ✅)</span>';
+        } else {
+          resultBox.style.background = 'rgba(239, 68, 68, 0.15)';
+          resultBox.style.color = '#f87171';
+          resultBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          resultBox.innerHTML = `<strong>⚠️ ${json.message}</strong>`;
+          if (pathStatus) pathStatus.innerHTML = '<span style="color:#f87171;">(تعذر استخدام المسار ❌)</span>';
+        }
+      }
+    } catch (err) {
+      if (resultBox) {
+        resultBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        resultBox.style.color = '#f87171';
+        resultBox.innerHTML = 'خطأ أثناء الاتصال بالخادم لاختبار المسار';
+      }
+    }
+  },
+
+  resetDefaultStoragePath() {
+    const pathInp = document.getElementById('cfgAutoBackupPath');
+    if (pathInp) {
+      pathInp.value = pathInp.dataset.defaultPath || 'server/database/backups';
+      App.showToast('تم استعادة المسار الافتراضي للنسخ الاحتياطية', 'info');
+      this.testStoragePath();
+    }
   },
 
   // ================== إدارة ومزامنة خادم MySQL ==================

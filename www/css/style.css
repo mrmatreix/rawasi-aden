@@ -5428,5 +5428,179 @@ body.light-mode .filter-preset-btn:hover, body.light-mode .filter-preset-btn.act
   }
 }
 
+/* ================= مؤشر وإشعار حالة النسخ الاحتياطي التلقائي في الهيدر ================= */
+.header-backup-status-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.header-backup-status-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 20px;
+  padding: 4px 12px;
+  cursor: pointer;
+  color: #f8fafc;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  outline: none;
+}
+
+.header-backup-status-btn:hover {
+  background: rgba(45, 62, 80, 0.85);
+  border-color: var(--gold-light);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.backup-status-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 1.15rem;
+}
+
+.backup-status-pulse {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.backup-status-pulse.warning {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.backup-status-pulse.danger {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.backup-status-text {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  line-height: 1.25;
+}
+
+.backup-status-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+}
+
+.backup-status-sub {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* القائمة المنسدلة لحالة النسخ */
+.backup-status-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: 350px;
+  max-width: 92vw;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), 0 0 20px rgba(212, 175, 55, 0.12);
+  z-index: 1050;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  animation: notifDropdownFade 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.backup-status-dropdown.active {
+  display: flex;
+}
+
+.backup-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: rgba(30, 41, 59, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.backup-dropdown-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.82rem;
+}
+
+.backup-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.backup-info-label {
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.backup-info-val {
+  color: #f8fafc;
+  font-weight: 600;
+  text-align: left;
+}
+
+.backup-path-code {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: #38bdf8;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: ltr;
+  display: inline-block;
+}
+
+.backup-dropdown-footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(20, 29, 44, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 768px) {
+  .header-backup-status-btn .backup-status-text {
+    display: none;
+  }
+  .header-backup-status-btn {
+    padding: 6px;
+    border-radius: 50%;
+  }
+}
+
+
 
 
