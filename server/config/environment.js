@@ -11,7 +11,7 @@ const isStaging = env === 'staging';
 const isProd = env === 'production';
 const isDev = !isStaging && !isProd;
 
-// تحديد المنفذ حسب البيئة
+// تحديد المنفذ حسب البيئة (Unified: 5500 default; AI Studio can set PORT=3000)
 let defaultPort = 5500;
 if (isStaging) defaultPort = 5501;
 

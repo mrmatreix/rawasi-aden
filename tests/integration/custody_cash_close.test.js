@@ -228,7 +228,9 @@ test('Custody Cash Close - JE Links, Cash Boxes, Year Close', async (t) => {
   assert.strictEqual(Number(recLeg.c), 10000, 'طرف الاسترداد الدائن 10k');
   const cashPay = await db.query(`SELECT cash_out FROM cash_movements WHERE id > ? AND notes LIKE '%2031-02%'`, [cashBeforePay]);
   assert.strictEqual(cashPay.length, 1, 'حركة صندوق واحدة بالصافي');
-  assert.strictEqual(Number(cashPay[0].cash_out), Number(payRow.net_salary), 'الحركة = صافي الراتب');
+  // القيد المركب يرحّل حركة واحدة بإجمالي الصافي (كل الموظفين النشطين — يشمل بيانات الترحيل اليدوية إن وُجدت)
+  const totalNetRow = await db.get(`SELECT COALESCE(SUM(total_net_salary), 0) as t FROM payroll WHERE payroll_month = '2031-02'`);
+  assert.strictEqual(Number(cashPay[0].cash_out), Number(totalNetRow.t), 'الحركة = إجمالي صافي المسير');
 
   // 6. الإقفال السنوي: إيراد + مصروف ثم إقفال 2031
   const acc33 = await acc('33');

@@ -251,26 +251,32 @@ router.post('/advances', requirePermission('hr:create'), async (req, res) => {
 router.get('/payroll', requirePermission('hr:view,hr:payroll'), async (req, res) => {
   try {
     const month = req.query.month;
-    let sql = 'SELECT p.*, e.full_name, e.employee_no FROM payroll p JOIN employees e ON e.id=p.employee_id';
+    let sql = `SELECT p.*, e.full_name, e.employee_no, e.job_title, e.department, 
+               COALESCE(p.bank_account, e.bank_account, '') as bank_account, 
+               COALESCE(p.cost_center, e.cost_center, 'الإدارة العامة') as cost_center 
+               FROM payroll p 
+               JOIN employees e ON e.id=p.employee_id`;
     const params = [];
     if (month) {
       sql += ' WHERE p.payroll_month=?';
       params.push(month);
     }
-    sql += ' ORDER BY p.payroll_month DESC, e.full_name';
+    sql += ' ORDER BY p.payroll_month DESC, p.id ASC, e.employee_no ASC';
     res.json({ success: true, data: await query(sql, params) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// إعداد واحتساب مسير الرواتب وفق القواعد النظامية:
-// - استقطاع التأمينات: 6% للموظف، 9% لرب العمل على الراتب الأساسي
-// - ضريبة كسب العمل: إعفاء لأول 20,000 ر.ي، ثم 10% للشرائح التالية
+// إعداد واحتساب مسير الرواتب وفق القواعد النظامية الشاملة المعتمدة
 router.post('/payroll/generate', requirePermission('hr:create,hr:payroll'), async (req, res) => {
   try {
     const payrollMonth = req.body.payroll_month || today().slice(0, 7);
-    const employees = await query("SELECT * FROM employees WHERE status='active'");
+    const employees = await query("SELECT * FROM employees WHERE status='active' ORDER BY id ASC");
+    if (!employees || employees.length === 0) {
+      return res.status(400).json({ success: false, message: 'لا يوجد موظفون نشطون لإعداد المسير' });
+    }
+
     const result = await transaction(async tx => {
       let created = 0;
       for (const e of employees) {
@@ -279,41 +285,74 @@ router.post('/payroll/generate', requirePermission('hr:create,hr:payroll'), asyn
 
         const advances = await tx.get("SELECT COALESCE(SUM(CASE WHEN installment_amount > 0 THEN MIN(installment_amount, amount-recovered_amount) ELSE 0 END),0) AS total FROM employee_advances WHERE employee_id=? AND status='active'", [e.id]);
         const overtime = await tx.get("SELECT COALESCE(SUM(overtime_hours),0) AS hours FROM attendance WHERE employee_id=? AND substr(date,1,7)=?", [e.id, payrollMonth]);
-        
+
         const basic = number(e.basic_salary);
-        const allowances = number(e.allowances || 0);
-        const overtimePay = Math.round(number(overtime?.hours) * (basic / 240) * 1.5 * 100) / 100;
-        const gross = basic + allowances + overtimePay;
+        const workingDays = 31;
+        const monthDays = 31;
+        const earnedBasic = Math.round(basic * (workingDays / monthDays));
 
-        // القواعد النظامية للتأمينات (6% موظف و 9% شركة على الأساسي)
-        const insEmp = Math.round(basic * 0.06 * 100) / 100;
-        const insOrg = Math.round(basic * 0.09 * 100) / 100;
+        const transportPct = e.transport_pct != null ? number(e.transport_pct) : 20;
+        const appearancePct = e.appearance_pct != null ? number(e.appearance_pct) : 25;
+        const natureOfWorkPct = e.nature_of_work_pct != null ? number(e.nature_of_work_pct) : 30;
 
-        // القواعد النظامية لضريبة كسب العمل (إعفاء 20,000 ر.ي)
-        const taxable = Math.max(0, gross - 20000);
+        const transport = Math.round(earnedBasic * (transportPct / 100));
+        const appearance = Math.round(earnedBasic * (appearancePct / 100));
+        const nature = Math.round(earnedBasic * (natureOfWorkPct / 100));
+        const living = e.living_allowance != null ? number(e.living_allowance) : 90000;
+        const health = e.health_insurance_allowance != null ? number(e.health_insurance_allowance) : 30000;
+
+        const totalAllowances = transport + appearance + nature + living + health;
+        const gross = earnedBasic + totalAllowances;
+
+        // التأمينات 6% موظف و 9% منشأة على الراتب الشامل
+        const insEmp = Math.round(gross * 0.06);
+        const insOrg = Math.round(gross * 0.09);
+
+        // الخصميات والجزاءات وأقساط السلف
+        const advanceDeductions = number(advances?.total);
+        const totalDeductions = advanceDeductions;
+
+        // الوعاء الضريبي = الراتب الشامل - تأمينات 6% - حد الإعفاء 65,000 - الخصميات
+        const taxableBase = Math.max(0, gross - insEmp - 65000 - totalDeductions);
+
+        // ضريبة كسب العمل (شرائح: 10% لأول 40,000 و 15% لما زاد)
         let tax = 0;
-        if (taxable > 0) {
-          if (taxable <= 30000) {
-            tax = taxable * 0.10;
+        if (taxableBase > 0) {
+          if (taxableBase <= 40000) {
+            tax = Math.round(taxableBase * 0.10);
           } else {
-            tax = (30000 * 0.10) + ((taxable - 30000) * 0.15);
+            tax = Math.round(taxableBase * 0.15 - 2000);
           }
         }
-        tax = Math.round(tax * 100) / 100;
 
-        const deductions = number(advances?.total);
-        const net = Math.round((gross - insEmp - tax - deductions) * 100) / 100;
+        // صافي الراتب المستحق
+        const net = Math.max(0, gross - insEmp - tax - totalDeductions);
+
+        // صندوق تنمية المهارات 1% (محسوب على الوعاء)
+        const skillsFund = Math.round(taxableBase * 0.01);
+        const unpaidLeave = 0;
+        const grandNet = net - unpaidLeave;
 
         await tx.run(`
           INSERT INTO payroll (
-            employee_id, payroll_month, basic_salary, allowances, overtime_amount,
-            gross_salary, insurance_employee, insurance_employer, tax_amount,
-            deductions, net_salary, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+            employee_id, payroll_month, basic_salary, earned_basic,
+            transport_allowance, appearance_allowance, nature_of_work_allowance,
+            living_allowance, health_insurance_allowance, allowances,
+            gross_salary, insurance_employee, insurance_employer,
+            absence_penalty_deductions, loan_installments, deductions,
+            taxable_base, tax_amount, net_salary, skills_fund,
+            unpaid_leave_deduction, total_net_salary, working_days, month_days,
+            cost_center, bank_account, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
         `, [
-          e.id, payrollMonth, basic, allowances, overtimePay,
-          gross, insEmp, insOrg, tax,
-          deductions, net
+          e.id, payrollMonth, basic, earnedBasic,
+          transport, appearance, nature,
+          living, health, totalAllowances,
+          gross, insEmp, insOrg,
+          0, advanceDeductions, totalDeductions,
+          taxableBase, tax, net, skillsFund,
+          unpaidLeave, grandNet, workingDays, monthDays,
+          e.cost_center || 'الإدارة العامة CC-100', e.bank_account || ''
         ]);
         created++;
       }
@@ -330,7 +369,7 @@ router.post('/payroll/generate', requirePermission('hr:create,hr:payroll'), asyn
     res.json({ 
       success: true, 
       data: { created: result }, 
-      message: `تم إعداد ${result} مسير راتب لشهر ${payrollMonth} وفق القواعد المحاسبية والنظامية` 
+      message: `تم إعداد ${result} مسير راتب لشهر ${payrollMonth} وفق القواعد الشاملة والنظامية المعتمدة` 
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -385,6 +424,7 @@ router.get('/payroll/:month/preview-journal', requirePermission('hr:view,account
     let totalGross = 0;
     let totalInsEmployer = 0;
     let totalInsEmployee = 0;
+    let totalSkillsFund = 0;
     let totalTax = 0;
     let totalDeductions = 0;
     let totalNet = 0;
@@ -393,13 +433,15 @@ router.get('/payroll/:month/preview-journal', requirePermission('hr:view,account
       const g = r.gross_salary != null ? number(r.gross_salary) : (number(r.basic_salary) + number(r.overtime_amount));
       const iOrg = number(r.insurance_employer || 0);
       const iEmp = number(r.insurance_employee || 0);
+      const sk = number(r.skills_fund || 0);
       const tx = number(r.tax_amount || 0);
       const ded = number(r.deductions || 0);
-      const net = number(r.net_salary || 0);
+      const net = r.total_net_salary != null ? number(r.total_net_salary) : number(r.net_salary || 0);
 
       totalGross += g;
       totalInsEmployer += iOrg;
       totalInsEmployee += iEmp;
+      totalSkillsFund += sk;
       totalTax += tx;
       totalDeductions += ded;
       totalNet += net;
@@ -408,26 +450,33 @@ router.get('/payroll/:month/preview-journal', requirePermission('hr:view,account
     totalGross = Math.round(totalGross * 100) / 100;
     totalInsEmployer = Math.round(totalInsEmployer * 100) / 100;
     totalInsEmployee = Math.round(totalInsEmployee * 100) / 100;
+    totalSkillsFund = Math.round(totalSkillsFund * 100) / 100;
     totalTax = Math.round(totalTax * 100) / 100;
     totalDeductions = Math.round(totalDeductions * 100) / 100;
-    totalNet = Math.round(totalNet * 100) / 100;
+    
+    // صافي الصرف المحاسبي المتزن تماماً (إجمالي الاستحقاق - الاستقطاعات)
+    const netPayable = Math.round((totalGross - totalInsEmployee - totalTax - totalDeductions) * 100) / 100;
 
-    const totalDebit = Math.round((totalGross + totalInsEmployer) * 100) / 100;
-    const totalCredit = Math.round((totalNet + totalTax + (totalInsEmployee + totalInsEmployer) + totalDeductions) * 100) / 100;
+    const totalDebit = Math.round((totalGross + totalInsEmployer + totalSkillsFund) * 100) / 100;
+    const totalCredit = Math.round((netPayable + totalTax + (totalInsEmployee + totalInsEmployer) + totalSkillsFund + totalDeductions) * 100) / 100;
 
     let salaryExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '511' OR code = '52' OR name LIKE '%رواتب%' LIMIT 1") || { id: 1, code: '511', name: 'مصروف الرواتب والأجور الأساسية والبدلات' };
-    let insExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '512' OR name LIKE '%مساهمة%تأمين%' LIMIT 1") || { id: 2, code: '512', name: 'مصروف مساهمة المنشأة في التأمينات الاجتماعية' };
-    let cashBankAcc = await get("SELECT id, code, name FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' LIMIT 1") || { id: 3, code: '111', name: 'الصندوق الرئيسي / البنك' };
-    let taxAcc = await get("SELECT id, code, name FROM accounts WHERE code = '213' OR name LIKE '%ضرائب%' OR name LIKE '%كسب%' LIMIT 1") || { id: 4, code: '213', name: 'أمانات مصلحة الضرائب (ضريبة كسب العمل)' };
-    let insLiabilityAcc = await get("SELECT id, code, name FROM accounts WHERE code = '214' OR name LIKE '%تأمينات%' LIMIT 1") || { id: 5, code: '214', name: 'الهيئة العامة للتأمينات والمعاشات' };
-    let advanceAcc = await get("SELECT id, code, name FROM accounts WHERE code = '114' OR name LIKE '%سلف%' LIMIT 1") || { id: 6, code: '114', name: 'سلف وعهد الموظفين' };
+    let insExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '512' OR name LIKE '%مساهمة%تأمين%' LIMIT 1") || { id: 2, code: '512', name: 'مصروف مساهمة الشركة في التأمينات الاجتماعية (9%)' };
+    let skillsExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '513' OR name LIKE '%مهارات%' LIMIT 1") || { id: 3, code: '513', name: 'مصروف مساهمة صندوق تنمية المهارات (1%)' };
+    let cashBankAcc = await get("SELECT id, code, name FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' LIMIT 1") || { id: 4, code: '111', name: 'الصندوق الرئيسي / البنك' };
+    let taxAcc = await get("SELECT id, code, name FROM accounts WHERE code = '213' OR name LIKE '%ضرائب%' OR name LIKE '%كسب%' LIMIT 1") || { id: 5, code: '213', name: 'أمانات مصلحة الضرائب (ضريبة كسب العمل)' };
+    let insLiabilityAcc = await get("SELECT id, code, name FROM accounts WHERE code = '214' OR name LIKE '%تأمينات%' LIMIT 1") || { id: 6, code: '214', name: 'الهيئة العامة للتأمينات والمعاشات (15%)' };
+    let skillsLiabilityAcc = await get("SELECT id, code, name FROM accounts WHERE code = '215' OR name LIKE '%مهارات%' LIMIT 1") || { id: 7, code: '215', name: 'أمانات صندوق تنمية المهارات (1%)' };
+    let advanceAcc = await get("SELECT id, code, name FROM accounts WHERE code = '114' OR name LIKE '%سلف%' LIMIT 1") || { id: 8, code: '114', name: 'سلف وعهد الموظفين' };
 
     const previewLines = [
       { side: 'مدين (منه)', account_code: salaryExpAcc.code, account_name: salaryExpAcc.name, debit: totalGross, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `إجمالي استحقاق رواتب وبدلات شهر ${month}` },
       { side: 'مدين (منه)', account_code: insExpAcc.code, account_name: insExpAcc.name, debit: totalInsEmployer, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `مساهمة المنشأة في التأمينات الاجتماعية (9%)` },
+      { side: 'مدين (منه)', account_code: skillsExpAcc.code, account_name: skillsExpAcc.name, debit: totalSkillsFund, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `مساهمة المنشأة في صندوق تنمية المهارات (1%)` },
       { side: 'دائن (له)', account_code: cashBankAcc.code, account_name: cashBankAcc.name, debit: 0, credit: totalNet, cost_center: 'الإدارة العامة CC-100', notes: `صافي رواتب محولة ومسددة للموظفين` },
       { side: 'دائن (له)', account_code: taxAcc.code, account_name: taxAcc.name, debit: 0, credit: totalTax, cost_center: 'الإدارة العامة CC-100', notes: `أمانات ضريبة كسب العمل المستقطعة` },
       { side: 'دائن (له)', account_code: insLiabilityAcc.code, account_name: insLiabilityAcc.name, debit: 0, credit: Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100, cost_center: 'الإدارة العامة CC-100', notes: `مستحقات التأمينات (حصة العامل 6% + المنشأة 9%)` },
+      { side: 'دائن (له)', account_code: skillsLiabilityAcc.code, account_name: skillsLiabilityAcc.name, debit: 0, credit: totalSkillsFund, cost_center: 'الإدارة العامة CC-100', notes: `مستحقات صندوق تنمية المهارات (1%)` },
       { side: 'دائن (له)', account_code: advanceAcc.code, account_name: advanceAcc.name, debit: 0, credit: totalDeductions, cost_center: 'الإدارة العامة CC-100', notes: `استرداد أقساط سلف الموظفين` }
     ].filter(l => l.debit > 0 || l.credit > 0);
 
@@ -441,6 +490,7 @@ router.get('/payroll/:month/preview-journal', requirePermission('hr:view,account
           insurance_employer_9pct: totalInsEmployer,
           insurance_employee_6pct: totalInsEmployee,
           total_insurance_15pct: Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100,
+          total_skills_fund_1pct: totalSkillsFund,
           total_tax: totalTax,
           total_advances: totalDeductions,
           total_net_payable: totalNet,
@@ -451,8 +501,9 @@ router.get('/payroll/:month/preview-journal', requirePermission('hr:view,account
         },
         lines: previewLines,
         rules: {
-          social_insurance: 'حصة الموظف 6% تستقطع من الراتب الأساسي + حصة المنشأة 9% تتحملها الشركة كمصروف إضافي = 15% تورد لهيئة التأمينات',
-          income_tax: 'إعفاء أول 20,000 ر.ي شهرياً، ثم 10% للشريحة الأولى (حتى 50,000 ر.ي)، و 15% لما زاد عن ذلك'
+          social_insurance: 'حصة الموظف 6% تستقطع من الراتب الشامل + حصة المنشأة 9% تتحملها الشركة كمصروف إضافي = 15% تورد لهيئة التأمينات والمعاشات',
+          income_tax: 'إعفاء قانوني لأول 65,000 ر.ي شهرياً، ثم 10% للشريحة الأولى (حتى 40,000 ر.ي)، و 15% لما زاد عن ذلك',
+          skills_fund: 'مساهمة قانونية بنسبة 1% من الوعاء لصالح صندوق تنمية المهارات المهنية'
         }
       }
     });
@@ -486,6 +537,7 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
     let totalGross = 0;
     let totalInsEmployer = 0;
     let totalInsEmployee = 0;
+    let totalSkillsFund = 0;
     let totalTax = 0;
     let totalDeductions = 0;
     let totalNet = 0;
@@ -494,13 +546,15 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
       const g = r.gross_salary != null ? number(r.gross_salary) : (number(r.basic_salary) + number(r.overtime_amount));
       const iOrg = number(r.insurance_employer || 0);
       const iEmp = number(r.insurance_employee || 0);
+      const sk = number(r.skills_fund || 0);
       const tx = number(r.tax_amount || 0);
       const ded = number(r.deductions || 0);
-      const net = number(r.net_salary || 0);
+      const net = r.total_net_salary != null ? number(r.total_net_salary) : number(r.net_salary || 0);
 
       totalGross += g;
       totalInsEmployer += iOrg;
       totalInsEmployee += iEmp;
+      totalSkillsFund += sk;
       totalTax += tx;
       totalDeductions += ded;
       totalNet += net;
@@ -509,15 +563,18 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
     totalGross = Math.round(totalGross * 100) / 100;
     totalInsEmployer = Math.round(totalInsEmployer * 100) / 100;
     totalInsEmployee = Math.round(totalInsEmployee * 100) / 100;
+    totalSkillsFund = Math.round(totalSkillsFund * 100) / 100;
     totalTax = Math.round(totalTax * 100) / 100;
     totalDeductions = Math.round(totalDeductions * 100) / 100;
-    totalNet = Math.round(totalNet * 100) / 100;
-
-    // إجمالي الجانب المدين (إجمالي استحقاق الرواتب + مساهمة الشركة في التأمينات)
-    const totalDebit = Math.round((totalGross + totalInsEmployer) * 100) / 100;
     
-    // إجمالي الجانب الدائن (صافي مسدد + ضريبة + إجمالي تأمينات + استرداد سلف)
-    const totalCredit = Math.round((totalNet + totalTax + (totalInsEmployee + totalInsEmployer) + totalDeductions) * 100) / 100;
+    // صافي الصرف المحاسبي المتزن تماماً
+    const netPayable = Math.round((totalGross - totalInsEmployee - totalTax - totalDeductions) * 100) / 100;
+
+    // إجمالي الجانب المدين (إجمالي استحقاق الرواتب + مساهمة الشركة في التأمينات + صندوق المهارات)
+    const totalDebit = Math.round((totalGross + totalInsEmployer + totalSkillsFund) * 100) / 100;
+    
+    // إجمالي الجانب الدائن (صافي مسدد + ضريبة + إجمالي تأمينات + صندوق مهارات + استرداد سلف)
+    const totalCredit = Math.round((netPayable + totalTax + (totalInsEmployee + totalInsEmployer) + totalSkillsFund + totalDeductions) * 100) / 100;
 
     // التحقق الرياضي من التوازن المحاسبي
     const diff = Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100;
@@ -531,9 +588,11 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
     // جلب الحسابات المحاسبية المتخصصة
     let salaryExpAcc = await get("SELECT id FROM accounts WHERE code = '511' OR code = '52' OR name LIKE '%رواتب%' LIMIT 1");
     let insExpAcc = await get("SELECT id FROM accounts WHERE code = '512' OR name LIKE '%مساهمة%تأمين%' LIMIT 1");
+    let skillsExpAcc = await get("SELECT id FROM accounts WHERE code = '513' OR name LIKE '%مهارات%' LIMIT 1");
     let cashBankAcc = await get("SELECT id FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' LIMIT 1");
     let taxAcc = await get("SELECT id FROM accounts WHERE code = '213' OR name LIKE '%ضرائب%' OR name LIKE '%كسب%' LIMIT 1");
     let insLiabilityAcc = await get("SELECT id FROM accounts WHERE code = '214' OR name LIKE '%تأمينات%' LIMIT 1");
+    let skillsLiabilityAcc = await get("SELECT id FROM accounts WHERE code = '215' OR name LIKE '%مهارات%' LIMIT 1");
     let advanceAcc = await get("SELECT id FROM accounts WHERE code = '114' OR name LIKE '%سلف%' LIMIT 1");
 
     if (!salaryExpAcc) salaryExpAcc = { id: 1 };
@@ -572,13 +631,21 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
         `, [jeId, insExpAcc.id, defaultCostCenterId, totalInsEmployer, `مساهمة المنشأة في التأمينات الاجتماعية (9%) لشهر ${month}`]);
       }
 
-      // 3. طرف دائن: الصندوق / البنك بصافي الرواتب المسددة للموظفين
+      // 3. طرف مدين: مصروف مساهمة صندوق تنمية المهارات (1%)
+      if (totalSkillsFund > 0 && skillsExpAcc) {
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, skillsExpAcc.id, defaultCostCenterId, totalSkillsFund, `مساهمة المنشأة في صندوق تنمية المهارات (1%) لشهر ${month}`]);
+      }
+
+      // 4. طرف دائن: الصندوق / البنك بصافي الرواتب المسددة للموظفين
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
         VALUES (?, ?, ?, 0, ?, ?)
       `, [jeId, cashBankAcc.id, defaultCostCenterId, totalNet, `صافي رواتب محولة ومسددة للموظفين لشهر ${month}`]);
 
-      // 4. طرف دائن: أمانات مصلحة الضرائب (ضريبة كسب العمل)
+      // 5. طرف دائن: أمانات مصلحة الضرائب (ضريبة كسب العمل)
       if (totalTax > 0 && taxAcc) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
@@ -586,7 +653,7 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
         `, [jeId, taxAcc.id, defaultCostCenterId, totalTax, `أمانات ضريبة كسب العمل المستقطعة لشهر ${month}`]);
       }
 
-      // 5. طرف دائن: الهيئة العامة للتأمينات والمعاشات (حصة الموظف 6% + حصة الشركة 9%)
+      // 6. طرف دائن: الهيئة العامة للتأمينات والمعاشات (حصة الموظف 6% + حصة الشركة 9%)
       const totalInsurance = Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100;
       if (totalInsurance > 0 && insLiabilityAcc) {
         await tx.run(`
@@ -595,7 +662,15 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
         `, [jeId, insLiabilityAcc.id, defaultCostCenterId, totalInsurance, `مستحقات التأمينات الاجتماعية (حصة العامل 6% + حصة المنشأة 9%) لشهر ${month}`]);
       }
 
-      // 6. طرف دائن: استرداد السلف والعهد
+      // 7. طرف دائن: أمانات صندوق تنمية المهارات (1%)
+      if (totalSkillsFund > 0 && skillsLiabilityAcc) {
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
+          VALUES (?, ?, ?, 0, ?, ?)
+        `, [jeId, skillsLiabilityAcc.id, defaultCostCenterId, totalSkillsFund, `مستحقات صندوق تنمية المهارات (1%) لشهر ${month}`]);
+      }
+
+      // 8. طرف دائن: استرداد السلف والعهد
       if (totalDeductions > 0 && advanceAcc) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)

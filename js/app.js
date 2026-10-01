@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.44574dd6',
+  assetVersion: '1.0.0.2194eb36',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -15,8 +15,8 @@ const App = {
     projects: 'js/projects.js?v=3d34399b',
     projectHub: 'js/project_hub.js?v=1a391ff1',
     projectControl: 'js/project_control_ui.js?v=e9e5fc1e',
-    accounting: 'js/accounting.js?v=219a7e58',
-    hr: 'js/hr.js?v=8ae5eff0',
+    accounting: 'js/accounting.js?v=c463c4c3',
+    hr: 'js/hr.js?v=4aed7d77',
     reports: 'js/reports.js?v=0ce13b23',
     inventory: 'js/inventory.js?v=0ad27580',
     settings: 'js/settings.js?v=2f9b5814',
@@ -736,13 +736,16 @@ const App = {
 
         if (tbody) {
           if (list.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد حركات عهد مسجلة</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد حركات عهد مسجلة</td></tr>`;
             const pag = document.getElementById('custodyPagination');
             if (pag) pag.innerHTML = '';
           } else {
             const renderRows = (pageList) => {
               tbody.innerHTML = pageList.map(c => {
                 const empDisplay = `<strong>${c.employee_name}</strong>${c.employee_no ? `<br><small style="color: var(--gold-light); font-family: monospace; font-weight: bold;">(الرقم: ${c.employee_no})</small>` : ''}`;
+                const accDisplay = c.account_name 
+                  ? `<strong>${c.account_name}</strong>${c.account_code ? `<br><small style="font-family: monospace; color: #38bdf8; font-weight: bold;">(${c.account_code})</small>` : ''}`
+                  : `<span style="color: var(--text-secondary); font-size: 0.82rem;">-</span>`;
                 const origCustodyDisplay = c.related_custody_no 
                   ? `<span style="color: #38bdf8; font-weight: bold; font-family: monospace;">تصفية لـ: ${c.related_custody_no}</span>`
                   : `<span style="color: var(--text-secondary);">-</span>`;
@@ -751,6 +754,7 @@ const App = {
                   <tr>
                     <td>${c.date}</td>
                     <td>${empDisplay}</td>
+                    <td>${accDisplay}</td>
                     <td>
                       <span class="badge ${c.operation_type === 'تصفية عهدة' ? 'badge-income' : 'badge-active'}">${c.operation_type}</span>
                       ${c.custody_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">${c.custody_no}</small>` : ''}
@@ -908,34 +912,51 @@ const App = {
     } catch (e) {}
   },
 
-  async loadCashTable() {
+  async loadCashTable(typeFilter) {
     const tbody = document.getElementById('fullCashTableBody');
     if (tbody && window.UI && UI.Skeleton) {
-      UI.Skeleton.showTableSkeleton(tbody, 5, 7);
+      UI.Skeleton.showTableSkeleton(tbody, 5, 8);
     }
 
+    const type = typeFilter || (typeof Accounting !== 'undefined' && Accounting._currentCashFilter) || 'الكل';
+    if (typeof Accounting !== 'undefined') Accounting._currentCashFilter = type;
+
     try {
-      const res = await fetch('/api/accounting/cash-movements');
+      let url = '/api/accounting/cash-movements';
+      if (type && type !== 'الكل') {
+        url += '?type=' + encodeURIComponent(type);
+      }
+      const res = await fetch(url);
       const json = await res.json();
       if (tbody && json.success) {
         const list = json.data || [];
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد حركات نقدية مسجلة</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد حركات مسجلة (${type})</td></tr>`;
           const pag = document.getElementById('cashPagination');
           if (pag) pag.innerHTML = '';
         } else {
           const renderRows = (pageList) => {
-            tbody.innerHTML = pageList.map(m => `
-              <tr>
-                <td>${m.date}</td>
-                <td>${this.formatNumber(m.previous_balance)}</td>
-                <td style="color: var(--accent-green); font-weight: bold;">${m.cash_in ? '+' + this.formatNumber(m.cash_in) : '-'}</td>
-                <td style="color: var(--accent-red); font-weight: bold;">${m.cash_out ? '-' + this.formatNumber(m.cash_out) : '-'}</td>
-                <td>${m.withdrawals ? this.formatNumber(m.withdrawals) : '-'}</td>
-                <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(m.current_balance)}</td>
-                <td>${m.notes || '-'}</td>
-              </tr>
-            `).join('');
+            tbody.innerHTML = pageList.map(m => {
+              const typeBadge = (m.movement_type === 'بنك' || m.movement_type === 'شيك')
+                ? `<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: bold;">🏦 بنك</span>`
+                : `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: bold;">💵 نقدي</span>`;
+
+              return `
+                <tr>
+                  <td>${m.date}</td>
+                  <td style="text-align: center;">${typeBadge}</td>
+                  <td>${this.formatNumber(m.previous_balance)}</td>
+                  <td style="color: var(--accent-green); font-weight: bold;">${m.cash_in ? '+' + this.formatNumber(m.cash_in) : '-'}</td>
+                  <td style="color: var(--accent-red); font-weight: bold;">${m.cash_out ? '-' + this.formatNumber(m.cash_out) : '-'}</td>
+                  <td>${m.withdrawals ? this.formatNumber(m.withdrawals) : '-'}</td>
+                  <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(m.current_balance)}</td>
+                  <td>
+                    ${m.notes || '-'}
+                    ${m.reference_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">المرجع: ${m.reference_no}</small>` : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('');
           };
 
           if (window.UI && UI.Pagination && document.getElementById('cashPagination')) {

@@ -14,7 +14,7 @@ const configPath = path.join(__dirname, 'config.json');
 
 function loadConfig() {
   const defaults = {
-    dbEngine: 'mysql', // 'mysql' | 'sqlite'
+    dbEngine: process.env.DB_ENGINE || (process.env.MYSQL_HOST ? 'mysql' : 'sqlite'), // 'mysql' | 'sqlite'
     mysql: {
       host: process.env.MYSQL_HOST || 'localhost',
       port: Number(process.env.MYSQL_PORT) || 3306,
@@ -283,6 +283,38 @@ async function initMysql() {
     await checkAndAddCol('custodies', 'status', 'VARCHAR(50) DEFAULT \'مفتوحة\'');
 
     await checkAndAddCol('payroll', 'journal_entry_id', 'INT NULL');
+
+    // توحيد 2026-10 (MySQL): نفس أعمدة فرع الرواتب الشاملة/السندات أعلاه
+    await checkAndAddCol('accounts', 'status', "VARCHAR(20) DEFAULT 'active'");
+    await checkAndAddCol('accounts', 'level', 'INT DEFAULT 3');
+    await checkAndAddCol('payments', 'exchange_rate', 'DECIMAL(12,6) DEFAULT 1.0');
+    await checkAndAddCol('payments', 'local_amount', 'DECIMAL(14,2) DEFAULT 0');
+    await checkAndAddCol('payments', 'client_name', 'VARCHAR(200) NULL');
+    await checkAndAddCol('expenses', 'exchange_rate', 'DECIMAL(12,6) DEFAULT 1.0');
+    await checkAndAddCol('expenses', 'local_amount', 'DECIMAL(14,2) DEFAULT 0');
+    await checkAndAddCol('expenses', 'supplier_name', 'VARCHAR(200) NULL');
+    await checkAndAddCol('cost_centers', 'status', "VARCHAR(50) DEFAULT 'active'");
+    await checkAndAddCol('custodies', 'account_id', 'INT NULL');
+    await checkAndAddCol('custodies', 'account_code', 'VARCHAR(50) NULL');
+    await checkAndAddCol('custodies', 'account_name', 'VARCHAR(200) NULL');
+    await checkAndAddCol('custodies', 'payment_method', "VARCHAR(50) DEFAULT 'نقدي'");
+    await checkAndAddCol('cash_movements', 'movement_type', "VARCHAR(20) DEFAULT 'نقدي'");
+    await checkAndAddCol('cash_movements', 'payment_method', "VARCHAR(50) DEFAULT 'نقدي'");
+    await checkAndAddCol('cash_movements', 'reference_no', 'VARCHAR(100) NULL');
+    await checkAndAddCol('cash_movements', 'account_id', 'INT NULL');
+    for (const c of ['earned_basic', 'transport_allowance', 'appearance_allowance', 'nature_of_work_allowance', 'living_allowance', 'health_insurance_allowance', 'gross_salary', 'insurance_employee', 'insurance_employer', 'absence_penalty_deductions', 'loan_installments', 'taxable_base', 'tax_amount', 'skills_fund', 'unpaid_leave_deduction', 'total_net_salary']) {
+      await checkAndAddCol('payroll', c, 'DECIMAL(14,2) DEFAULT 0');
+    }
+    await checkAndAddCol('payroll', 'working_days', 'INT DEFAULT 31');
+    await checkAndAddCol('payroll', 'month_days', 'INT DEFAULT 31');
+    await checkAndAddCol('payroll', 'cost_center', "VARCHAR(150) DEFAULT 'الإدارة العامة'");
+    await checkAndAddCol('payroll', 'bank_account', 'VARCHAR(100) NULL');
+    await checkAndAddCol('employees', 'transport_pct', 'DECIMAL(5,2) DEFAULT 20');
+    await checkAndAddCol('employees', 'appearance_pct', 'DECIMAL(5,2) DEFAULT 25');
+    await checkAndAddCol('employees', 'nature_of_work_pct', 'DECIMAL(5,2) DEFAULT 30');
+    await checkAndAddCol('employees', 'living_allowance', 'DECIMAL(14,2) DEFAULT 90000');
+    await checkAndAddCol('employees', 'health_insurance_allowance', 'DECIMAL(14,2) DEFAULT 30000');
+    await checkAndAddCol('employees', 'cost_center', "VARCHAR(150) DEFAULT 'الإدارة العامة'");
 
     await mysqlPool.query(`
       CREATE TABLE IF NOT EXISTS currencies (
@@ -635,6 +667,61 @@ function initSqlite() {
     const prCols = sqliteDb.prepare("PRAGMA table_info(payroll)").all().map(c => c.name);
     if (!prCols.includes('journal_entry_id')) {
       sqliteDb.exec("ALTER TABLE payroll ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
+    }
+
+    // 4.ب توحيد 2026-10: طيّ مخطط فرع الرواتب الشاملة/السندات في الإقلاع (نفس أعمدة
+    // migrate_chart_of_accounts_and_vouchers + migrate_vouchers_custodies_periods + migrate_comprehensive_payroll —
+    // البيانات التأسيسية تبقى يدوية عبر `npm run migrate`، والمخطط فقط يُضمن هنا)
+    const unifiedCols = [
+      ['accounts', 'status', "TEXT DEFAULT 'active'"],
+      ['accounts', 'level', 'INTEGER DEFAULT 3'],
+      ['payments', 'exchange_rate', 'REAL DEFAULT 1.0'],
+      ['payments', 'local_amount', 'REAL DEFAULT 0'],
+      ['payments', 'client_name', 'TEXT'],
+      ['expenses', 'exchange_rate', 'REAL DEFAULT 1.0'],
+      ['expenses', 'local_amount', 'REAL DEFAULT 0'],
+      ['expenses', 'supplier_name', 'TEXT'],
+      ['cost_centers', 'status', "TEXT DEFAULT 'active'"],
+      ['custodies', 'account_id', 'INTEGER'],
+      ['custodies', 'account_code', 'TEXT'],
+      ['custodies', 'account_name', 'TEXT'],
+      ['custodies', 'payment_method', "TEXT DEFAULT 'نقدي'"],
+      ['cash_movements', 'movement_type', "TEXT DEFAULT 'نقدي'"],
+      ['cash_movements', 'payment_method', "TEXT DEFAULT 'نقدي'"],
+      ['cash_movements', 'reference_no', 'TEXT'],
+      ['cash_movements', 'account_id', 'INTEGER'],
+      ['payroll', 'earned_basic', 'REAL DEFAULT 0'],
+      ['payroll', 'transport_allowance', 'REAL DEFAULT 0'],
+      ['payroll', 'appearance_allowance', 'REAL DEFAULT 0'],
+      ['payroll', 'nature_of_work_allowance', 'REAL DEFAULT 0'],
+      ['payroll', 'living_allowance', 'REAL DEFAULT 0'],
+      ['payroll', 'health_insurance_allowance', 'REAL DEFAULT 0'],
+      ['payroll', 'gross_salary', 'REAL DEFAULT 0'],
+      ['payroll', 'insurance_employee', 'REAL DEFAULT 0'],
+      ['payroll', 'insurance_employer', 'REAL DEFAULT 0'],
+      ['payroll', 'absence_penalty_deductions', 'REAL DEFAULT 0'],
+      ['payroll', 'loan_installments', 'REAL DEFAULT 0'],
+      ['payroll', 'taxable_base', 'REAL DEFAULT 0'],
+      ['payroll', 'tax_amount', 'REAL DEFAULT 0'],
+      ['payroll', 'skills_fund', 'REAL DEFAULT 0'],
+      ['payroll', 'unpaid_leave_deduction', 'REAL DEFAULT 0'],
+      ['payroll', 'total_net_salary', 'REAL DEFAULT 0'],
+      ['payroll', 'working_days', 'INTEGER DEFAULT 31'],
+      ['payroll', 'month_days', 'INTEGER DEFAULT 31'],
+      ['payroll', 'cost_center', "TEXT DEFAULT 'الإدارة العامة'"],
+      ['payroll', 'bank_account', 'TEXT'],
+      ['employees', 'transport_pct', 'REAL DEFAULT 20'],
+      ['employees', 'appearance_pct', 'REAL DEFAULT 25'],
+      ['employees', 'nature_of_work_pct', 'REAL DEFAULT 30'],
+      ['employees', 'living_allowance', 'REAL DEFAULT 90000'],
+      ['employees', 'health_insurance_allowance', 'REAL DEFAULT 30000'],
+      ['employees', 'cost_center', "TEXT DEFAULT 'الإدارة العامة'"]
+    ];
+    for (const [tbl, col, def] of unifiedCols) {
+      const names = sqliteDb.prepare(`PRAGMA table_info(${tbl})`).all().map(c => c.name);
+      if (!names.includes(col)) {
+        sqliteDb.exec(`ALTER TABLE ${tbl} ADD COLUMN ${col} ${def};`);
+      }
     }
 
     // 5. (نُقلت عينة مشروع الدراسة إلى seed.js — بيانات العرض لا تنتمي للإقلاع،

@@ -15,7 +15,7 @@ router.get('/', requirePermission('revenues:view,expenses:view,accounting:view')
     const { type, client_id, supplier_id, project_id, status } = req.query;
     let sql = `
       SELECT p.*, 
-        c.name as client_name, 
+        COALESCE(c.name, p.client_name, '') as client_name, 
         s.name as supplier_name,
         pr.name as project_name,
         a.name as account_name,
@@ -118,6 +118,21 @@ router.post('/', (req, res, next) => {
     const cleanCheckNo = check_no ? String(check_no).trim() : null;
     const cleanBankName = bank_name ? String(bank_name).trim() : null;
 
+    let finalExchangeRate = 1.0;
+    if (selectedCurrency !== 'ر.ي') {
+      if (req.body.exchange_rate && Number(req.body.exchange_rate) > 0) {
+        finalExchangeRate = Number(req.body.exchange_rate);
+      } else {
+        const currRow = await get('SELECT rate_to_base FROM currencies WHERE symbol = ? OR code = ?', [selectedCurrency, selectedCurrency]);
+        if (currRow && currRow.rate_to_base > 0) {
+          finalExchangeRate = Number(currRow.rate_to_base);
+        }
+      }
+    }
+    const finalLocalAmount = req.body.local_amount && Number(req.body.local_amount) > 0
+      ? Number(req.body.local_amount)
+      : Math.round(parsedAmount * finalExchangeRate * 100) / 100;
+
     // توليد رقم السند
     const prefix = type === 'قبض' ? 'RC' : 'PV';
     const currentYear = new Date().getFullYear();
@@ -130,7 +145,9 @@ router.post('/', (req, res, next) => {
     }
 
     const cId = client_id && client_id !== '' ? Number(client_id) : null;
+    const directClientName = req.body.client_name ? String(req.body.client_name).trim() : null;
     const sId = supplier_id && supplier_id !== '' ? Number(supplier_id) : null;
+    const directSupplierName = req.body.supplier_name ? String(req.body.supplier_name).trim() : null;
     const pId = project_id && project_id !== '' ? Number(project_id) : null;
     const accId = account_id && account_id !== '' ? Number(account_id) : null;
     let finalCcId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
@@ -148,18 +165,20 @@ router.post('/', (req, res, next) => {
     const cleanReceiptCategory = req.body.receipt_category || 'general';
 
     const txResult = await transaction(async (tx) => {
-      // 1. تسجيل السند مع بيانات المنشئ وحالة الدورة وتصنيف المقبوضات
+      // 1. تسجيل السند مع بيانات المنشئ وحالة الدورة وتصنيف المقبوضات وأسعار الصرف واسم العميل المباشر
       const result = await tx.run(`
         INSERT INTO payments (
-          receipt_no, type, client_id, supplier_id, project_id, 
+          receipt_no, type, client_id, client_name, supplier_id, project_id, 
           account_id, cost_center_id, amount, currency, payment_method, 
           check_no, bank_name, date, notes, receipt_category,
+          exchange_rate, local_amount,
           status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        receipt_no, type, cId, sId, pId,
+        receipt_no, type, cId, directClientName, sId, pId,
         accId, finalCcId, parsedAmount, selectedCurrency, payment_method,
         cleanCheckNo, cleanBankName, date, notes || '', cleanReceiptCategory,
+        finalExchangeRate, finalLocalAmount,
         finalStatus, creatorId, creatorName,
         finalStatus === 'posted' ? creatorId : null,
         finalStatus === 'posted' ? creatorName : null,
@@ -177,26 +196,43 @@ router.post('/', (req, res, next) => {
               total_paid = total_paid + ?,
               current_balance = GREATEST(0, current_balance - ?)
             WHERE id = ?
-          `, [parsedAmount, parsedAmount, cId]);
+          `, [finalLocalAmount, finalLocalAmount, cId]);
         } else if (type === 'صرف' && sId) {
           await tx.run(`
             UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?
-          `, [parsedAmount, sId]);
+          `, [finalLocalAmount, sId]);
         }
 
-        // حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي) — SUGGESTION-4
+        // التأثير على حركة الصندوق والبنك وتحديد نوع الحركة (نقدي / بنك)
+        // Unified: their multi-currency/bank/party movement + project-scoped chain (same BOX_MATCH as CashBoxService) + zero fallback on virgin DB
+        const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE IFNULL(project_id, 0) = IFNULL(?, 0) ORDER BY id DESC LIMIT 1', [pId || null]) || { current_balance: 0 };
+        const prevBal = Number(lastCash.current_balance) || 0;
+        const newBal = type === 'قبض' ? prevBal + finalLocalAmount : prevBal - finalLocalAmount;
+        const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || String(cleanBankName).length > 0) ? 'بنك' : 'نقدي';
+        const partyLabel = directClientName || directSupplierName;
         const moveDesc = payment_method === 'شيك'
-          ? `سند ${type} بشيك رقم ${cleanCheckNo}: ${receipt_no}`
-          : `سند ${type}: ${receipt_no}`;
+          ? `سند ${type} بشيك رقم ${cleanCheckNo}: ${receipt_no}${partyLabel ? ' (' + partyLabel + ')' : ''}`
+          : `سند ${type}: ${receipt_no}${partyLabel ? ' (' + partyLabel + ')' : ''} ${selectedCurrency !== 'ر.ي' ? '(' + parsedAmount + ' ' + selectedCurrency + ')' : ''}`;
 
-        await CashBoxService.appendMovement(tx, {
-          projectId: pId,
-          cashIn: type === 'قبض' ? parsedAmount : 0,
-          cashOut: type === 'صرف' ? parsedAmount : 0,
-          currency: selectedCurrency, date, notes: moveDesc
-        });
+        await tx.run(`
+          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id, project_id)
+          VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          prevBal,
+          type === 'قبض' ? finalLocalAmount : 0,
+          type === 'صرف' ? finalLocalAmount : 0,
+          newBal,
+          'ر.ي',
+          date,
+          moveDesc,
+          moveType,
+          payment_method,
+          receipt_no,
+          accId,
+          pId || null
+        ]);
 
-        // توليد قيد يومي تلقائي متزن
+        // توليد قيد يومي تلقائي متزن بالعملة المحلية
         const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
         let jeSeq = (entryCount ? entryCount.cnt : 0) + 1;
         let entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
@@ -214,11 +250,11 @@ router.post('/', (req, res, next) => {
         `, [
           entryNo,
           date,
-          `سند ${type} رقم ${receipt_no} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || ''}`,
+          `سند ${type} رقم ${receipt_no} ${selectedCurrency !== 'ر.ي' ? '(' + parsedAmount + ' ' + selectedCurrency + ' بسعر صرف ' + finalExchangeRate + ')' : ''} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || ''}`,
           `سند ${type}`,
           paymentId,
-          parsedAmount,
-          parsedAmount,
+          finalLocalAmount,
+          finalLocalAmount,
           creatorId, creatorName, creatorId, creatorName
         ]);
 
@@ -229,7 +265,7 @@ router.post('/', (req, res, next) => {
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
             VALUES (?, 3, ?, ?, ?, 0, ?)
-          `, [jeId, finalCcId, pId, parsedAmount, `قبض في الصندوق / البنك`]);
+          `, [jeId, finalCcId, pId, finalLocalAmount, `قبض في الصندوق / البنك`]);
 
           let creditAcc = accId;
           let creditNote = 'تحصيل مستخلص / تخفيض ذمة العميل (IFRS 15)';
@@ -249,18 +285,18 @@ router.post('/', (req, res, next) => {
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
             VALUES (?, ?, ?, ?, 0, ?, ?)
-          `, [jeId, creditAcc, finalCcId, pId, parsedAmount, creditNote]);
+          `, [jeId, creditAcc, finalCcId, pId, finalLocalAmount, creditNote]);
         } else {
           const debitAcc = accId || 7;
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
             VALUES (?, ?, ?, ?, ?, 0, ?)
-          `, [jeId, debitAcc, finalCcId, pId, parsedAmount, `سداد للمورد / إثبات المصروف`]);
+          `, [jeId, debitAcc, finalCcId, pId, finalLocalAmount, `سداد للمورد / إثبات المصروف`]);
 
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
             VALUES (?, 3, ?, ?, 0, ?, ?)
-          `, [jeId, finalCcId, pId, parsedAmount, `صرف من الصندوق / البنك`]);
+          `, [jeId, finalCcId, pId, finalLocalAmount, `صرف من الصندوق / البنك`]);
         }
       }
 

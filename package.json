@@ -12,6 +12,7 @@
     "test:unit": "node --test --test-concurrency=1 tests/unit/**/*.test.js",
     "test:integration": "node --test --test-concurrency=1 tests/integration/**/*.test.js",
     "seed": "node server/database/seed.js",
+    "migrate": "node server/database/migrate_chart_of_accounts_and_vouchers.js && node server/database/migrate_vouchers_custodies_periods.js && node server/database/migrate_comprehensive_payroll.js",
     "costs:recalc": "node scripts/recalc_project_costs.js",
     "android:sync": "node build_www.js && npx cap sync android",
     "android:open": "npx cap open android"
