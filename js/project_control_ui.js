@@ -24,12 +24,57 @@ const ProjectControlUI = {
 
   // مسار الـ API الموحد
   apiUrl(endpoint) {
-    const pid = this.currentProjectId || (window.ProjectHub && ProjectHub.currentProjectId);
+    const pid = this.getProjectId();
     return `/api/project-control/${pid}/${endpoint}`;
   },
 
   getProjectId() {
-    return this.currentProjectId || (window.ProjectHub && ProjectHub.currentProjectId);
+    if (this.currentProjectId) return this.currentProjectId;
+    if (window.ProjectHub && ProjectHub.currentProjectId) return ProjectHub.currentProjectId;
+    const select = document.getElementById('hubProjectSelect');
+    if (select && select.value) return Number(select.value);
+    if (window.Projects && Projects.list && Projects.list.length > 0 && Projects.list[0].id) {
+      return Projects.list[0].id;
+    }
+    return null;
+  },
+
+  // التحقق من وجود جلسة مصادقة نشطة
+  isAuthenticated() {
+    return !!((window.Auth && window.Auth.token) ||
+              sessionStorage.getItem('rawasi_token') ||
+              localStorage.getItem('rawasi_token'));
+  },
+
+  // بطاقة طلب تسجيل الدخول عند عدم توفر جلسة
+  renderAuthRequired(container, featureTitle) {
+    if (!container) return;
+    container.innerHTML = `
+      <div class="panel-card" style="padding: 40px 24px; text-align: center; border: 1px dashed var(--gold-primary); background: rgba(15, 23, 42, 0.7); border-radius: 12px; margin: 20px 0;">
+        <div style="font-size: 2.8rem; margin-bottom: 12px;">🔒</div>
+        <h4 style="color: var(--gold-light); margin-bottom: 8px; font-size: 1.15rem;">يرجى تسجيل الدخول أولاً</h4>
+        <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+          يتطلب استعراض ${featureTitle} وجود جلسة مصادقة نشطة ومعتمدة في النظام.
+        </p>
+        <button class="btn btn-primary" onclick="if (window.Auth && typeof Auth.showLogin === 'function') Auth.showLogin(); else location.reload();" style="padding: 9px 26px; font-weight: bold;">
+          <span>🔑 تسجيل الدخول الآن</span>
+        </button>
+      </div>
+    `;
+  },
+
+  // بطاقة طلب تحديد المشروع أولاً
+  renderNoProjectSelected(container, featureTitle) {
+    if (!container) return;
+    container.innerHTML = `
+      <div class="panel-card" style="padding: 36px 20px; text-align: center; border: 1px dashed var(--border-color); background: rgba(15, 23, 42, 0.5); border-radius: 12px; margin: 20px 0;">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">📁</div>
+        <h4 style="color: var(--text-primary); margin-bottom: 8px;">يرجى تحديد المشروع أولاً</h4>
+        <p style="color: var(--text-secondary); margin-bottom: 18px; font-size: 0.9rem;">
+          يرجى اختيار مشروع من القائمة المنسدلة في أعلى مساحة العمل لعرض مؤشرات ${featureTitle}.
+        </p>
+      </div>
+    `;
   },
 
   // ==========================================================================
@@ -41,6 +86,16 @@ const ProjectControlUI = {
     const container = document.getElementById('hubPane_smart-completion');
     if (!container) return;
 
+    if (!this.isAuthenticated()) {
+      this.renderAuthRequired(container, 'مؤشرات تدقيق نسبة الإنجاز (Smart % Complete)');
+      return;
+    }
+
+    if (!this.currentProjectId) {
+      this.renderNoProjectSelected(container, 'نسبة الإنجاز الذكية');
+      return;
+    }
+
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
@@ -50,8 +105,18 @@ const ProjectControlUI = {
 
     try {
       const res = await fetch(this.apiUrl('completion'));
+      if (res.status === 401) {
+        this.renderAuthRequired(container, 'مؤشرات تدقيق نسبة الإنجاز');
+        return;
+      }
       const json = await res.json();
-      if (!json.success) throw new Error(json.message || 'فشل جلب بيانات تدقيق الإنجاز');
+      if (!json.success) {
+        if (json.authenticated === false || (json.message && json.message.includes('تسجيل الدخول'))) {
+          this.renderAuthRequired(container, 'مؤشرات تدقيق نسبة الإنجاز');
+          return;
+        }
+        throw new Error(json.message || 'فشل جلب بيانات تدقيق الإنجاز');
+      }
 
       this.cache.completion = json.data;
       const d = json.data;
@@ -282,7 +347,11 @@ const ProjectControlUI = {
       this.loadEngineerCertificationsTable(projectId);
 
     } catch (err) {
-      console.error('Error rendering smart completion:', err);
+      if (err.message && err.message.includes('تسجيل الدخول')) {
+        this.renderAuthRequired(container, 'مؤشرات تدقيق نسبة الإنجاز');
+        return;
+      }
+      console.warn('Notice loading smart completion:', err);
       container.innerHTML = `
         <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
@@ -438,6 +507,16 @@ const ProjectControlUI = {
     const container = document.getElementById('hubPane_wbs-schedule');
     if (!container) return;
 
+    if (!this.isAuthenticated()) {
+      this.renderAuthRequired(container, 'هيكل WBS والجدول الزمني والمسار الحرج');
+      return;
+    }
+
+    if (!this.currentProjectId) {
+      this.renderNoProjectSelected(container, 'الجدول الزمني WBS');
+      return;
+    }
+
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
@@ -450,8 +529,20 @@ const ProjectControlUI = {
         fetch(this.apiUrl('wbs')),
         fetch(this.apiUrl('wbs/compare-baseline'))
       ]);
+
+      if (wbsRes.status === 401 || compRes.status === 401) {
+        this.renderAuthRequired(container, 'هيكل WBS والجدول الزمني');
+        return;
+      }
+
       const wbsJson = await wbsRes.json();
       const compJson = await compRes.json();
+
+      if (wbsJson.authenticated === false || compJson.authenticated === false ||
+          (wbsJson.message && wbsJson.message.includes('تسجيل الدخول'))) {
+        this.renderAuthRequired(container, 'هيكل WBS والجدول الزمني');
+        return;
+      }
 
       const activities = wbsJson.activities || [];
       const stats = wbsJson.stats || {};
@@ -619,7 +710,11 @@ const ProjectControlUI = {
       `;
 
     } catch (err) {
-      console.error('Error rendering WBS Schedule:', err);
+      if (err.message && err.message.includes('تسجيل الدخول')) {
+        this.renderAuthRequired(container, 'هيكل WBS والجدول الزمني');
+        return;
+      }
+      console.warn('Notice loading WBS Schedule:', err);
       container.innerHTML = `
         <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
@@ -748,6 +843,16 @@ const ProjectControlUI = {
     const container = document.getElementById('hubPane_evm-control');
     if (!container) return;
 
+    if (!this.isAuthenticated()) {
+      this.renderAuthRequired(container, 'مؤشرات القيمة المكتسبة (EVM Dashboard)');
+      return;
+    }
+
+    if (!this.currentProjectId) {
+      this.renderNoProjectSelected(container, 'مؤشرات القيمة المكتسبة EVM');
+      return;
+    }
+
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
@@ -757,8 +862,18 @@ const ProjectControlUI = {
 
     try {
       const res = await fetch(this.apiUrl('evm'));
+      if (res.status === 401) {
+        this.renderAuthRequired(container, 'مؤشرات القيمة المكتسبة EVM');
+        return;
+      }
       const json = await res.json();
-      if (!json.success) throw new Error(json.message || 'فشل جلب مؤشرات EVM');
+      if (!json.success) {
+        if (json.authenticated === false || (json.message && json.message.includes('تسجيل الدخول'))) {
+          this.renderAuthRequired(container, 'مؤشرات القيمة المكتسبة EVM');
+          return;
+        }
+        throw new Error(json.message || 'فشل جلب مؤشرات EVM');
+      }
 
       const d = json.data;
       this.cache.evm = d;
@@ -1005,7 +1120,11 @@ const ProjectControlUI = {
       `;
 
     } catch (err) {
-      console.error('Error rendering EVM:', err);
+      if (err.message && err.message.includes('تسجيل الدخول')) {
+        this.renderAuthRequired(container, 'مؤشرات القيمة المكتسبة EVM');
+        return;
+      }
+      console.warn('Notice loading EVM:', err);
       container.innerHTML = `
         <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
@@ -1042,6 +1161,16 @@ const ProjectControlUI = {
     const container = document.getElementById('hubPane_risks-claims');
     if (!container) return;
 
+    if (!this.isAuthenticated()) {
+      this.renderAuthRequired(container, 'سجلات الحوكمة والمخاطر والمطالبات التعاقدية');
+      return;
+    }
+
+    if (!this.currentProjectId) {
+      this.renderNoProjectSelected(container, 'سجلات المخاطر والمطالبات');
+      return;
+    }
+
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
@@ -1051,8 +1180,18 @@ const ProjectControlUI = {
 
     try {
       const res = await fetch(this.apiUrl('risks/dashboard'));
+      if (res.status === 401) {
+        this.renderAuthRequired(container, 'سجلات الحوكمة والمخاطر والمطالبات');
+        return;
+      }
       const json = await res.json();
-      if (!json.success) throw new Error(json.message || 'فشل جلب سجلات الحوكمة');
+      if (!json.success) {
+        if (json.authenticated === false || (json.message && json.message.includes('تسجيل الدخول'))) {
+          this.renderAuthRequired(container, 'سجلات الحوكمة والمخاطر والمطالبات');
+          return;
+        }
+        throw new Error(json.message || 'فشل جلب سجلات الحوكمة');
+      }
 
       const d = json.data;
       this.cache.risks = d;
@@ -1168,7 +1307,11 @@ const ProjectControlUI = {
       `;
 
     } catch (err) {
-      console.error('Error rendering Risks and Claims:', err);
+      if (err.message && err.message.includes('تسجيل الدخول')) {
+        this.renderAuthRequired(container, 'سجلات الحوكمة والمخاطر والمطالبات');
+        return;
+      }
+      console.warn('Notice loading Risks and Claims:', err);
       container.innerHTML = `
         <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
