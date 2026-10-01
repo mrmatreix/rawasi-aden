@@ -109,9 +109,14 @@ const AccountingService = {
     // 2. التحقق المالي الصارم من التوازن ومراكز التكلفة
     const { sanitizedLines, totalDebit, totalCredit } = await this.validateJournalEntryLines(lines);
 
-    // 3. توليد رقم القيد التسلسلي
+    // 3. توليد رقم القيد التسلسلي (حلقة فرادة: COUNT+1 وحده يصطدم بعد أي حذف قيد)
     const countRow = await get('SELECT COUNT(*) as count FROM journal_entries');
-    const entryNo = `JV-${new Date().getFullYear()}-${String((countRow?.count || 0) + 1).padStart(4, '0')}`;
+    let jeSeqAc = (countRow?.count || 0) + 1;
+    let entryNo = `JV-${new Date().getFullYear()}-${String(jeSeqAc).padStart(4, '0')}`;
+    while (await get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+      jeSeqAc += 1;
+      entryNo = `JV-${new Date().getFullYear()}-${String(jeSeqAc).padStart(4, '0')}`;
+    }
 
     // 4. الحفظ الذري مع توثيق المنشئ وحالة الترحيل
     let validCreatorId = null;

@@ -186,7 +186,12 @@ const BankReconciliationService = {
 
       // 1. توليد قيد اليومية: من حـ/ عمولات ومصاريف بنكية (5210) إلى حـ/ البنك
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
+        jeSeq++;
+        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      }
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -313,7 +318,12 @@ const BankReconciliationService = {
     return await transaction(async (tx) => {
       // 1. توليد قيد عكسي للشيك المرتجع
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
+        jeSeq++;
+        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      }
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (

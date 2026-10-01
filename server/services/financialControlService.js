@@ -467,8 +467,12 @@ const FinancialControlService = {
 
     await transaction(async (tx) => {
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+      let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
       reversingEntryNo = `REV-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [reversingEntryNo])) {
+        seq++;
+        reversingEntryNo = `REV-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`;
+      }
 
       const totalDebit = Number(entry.total_credit || entry.total_debit);
       const totalCredit = Number(entry.total_debit || entry.total_credit);

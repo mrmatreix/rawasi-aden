@@ -189,7 +189,12 @@ const InventoryValuationService = {
 
       // 3. إنشاء قيد محاسبي متزن: من حـ/ الموردين إلى حـ/ المخزون
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
+        jeSeq++;
+        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      }
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -294,7 +299,12 @@ const InventoryValuationService = {
 
       // 3. إنشاء قيد محاسبي متزن: من حـ/ المخزون إلى حـ/ تكاليف ومصروفات المشاريع
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
+        jeSeq++;
+        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      }
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -407,7 +417,12 @@ const InventoryValuationService = {
 
       // 2. توليد قيد التسوية المحاسبي المتزن
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
+        jeSeq++;
+        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
+      }
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
