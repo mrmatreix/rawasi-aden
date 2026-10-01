@@ -11,6 +11,8 @@
 const { get, query, run, transaction } = require('../database/db');
 const { checkPeriodOpen } = require('./periodService');
 const { logAudit } = require('./auditService');
+const ProjectCostService = require('./projectCostService');
+const CashBoxService = require('./cashBoxService');
 
 const DOCUMENT_STATUSES = {
   DRAFT: 'draft',               // مسودة (قابلة للتعديل والحذف دون أثر مالي)
@@ -126,6 +128,7 @@ const FinancialControlService = {
 
     const revDate = reversal_date || new Date().toISOString().split('T')[0];
     await this.assertPeriodOpen(revDate);
+    await ProjectCostService.ensureSchema(); // تجهيز مخطط توحيد التكلفة قبل المعاملة
 
     const revUser = user || (req ? req.user : null) || { id: null, username: 'المدير المالي' };
     const revUserId = await this.resolveValidUserId(revUser.id);
@@ -136,27 +139,60 @@ const FinancialControlService = {
     let reversingJeId = null;
     let reversingEntryNo = null;
 
-    await transaction(async (tx) => {
-      // 1. إعادة رصيد الصندوق / حركة البنك بالطرف المعاكس
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-      const prevBal = Number(lastCash.current_balance) || 0;
-      const newBal = prevBal + amount;
-      const cashNotes = `قيد عكسي لسند الصرف ${exp.receipt_no}: ${cleanReason}`;
-
-      await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, 0, 0, ?, ?, ?, ?)
-      `, [prevBal, amount, newBal, exp.currency || 'ر.ي', revDate, cashNotes]);
-
-      // 2. تخفيض تكلفة المشروع إن كان مرتبطاً بمشروع
-      if (exp.project_id) {
-        await tx.run(`
-          UPDATE projects SET actual_cost = GREATEST(0, actual_cost - ?) WHERE id = ?
-        `, [amount, exp.project_id]);
+    // SUGGESTION-7/8: كشف سند التسوية من دليل القيد الأصلي (مدين 21/215) — لا استنتاج
+    let settleInfo = null;
+    const origJe = await get(
+      `SELECT id FROM journal_entries WHERE reference_type = 'سند صرف' AND reference_id = ? ORDER BY id DESC LIMIT 1`,
+      [exp.id]
+    );
+    if (origJe) {
+      const drLine = await get(
+        'SELECT account_id FROM journal_entry_lines WHERE entry_id = ? AND debit > 0 ORDER BY id ASC LIMIT 1',
+        [origJe.id]
+      );
+      const apAcc = await get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
+      const wpAcc = await get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
+      if (drLine && apAcc && Number(drLine.account_id) === Number(apAcc.id)) {
+        const pur = await get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
+        if (!pur) throw new Error('لا يمكن العكس: الفاتورة المرتبطة بسند التسوية غير موجودة');
+        if (!pur.supplier_id) throw new Error('لا يمكن العكس: فاتورة التسوية بلا مورد مسجل');
+        settleInfo = { kind: 'purchase', purchase: pur, accId: apAcc.id };
+      } else if (drLine && wpAcc && Number(drLine.account_id) === Number(wpAcc.id)) {
+        const lab = await get('SELECT * FROM project_labor_expenses WHERE linked_expense_id = ?', [exp.id]);
+        if (!lab) throw new Error('لا يمكن العكس: سجل الأجور المرتبط بسند التسوية غير موجود');
+        settleInfo = { kind: 'labor', labor: lab, accId: wpAcc.id };
       }
+    }
 
-      // 3. تخفيض رصيد المورد إن كان محدداً
-      if (exp.supplier_id) {
+    await transaction(async (tx) => {
+      // 1. تعويض نقدي في صندوق المشروع (SUGGESTION-7: واعٍ بالصناديق بدل الإدخال الخام العام)
+      const cashNotes = `قيد عكسي لسند الصرف ${exp.receipt_no}: ${cleanReason}`;
+      await CashBoxService.appendMovement(tx, {
+        projectId: exp.project_id ?? null, cashIn: amount,
+        currency: exp.currency || 'ر.ي', date: revDate, notes: cashNotes
+      });
+
+      // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة بعد تثبيت حالة reversed)
+
+      // 3. الذمم والمسدد: استعادة لسند التسوية، تخفيض للسلوك الأصلي
+      if (settleInfo && settleInfo.kind === 'labor') {
+        const restoredPaid = Math.max(0, (Number(settleInfo.labor.paid_amount) || 0) - amount);
+        const restoredRemaining = Number(settleInfo.labor.total_amount) - restoredPaid;
+        const restoredStatus = restoredRemaining <= 0.005 ? 'مدفوع' : (restoredPaid > 0.005 ? 'جزئي' : 'غير مدفوع');
+        await tx.run(
+          'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
+          [restoredPaid, restoredStatus, settleInfo.labor.id]
+        );
+      } else if (settleInfo) {
+        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [amount, settleInfo.purchase.supplier_id]);
+        const restoredPaid = Math.max(0, (Number(settleInfo.purchase.paid_amount) || 0) - amount);
+        const restoredRemaining = Number(settleInfo.purchase.total_amount) - restoredPaid;
+        const restoredStatus = restoredRemaining <= 0.005 ? 'مدفوع' : (restoredPaid > 0.005 ? 'جزئي' : 'غير مدفوع');
+        await tx.run(
+          'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+          [restoredPaid, restoredStatus, settleInfo.purchase.id]
+        );
+      } else if (exp.supplier_id) {
         await tx.run(`
           UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?
         `, [amount, exp.supplier_id]);
@@ -188,8 +224,13 @@ const FinancialControlService = {
 
       // أسطر القيد العكسي: يتم عكس الطرفين تماماً
       // المدين: الصندوق والبنك (حساب 3)
-      // الدائن: حساب المصروف الأصلي (accId أو 10)
-      const expenseAccId = exp.account_id || 10;
+      // الدائن: حساب المصروف الأصلي (accId أو 10) — أو الموردون (21)/الأجور المستحقة (215) لسند التسوية
+      const expenseAccId = settleInfo ? settleInfo.accId : (exp.account_id || 10);
+      const creditNote = settleInfo && settleInfo.kind === 'labor'
+        ? `إلغاء تسوية الأجر وإعادة الالتزام — أجور #${settleInfo.labor.id} - ${cleanReason}`
+        : settleInfo
+          ? `إلغاء تسوية الذمم وإعادة الالتزام للمورد - فاتورة #${settleInfo.purchase.id} - ${cleanReason}`
+          : `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`;
       const finalCcId = exp.cost_center_id || 1;
 
       await tx.run(`
@@ -200,7 +241,7 @@ const FinancialControlService = {
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, ?, 0, ?, ?)
-      `, [reversingJeId, expenseAccId, finalCcId, exp.project_id, amount, `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`]);
+      `, [reversingJeId, expenseAccId, finalCcId, exp.project_id, amount, creditNote]);
 
       // 5. تحديث حالة سند الصرف الأصلي إلى "معكوس" مع حفظ بيانات العكس
       await tx.run(`
@@ -213,6 +254,11 @@ const FinancialControlService = {
             reversal_ref_id = ?
         WHERE id = ?
       `, [revUserId, revUserName, cleanReason, reversingJeId, exp.id]);
+
+      // 6. توحيد التكلفة: إعادة الاحتساب من المصادر بعد تثبيت حالة reversed
+      if (exp.project_id) {
+        await ProjectCostService.recalculateProjectCost(exp.project_id, tx);
+      }
     });
 
     // 6. تسجيل العملية بدقة في سجل التدقيق الرقابي مع بيانات القيمة السابقة والجديدة والسبب
@@ -273,18 +319,15 @@ const FinancialControlService = {
     let reversingEntryNo = null;
 
     await transaction(async (tx) => {
-      // 1. عكس حركة الصندوق والبنك
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-      const prevBal = Number(lastCash.current_balance) || 0;
-      const newBal = isReceipt ? (prevBal - amount) : (prevBal + amount);
+      // 1. عكس حركة الصندوق في سلسلة صندوق المشروع (SUGGESTION-7: واعٍ بالصناديق)
       const cashIn = isReceipt ? 0 : amount;
       const cashOut = isReceipt ? amount : 0;
       const cashNotes = `قيد عكسي لسند ${pay.type} ${pay.receipt_no}: ${cleanReason}`;
 
-      await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?)
-      `, [prevBal, cashIn, cashOut, newBal, pay.currency || 'ر.ي', revDate, cashNotes]);
+      await CashBoxService.appendMovement(tx, {
+        projectId: pay.project_id ?? null, cashIn, cashOut,
+        currency: pay.currency || 'ر.ي', date: revDate, notes: cashNotes
+      });
 
       // 2. عكس أرصدة العميل أو المورد
       if (isReceipt && pay.client_id) {
@@ -424,8 +467,12 @@ const FinancialControlService = {
 
     await transaction(async (tx) => {
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+      let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
       reversingEntryNo = `REV-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [reversingEntryNo])) {
+        seq++;
+        reversingEntryNo = `REV-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`;
+      }
 
       const totalDebit = Number(entry.total_credit || entry.total_debit);
       const totalCredit = Number(entry.total_debit || entry.total_credit);
@@ -674,15 +721,12 @@ const FinancialControlService = {
         await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [remaining, pu.supplier_id]);
       }
 
-      // 2. إعادة النقدية للصندوق إن كان هناك جزء مدفوع نقداً
+      // 2. إعادة النقدية لصندوق المشروع إن كان هناك جزء مدفوع نقداً (SUGGESTION-7: واعٍ بالصناديق)
       if (paidAmount > 0) {
-        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-        const prevBal = Number(lastCash.current_balance) || 0;
-        const newBal = prevBal + paidAmount;
-        await tx.run(`
-          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-          VALUES (?, ?, 0, 0, ?, ?, ?, ?)
-        `, [prevBal, paidAmount, newBal, pu.currency || 'ر.ي', revDate, `قيد عكسي لمشتريات ${pu.invoice_no}: ${cleanReason}`]);
+        await CashBoxService.appendMovement(tx, {
+          projectId: pu.project_id ?? null, cashIn: paidAmount,
+          currency: pu.currency || 'ر.ي', date: revDate, notes: `قيد عكسي لمشتريات ${pu.invoice_no}: ${cleanReason}`
+        });
       }
 
       // 3. توليد قيد يومي عكسي متزن
@@ -761,6 +805,217 @@ const FinancialControlService = {
       reversing_je_id: reversingJeId,
       invoice_no: pu.invoice_no,
       amount: totalAmount
+    };
+  },
+
+  // ─── SUGGESTION-4 (§12): الإقفال السنوي ─────────────────────────────────────
+  // قيد إقفال مركب بتاريخ نهاية الفترة: تصفير حسابات 4/5 في الأرباح المحتجزة،
+  // ثم قفل الفترة ذرياً. يُرفض تكرار الإقفال عبر close_entry_id.
+
+  async ensureCloseSchema() {
+    if (this._closeSchemaEnsured) return true;
+    const { getActiveEngine } = require('../database/db');
+    const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
+
+    const ensureColumn = async (table, column, sqliteDef, mysqlDef) => {
+      if (engine === 'mysql') {
+        const cols = await query(`SHOW COLUMNS FROM ${table}`);
+        const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
+        if (!names.includes(column)) {
+          await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${mysqlDef}`);
+        }
+      } else {
+        const cols = await query(`PRAGMA table_info(${table})`);
+        const names = (cols || []).map(c => c.name);
+        if (!names.includes(column)) {
+          await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqliteDef}`);
+        }
+      }
+    };
+
+    try {
+      await ensureColumn('accounting_periods', 'close_entry_id', 'INTEGER', 'INT NULL');
+      // حساب الأرباح المحتجزة (33) ابناً لحقوق الملكية (3) إن لم يوجد
+      const retained = await get("SELECT id FROM accounts WHERE code = '33'");
+      if (!retained) {
+        const parent = await get("SELECT id FROM accounts WHERE code = '3'");
+        await run(
+          'INSERT INTO accounts (code, name, type, parent_id, balance) VALUES (?, ?, ?, ?, 0)',
+          ['33', 'الأرباح المحتجزة والمرحّلة', 'حقوق ملكية', parent ? parent.id : null]
+        );
+      }
+      this._closeSchemaEnsured = true;
+      return true;
+    } catch (err) {
+      console.warn('⚠️ [YearClose] تعذر التأكد من مخطط الإقفال:', err.message);
+      throw err;
+    }
+  },
+
+  /** صافي حسابات النتيجة (4/5) بأرصدتها الكاملة حتى تاريخ معين — نفس منهج التقارير */
+  async getYearClosePreview(endDate) {
+    await this.ensureCloseSchema();
+    const accounts = await query(
+      `SELECT * FROM accounts
+       WHERE type IN ('إيرادات', 'مصروفات', 'تكاليف')
+          OR code LIKE '4%' OR code LIKE '5%'
+       ORDER BY code ASC`
+    );
+    const move = await query(`
+      SELECT jel.account_id,
+             COALESCE(SUM(jel.debit), 0) as d, COALESCE(SUM(jel.credit), 0) as c
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON jel.entry_id = je.id
+      WHERE je.status = 'posted' AND je.date <= ?
+      GROUP BY jel.account_id
+    `, [endDate]);
+    const moveMap = {};
+    (move || []).forEach(r => {
+      moveMap[r.account_id] = { d: Number(r.d) || 0, c: Number(r.c) || 0 };
+    });
+
+    const revenues = [];
+    const expenses = [];
+    for (const acc of accounts) {
+      const t = (acc.type || '').trim();
+      const code = String(acc.code || '');
+      const isRevenue = t === 'إيرادات' || (!['مصروفات', 'تكاليف'].includes(t) && code.startsWith('4'));
+      const isExpense = t === 'مصروفات' || t === 'تكاليف' ||
+        (!['إيرادات'].includes(t) && code.startsWith('5'));
+      if (!isRevenue && !isExpense) continue;
+      const m = moveMap[acc.id] || { d: 0, c: 0 };
+      const opening = Number(acc.balance) || 0;
+      let totalD = m.d;
+      let totalC = m.c;
+      if (isExpense) {
+        if (opening >= 0) totalD += opening; else totalC += -opening;
+      } else {
+        if (opening >= 0) totalC += opening; else totalD += -opening;
+      }
+      const net = isExpense ? (totalD - totalC) : (totalC - totalD);
+      if (Math.abs(net) < 0.005) continue;
+      const row = {
+        account_id: acc.id, code: acc.code, name: acc.name,
+        total_debit: totalD, total_credit: totalC, net
+      };
+      if (isRevenue) revenues.push(row); else expenses.push(row);
+    }
+    const totalRev = revenues.reduce((s, r) => s + r.net, 0);
+    const totalExp = expenses.reduce((s, r) => s + r.net, 0);
+    return { revenues, expenses, total_revenues: totalRev, total_expenses: totalExp, net: totalRev - totalExp };
+  },
+
+  /**
+   * تنفيذ الإقفال السنوي + قفل الفترة ذرياً.
+   * closedBy: اسم المفوَّض (تُتحقق كلمة المرور في المسار قبل الاستدعاء).
+   */
+  async executeYearClose(periodId, { closedBy, notes = null, req = null } = {}) {
+    await this.ensureCloseSchema();
+    const period = await get('SELECT * FROM accounting_periods WHERE id = ?', [periodId]);
+    if (!period) throw new Error('الفترة المحاسبية غير موجودة');
+    if (period.close_entry_id) {
+      const je = await get('SELECT entry_no FROM journal_entries WHERE id = ?', [period.close_entry_id]);
+      throw new Error(`تم إقفال هذه الفترة محاسبياً مسبقاً بالقيد (${je ? je.entry_no : period.close_entry_id})`);
+    }
+    if (period.status === 'closed') {
+      throw new Error('الفترة مقفلة بدون قيد إقفال — أعد فتحها ثم نفّذ الإقفال السنوي');
+    }
+    await this.assertPeriodOpen(period.end_date);
+
+    const preview = await this.getYearClosePreview(period.end_date);
+    const retained = await get("SELECT id FROM accounts WHERE code = '33'");
+    if (!retained) throw new Error('حساب الأرباح المحتجزة (33) غير موجود');
+
+    const userId = req?.user?.id || null;
+    const posterId = await this.resolveValidUserId(userId);
+    const posterName = closedBy || req?.user?.username || 'المدير العام';
+    const fYear = period.fiscal_year || String(period.end_date).slice(0, 4);
+
+    const result = await transaction(async (tx) => {
+      let jeId = null;
+      let entryNo = null;
+
+      // سطور الإقفال: تصفير كل حساب نتيجة ثم الفرق للأرباح المحتجزة
+      const closeLines = [];
+      for (const r of preview.revenues) {
+        if (r.net >= 0) closeLines.push({ account_id: r.account_id, debit: r.net, credit: 0 });
+        else closeLines.push({ account_id: r.account_id, debit: 0, credit: -r.net });
+      }
+      for (const e of preview.expenses) {
+        if (e.net >= 0) closeLines.push({ account_id: e.account_id, debit: 0, credit: e.net });
+        // المصروف الدائن (net سالب) يُصفَّر بمدين موجب — لا مدين سالب (كان يكسر اتزان الفرق)
+        else closeLines.push({ account_id: e.account_id, debit: -e.net, credit: 0 });
+      }
+      const lineDr = closeLines.reduce((s, l) => s + l.debit, 0);
+      const lineCr = closeLines.reduce((s, l) => s + l.credit, 0);
+      const plug = Math.round((lineDr - lineCr) * 100) / 100;
+      if (Math.abs(plug) >= 0.005) {
+        if (plug > 0) closeLines.push({ account_id: retained.id, debit: 0, credit: plug });
+        else closeLines.push({ account_id: retained.id, debit: -plug, credit: 0 });
+      }
+
+      if (closeLines.length > 0) {
+        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
+        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+        entryNo = `CLS-${fYear}-${String(jeSeq).padStart(4, '0')}`;
+        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+          jeSeq++;
+          entryNo = `CLS-${fYear}-${String(jeSeq).padStart(4, '0')}`;
+        }
+        const total = closeLines.reduce((s, l) => s + l.debit, 0);
+        const jeRes = await tx.run(`
+          INSERT INTO journal_entries (
+            entry_no, date, description, reference_type, reference_id,
+            total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, ?, ?, 'إقفال سنوي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [
+          entryNo, period.end_date,
+          `قيد الإقفال السنوي للفترة (${period.period_name}) — تصفير حسابات النتيجة في الأرباح المحتجزة`,
+          period.id, total, total, posterId, posterName, posterId, posterName
+        ]);
+        jeId = jeRes.lastInsertRowid || jeRes.insertId;
+
+        for (const l of closeLines) {
+          await tx.run(`
+            INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
+            VALUES (?, ?, ?, ?, ?)
+          `, [jeId, l.account_id, l.debit, l.credit, `إقفال ${period.period_name}`]);
+        }
+      }
+
+      await tx.run(`
+        UPDATE accounting_periods
+        SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = ?,
+            close_entry_id = ?, notes = COALESCE(?, notes)
+        WHERE id = ?
+      `, [posterName, jeId, notes || null, period.id]);
+
+      return { jeId, entryNo, lines_count: closeLines.length };
+    });
+
+    if (req) {
+      await logAudit(req, {
+        action: 'CLOSE_PERIOD',
+        entity_type: 'period',
+        entity_id: periodId,
+        details: {
+          period_name: period.period_name, closed_by: posterName,
+          close_entry_no: result.entryNo, total_revenues: preview.total_revenues,
+          total_expenses: preview.total_expenses, net: preview.net
+        }
+      });
+    }
+
+    return {
+      success: true,
+      entry_no: result.entryNo,
+      journal_entry_id: result.jeId,
+      lines_count: result.lines_count,
+      total_revenues: preview.total_revenues,
+      total_expenses: preview.total_expenses,
+      net: preview.net,
+      locked: true
     };
   }
 };

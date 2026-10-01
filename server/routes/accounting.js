@@ -6,6 +6,7 @@ const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const AccountingService = require('../services/accountingService');
 const FinancialControlService = require('../services/financialControlService');
+const CashBoxService = require('../services/cashBoxService');
 const { requirePermission } = require('../middleware/security');
 
 // دليل الحسابات الشجري مع دعم الهرمية، الرتب، والحسابات التحليلية الطرفية
@@ -1164,10 +1165,35 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
         });
       }
 
-      // توليد رقم عملية التصفية
+      // توليد رقم عملية التصفية (حلقة فرادة: COUNT+1 وحده يصطدم بعد أي حذف)
       const countRes = await get('SELECT COUNT(*) as cnt FROM custodies');
-      const seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      const custody_no = `STL-${currentYear}-${String(seq).padStart(4, '0')}`;
+      let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+      let custody_no = `STL-${currentYear}-${String(seq).padStart(4, '0')}`;
+      while (await get('SELECT id FROM custodies WHERE custody_no = ?', [custody_no])) {
+        seq += 1;
+        custody_no = `STL-${currentYear}-${String(seq).padStart(4, '0')}`;
+      }
+
+      // SUGGESTION-4: حساب المصروف (اختياري — الافتراضي 5) + حساب العهد + صندوق المشروع الموروث
+      await AccountingService.ensureCustodyJournalLinks();
+      const settlePId = req.body.project_id ? Number(req.body.project_id)
+        : (origCustody.project_id ? Number(origCustody.project_id) : null);
+      const settleCc = req.body.cost_center_id ? Number(req.body.cost_center_id) : null;
+      let expAcc = null;
+      if (req.body.expense_account_id) {
+        expAcc = await get('SELECT id FROM accounts WHERE id = ?', [Number(req.body.expense_account_id)]);
+        if (!expAcc) {
+          return res.status(400).json({ success: false, message: 'حساب المصروف المحدد غير موجود في الدليل' });
+        }
+      } else {
+        expAcc = await get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
+      }
+      const advAccSettle = await get("SELECT id FROM accounts WHERE code = '114' LIMIT 1");
+      if (!expAcc || !advAccSettle) {
+        return res.status(500).json({ success: false, message: 'الحسابات المحاسبية للتصفية (5/114) غير موجودة في الدليل' });
+      }
+      const settleCreatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+      const settleCreatorName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
 
       const txResult = await transaction(async (tx) => {
         // 1. تحديث رصيد العهدة الأصلية
@@ -1176,7 +1202,7 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
         const newStatus = newRemaining <= 0 ? 'مصفاة بالكامل' : 'تصفية جزئية';
 
         await tx.run(`
-          UPDATE custodies 
+          UPDATE custodies
           SET spent_amount = ?, remaining_amount = ?, status = ?
           WHERE id = ?
         `, [newSpent, newRemaining, newStatus, origCustody.id]);
@@ -1186,17 +1212,50 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
           INSERT INTO custodies (
             custody_no, operation_type, related_custody_id, related_custody_no,
             employee_id, employee_no, employee_name,
-            total_amount, spent_amount, remaining_amount, currency, status, date, notes,
+            total_amount, spent_amount, remaining_amount, currency, status, date, notes, project_id,
             account_id, account_code, account_name, payment_method
-          ) VALUES (?, 'تصفية عهدة', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'تمت التصفية', ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, 'تصفية عهدة', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'تمت التصفية', ?, ?, ?, ?, ?, ?, ?)
         `, [
           custody_no, origCustody.id, origCustody.custody_no,
           empId || origCustody.employee_id, empNo || origCustody.employee_no, empName || origCustody.employee_name,
           settleAmount, settleAmount, 0, selectedCurrency, date, notes || `تصفية للعهدة رقم ${origCustody.custody_no}`,
+          settlePId,
           accId || origCustody.account_id, accCode || origCustody.account_code, accName || origCustody.account_name, payment_method || 'نقدي'
         ]);
+        const settleId = result.lastInsertRowid || result.insertId;
 
-        return { result, newRemaining, newStatus };
+        // 3. قيد التصفية: من حـ/ المصروف إلى حـ/ سلف وعهد الموظفين (114) — بلا حركة صندوق
+        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
+        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+        let entryNo = `JE-STL-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
+        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+          jeSeq++;
+          entryNo = `JE-STL-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
+        }
+        const jeRes = await tx.run(`
+          INSERT INTO journal_entries (
+            entry_no, date, description, reference_type, reference_id,
+            total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, ?, ?, 'تصفية عهدة', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [
+          entryNo, date,
+          `تصفية عهدة ${custody_no} للعهدة الأصلية ${origCustody.custody_no} — ${empName || origCustody.employee_name}`,
+          settleId, settleAmount, settleAmount,
+          settleCreatorId, settleCreatorName, settleCreatorId, settleCreatorName
+        ]);
+        const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+          VALUES (?, ?, ?, ?, ?, 0, ?)
+        `, [jeId, expAcc.id, settleCc, settlePId, settleAmount, `مصروف تصفية العهدة ${custody_no}`]);
+        await tx.run(`
+          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+          VALUES (?, ?, ?, ?, 0, ?, ?)
+        `, [jeId, advAccSettle.id, settleCc, settlePId, settleAmount, `تخفيض عهدة ${origCustody.custody_no}`]);
+        await tx.run('UPDATE custodies SET journal_entry_id = ? WHERE id = ?', [jeId, settleId]);
+
+        return { result, newRemaining, newStatus, jeId, entryNo, settleId };
       });
 
       // توثيق التصفية في سجل التدقيق والرقابة
@@ -1204,13 +1263,16 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
         action: 'SETTLE',
         entity_type: 'custody',
         entity_id: custody_no,
-        details: { custody_no, related_custody_no: origCustody.custody_no, settleAmount, empName }
+        details: { custody_no, related_custody_no: origCustody.custody_no, settleAmount, empName, journal_entry_no: txResult.entryNo }
       });
 
       return res.json({
         success: true,
         message: `تم تسجيل تصفية العهدة بنجاح برقم ${custody_no}. الرصيد المتبقي في العهدة الأصلية: ${txResult.newRemaining.toLocaleString()} ${selectedCurrency}`,
         custody_no,
+        id: txResult.settleId,
+        journal_entry_id: txResult.jeId,
+        entry_no: txResult.entryNo,
         settle_amount: settleAmount,
         remaining_in_original: txResult.newRemaining
       });
@@ -1221,6 +1283,9 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       return res.status(400).json({ success: false, message: 'مبلغ العهدة يجب أن يكون أكبر من الصفر' });
     }
 
+    const custodyPId = req.body.project_id ? Number(req.body.project_id) : null;
+    const custodyCc = req.body.cost_center_id ? Number(req.body.cost_center_id) : null;
+
     const countRes = await get('SELECT COUNT(*) as cnt FROM custodies');
     let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
     const prefix = operation_type === 'نثرية' ? 'PET' : 'CST';
@@ -1230,56 +1295,86 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       custody_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
     }
 
+    // SUGGESTION-4: قيد الصرف + حركة الصندوق ذرياً (فشل صريح إن غابت الحسابات)
+    await AccountingService.ensureCustodyJournalLinks();
+    const advAcc = await get("SELECT id FROM accounts WHERE code = '114' LIMIT 1");
+    const cashAcc = await get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+    if (!advAcc || !cashAcc) {
+      return res.status(500).json({ success: false, message: 'الحسابات المحاسبية للعهد (114/111) غير موجودة في الدليل' });
+    }
+    const creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const creatorName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
+
     const remaining = Math.max(0, parsedAmount - parsedSpent);
 
-    const result = await run(`
-      INSERT INTO custodies (
-        custody_no, operation_type, employee_id, employee_no, employee_name,
-        total_amount, spent_amount, remaining_amount, currency, status, date, notes,
-        account_id, account_code, account_name, payment_method
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?, ?, ?, ?, ?)
-    `, [
-      custody_no, operation_type, empId, empNo, empName,
-      parsedAmount, parsedSpent, remaining, selectedCurrency, date, notes || '',
-      accId, accCode, accName, payment_method || 'نقدي'
-    ]);
+    const txResult = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO custodies (
+          custody_no, operation_type, employee_id, employee_no, employee_name,
+          total_amount, spent_amount, remaining_amount, currency, status, date, notes, project_id,
+          account_id, account_code, account_name, payment_method
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        custody_no, operation_type, empId, empNo, empName,
+        parsedAmount, parsedSpent, remaining, selectedCurrency, date, notes || '', custodyPId,
+        accId, accCode, accName, payment_method || 'نقدي'
+      ]);
+      const custodyId = result.lastInsertRowid || result.insertId;
 
-    // تسجيل حركة صرف العهدة في حركة الصندوق والبنك
-    const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || payment_method === 'بنك') ? 'بنك' : 'نقدي';
-    const lastCash = await get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1');
-    const prevBal = (lastCash && lastCash.current_balance != null) ? Number(lastCash.current_balance) : 0;
-    const currentBal = prevBal - parsedAmount;
+      // قيد الصرف: من حـ/ سلف وعهد الموظفين (114) إلى حـ/ الصندوق (111)
+      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
+      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
+      let entryNo = `JE-CST-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
+      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+        jeSeq++;
+        entryNo = `JE-CST-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
+      }
+      const jeRes = await tx.run(`
+        INSERT INTO journal_entries (
+          entry_no, date, description, reference_type, reference_id,
+          total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [
+        entryNo, date,
+        `${operation_type} رقم ${custody_no} — ${empName}`,
+        operation_type, custodyId, parsedAmount, parsedAmount,
+        creatorId, creatorName, creatorId, creatorName
+      ]);
+      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
+      await tx.run(`
+        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+        VALUES (?, ?, ?, ?, ?, 0, ?)
+      `, [jeId, advAcc.id, custodyCc, custodyPId, parsedAmount, `${operation_type} ${custody_no} — ${empName}`]);
+      await tx.run(`
+        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
+        VALUES (?, ?, ?, ?, 0, ?, ?)
+      `, [jeId, cashAcc.id, custodyCc, custodyPId, parsedAmount, `الصندوق — ${operation_type} ${custody_no}`]);
+      await tx.run('UPDATE custodies SET journal_entry_id = ? WHERE id = ?', [jeId, custodyId]);
 
-    await run(`
-      INSERT INTO cash_movements (
-        date, cash_in, cash_out, previous_balance, current_balance, notes,
-        movement_type, payment_method, reference_no, account_id
-      )
-      VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      date,
-      parsedAmount,
-      prevBal,
-      currentBal,
-      `${operation_type}: ${custody_no} للموظف (${empName})${accName ? ' - حساب: ' + accName : ''}`,
-      moveType,
-      payment_method || 'نقدي',
-      custody_no,
-      accId
-    ]);
+      // حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي)
+      await CashBoxService.appendMovement(tx, {
+        projectId: custodyPId, cashOut: parsedAmount,
+        currency: selectedCurrency, date, notes: `${operation_type}: ${custody_no} — ${empName}${accName ? ' - حساب: ' + accName : ''}`
+      });
+
+      return { custodyId, jeId, entryNo };
+    });
 
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'custody',
       entity_id: custody_no,
-      details: { custody_no, operation_type, empName, total_amount: parsedAmount, account_id: accId, account_code: accCode }
+      details: { custody_no, operation_type, empName, total_amount: parsedAmount, journal_entry_no: txResult.entryNo, account_id: accId, account_code: accCode }
     });
 
     res.json({
       success: true,
       message: `تم تسجيل ${operation_type} بنجاح برقم ${custody_no} وإدراج حركة الصرف في حركة الصندوق والبنك`,
       custody_no,
-      id: result.lastInsertRowid || result.insertId,
+      id: txResult.custodyId,
+      journal_entry_id: txResult.jeId,
+      entry_no: txResult.entryNo,
       remaining
     });
   } catch (err) {
@@ -1287,24 +1382,27 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
   }
 });
 
-// حركة الصندوق والبنك مع الفلترة حسب نوع الحركة (نقدي / بنك / الكل) والتاريخ
+// حركة الصندوق والبنك — Unified: project-scoped boxes summary + type/date filters
 router.get('/cash-movements', async (req, res) => {
   try {
     const { type, from_date, to_date, all } = req.query;
-    let sql = 'SELECT * FROM cash_movements';
+    let sql = `
+      SELECT m.*, p.code as project_code, p.name as project_name
+      FROM cash_movements m
+      LEFT JOIN projects p ON p.id = m.project_id`;
     const conditions = [];
     const params = [];
 
     if (type && type !== 'الكل' && type !== 'all') {
-      conditions.push('movement_type = ?');
+      conditions.push('m.movement_type = ?');
       params.push(type);
     }
     if (from_date) {
-      conditions.push('date >= ?');
+      conditions.push('m.date >= ?');
       params.push(from_date);
     }
     if (to_date) {
-      conditions.push('date <= ?');
+      conditions.push('m.date <= ?');
       params.push(to_date);
     }
 
@@ -1312,21 +1410,20 @@ router.get('/cash-movements', async (req, res) => {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    sql += ' ORDER BY date DESC, id DESC';
+    sql += ' ORDER BY m.date DESC, m.id DESC';
     if (!all && all !== 'true') {
-      sql += ' LIMIT 100';
+      sql += ' LIMIT 50';
     }
 
     const movements = await query(sql, params);
 
-    // ملخص الحركة
+    // ملخص الحركة — Unified: filtered totals + authoritative per-box summary (current_balance = sum of boxes)
     let summarySql = `
-      SELECT 
+      SELECT
         (SELECT previous_balance FROM cash_movements ORDER BY id ASC LIMIT 1) as initial_balance,
-        SUM(cash_in) as total_cash_in,
-        SUM(cash_out) as total_cash_out,
-        SUM(withdrawals) as total_withdrawals,
-        (SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1) as current_balance
+        COALESCE(SUM(cash_in), 0) as total_cash_in,
+        COALESCE(SUM(cash_out), 0) as total_cash_out,
+        COALESCE(SUM(withdrawals), 0) as total_withdrawals
       FROM cash_movements
     `;
     let summaryConditions = [];
@@ -1347,13 +1444,14 @@ router.get('/cash-movements', async (req, res) => {
       summarySql += ' WHERE ' + summaryConditions.join(' AND ');
     }
 
-    const summary = await get(summarySql, summaryParams) || { 
-      initial_balance: 0, 
-      total_cash_in: 0, 
-      total_cash_out: 0, 
-      total_withdrawals: 0, 
-      current_balance: 0 
+    const totals = await get(summarySql, summaryParams) || {
+      initial_balance: 0,
+      total_cash_in: 0,
+      total_cash_out: 0,
+      total_withdrawals: 0
     };
+    const boxesSummary = await CashBoxService.getBoxesSummary();
+    const summary = { ...totals, ...boxesSummary };
 
     res.json({ success: true, data: movements, summary });
   } catch (err) {
@@ -1700,12 +1798,77 @@ router.put('/periods/:id/close', requirePermission('accounting:approve,accountin
       details: { period_name: period.period_name, closed_by: username, notes, authorized_user_id: authorizedUser?.id }
     });
 
-    res.json({ 
-      success: true, 
-      message: `🔒 تم إغلاق وتأمين الفترة المحاسبية (${period.period_name}) بنجاح بواسطة [${username}]، وتم قفل كافة المعاملات والقيود بين ${period.start_date} و ${period.end_date}.` 
+    res.json({
+      success: true,
+      message: `🔒 تم إغلاق وتأمين الفترة المحاسبية (${period.period_name}) بنجاح بواسطة [${username}]، وتم قفل كافة المعاملات والقيود بين ${period.start_date} و ${period.end_date}.`
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إغلاق الفترة المحاسبية: ' + err.message });
+  }
+});
+
+// الإقفال السنوي: قيد تصفير حسابات النتيجة في الأرباح المحتجزة + قفل الفترة ذرياً (SUGGESTION-4)
+router.post('/periods/:id/year-close', requirePermission('accounting:approve,accounting:close_period'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes, manager_password } = req.body;
+
+    if (!manager_password || !String(manager_password).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: '⛔ الإقفال السنوي يتطلب إدخال كلمة مرور المدير المالي / المشرف للتفويض القانوني.'
+      });
+    }
+
+    // التحقق الأمني من صحة كلمة مرور المدير (نفس تفويض إغلاق الفترة)
+    let isAuthorized = false;
+    let authorizedUser = null;
+
+    if (req.user && req.user.id) {
+      const currentUser = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      if (currentUser && currentUser.password_hash) {
+        if (bcrypt.compareSync(manager_password, currentUser.password_hash)) {
+          isAuthorized = true;
+          authorizedUser = currentUser;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      const adminUsers = await query("SELECT * FROM users WHERE role IN ('admin', 'general_manager') OR username = 'admin'");
+      for (const admin of adminUsers) {
+        if (admin.password_hash && bcrypt.compareSync(manager_password, admin.password_hash)) {
+          isAuthorized = true;
+          authorizedUser = admin;
+          break;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      return res.status(401).json({
+        success: false,
+        message: '⛔ كلمة مرور المدير غير صحيحة! لا يمكن تنفيذ الإقفال السنوي بدون تفويض مالي معتمد.'
+      });
+    }
+
+    const username = authorizedUser?.full_name || authorizedUser?.username || req.user?.username || 'المدير العام';
+    const result = await FinancialControlService.executeYearClose(id, {
+      closedBy: username,
+      notes: notes || null,
+      req
+    });
+
+    res.json({
+      success: true,
+      message: result.entry_no
+        ? `🔒 تم الإقفال السنوي بنجاح بالقيد (${result.entry_no}) وقفل الفترة. صافي النتيجة: ${Number(result.net).toLocaleString()} ر.ي`
+        : '🔒 تم قفل الفترة (لا أرصدة نتيجة تستوجب قيد إقفال).',
+      data: result
+    });
+  } catch (err) {
+    const status = err.message.includes('مسبقاً') || err.message.includes('مقفلة') || err.message.includes('غير موجودة') ? 400 : 500;
+    res.status(status).json({ success: false, message: err.message, error: err.message });
   }
 });
 

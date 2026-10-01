@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../database/db');
+const { query, get, run, transaction } = require('../database/db');
 const { tafqeet } = require('../services/tafqeetService');
 const { requirePermission, requireScope } = require('../middleware/security');
+const ProjectCostService = require('../services/projectCostService');
+const FinancialControlService = require('../services/financialControlService');
+const CashBoxService = require('../services/cashBoxService');
+const { checkPeriodOpen } = require('../services/periodService');
 
 // فرض نطاق المشروع الإلزامي وحماية العمليات على كافة مسارات إدارة المشاريع
 router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
@@ -384,8 +388,16 @@ router.post('/:projectId/quotations', async (req, res) => {
       currency = 'ر.ي', payment_terms, delivery_period, status = 'مسودة', notes
     } = req.body;
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
-    const autoNo = quotation_no || `QUO-2024-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
+    let autoNo = (quotation_no || '').trim() || null;
+    if (!autoNo) {
+      const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
+      let qSeq = (countRes.cnt || 0) + 1;
+      autoNo = `QUO-${new Date().getFullYear()}-${String(qSeq).padStart(3, '0')}`;
+      while (await get('SELECT id FROM project_quotations WHERE quotation_no = ?', [autoNo])) {
+        qSeq += 1;
+        autoNo = `QUO-${new Date().getFullYear()}-${String(qSeq).padStart(3, '0')}`;
+      }
+    }
 
     const result = await run(`
       INSERT INTO project_quotations (
@@ -629,33 +641,215 @@ router.post('/:projectId/purchases', async (req, res) => {
 
     if (!item_description) return res.status(400).json({ success: false, message: 'وصف المواد المشتراة مطلوب' });
 
+    await ProjectCostService.ensureSchema();
+
     const qty = Number(quantity) || 1;
     const price = Number(unit_price) || 0;
     const total = total_amount ? Number(total_amount) : (qty * price);
+    const paid = Number(paid_amount) || 0;
+    const recDate = date || new Date().toISOString().split('T')[0];
+    const willMirror = paid > 0;
+    const remaining = total - paid;
 
-    const result = await run(`
-      INSERT INTO project_purchases (
-        project_id, invoice_no, supplier_id, supplier_name, item_description,
-        quantity, unit, unit_price, total_amount, paid_amount,
-        payment_status, payment_method, date, receipt_no, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      projectId, invoice_no, supplier_id ? Number(supplier_id) : null, supplier_name, item_description,
-      qty, unit, price, total, Number(paid_amount) || 0,
-      payment_status, payment_method, date || new Date().toISOString().split('T')[0], receipt_no, notes
-    ]);
+    if (!(total > 0)) return res.status(400).json({ success: false, message: 'إجمالي الفاتورة يجب أن يكون أكبر من الصفر' });
+    if (!(paid >= 0)) return res.status(400).json({ success: false, message: 'المبلغ المدفوع لا يمكن أن يكون سالباً' });
+    if (paid - total > 0.005) return res.status(400).json({ success: false, message: 'المبلغ المدفوع يتجاوز إجمالي الفاتورة' });
 
-    // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
-    if (Number(paid_amount) > 0) {
-      const expReceipt = receipt_no || `EXP-PUR-${result.lastInsertRowid}`;
-      await run(`
-        INSERT INTO expenses (receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes)
-        VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?)
-      `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, Number(paid_amount), payment_method, date || new Date().toISOString().split('T')[0], `فاتورة مشتريات: ${item_description}`]);
+    // SUGGESTION-6: الآجل يتطلب مورداً مسجلاً — لا التزام بلا دائن
+    let resolvedSupplierId = supplier_id ? Number(supplier_id) : null;
+    let resolvedSupplierName = supplier_name ? String(supplier_name).trim() || null : null;
+    if (remaining > 0.005) {
+      if (resolvedSupplierId) {
+        const s = await get('SELECT id, name FROM suppliers WHERE id = ?', [resolvedSupplierId]);
+        if (!s) return res.status(400).json({ success: false, message: 'المورد المحدد غير مسجل في سجل الموردين' });
+        resolvedSupplierName = s.name;
+      } else if (resolvedSupplierName) {
+        const s = await get('SELECT id, name FROM suppliers WHERE name = ? LIMIT 1', [resolvedSupplierName]);
+        if (!s) return res.status(400).json({ success: false, message: 'المشتريات الآجلة تتطلب مورداً مسجلاً — أنشئ المورد في سجل الموردين أولاً ثم أعد إدخال الفاتورة' });
+        resolvedSupplierId = s.id;
+        resolvedSupplierName = s.name;
+      } else {
+        return res.status(400).json({ success: false, message: 'المشتريات الآجلة تتطلب تحديد المورد — لا يمكن إثبات التزام بلا دائن' });
+      }
     }
 
-    const created = await get('SELECT * FROM project_purchases WHERE id = ?', [result.lastInsertRowid]);
-    res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created });
+    // الحالة تُشتق من المبالغ دائماً (لا ثقة بإدخال العميل)
+    const derivedStatus = remaining <= 0.005 ? 'مدفوع' : (paid > 0.005 ? 'جزئي' : 'غير مدفوع');
+
+    // SUGGESTION-5/6: أي أثر مالي (مرآة أو استحقاق) يتطلب فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
+    let creatorId = null;
+    let creatorName = 'النظام';
+    let mirrorCcId = null;
+    const hasFinancialEffect = willMirror || remaining > 0.005;
+    if (hasFinancialEffect) {
+      const period = await checkPeriodOpen(recDate);
+      if (!period.isOpen) {
+        return res.status(403).json({ success: false, message: period.message });
+      }
+      creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+      creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
+      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
+      mirrorCcId = prjCc ? prjCc.id : 1;
+    }
+
+    // السجل الفرعي + المرآة + قيدها + حركتها النقدية + إعادة الاحتساب — ذرياً
+    const txResult = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO project_purchases (
+          project_id, invoice_no, supplier_id, supplier_name, item_description,
+          quantity, unit, unit_price, total_amount, paid_amount,
+          payment_status, payment_method, date, receipt_no, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        projectId, invoice_no ?? null, resolvedSupplierId, resolvedSupplierName, item_description,
+        qty, unit ?? null, price, total, paid,
+        derivedStatus, payment_method, recDate, receipt_no ?? null, notes ?? null
+      ]);
+      const purchaseId = result.lastInsertRowid || result.insertId;
+
+      // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
+      // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
+      if (willMirror) {
+        const expReceipt = receipt_no || `EXP-PUR-${purchaseId}`;
+        const mirrorRes = await tx.run(`
+          INSERT INTO expenses (
+            receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes,
+            source_table, source_id, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?, 'project_purchases', ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [expReceipt, projectId, resolvedSupplierId, paid, payment_method, recDate,
+            `فاتورة مشتريات: ${item_description}`, purchaseId, creatorId, creatorName, creatorId, creatorName]);
+        const mirrorId = mirrorRes.lastInsertRowid || mirrorRes.insertId;
+        // قيد المرآة على الجزء المدفوع فقط: مدين مصروف / دائن صندوق + حركة صندوق المشروع
+        await ProjectCostService.createMirrorJournal(tx, {
+          sourceTable: 'project_purchases', expenseId: mirrorId,
+          projectId, costCenterId: mirrorCcId, amount: paid, date: recDate,
+          receiptNo: expReceipt, label: item_description,
+          user: { id: creatorId, name: creatorName }
+        });
+        await CashBoxService.appendMovement(tx, {
+          projectId, cashOut: paid,
+          currency: 'ر.ي', date: recDate, notes: `مصروف مرآة مشتريات: ${expReceipt}`
+        });
+      }
+
+      // SUGGESTION-6: إثبات المتبقي التزاماً على المورد (دفتري — بلا حركة نقدية)
+      if (remaining > 0.005) {
+        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, resolvedSupplierId]);
+        await ProjectCostService.createPayableJournal(tx, {
+          purchaseId, supplierId: resolvedSupplierId,
+          projectId, costCenterId: mirrorCcId, amount: remaining, date: recDate,
+          invoiceRef: invoice_no || `#${purchaseId}`,
+          user: { id: creatorId, name: creatorName }
+        });
+      }
+
+      // توحيد التكلفة: إعادة الاحتساب من المصادر
+      await ProjectCostService.recalculateProjectCost(projectId, tx);
+      return { purchaseId };
+    });
+
+    // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
+    let dupWarnings = [];
+    try {
+      dupWarnings = await ProjectCostService.detectPossibleDuplicates({
+        projectId, amount: total, date: recDate,
+        excludeTable: 'project_purchases', excludeId: txResult.purchaseId
+      });
+    } catch {}
+
+    const created = await get('SELECT * FROM project_purchases WHERE id = ?', [txResult.purchaseId]);
+    res.json({
+      success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created, warnings: dupWarnings,
+      payable: remaining > 0.005 ? { supplier_id: resolvedSupplierId, amount: remaining } : null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// SUGGESTION-6: سداد مستحق فاتورة موقعية (جزئي أو كامل)
+router.post('/:projectId/purchases/:id/pay', async (req, res) => {
+  try {
+    const { projectId, id } = req.params;
+    const {
+      amount, supplier_id, supplier_name,
+      payment_method = 'نقدي', date, notes
+    } = req.body;
+
+    const purchase = await get(
+      'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [id, projectId]
+    );
+    if (!purchase) return res.status(404).json({ success: false, message: 'فاتورة المشتريات غير موجودة' });
+
+    const payAmount = Number(amount) || 0;
+    if (!(payAmount > 0)) return res.status(400).json({ success: false, message: 'مبلغ السداد يجب أن يكون أكبر من الصفر' });
+    const outstanding = Number(purchase.total_amount) - (Number(purchase.paid_amount) || 0);
+    if (outstanding <= 0.005) return res.status(400).json({ success: false, message: 'الفاتورة مسددة بالكامل — لا متبقي للسداد' });
+    if (payAmount - outstanding > 0.005) {
+      return res.status(400).json({ success: false, message: `مبلغ السداد يتجاوز المتبقي (${outstanding})` });
+    }
+
+    const payDate = date || new Date().toISOString().split('T')[0];
+    const period = await checkPeriodOpen(payDate);
+    if (!period.isOpen) {
+      return res.status(403).json({ success: false, message: period.message });
+    }
+
+    // المورد: مورد الفاتورة، أو يُحل من الطلب للفواتير القديمة بلا مورد
+    let paySupplierId = purchase.supplier_id ? Number(purchase.supplier_id) : null;
+    if (!paySupplierId) {
+      if (supplier_id) {
+        const s = await get('SELECT id FROM suppliers WHERE id = ?', [Number(supplier_id)]);
+        if (!s) return res.status(400).json({ success: false, message: 'المورد المحدد للسداد غير مسجل' });
+        paySupplierId = s.id;
+      } else if (supplier_name && String(supplier_name).trim()) {
+        const s = await get('SELECT id FROM suppliers WHERE name = ? LIMIT 1', [String(supplier_name).trim()]);
+        if (!s) return res.status(400).json({ success: false, message: 'الفاتورة بلا مورد مسجل — حدد المورد المستلم للسداد' });
+        paySupplierId = s.id;
+      } else {
+        return res.status(400).json({ success: false, message: 'الفاتورة بلا مورد مسجل — حدد المورد المستلم للسداد' });
+      }
+    } else if (supplier_id && Number(supplier_id) !== paySupplierId) {
+      return res.status(400).json({ success: false, message: 'مورد السداد لا يطابق مورد الفاتورة' });
+    }
+
+    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const actorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
+    const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
+    const ccId = prjCc ? prjCc.id : 1;
+
+    const newPaid = (Number(purchase.paid_amount) || 0) + payAmount;
+    const newRemaining = Number(purchase.total_amount) - newPaid;
+    const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+
+    await transaction(async (tx) => {
+      await tx.run(
+        'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+        [newPaid, newStatus, purchase.id]
+      );
+      // توثيق المورد على الفاتورة القديمة بلا مورد
+      if (!purchase.supplier_id) {
+        await tx.run('UPDATE project_purchases SET supplier_id = ? WHERE id = ?', [paySupplierId, purchase.id]);
+      }
+      await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [payAmount, paySupplierId]);
+      await ProjectCostService.createSettlementJournal(tx, {
+        purchaseId: purchase.id, supplierId: paySupplierId,
+        projectId, costCenterId: ccId, amount: payAmount, date: payDate,
+        payRef: `فاتورة #${purchase.id}${purchase.invoice_no ? ' (' + purchase.invoice_no + ')' : ''}${notes ? ' — ' + notes : ''}`,
+        user: { id: actorId, name: actorName }
+      });
+      await CashBoxService.appendMovement(tx, {
+        projectId, cashOut: payAmount,
+        currency: 'ر.ي', date: payDate, notes: `سداد مستحق موقعية: فاتورة #${purchase.id}`
+      });
+    });
+
+    const updated = await get('SELECT * FROM project_purchases WHERE id = ?', [purchase.id]);
+    res.json({
+      success: true, message: `تم تسجيل سداد ${payAmount} — المتبقي: ${Math.max(0, newRemaining)}`,
+      data: updated, outstanding: Math.max(0, newRemaining)
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -663,8 +857,51 @@ router.post('/:projectId/purchases', async (req, res) => {
 
 router.delete('/:projectId/purchases/:id', async (req, res) => {
   try {
-    await run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-    res.json({ success: true, message: 'تم حذف الفاتورة بنجاح' });
+    await ProjectCostService.ensureSchema();
+    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const actorName = req.user?.username || req.user?.full_name || 'النظام';
+    // SUGGESTION-6: صف الفاتورة لازم لفك ذممها قبل حذفها
+    const doomed = await get(
+      'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]
+    );
+    // SUGGESTION-7: منع حذف فاتورة ممتصة بسند حي (يُعكس/يُفك أولاً)
+    if (doomed && doomed.linked_expense_id) {
+      const linkedExp = await get('SELECT id, status FROM expenses WHERE id = ?', [doomed.linked_expense_id]);
+      if (linkedExp && !['reversed', 'cancelled'].includes((linkedExp.status || '').toLowerCase())) {
+        const isDraft = (linkedExp.status || '').toLowerCase() === 'draft';
+        return res.status(400).json({ success: false, message: isDraft
+          ? 'لا يمكن حذف الفاتورة: مرتبطة بسند غير مرحل — فك الربط أولاً ثم احذف'
+          : 'لا يمكن حذف الفاتورة: مرتبطة بسند مرحل — اعكس السند أولاً ثم احذف' });
+      }
+    }
+    const txResult = await transaction(async (tx) => {
+      await tx.run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+      // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
+      const reversed = await ProjectCostService.reverseLinkedMirrors('project_purchases', req.params.id, {
+        tx, user: { id: actorId, name: actorName }, reason: 'حذف فاتورة المشتريات الأصل من المشروع'
+      });
+      // SUGGESTION-6: فك أثر الذمم (عكس الاستحقاق والتسويات + إعادة رصيد المورد)
+      let payables = { apReversed: 0, settlementsReversed: 0, balanceDelta: 0 };
+      if (doomed) {
+        payables = await ProjectCostService.reverseSitePurchasePayables(tx, doomed, {
+          user: { id: actorId, name: actorName }, reason: 'حذف الفاتورة الموقعية وفك ذممها'
+        });
+      }
+      const removed = await ProjectCostService.deleteLinkedMirrors('project_purchases', req.params.id, tx);
+      await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
+      return { reversed, removed, payables };
+    });
+    const parts = [];
+    if (txResult.reversed > 0) parts.push(`عكس ${txResult.reversed} مرآة`);
+    if (txResult.payables.apReversed > 0) parts.push('عكس استحقاق المورد');
+    if (txResult.payables.settlementsReversed > 0) parts.push(`عكس ${txResult.payables.settlementsReversed} سداد`);
+    if (txResult.removed > 0) parts.push(`حذف ${txResult.removed} مرآة يتيمة`);
+    res.json({
+      success: true,
+      message: parts.length > 0
+        ? `تم حذف الفاتورة (${parts.join('، ')}) وتحديث تكلفة المشروع`
+        : 'تم حذف الفاتورة وتحديث تكلفة المشروع بنجاح'
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -687,39 +924,189 @@ router.post('/:projectId/labor', async (req, res) => {
     const projectId = req.params.projectId;
     const {
       date, worker_name_or_team, trade = 'نجار مسلح', workers_count = 1,
-      daily_rate = 0, days_or_hours = 1, total_amount, expense_category = 'أجور عمالة',
+      daily_rate = 0, days_or_hours = 1, total_amount, paid_amount, expense_category = 'أجور عمالة',
       payment_status = 'مدفوع', supervisor_name, notes
     } = req.body;
 
     if (!worker_name_or_team) return res.status(400).json({ success: false, message: 'اسم العامل أو الطاقم مطلوب' });
 
+    await ProjectCostService.ensureSchema();
+
     const count = Number(workers_count) || 1;
     const rate = Number(daily_rate) || 0;
     const days = Number(days_or_hours) || 1;
     const total = total_amount ? Number(total_amount) : (count * rate * days);
+    const recDate = date || new Date().toISOString().split('T')[0];
 
-    const result = await run(`
-      INSERT INTO project_labor_expenses (
-        project_id, date, worker_name_or_team, trade, workers_count,
-        daily_rate, days_or_hours, total_amount, expense_category,
-        payment_status, supervisor_name, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      projectId, date || new Date().toISOString().split('T')[0], worker_name_or_team, trade,
-      count, rate, days, total, expense_category, payment_status, supervisor_name, notes
-    ]);
+    if (!(total > 0)) return res.status(400).json({ success: false, message: 'إجمالي الأجور يجب أن يكون أكبر من الصفر' });
+    // SUGGESTION-8: المدفوع صريحاً، أو يُستنتج من الحالة للعملاء القدامى (توافق خلفي)
+    let paid;
+    const paidProvided = paid_amount !== undefined && paid_amount !== null && paid_amount !== '';
+    if (paidProvided) {
+      paid = Number(paid_amount) || 0;
+      if (!(paid >= 0)) return res.status(400).json({ success: false, message: 'المبلغ المدفوع لا يمكن أن يكون سالباً' });
+      if (paid - total > 0.005) return res.status(400).json({ success: false, message: 'المبلغ المدفوع يتجاوز إجمالي الأجور' });
+    } else if (payment_status === 'مدفوع' || !payment_status) {
+      paid = total;
+    } else if (payment_status === 'غير مدفوع') {
+      paid = 0;
+    } else {
+      return res.status(400).json({ success: false, message: 'الحالة الجزئية تتطلب إرسال المبلغ المدفوع (paid_amount) صراحةً' });
+    }
+    const remaining = total - paid;
+    const willMirror = paid > 0;
 
-    // تسجيل مصروف آلي في جدول المصروفات العام
-    if (payment_status === 'مدفوع' && total > 0) {
-      const expReceipt = `EXP-LAB-${result.lastInsertRowid}`;
-      await run(`
-        INSERT INTO expenses (receipt_no, expense_type, project_id, amount, payment_method, date, notes)
-        VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?)
-      `, [expReceipt, projectId, total, date || new Date().toISOString().split('T')[0], `أجور ${trade}: ${worker_name_or_team}`]);
+    // الحالة تُشتق من المبالغ دائماً (لا ثقة بإدخال العميل)
+    const derivedStatus = remaining <= 0.005 ? 'مدفوع' : (paid > 0.005 ? 'جزئي' : 'غير مدفوع');
+
+    // SUGGESTION-5/8: أي أثر مالي (مرآة أو استحقاق) يتطلب فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
+    let creatorId = null;
+    let creatorName = 'النظام';
+    let mirrorCcId = null;
+    const hasFinancialEffect = willMirror || remaining > 0.005;
+    if (hasFinancialEffect) {
+      const period = await checkPeriodOpen(recDate);
+      if (!period.isOpen) {
+        return res.status(403).json({ success: false, message: period.message });
+      }
+      creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+      creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
+      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
+      mirrorCcId = prjCc ? prjCc.id : 1;
     }
 
-    const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [result.lastInsertRowid]);
-    res.json({ success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created });
+    // السجل الفرعي + المرآة + قيدها + حركتها النقدية + الاستحقاق + إعادة الاحتساب — ذرياً
+    const txResult = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO project_labor_expenses (
+          project_id, date, worker_name_or_team, trade, workers_count,
+          daily_rate, days_or_hours, total_amount, paid_amount, expense_category,
+          payment_status, supervisor_name, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        projectId, recDate, worker_name_or_team, trade ?? null,
+        count, rate, days, total, paid, expense_category, derivedStatus, supervisor_name ?? null, notes ?? null
+      ]);
+      const laborId = result.lastInsertRowid || result.insertId;
+
+      // تسجيل مصروف آلي في جدول المصروفات العام (على الجزء المدفوع فقط)
+      // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
+      if (willMirror) {
+        const expReceipt = `EXP-LAB-${laborId}`;
+        const mirrorRes = await tx.run(`
+          INSERT INTO expenses (
+            receipt_no, expense_type, project_id, amount, payment_method, date, notes,
+            source_table, source_id, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
+          )
+          VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?, 'project_labor_expenses', ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [expReceipt, projectId, paid, recDate, `أجور ${trade}: ${worker_name_or_team}`, laborId,
+            creatorId, creatorName, creatorId, creatorName]);
+        const mirrorId = mirrorRes.lastInsertRowid || mirrorRes.insertId;
+        // قيد المرآة: مدين أجور / دائن صندوق + حركة صندوق المشروع
+        await ProjectCostService.createMirrorJournal(tx, {
+          sourceTable: 'project_labor_expenses', expenseId: mirrorId,
+          projectId, costCenterId: mirrorCcId, amount: paid, date: recDate,
+          receiptNo: expReceipt, label: `${trade}: ${worker_name_or_team}`,
+          user: { id: creatorId, name: creatorName }
+        });
+        await CashBoxService.appendMovement(tx, {
+          projectId, cashOut: paid,
+          currency: 'ر.ي', date: recDate, notes: `مصروف مرآة عمالة: ${expReceipt}`
+        });
+      }
+
+      // SUGGESTION-8: إثبات المتبقي التزاماً للأجر (دفتري — بلا حركة نقدية)
+      if (remaining > 0.005) {
+        await ProjectCostService.createWageAccrualJournal(tx, {
+          laborId, workerLabel: `${trade}: ${worker_name_or_team}`,
+          projectId, costCenterId: mirrorCcId, amount: remaining, date: recDate,
+          user: { id: creatorId, name: creatorName }
+        });
+      }
+
+      // توحيد التكلفة: إعادة الاحتساب من المصادر
+      await ProjectCostService.recalculateProjectCost(projectId, tx);
+      return { laborId };
+    });
+
+    // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
+    let dupWarnings = [];
+    try {
+      dupWarnings = await ProjectCostService.detectPossibleDuplicates({
+        projectId, amount: total, date: recDate,
+        excludeTable: 'project_labor_expenses', excludeId: txResult.laborId
+      });
+    } catch {}
+
+    const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [txResult.laborId]);
+    res.json({
+      success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created, warnings: dupWarnings,
+      payable: remaining > 0.005 ? { worker: worker_name_or_team, amount: remaining } : null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// SUGGESTION-8: سداد مستحق أجور (جزئي أو كامل)
+router.post('/:projectId/labor/:id/pay', async (req, res) => {
+  try {
+    const { projectId, id } = req.params;
+    const {
+      amount, payment_method = 'نقدي', date, notes
+    } = req.body;
+
+    const labor = await get(
+      'SELECT * FROM project_labor_expenses WHERE id = ? AND project_id = ?', [id, projectId]
+    );
+    if (!labor) return res.status(404).json({ success: false, message: 'سجل الأجور غير موجود' });
+
+    const payAmount = Number(amount) || 0;
+    if (!(payAmount > 0)) return res.status(400).json({ success: false, message: 'مبلغ السداد يجب أن يكون أكبر من الصفر' });
+    const outstanding = Number(labor.total_amount) - (Number(labor.paid_amount) || 0);
+    if (outstanding <= 0.005) return res.status(400).json({ success: false, message: 'الأجر مسدد بالكامل — لا متبقي للسداد' });
+    if (payAmount - outstanding > 0.005) {
+      return res.status(400).json({ success: false, message: `مبلغ السداد يتجاوز المتبقي (${outstanding})` });
+    }
+
+    const payDate = date || new Date().toISOString().split('T')[0];
+    const period = await checkPeriodOpen(payDate);
+    if (!period.isOpen) {
+      return res.status(403).json({ success: false, message: period.message });
+    }
+
+    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const actorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
+    const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
+    const ccId = prjCc ? prjCc.id : 1;
+    const workerLabel = `${labor.trade || ''}: ${labor.worker_name_or_team}`.trim();
+
+    const newPaid = (Number(labor.paid_amount) || 0) + payAmount;
+    const newRemaining = Number(labor.total_amount) - newPaid;
+    const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+
+    await transaction(async (tx) => {
+      await tx.run(
+        'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
+        [newPaid, newStatus, labor.id]
+      );
+      await ProjectCostService.createWageSettlementJournal(tx, {
+        laborId: labor.id, workerLabel,
+        projectId, costCenterId: ccId, amount: payAmount, date: payDate,
+        payRef: `سجل أجور #${labor.id}${notes ? ' — ' + notes : ''}`,
+        user: { id: actorId, name: actorName }
+      });
+      await CashBoxService.appendMovement(tx, {
+        projectId, cashOut: payAmount,
+        currency: 'ر.ي', date: payDate, notes: `سداد مستحق أجور: ${workerLabel} (#${labor.id})`
+      });
+    });
+
+    const updated = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [labor.id]);
+    res.json({
+      success: true, message: `تم تسجيل سداد ${payAmount} — المتبقي: ${Math.max(0, newRemaining)}`,
+      data: updated, outstanding: Math.max(0, newRemaining)
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -727,8 +1114,50 @@ router.post('/:projectId/labor', async (req, res) => {
 
 router.delete('/:projectId/labor/:id', async (req, res) => {
   try {
-    await run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-    res.json({ success: true, message: 'تم حذف السجل بنجاح' });
+    await ProjectCostService.ensureSchema();
+    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
+    const actorName = req.user?.username || req.user?.full_name || 'النظام';
+    // SUGGESTION-7: منع حذف بند ممتص بسند حي (يُعكس/يُفك أولاً)
+    const doomedLabor = await get(
+      'SELECT * FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]
+    );
+    if (doomedLabor && doomedLabor.linked_expense_id) {
+      const linkedExp = await get('SELECT id, status FROM expenses WHERE id = ?', [doomedLabor.linked_expense_id]);
+      if (linkedExp && !['reversed', 'cancelled'].includes((linkedExp.status || '').toLowerCase())) {
+        const isDraft = (linkedExp.status || '').toLowerCase() === 'draft';
+        return res.status(400).json({ success: false, message: isDraft
+          ? 'لا يمكن حذف البند: مرتبط بسند غير مرحل — فك الربط أولاً ثم احذف'
+          : 'لا يمكن حذف البند: مرتبط بسند مرحل — اعكس السند أولاً ثم احذف' });
+      }
+    }
+    const txResult = await transaction(async (tx) => {
+      await tx.run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+      // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
+      const reversed = await ProjectCostService.reverseLinkedMirrors('project_labor_expenses', req.params.id, {
+        tx, user: { id: actorId, name: actorName }, reason: 'حذف سجل الأجور الأصل من المشروع'
+      });
+      // SUGGESTION-8: فك مستحقات الأجور (عكس الاستحقاق والتسويات + تعويض نقدي)
+      let wages = { accrualReversed: 0, settlementsReversed: 0 };
+      if (doomedLabor) {
+        wages = await ProjectCostService.reverseSiteLaborPayables(tx, doomedLabor, {
+          user: { id: actorId, name: actorName }, reason: 'حذف سجل الأجور وفك مستحقاته'
+        });
+      }
+      const removed = await ProjectCostService.deleteLinkedMirrors('project_labor_expenses', req.params.id, tx);
+      await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
+      return { reversed, removed, wages };
+    });
+    const parts = [];
+    if (txResult.reversed > 0) parts.push(`عكس ${txResult.reversed} مرآة`);
+    if (txResult.wages.accrualReversed > 0) parts.push('عكس استحقاق الأجور');
+    if (txResult.wages.settlementsReversed > 0) parts.push(`عكس ${txResult.wages.settlementsReversed} سداد أجور`);
+    if (txResult.removed > 0) parts.push(`حذف ${txResult.removed} مرآة يتيمة`);
+    res.json({
+      success: true,
+      message: parts.length > 0
+        ? `تم حذف السجل (${parts.join('، ')}) وتحديث تكلفة المشروع`
+        : 'تم حذف السجل وتحديث تكلفة المشروع بنجاح'
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

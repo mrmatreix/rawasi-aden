@@ -3,9 +3,11 @@
  * تفصل منطق الأعمال والتحقق المالي عن مسارات الـ HTTP/Routes
  */
 
-const { get, query, run, transaction } = require('../database/db');
+const { get, query, run, transaction, getActiveEngine } = require('../database/db');
 const { checkPeriodOpen } = require('./periodService');
 const { logAudit } = require('./auditService');
+
+let custodyLinksEnsured = false;
 
 const AccountingService = {
   /**
@@ -111,9 +113,14 @@ const AccountingService = {
     // 2. التحقق المالي الصارم من التوازن ومراكز التكلفة
     const { sanitizedLines, totalDebit, totalCredit } = await this.validateJournalEntryLines(lines);
 
-    // 3. توليد رقم القيد التسلسلي
+    // 3. توليد رقم القيد التسلسلي (حلقة فرادة: COUNT+1 وحده يصطدم بعد أي حذف قيد)
     const countRow = await get('SELECT COUNT(*) as count FROM journal_entries');
-    const entryNo = `JV-${new Date().getFullYear()}-${String((countRow?.count || 0) + 1).padStart(4, '0')}`;
+    let jeSeqAc = (countRow?.count || 0) + 1;
+    let entryNo = `JV-${new Date().getFullYear()}-${String(jeSeqAc).padStart(4, '0')}`;
+    while (await get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+      jeSeqAc += 1;
+      entryNo = `JV-${new Date().getFullYear()}-${String(jeSeqAc).padStart(4, '0')}`;
+    }
 
     // 4. الحفظ الذري مع توثيق المنشئ وحالة الترحيل
     let validCreatorId = null;
@@ -173,6 +180,43 @@ const AccountingService = {
       total_credit: totalCredit,
       status
     };
+  },
+
+  /**
+   * SUGGESTION-4 (§12): ربط العهد والسلف بقيودها (idempotent — خارج المعاملات).
+   * - custodies.journal_entry_id + employee_advances.journal_entry_id
+   * - custodies.project_id (صندوق الصرف — ترثه التصفية)
+   */
+  async ensureCustodyJournalLinks() {
+    if (custodyLinksEnsured) return true;
+    const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
+
+    const ensureColumn = async (table, column, sqliteDef, mysqlDef) => {
+      if (engine === 'mysql') {
+        const cols = await query(`SHOW COLUMNS FROM ${table}`);
+        const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
+        if (!names.includes(column)) {
+          await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${mysqlDef}`);
+        }
+      } else {
+        const cols = await query(`PRAGMA table_info(${table})`);
+        const names = (cols || []).map(c => c.name);
+        if (!names.includes(column)) {
+          await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqliteDef}`);
+        }
+      }
+    };
+
+    try {
+      await ensureColumn('custodies', 'journal_entry_id', 'INTEGER', 'INT NULL');
+      await ensureColumn('custodies', 'project_id', 'INTEGER', 'INT NULL');
+      await ensureColumn('employee_advances', 'journal_entry_id', 'INTEGER', 'INT NULL');
+      custodyLinksEnsured = true;
+      return true;
+    } catch (err) {
+      console.warn('⚠️ [Accounting] تعذر التأكد من ربط العهد بالقيود:', err.message);
+      throw err;
+    }
   }
 };
 

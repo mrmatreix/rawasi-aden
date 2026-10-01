@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
+const ProjectCostService = require('../services/projectCostService');
 
 // جلب جميع المشاريع مع اسم العميل وتطبيق نطاق الصلاحيات
 router.get('/', requirePermission('projects:view'), async (req, res) => {
@@ -70,6 +71,8 @@ router.get('/:id', requirePermission('projects:view', { projectParam: 'id' }), a
       ORDER BY it.date DESC
     `, [req.params.id]);
 
+    const cost_breakdown = await ProjectCostService.getCostBreakdown(req.params.id);
+
     res.json({
       success: true,
       data: {
@@ -77,11 +80,53 @@ router.get('/:id', requirePermission('projects:view', { projectParam: 'id' }), a
         expenses,
         bills,
         payments,
-        inventory
+        inventory,
+        cost_breakdown
       }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب تفاصيل المشروع', error: err.message });
+  }
+});
+
+// تفصيل التكلفة الفعلية الموحدة للمشروع من مصادرها الأربعة مع كشف أي انحراف
+router.get('/:id/cost-breakdown', requirePermission('projects:view', { projectParam: 'id' }), async (req, res) => {
+  try {
+    const project = await get('SELECT id, code, name, actual_cost FROM projects WHERE id = ?', [req.params.id]);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
+    }
+    const breakdown = await ProjectCostService.getCostBreakdown(req.params.id);
+    const stored = Number(project.actual_cost) || 0;
+    // البنود الفرعية الممتصة بسندات رسمية (لشفافية منع الازدواج)
+    const linkedItems = await query(`
+      SELECT 'labor' as kind, l.id, l.total_amount, l.date as record_date, l.linked_expense_id,
+             e.receipt_no as expense_receipt_no, e.status as expense_status, e.amount as expense_amount
+      FROM project_labor_expenses l LEFT JOIN expenses e ON e.id = l.linked_expense_id
+      WHERE l.project_id = ? AND l.linked_expense_id IS NOT NULL
+      UNION ALL
+      SELECT 'purchase' as kind, p.id, p.total_amount, p.date as record_date, p.linked_expense_id,
+             e.receipt_no, e.status, e.amount
+      FROM project_purchases p LEFT JOIN expenses e ON e.id = p.linked_expense_id
+      WHERE p.project_id = ? AND p.linked_expense_id IS NOT NULL
+      ORDER BY record_date DESC
+    `, [req.params.id, req.params.id]);
+    res.json({
+      success: true,
+      data: {
+        project_id: project.id,
+        project_code: project.code,
+        project_name: project.name,
+        stored_actual_cost: stored,
+        unified_total: breakdown.total,
+        drift: Math.round((breakdown.total - stored) * 100) / 100,
+        is_consistent: Math.abs(breakdown.total - stored) < 0.01,
+        breakdown,
+        linked_items: linkedItems || []
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في احتساب تفصيل التكلفة: ' + err.message });
   }
 });
 
@@ -93,7 +138,7 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
       client_id,
       contract_value = 0,
       estimated_cost = 0,
-      actual_cost = 0,
+      // ملاحظة: actual_cost تُحتسب تلقائياً من المصادر الموحدة — أي قيمة مرسلة تُتجاهل
       currency = 'ر.ي',
       progress_percentage = 0,
       expected_profit = 0,
@@ -113,7 +158,12 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
 
     // توليد كود المشروع تلقائياً
     const countRes = await get('SELECT COUNT(*) as cnt FROM projects');
-    const code = `PRJ-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(3, '0')}`;
+    let prjSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+    let code = `PRJ-${String(prjSeq).padStart(3, '0')}`;
+    while (await get('SELECT id FROM projects WHERE code = ?', [code])) {
+      prjSeq += 1;
+      code = `PRJ-${String(prjSeq).padStart(3, '0')}`;
+    }
 
     const result = await run(`
       INSERT INTO projects (
@@ -123,7 +173,7 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       code, trimmedName, client_id ? Number(client_id) : null, Number(contract_value) || 0, Number(estimated_cost) || 0,
-      Number(actual_cost) || 0, selectedCurrency, Number(progress_percentage) || 0, Number(expected_profit) || 0, Number(actual_profit) || 0,
+      0, selectedCurrency, Number(progress_percentage) || 0, Number(expected_profit) || 0, Number(actual_profit) || 0,
       status || 'active', start_date || null, end_date || null, notes ? notes.trim() : ''
     ]);
 
@@ -156,7 +206,7 @@ router.put('/:id', requirePermission('projects:edit', { projectParam: 'id' }), a
       client_id,
       contract_value,
       estimated_cost,
-      actual_cost,
+      // actual_cost: تُحتسب تلقائياً من المصادر الموحدة — ممنوع تعديلها يدوياً
       progress_percentage,
       expected_profit,
       actual_profit,
@@ -173,7 +223,6 @@ router.put('/:id', requirePermission('projects:edit', { projectParam: 'id' }), a
         client_id = COALESCE(?, client_id),
         contract_value = COALESCE(?, contract_value),
         estimated_cost = COALESCE(?, estimated_cost),
-        actual_cost = COALESCE(?, actual_cost),
         currency = COALESCE(?, currency),
         progress_percentage = COALESCE(?, progress_percentage),
         expected_profit = COALESCE(?, expected_profit),
@@ -184,9 +233,10 @@ router.put('/:id', requirePermission('projects:edit', { projectParam: 'id' }), a
         notes = COALESCE(?, notes)
       WHERE id = ?
     `, [
-      name, client_id, contract_value, estimated_cost, actual_cost,
-      currency, progress_percentage, expected_profit, actual_profit, status,
-      start_date, end_date, notes, req.params.id
+      // تحويل undefined إلى null لأن محرك SQLite يرفض ربط undefined
+      name ?? null, client_id ?? null, contract_value ?? null, estimated_cost ?? null,
+      currency ?? null, progress_percentage ?? null, expected_profit ?? null, actual_profit ?? null, status ?? null,
+      start_date ?? null, end_date ?? null, notes ?? null, req.params.id
     ]);
 
     res.json({ success: true, message: 'تم تحديث بيانات المشروع بنجاح' });

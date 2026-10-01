@@ -3,6 +3,7 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const CashBoxService = require('../services/cashBoxService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 // جلب فواتير المشتريات
@@ -77,7 +78,12 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
     }
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM purchases');
-    const invoice_no = `PO-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    let purSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
+    let invoice_no = `PO-${new Date().getFullYear()}-${String(purSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM purchases WHERE invoice_no = ?', [invoice_no])) {
+      purSeq += 1;
+      invoice_no = `PO-${new Date().getFullYear()}-${String(purSeq).padStart(4, '0')}`;
+    }
 
     const parsedTotal = Number(total_amount);
     const parsedPaid = Number(paid_amount);
@@ -111,15 +117,12 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
           await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, supplier_id]);
         }
 
-        // إذا دفعت مبالغ نقداً، تسجيل حركة الصندوق
+        // إذا دفعت مبالغ نقداً، تسجيل حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي)
         if (parsedPaid > 0) {
-          const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-          const prevBal = Number(lastCash.current_balance) || 0;
-          const newBal = prevBal - parsedPaid;
-          await tx.run(`
-            INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-            VALUES (?, 0, ?, 0, ?, ?, ?, ?)
-          `, [prevBal, parsedPaid, newBal, currency, date, `سداد مشتريات: ${invoice_no}`]);
+          await CashBoxService.appendMovement(tx, {
+            projectId: project_id ?? null, cashOut: parsedPaid,
+            currency, date, notes: `سداد مشتريات: ${invoice_no}`
+          });
         }
       }
 
@@ -257,13 +260,10 @@ router.post('/:id/post', requirePermission('purchases:post,accounting:post'), as
       }
 
       if (parsedPaid > 0) {
-        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-        const prevBal = Number(lastCash.current_balance) || 0;
-        const newBal = prevBal - parsedPaid;
-        await tx.run(`
-          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-          VALUES (?, 0, ?, 0, ?, ?, ?, ?)
-        `, [prevBal, parsedPaid, newBal, pu.currency || 'ر.ي', pu.date, `ترحيل سداد مشتريات: ${pu.invoice_no}`]);
+        await CashBoxService.appendMovement(tx, {
+          projectId: pu.project_id ?? null, cashOut: parsedPaid,
+          currency: pu.currency || 'ر.ي', date: pu.date, notes: `ترحيل سداد مشتريات: ${pu.invoice_no}`
+        });
       }
 
       await tx.run(`

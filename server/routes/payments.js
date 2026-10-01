@@ -3,6 +3,7 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const CashBoxService = require('../services/cashBoxService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 const FinancialControlService = {
   ...require('../services/financialControlService')
@@ -203,18 +204,19 @@ router.post('/', (req, res, next) => {
         }
 
         // التأثير على حركة الصندوق والبنك وتحديد نوع الحركة (نقدي / بنك)
-        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+        // Unified: their multi-currency/bank/party movement + project-scoped chain (same BOX_MATCH as CashBoxService) + zero fallback on virgin DB
+        const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE IFNULL(project_id, 0) = IFNULL(?, 0) ORDER BY id DESC LIMIT 1', [pId || null]) || { current_balance: 0 };
         const prevBal = Number(lastCash.current_balance) || 0;
         const newBal = type === 'قبض' ? prevBal + finalLocalAmount : prevBal - finalLocalAmount;
         const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || String(cleanBankName).length > 0) ? 'بنك' : 'نقدي';
         const partyLabel = directClientName || directSupplierName;
-        const moveDesc = payment_method === 'شيك' 
+        const moveDesc = payment_method === 'شيك'
           ? `سند ${type} بشيك رقم ${cleanCheckNo}: ${receipt_no}${partyLabel ? ' (' + partyLabel + ')' : ''}`
           : `سند ${type}: ${receipt_no}${partyLabel ? ' (' + partyLabel + ')' : ''} ${selectedCurrency !== 'ر.ي' ? '(' + parsedAmount + ' ' + selectedCurrency + ')' : ''}`;
 
         await tx.run(`
-          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
-          VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id, project_id)
+          VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           prevBal,
           type === 'قبض' ? finalLocalAmount : 0,
@@ -226,7 +228,8 @@ router.post('/', (req, res, next) => {
           moveType,
           payment_method,
           receipt_no,
-          accId
+          accId,
+          pId || null
         ]);
 
         // توليد قيد يومي تلقائي متزن بالعملة المحلية
@@ -444,26 +447,17 @@ router.post('/:id/post', (req, res, next) => {
         `, [parsedAmount, pay.supplier_id]);
       }
 
-      // 2. حركة الصندوق والبنك
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
-      const prevBal = Number(lastCash.current_balance) || 0;
-      const newBal = pay.type === 'قبض' ? prevBal + parsedAmount : prevBal - parsedAmount;
-      const moveDesc = pay.payment_method === 'شيك' 
+      // 2. حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي) — SUGGESTION-4
+      const moveDesc = pay.payment_method === 'شيك'
         ? `سند ${pay.type} بشيك رقم ${pay.check_no}: ${pay.receipt_no}`
         : `سند ${pay.type}: ${pay.receipt_no}`;
 
-      await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?)
-      `, [
-        prevBal,
-        pay.type === 'قبض' ? parsedAmount : 0,
-        pay.type === 'صرف' ? parsedAmount : 0,
-        newBal,
-        pay.currency || 'ر.ي',
-        pay.date,
-        moveDesc
-      ]);
+      await CashBoxService.appendMovement(tx, {
+        projectId: pay.project_id ?? null,
+        cashIn: pay.type === 'قبض' ? parsedAmount : 0,
+        cashOut: pay.type === 'صرف' ? parsedAmount : 0,
+        currency: pay.currency || 'ر.ي', date: pay.date, notes: moveDesc
+      });
 
       // 3. قيد اليومية التلقائي المتزن
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');

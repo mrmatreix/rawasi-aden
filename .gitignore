@@ -22,3 +22,11 @@ cloudflared.exe
 ملفات_المشاريع/
 .vscode/
 scratch/
+
+# قاعدة البيانات المحلية (تُبنى تلقائياً عند الإقلاع + `npm run seed` للعرض)
+server/database/rawasi_aden.db
+server/database/*.db-journal
+# مرآة الواجهة للأندرويد (مولّدة: `npm run build`)
+www/
+# الحزم التنفيذية (تُبنى عند الإصدار، لا تُنسخ في Git)
+*.exe

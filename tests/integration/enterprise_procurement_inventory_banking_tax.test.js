@@ -11,10 +11,187 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
   const makerUser = { id: 1, username: 'admin', full_name: 'المدير العام', role: 'admin' };
   const checkerUser = { id: 2, username: 'finance_checker', full_name: 'مدير التدقيق المالي', role: 'finance_manager' };
 
-  const testSuffix = Date.now().toString().slice(-6);
+  // لاحقة ثابتة معزولة (بدل الطابع الزمني) — تتيح التنظيف القبلي/البعدي بمفاتيح دقيقة
+  // وتمنع تصادم المفاتيح الفريدة بين التشغيلات (كان CHQ-xxxxxx يتصادم سابقاً)
+  const testSuffix = 'ENTFIX';
+  const CLIENT_NAME = `شركة الأفق العقارية - ${testSuffix}`;
+  const SUPP_NAME = `مؤسسة النصر لمواد البناء - ${testSuffix}`;
+  const SUPP2_NAME = `مؤسسة الاتحاد للتوريدات - ${testSuffix}`;
+  const PROJ_NAME = `مشروع برج الرقابة المالية المتكامل - ${testSuffix}`;
+  const ITEM_CODE = `ITM-TEST-${testSuffix}`;
+  const BILL_NO = `IPC-TAX-${testSuffix}`;
+  const CHEQUE_NO = `CHQ-${testSuffix}`;
+  const LG_NO = `LG-PB-${testSuffix}`;
 
-  let testProjectId, testSupplierId, testClientId, testItemId, testBoqId;
+  let testProjectId, testSupplierId, testSupplier2Id, testClientId, testItemId, testBoqId;
   let prId, rfqId, poId, grnId, stmtId, chequeId, billId, guaranteeId;
+  // مُلتقطات التنظيف: معرفات الصفوف وأرقام القيود (قيد العمولة البنكية بلا أب — لا يُحل إلا برقمه)
+  let transferId, retId, retJeNo, adjId, adjJeNo, chargeJeNo, bounceJeNo, taxJeNo, lgJeNo, relJeNo, brsId;
+  // رصيد البنك 1 قبل التشغيل (الكيان الحقيقي الوحيد المتأثر: −25k عمولة −1.05M هامش +1M استرداد)
+  let bank1Before = null;
+
+  // تنظيف معزول: قبلي (صفوف ثابتة المفاتيح من تشغيل متقطع) + بعدي شامل
+  // القيود تُحل من journal_entry_id في الآباء + أرقام القيود الملتقطة — بلا كنس تاريخي
+  const cleanup = async () => {
+    const idSet = async (sql, params = []) => new Set((await query(sql, params)).map(r => r.id));
+    const withCaptured = (s, v) => { if (v) s.add(Number(v)); return s; };
+    const ph = (s) => [...s].map(() => '?').join(',');
+
+    const projIds = withCaptured(await idSet('SELECT id FROM projects WHERE name = ?', [PROJ_NAME]), testProjectId);
+    const itemIds = withCaptured(await idSet('SELECT id FROM items WHERE code = ?', [ITEM_CODE]), testItemId);
+    const clientIds = withCaptured(await idSet('SELECT id FROM clients WHERE name = ?', [CLIENT_NAME]), testClientId);
+    const suppIds = withCaptured(await idSet('SELECT id FROM suppliers WHERE name IN (?, ?)', [SUPP_NAME, SUPP2_NAME]), testSupplierId);
+    withCaptured(suppIds, testSupplier2Id);
+    const billIds = withCaptured(await idSet('SELECT id FROM bills WHERE bill_no = ?', [BILL_NO]), billId);
+    const chqIds = withCaptured(await idSet('SELECT id FROM cheques WHERE cheque_no = ?', [CHEQUE_NO]), chequeId);
+    const lgIds = withCaptured(await idSet('SELECT id FROM bank_guarantees WHERE guarantee_no = ?', [LG_NO]), guaranteeId);
+    // الكشف البنكي غير مربوط بكيان اختباري — بصمته القيم الدقيقة + سطراه المعروفان
+    const stmtRows = await query(
+      `SELECT s.id FROM bank_statements s
+       WHERE s.bank_account_id = 1 AND s.statement_date = '2026-09-24'
+         AND s.opening_balance = 50000000 AND s.closing_balance = 54500000
+         AND EXISTS (SELECT 1 FROM bank_statement_lines l WHERE l.statement_id = s.id AND l.description = 'إيداع نقدي محصل من عميل')
+         AND EXISTS (SELECT 1 FROM bank_statement_lines l WHERE l.statement_id = s.id AND l.description = 'عمولة تحويل بنكي سريع')`
+    );
+    const stmtIds = withCaptured(new Set(stmtRows.map(r => r.id)), stmtId);
+
+    const prIds = withCaptured(new Set(), prId);
+    const poIds = withCaptured(new Set(), poId);
+    const grnIds = withCaptured(new Set(), grnId);
+    const rfqIds = withCaptured(new Set(), rfqId);
+    if (projIds.size > 0) {
+      for (const r of await query(`SELECT id FROM purchase_requisitions WHERE project_id IN (${ph(projIds)})`, [...projIds])) prIds.add(r.id);
+      for (const r of await query(`SELECT id FROM purchase_orders WHERE project_id IN (${ph(projIds)})`, [...projIds])) poIds.add(r.id);
+      for (const r of await query(`SELECT id FROM goods_receipt_notes WHERE project_id IN (${ph(projIds)})`, [...projIds])) grnIds.add(r.id);
+    }
+    if (prIds.size > 0) {
+      for (const r of await query(`SELECT id FROM rfqs WHERE requisition_id IN (${ph(prIds)})`, [...prIds])) rfqIds.add(r.id);
+    }
+
+    // 1. القيود: من الآباء أولاً ثم الملتقطة (إزالة تكرار بالمجموعة)
+    const jeIds = new Set();
+    const collectJe = async (table, col, idSetV, extraCols = []) => {
+      if (idSetV.size === 0) return;
+      const cols = ['journal_entry_id', ...extraCols].join(', ');
+      const rows = await query(`SELECT ${cols} FROM ${table} WHERE ${col} IN (${ph(idSetV)})`, [...idSetV]);
+      for (const r of rows) for (const c of ['journal_entry_id', ...extraCols]) if (r[c]) jeIds.add(Number(r[c]));
+    };
+    if (projIds.size > 0) {
+      const rets = await query(`SELECT id, journal_entry_id FROM inventory_returns WHERE project_id IN (${ph(projIds)})`, [...projIds]);
+      for (const r of rets) { if (r.journal_entry_id) jeIds.add(Number(r.journal_entry_id)); }
+    }
+    if (retId) {
+      const rr = await get('SELECT journal_entry_id FROM inventory_returns WHERE id = ?', [Number(retId)]);
+      if (rr && rr.journal_entry_id) jeIds.add(Number(rr.journal_entry_id));
+    }
+    await collectJe('inventory_adjustments', 'id', withCaptured(new Set(), adjId));
+    if (itemIds.size > 0) {
+      const adjs = await query(`SELECT journal_entry_id FROM inventory_adjustments WHERE item_id IN (${ph(itemIds)})`, [...itemIds]);
+      for (const r of adjs) if (r.journal_entry_id) jeIds.add(Number(r.journal_entry_id));
+    }
+    await collectJe('cheques', 'id', chqIds);
+    await collectJe('bills', 'id', billIds);
+    await collectJe('bank_guarantees', 'id', lgIds, ['release_journal_entry_id']);
+    if (billIds.size > 0) {
+      const whs = await query(`SELECT journal_entry_id FROM tax_withholdings WHERE source_doc_type = 'bill' AND source_doc_id IN (${ph(billIds)})`, [...billIds]);
+      for (const r of whs) if (r.journal_entry_id) jeIds.add(Number(r.journal_entry_id));
+    }
+    const jeNos = [retJeNo, adjJeNo, chargeJeNo, bounceJeNo, taxJeNo, lgJeNo, relJeNo].filter(Boolean);
+    if (jeNos.length > 0) {
+      const rows = await query(`SELECT id FROM journal_entries WHERE entry_no IN (${jeNos.map(() => '?').join(',')})`, jeNos);
+      for (const r of rows) jeIds.add(Number(r.id));
+    }
+    // شبكة أمان: أي قيد يمس مشروع الاختبار (يلتقط بقايا جزئية بلا آباء ولا التقطات)
+    if (projIds.size > 0) {
+      const touched = await query(`SELECT DISTINCT entry_id AS id FROM journal_entry_lines WHERE project_id IN (${ph(projIds)})`, [...projIds]);
+      for (const r of touched) jeIds.add(Number(r.id));
+    }
+    // سطور القيود أولاً (بعضها يشير للمشروع — لا شيء يشير إليها)
+    if (jeIds.size > 0) {
+      await run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${ph(jeIds)})`, [...jeIds]);
+    }
+    // (حذف رؤوس القيود في الخطوة 3 — بعد صفوف الأعمال التي تشير إليها عبر journal_entry_id)
+
+    // 2. الأوراق والأبناء (الأحفاد قبل الآباء)
+    if (billIds.size > 0) {
+      await run(`DELETE FROM tax_withholdings WHERE source_doc_type = 'bill' AND source_doc_id IN (${ph(billIds)})`, [...billIds]);
+    }
+    if (stmtIds.size > 0) {
+      await run(`DELETE FROM bank_statement_lines WHERE statement_id IN (${ph(stmtIds)})`, [...stmtIds]);
+      await run(`DELETE FROM bank_reconciliations WHERE statement_id IN (${ph(stmtIds)})`, [...stmtIds]);
+      await run(`DELETE FROM bank_statements WHERE id IN (${ph(stmtIds)})`, [...stmtIds]);
+    }
+    if (brsId) await run('DELETE FROM bank_reconciliations WHERE id = ?', [Number(brsId)]);
+    if (chqIds.size > 0) await run(`DELETE FROM cheques WHERE id IN (${ph(chqIds)})`, [...chqIds]);
+    if (lgIds.size > 0) {
+      // عكس أثر الضمانات القديمة على البنك من بيانات صفوفها (قبلي فقط — البعدي يستعيد اللقطة)
+      if (bank1Before === null) {
+        const rows = await query(`SELECT cash_margin_amount, commission_fee, status FROM bank_guarantees WHERE id IN (${ph(lgIds)})`, [...lgIds]);
+        let restore = 0;
+        for (const g of rows) {
+          restore += (Number(g.cash_margin_amount) || 0) + (Number(g.commission_fee) || 0);
+          if ((g.status || '') === 'released') restore -= (Number(g.cash_margin_amount) || 0);
+        }
+        if (Math.abs(restore) > 0.005) {
+          await run('UPDATE bank_accounts SET current_balance = current_balance + ? WHERE id = 1', [restore]);
+        }
+      }
+      await run(`DELETE FROM bank_guarantees WHERE id IN (${ph(lgIds)})`, [...lgIds]);
+    }
+    if (billIds.size > 0) await run(`DELETE FROM bills WHERE id IN (${ph(billIds)})`, [...billIds]);
+    // طبقات التقييم قبل أذون الاستلام (تشير إليها عبر grn_id)
+    if (itemIds.size > 0) await run(`DELETE FROM inventory_valuation_layers WHERE item_id IN (${ph(itemIds)})`, [...itemIds]);
+    if (grnIds.size > 0) {
+      await run(`DELETE FROM goods_receipt_items WHERE grn_id IN (${ph(grnIds)})`, [...grnIds]);
+      await run(`DELETE FROM goods_receipt_notes WHERE id IN (${ph(grnIds)})`, [...grnIds]);
+    }
+    if (poIds.size > 0) {
+      await run(`DELETE FROM purchase_order_items WHERE po_id IN (${ph(poIds)})`, [...poIds]);
+      await run(`DELETE FROM purchase_orders WHERE id IN (${ph(poIds)})`, [...poIds]);
+    }
+    if (rfqIds.size > 0) {
+      await run(`DELETE FROM rfq_vendor_quotes WHERE rfq_id IN (${ph(rfqIds)})`, [...rfqIds]);
+      await run(`DELETE FROM rfqs WHERE id IN (${ph(rfqIds)})`, [...rfqIds]);
+    }
+    if (prIds.size > 0) {
+      await run(`DELETE FROM purchase_requisition_items WHERE requisition_id IN (${ph(prIds)})`, [...prIds]);
+      await run(`DELETE FROM purchase_requisitions WHERE id IN (${ph(prIds)})`, [...prIds]);
+    }
+    if (itemIds.size > 0) {
+      await run(`DELETE FROM inventory_transactions WHERE item_id IN (${ph(itemIds)})`, [...itemIds]);
+      await run(`DELETE FROM inventory_transfers WHERE item_id IN (${ph(itemIds)})`, [...itemIds]);
+      await run(`DELETE FROM inventory_adjustments WHERE item_id IN (${ph(itemIds)})`, [...itemIds]);
+      await run(`DELETE FROM warehouse_stocks WHERE item_id IN (${ph(itemIds)})`, [...itemIds]);
+    }
+    if (transferId) await run('DELETE FROM inventory_transfers WHERE id = ?', [Number(transferId)]);
+    if (retId) await run('DELETE FROM inventory_returns WHERE id = ?', [Number(retId)]);
+    if (projIds.size > 0) {
+      await run(`DELETE FROM inventory_returns WHERE project_id IN (${ph(projIds)})`, [...projIds]);
+      await run(`DELETE FROM project_boq WHERE project_id IN (${ph(projIds)})`, [...projIds]);
+    }
+    if (itemIds.size > 0) await run(`DELETE FROM items WHERE id IN (${ph(itemIds)})`, [...itemIds]);
+    if (projIds.size > 0) await run(`DELETE FROM projects WHERE id IN (${ph(projIds)})`, [...projIds]);
+    if (clientIds.size > 0) await run(`DELETE FROM clients WHERE id IN (${ph(clientIds)})`, [...clientIds]);
+    if (suppIds.size > 0) await run(`DELETE FROM suppliers WHERE id IN (${ph(suppIds)})`, [...suppIds]);
+
+    // 3. رؤوس القيود — بعد زوال كل صف يشير إليها
+    if (jeIds.size > 0) {
+      await run(`DELETE FROM journal_entries WHERE id IN (${ph(jeIds)})`, [...jeIds]);
+    }
+
+    // 4. البنك 1: استعادة اللقطة بعدياً (القيمة الملتقطة قبل التشغيل)
+    if (bank1Before !== null) {
+      await run('UPDATE bank_accounts SET current_balance = ? WHERE id = 1', [bank1Before]);
+    }
+  };
+  t.after(() => cleanup().catch((e) => { console.error("CLEANUP-FAIL:", e.message); }));
+  await cleanup();
+
+  // لقطة رصيد البنك 1 بعد التنظيف القبلي (أساس الاستعادة البعدية)
+  try {
+    const b1 = await get('SELECT current_balance FROM bank_accounts WHERE id = 1');
+    bank1Before = b1 ? Number(b1.current_balance) : null;
+  } catch { bank1Before = null; }
 
   before(async () => {
     // 1. عميل ومورد
@@ -29,6 +206,12 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
       VALUES (?, 'حديد وأسمنت', 0, ?)
     `, [`مؤسسة النصر لمواد البناء - ${testSuffix}`, `TIN-SUP-${testSuffix}`]);
     testSupplierId = suppRes.lastInsertRowid || suppRes.insertId;
+
+    const supp2Res = await run(`
+      INSERT INTO suppliers (name, category, balance, tax_number)
+      VALUES (?, 'حديد وأسمنت', 0, ?)
+    `, [`مؤسسة الاتحاد للتوريدات - ${testSuffix}`, `TIN-SUP2-${testSuffix}`]);
+    testSupplier2Id = supp2Res.lastInsertRowid || supp2Res.insertId;
 
     // 2. مشروع وبند جدول كميات BOQ
     const projRes = await run(`
@@ -106,7 +289,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
       closing_date: '2026-10-05',
       vendor_quotes: [
         { supplier_id: testSupplierId, total_price: 12800000, delivery_days: 2, quote_reference: 'Q-NASR-01' },
-        { supplier_id: 1, total_price: 13200000, delivery_days: 4, quote_reference: 'Q-OTHER-02' }
+        { supplier_id: testSupplier2Id, total_price: 13200000, delivery_days: 4, quote_reference: 'Q-OTHER-02' }
       ],
       user: makerUser
     });
@@ -251,6 +434,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
 
     assert.ok(trf.transfer_no.startsWith('TRF-'));
     assert.equal(trf.status, 'completed');
+    transferId = trf.id;
 
     const wh1 = await get('SELECT quantity FROM warehouse_stocks WHERE warehouse_id = 1 AND item_id = ?', [testItemId]);
     const wh2 = await get('SELECT quantity FROM warehouse_stocks WHERE warehouse_id = 2 AND item_id = ?', [testItemId]);
@@ -293,6 +477,8 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
 
     assert.ok(ret.return_no.startsWith('RET-PRJ-'));
     assert.ok(ret.journal_entry_no.startsWith('JV-'));
+    retId = ret.id;
+    retJeNo = ret.journal_entry_no;
 
     const afterProj = await get('SELECT actual_cost FROM projects WHERE id = ?', [testProjectId]);
     assert.equal(Number(afterProj.actual_cost), initialCost - 1300000);
@@ -312,6 +498,8 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     assert.equal(adj.diff_qty, -1);
     assert.equal(adj.adjustment_type, 'deficit');
     assert.ok(adj.journal_entry_no.startsWith('JV-'));
+    adjId = adj.id;
+    adjJeNo = adj.journal_entry_no;
 
     const jv = await get('SELECT total_debit, total_credit FROM journal_entries WHERE entry_no = ?', [adj.journal_entry_no]);
     assert.equal(Number(jv.total_debit), Number(jv.total_credit));
@@ -353,6 +541,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
 
     assert.equal(charge.success, true);
     assert.ok(charge.entry_no.startsWith('JV-'));
+    chargeJeNo = charge.entry_no;
 
     const jv = await get('SELECT total_debit, total_credit FROM journal_entries WHERE entry_no = ?', [charge.entry_no]);
     assert.equal(Number(jv.total_debit), 25000);
@@ -383,6 +572,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
 
     assert.equal(bounce.status, 'bounced');
     assert.ok(bounce.journal_entry_no.startsWith('JV-'));
+    bounceJeNo = bounce.journal_entry_no;
 
     const updatedClient = await get('SELECT current_balance FROM clients WHERE id = ?', [testClientId]);
     assert.equal(Number(updatedClient.current_balance), 3000000);
@@ -400,6 +590,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     assert.ok(typeof brs.adjusted_bank_balance === 'number');
     assert.ok(typeof brs.adjusted_book_balance === 'number');
     assert.ok(typeof brs.variance === 'number');
+    brsId = brs.id;
   });
 
   // =========================================================================
@@ -412,7 +603,6 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
   });
 
   await t.test('4.2. Process Bill Tax Deduction with compound balanced GL entry', async () => {
-    const billCount = await get('SELECT COUNT(*) as cnt FROM bills');
     const bill_no = `IPC-TAX-${testSuffix}`;
 
     const billRes = await run(`
@@ -430,6 +620,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     assert.equal(taxResult.tax_wht_amount, 600000); // 3% من 20 مليون
     assert.equal(taxResult.net_amount, 15400000); // 20M - 2M - 2M - 0.6M = 15.4M
     assert.ok(taxResult.journal_entry_no.startsWith('JV-TAX-'));
+    taxJeNo = taxResult.journal_entry_no;
 
     const jv = await get('SELECT total_debit, total_credit FROM journal_entries WHERE entry_no = ?', [taxResult.journal_entry_no]);
     assert.equal(Number(jv.total_debit), 20000000);
@@ -437,6 +628,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
   });
 
   await t.test('4.3. Periodic Tax Declaration report aggregates WHT certificates', async () => {
+    // الفاتورة في 4.2 بتاريخ اليوم — الفترة هي الشهر الجاري ديناميكياً (منسجم مع التقويم دائماً)
     const currentPeriod = new Date().toISOString().substring(0, 7);
     const dec = await TaxAndGuaranteeService.getTaxDeclarationReport(currentPeriod);
 
@@ -467,6 +659,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     assert.equal(lg.commission_fee, 50000);
     assert.ok(lg.journal_entry_no.startsWith('JV-LG-'));
     guaranteeId = lg.id;
+    lgJeNo = lg.journal_entry_no;
 
     const jv = await get('SELECT total_debit, total_credit FROM journal_entries WHERE entry_no = ?', [lg.journal_entry_no]);
     assert.equal(Number(jv.total_debit), 1050000);
@@ -482,6 +675,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     assert.equal(release.status, 'released');
     assert.equal(release.refunded_margin, 1000000);
     assert.ok(release.journal_entry_no.startsWith('JV-REL-'));
+    relJeNo = release.journal_entry_no;
 
     const jv = await get('SELECT total_debit, total_credit FROM journal_entries WHERE entry_no = ?', [release.journal_entry_no]);
     assert.equal(Number(jv.total_debit), 1000000);

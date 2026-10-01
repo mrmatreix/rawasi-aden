@@ -13,8 +13,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261001-gzdv">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261001-gzdv">
+  <link rel="manifest" href="manifest.json?v=1c6a3d66">
+  <link rel="stylesheet" href="css/style.css?v=f256ed98">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -1943,6 +1943,9 @@
                     <th>عدد العمال</th>
                     <th>اليومية / الفئة</th>
                     <th>إجمالي الأجر</th>
+                    <th>المسدد</th>
+                    <th>المتبقي</th>
+                    <th>الحالة</th>
                     <th>المشرف المستلم</th>
                     <th>الإجراء</th>
                   </tr>
@@ -4414,8 +4417,8 @@
             <input type="number" id="projEstimatedCost" class="form-control" placeholder="750000" required>
           </div>
           <div class="form-group">
-            <label>التكلفة الفعلية الأولية</label>
-            <input type="number" id="projActualCost" class="form-control" value="0">
+            <label>التكلفة الفعلية <small style="color: var(--text-secondary); font-weight: 400;">(تُحسب تلقائياً من المصادر)</small></label>
+            <input type="number" id="projActualCost" class="form-control" value="0" readonly disabled title="التكلفة الفعلية تُحتسب تلقائياً من المصروفات والمخزون والأجور والمشتريات — لا تُدخل يدوياً">
           </div>
           <div class="form-group">
             <label>نسبة الإنجاز %</label>
@@ -6871,6 +6874,20 @@
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div class="form-group">
+            <label>المبلغ المسدد نقداً / بنكياً</label>
+            <input type="number" id="projLaborPaid" class="form-control" placeholder="فارغ = حسب حالة الدفع">
+          </div>
+          <div class="form-group">
+            <label>حالة الدفع</label>
+            <select id="projLaborStatus" class="form-control">
+              <option value="مدفوع">مدفوع بالكامل</option>
+              <option value="غير مدفوع">غير مدفوع / ذمة للطاقم</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
             <label>تصنيف المصروف</label>
             <select id="projLaborCat" class="form-control">
               <option value="أجور عمالة">أجور عمالة مباشرة</option>
@@ -7947,26 +7964,17 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/ui-ux.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/auth.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/projects.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/accounting.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/inventory.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/hr.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/settings.js?v=1.0.0.20261001-gzdv"></script>
-  <script src="js/app.js?v=1.0.0.20261001-gzdv"></script>
+  <script src="js/ui-ux.js?v=1632e5be"></script>
+  <script src="js/auth.js?v=14412da3"></script>
+  <script src="js/events.js?v=032539a3"></script>
+  <script src="js/project_control_ui.js?v=fbc2f9ff"></script>
+  <script src="js/app.js?v=7eeae978"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261001-gzdv')
+        navigator.serviceWorker.register('./sw.js?v=c1d9de5f')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

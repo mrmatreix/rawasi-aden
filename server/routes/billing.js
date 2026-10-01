@@ -104,9 +104,14 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
       if (proj) finalClientId = proj.client_id;
     }
 
-    // توليد رقم المستخلص
+    // توليد رقم المستخلص (حلقة فرادة: COUNT+1 وحده يصطدم بعد أي حذف صف)
     const countRes = await get('SELECT COUNT(*) as cnt FROM bills');
-    const bill_no = `INV-${new Date().getFullYear()}-${String((countRes ? countRes.cnt : 0) + 1).padStart(4, '0')}`;
+    let billSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+    let bill_no = `INV-${new Date().getFullYear()}-${String(billSeq).padStart(4, '0')}`;
+    while (await get('SELECT id FROM bills WHERE bill_no = ?', [bill_no])) {
+      billSeq += 1;
+      bill_no = `INV-${new Date().getFullYear()}-${String(billSeq).padStart(4, '0')}`;
+    }
 
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);

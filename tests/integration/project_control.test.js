@@ -6,7 +6,7 @@
 
 'use strict';
 
-const { test, before, describe } = require('node:test');
+const { test, before, after, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const { query, get, run } = require('../../server/database/db');
 const ctrl = require('../../server/services/projectControlService');
@@ -14,11 +14,41 @@ const ctrl = require('../../server/services/projectControlService');
 let testProjectId, testUserId;
 const sfx = Date.now().toString().slice(-6);
 
+// تنظيف معزول بمفاتيح الاسم البادئة (يغطي التشغيل الحالي + بقايا التشغيلات المقتولة)
+const cleanup = async () => {
+  try {
+    const projs = await query(`SELECT id FROM projects WHERE name LIKE 'مشروع اختبار التحكم المتقدم - %'`);
+    for (const pr of projs) {
+      const pid = pr.id;
+      await run('DELETE FROM project_wbs_baselines WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_wbs_dependencies WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_wbs_activities WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_evm_snapshots WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_engineer_certifications WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_risk_register WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_claims_register WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_non_conformance WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_rfi WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_invoices WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_purchases WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_boq WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_budgets WHERE project_id = ?', [pid]);
+      await run('DELETE FROM project_contracts WHERE project_id = ?', [pid]);
+      await run('DELETE FROM cash_movements WHERE project_id = ?', [pid]);
+      await run('DELETE FROM projects WHERE id = ?', [pid]);
+    }
+    await run(`DELETE FROM clients WHERE name LIKE 'عميل اختبار التحكم المتقدم - %'`);
+    await run(`DELETE FROM users WHERE id = 901 OR username LIKE 'pm_test_%'`);
+  } catch {}
+};
+after(() => cleanup().catch(() => {}));
+
 // ============================================================================
 // إعداد بيانات الاختبار
 // ============================================================================
 
 before(async () => {
+  await cleanup();
   // مستخدم اختبار
   try {
     const uRes = await run(
@@ -28,11 +58,18 @@ before(async () => {
     testUserId = 901;
   } catch { testUserId = 901; }
 
+  // عميل اختبار (اكتفاء ذاتي: لا اعتماد على بيانات البذرة)
+  const cliRes = await run(
+    `INSERT INTO clients (name, company, phone) VALUES (?, 'شركة اختبار', '700000000')`,
+    [`عميل اختبار التحكم المتقدم - ${sfx}`]
+  );
+  const testClientId = cliRes.lastInsertRowid || cliRes.insertId || cliRes.lastID;
+
   // مشروع اختبار
   const prjRes = await run(
     `INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status)
-     VALUES (?, 1, 5000000, 3500000, 0, 0, 'active')`,
-    [`مشروع اختبار التحكم المتقدم - ${sfx}`]
+     VALUES (?, ?, 5000000, 3500000, 0, 0, 'active')`,
+    [`مشروع اختبار التحكم المتقدم - ${sfx}`, testClientId]
   );
   testProjectId = prjRes.lastInsertRowid || prjRes.insertId || prjRes.lastID;
 

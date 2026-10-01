@@ -1044,6 +1044,9 @@ const ProjectHub = {
           <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.paid_amount)} <small>${curr}</small></td>
           <td><span class="drawing-badge-status ${p.payment_status === 'مدفوع' ? 'approved' : 'pending'}">${p.payment_status}</span></td>
           <td>
+            ${(Number(p.total_amount) - (Number(p.paid_amount) || 0)) > 0.005
+              ? `<button class="btn btn-success btn-sm" onclick="ProjectHub.payPurchase(${p.id}, ${(Number(p.total_amount) - (Number(p.paid_amount) || 0))})" title="سداد المستحق">💰</button> `
+              : ''}
             <button class="btn btn-danger btn-sm" onclick="ProjectHub.deletePurchase(${p.id})" title="حذف">🗑️</button>
           </td>
         </tr>
@@ -1091,6 +1094,14 @@ const ProjectHub = {
       notes: document.getElementById('projPurNotes').value
     };
 
+    // SUGGESTION-6: الآجل يتطلب مورداً (فحص مبكر — الخادم يفرض أيضاً)
+    const purTotal = Number(payload.total_amount) || 0;
+    const purPaid = Number(payload.paid_amount) || 0;
+    if (purTotal - purPaid > 0.005 && !payload.supplier_id) {
+      App.showToast('المشتريات الآجلة (غير المسددة بالكامل) تتطلب تحديد المورد أولاً', 'error');
+      return;
+    }
+
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/purchases`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1104,6 +1115,26 @@ const ProjectHub = {
       await this.loadProjectData();
     } else {
       App.showToast(json.message || 'فشل في حفظ الفاتورة', 'error');
+    }
+  },
+
+  async payPurchase(id, outstanding) {
+    const val = prompt(`المتبقي المستحق: ${App.formatNumber(outstanding)}\nأدخل مبلغ السداد:`, String(Math.round(outstanding * 1000) / 1000));
+    if (val === null) return;
+    const amount = Number(val);
+    if (!(amount > 0)) { App.showToast('مبلغ السداد يجب أن يكون أكبر من الصفر', 'error'); return; }
+    if (amount - outstanding > 0.005) { App.showToast('المبلغ يتجاوز المتبقي المستحق', 'error'); return; }
+    const res = await fetch(`/api/project-hub/${this.currentProjectId}/purchases/${id}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, date: new Date().toISOString().split('T')[0] })
+    });
+    const json = await res.json();
+    if (json.success) {
+      App.showToast(json.message || 'تم تسجيل السداد', 'success');
+      await this.loadProjectData();
+    } else {
+      App.showToast(json.message || 'فشل في تسجيل السداد', 'error');
     }
   },
 
@@ -1128,13 +1159,16 @@ const ProjectHub = {
     const curr = this.data.project.currency || 'ر.ي';
 
     if (labor.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد مصاريف عمالة مسجلة للمشروع.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد مصاريف عمالة مسجلة للمشروع.</td></tr>`;
       return;
     }
 
     let totalLaborVal = 0;
+    let totalLaborPaid = 0;
     tbody.innerHTML = labor.map(l => {
       totalLaborVal += Number(l.total_amount) || 0;
+      totalLaborPaid += Number(l.paid_amount) || 0;
+      const outstanding = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
       return `
         <tr>
           <td>${l.date}</td>
@@ -1143,16 +1177,22 @@ const ProjectHub = {
           <td>${l.workers_count} عمال</td>
           <td>${App.formatNumber(l.daily_rate)} <small>${curr}</small></td>
           <td style="color: var(--accent-red); font-weight: 700;">${App.formatNumber(l.total_amount)} <small>${curr}</small></td>
+          <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(l.paid_amount)} <small>${curr}</small></td>
+          <td style="color: var(--accent-red); font-weight: 700;">${App.formatNumber(Math.max(0, outstanding))} <small>${curr}</small></td>
+          <td><span class="drawing-badge-status ${l.payment_status === 'مدفوع' ? 'approved' : 'pending'}">${l.payment_status || '-'}</span></td>
           <td>${l.supervisor_name || '-'}</td>
           <td>
+            ${outstanding > 0.005
+              ? `<button class="btn btn-success btn-sm" onclick="ProjectHub.payLabor(${l.id}, ${outstanding})" title="سداد المستحق">💰</button> `
+              : ''}
             <button class="btn btn-danger btn-sm" onclick="ProjectHub.deleteLabor(${l.id})" title="حذف">🗑️</button>
           </td>
         </tr>
       `;
     }).join('') + `
       <tr style="background: rgba(239,68,68,0.08); font-weight: 800;">
-        <td colspan="5" style="text-align: right; color: var(--accent-red);">إجمالي أجور العمالة والمصروفات الميدانية:</td>
-        <td colspan="3" style="color: var(--accent-red); font-size: 1.05rem;">${App.formatNumber(totalLaborVal)} ${curr}</td>
+        <td colspan="6" style="text-align: right; color: var(--accent-red);">إجمالي أجور العمالة والمصروفات الميدانية:</td>
+        <td colspan="5" style="color: var(--accent-red); font-size: 1.05rem;">${App.formatNumber(totalLaborVal)} ${curr} <small style="color: var(--accent-green);">(المسدد: ${App.formatNumber(totalLaborPaid)} — المتبقي: ${App.formatNumber(totalLaborVal - totalLaborPaid)})</small></td>
       </tr>
     `;
   },
@@ -1173,6 +1213,8 @@ const ProjectHub = {
       daily_rate: document.getElementById('projLaborRate').value,
       days_or_hours: document.getElementById('projLaborDays').value || 1,
       total_amount: document.getElementById('projLaborTotal').value,
+      paid_amount: document.getElementById('projLaborPaid').value,
+      payment_status: document.getElementById('projLaborStatus').value,
       expense_category: document.getElementById('projLaborCat').value,
       supervisor_name: document.getElementById('projLaborSupervisor').value,
       notes: document.getElementById('projLaborNotes').value
@@ -1191,6 +1233,26 @@ const ProjectHub = {
       await this.loadProjectData();
     } else {
       App.showToast(json.message || 'فشل في حفظ السجل', 'error');
+    }
+  },
+
+  async payLabor(id, outstanding) {
+    const val = prompt(`المتبقي المستحق: ${App.formatNumber(outstanding)}\nأدخل مبلغ السداد:`, String(Math.round(outstanding * 1000) / 1000));
+    if (val === null) return;
+    const amount = Number(val);
+    if (!(amount > 0)) { App.showToast('مبلغ السداد يجب أن يكون أكبر من الصفر', 'error'); return; }
+    if (amount - outstanding > 0.005) { App.showToast('المبلغ يتجاوز المتبقي المستحق', 'error'); return; }
+    const res = await fetch(`/api/project-hub/${this.currentProjectId}/labor/${id}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, date: new Date().toISOString().split('T')[0] })
+    });
+    const json = await res.json();
+    if (json.success) {
+      App.showToast(json.message || 'تم تسجيل السداد', 'success');
+      await this.loadProjectData();
+    } else {
+      App.showToast(json.message || 'فشل في تسجيل السداد', 'error');
     }
   },
 
