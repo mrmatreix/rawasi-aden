@@ -13,8 +13,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261002-nbd7">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261002-nbd7">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261002-fnit">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261002-fnit">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -4340,6 +4340,191 @@
             </form>
           </div>
 
+          <!-- بطاقة استراتيجية متطورة: محرك الأرشفة الشاملة والمزامنة السحابية المشفرة (Encrypted Cloud Backup & Vault) -->
+          <div class="panel-card" style="margin-bottom: 24px; border: 1px solid #38bdf8; background: linear-gradient(135deg, rgba(56, 189, 248, 0.04) 0%, rgba(15, 23, 42, 0.75) 100%);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+                  ☁️
+                </div>
+                <div>
+                  <h3 style="color: #38bdf8; font-size: 1.15rem; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <span>الأرشفة الشاملة والمزامنة السحابية المشفرة</span>
+                    <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; border: 1px solid #34d399;">🔒 AES-256-GCM Military Grade</span>
+                  </h3>
+                  <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 3px 0 0 0;">
+                    أرشفة موحدة للنظام (قاعدة البيانات + مستندات وعقود ومخططات المشاريع) مع تشفير عسكري ومزامنة سحابية مؤمنة
+                  </p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadCloudBackupStatus()">🔄 تحديث الخزنة</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="Settings.syncToCloudNow()" id="btnQuickCloudSync" style="background: #0284c7; border-color: #0284c7;">
+                  ☁️ مزامنة سحابية فورية
+                </button>
+              </div>
+            </div>
+
+            <!-- مؤشرات سريعة لحالة الخزنة والتشفير -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 20px;">
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">حالة المزامنة السحابية:</span>
+                <strong id="cloudStatusBadge" style="font-size: 0.95rem; color: #38bdf8;">جاري الفحص...</strong>
+              </div>
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">آخر مزامنة ناجحة:</span>
+                <strong id="cloudLastSyncTimeText" style="font-size: 0.92rem; color: #f8fafc;">-</strong>
+              </div>
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">خوارزمية حماية الخزنة:</span>
+                <strong style="font-size: 0.92rem; color: #34d399;">AES-256-GCM + PBKDF2 (100k)</strong>
+              </div>
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">إجمالي الأرشيفات في الخزنة:</span>
+                <strong id="cloudVaultFilesCountText" style="font-size: 0.95rem; color: var(--gold-light);">0 أرشيف</strong>
+              </div>
+            </div>
+
+            <!-- شبكة العمليات الرئيسية: قسم الأرشفة والتشفير + قسم إعدادات السحابة -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
+              
+              <!-- القسم الأيمن: أرشفة النظام الشاملة والمشفرة -->
+              <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 16px;">
+                <h4 style="color: var(--gold-light); margin: 0 0 12px 0; font-size: 0.98rem; display: flex; align-items: center; gap: 6px;">
+                  <span>📦 إنشاء أرشيف شامل للنظام (Full Bundle Archive)</span>
+                </h4>
+                <p style="color: var(--text-secondary); font-size: 0.78rem; margin: 0 0 14px 0; line-height: 1.4;">
+                  يقوم هذا الإجراء بحزم قاعدة البيانات بالكامل + ملفات ومستندات وعقود المشاريع ومستخلصات الـ PDF مع تشفير اختياري بكلمة مرور.
+                </p>
+
+                <div class="form-group" style="margin-bottom: 12px;">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600;">
+                    <input type="checkbox" id="cfgArchiveEncrypt" checked onchange="Settings.toggleArchiveCryptoFields()">
+                    <span>تشفير الأرشيف عسكرياً بمفتاح أمان (AES-256-GCM) 🔒</span>
+                  </label>
+                  <small style="color: var(--text-secondary); font-size: 0.72rem; display: block; margin-right: 24px;">
+                    حماية قصوى تمنع فتح الملف أو قراءة الحسابات والمشاريع بدون كلمة المرور.
+                  </small>
+                </div>
+
+                <div class="form-group" id="archivePassphraseGroup" style="margin-bottom: 12px;">
+                  <label for="cfgArchivePassphrase" style="font-size: 0.85rem; font-weight: 600;">كلمة مرور / مفتاح التشفير</label>
+                  <div style="display: flex; gap: 6px;">
+                    <input type="text" id="cfgArchivePassphrase" class="form-control" placeholder="أدخل كلمة مرور قوية أو اضغط توليد مفتاح" style="font-family: monospace;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.generatePassphraseForArchive()" title="توليد مفتاح عشوائي فائق القوة">🔑 توليد</button>
+                  </div>
+                  <small style="color: #fbbf24; font-size: 0.72rem; display: block; margin-top: 3px;">
+                    ⚠️ يرجى حفظ هذا المفتاح في مكان آمن، لن يمكن فك تشفير النسخة بدونه إطلاقاً.
+                  </small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
+                    <input type="checkbox" id="cfgArchiveIncludeFiles" checked>
+                    <span>تضمين مجلد وثائق ومخططات وعقود المشاريع ومستخلصات فيديك 📑</span>
+                  </label>
+                </div>
+
+                <button type="button" class="btn btn-primary" id="btnCreateArchiveNow" onclick="Settings.createFullSystemArchive()" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #d97706, #b45309);">
+                  <span>📦🔒 إنشاء وتنزيل الأرشيف الشامل فوراً</span>
+                </button>
+              </div>
+
+              <!-- القسم الأيسر: إعدادات المزامنة السحابية والربط -->
+              <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 16px;">
+                <h4 style="color: #38bdf8; margin: 0 0 12px 0; font-size: 0.98rem; display: flex; align-items: center; gap: 6px;">
+                  <span>⚙️ إعدادات المزامنة والتخزين السحابي (Cloud Storage)</span>
+                </h4>
+
+                <form onsubmit="Settings.saveCloudSyncConfig(event)">
+                  <div class="form-group" style="margin-bottom: 10px;">
+                    <label for="cfgCloudProvider" style="font-size: 0.85rem; font-weight: 600;">موفر التخزين السحابي (Cloud Provider)</label>
+                    <select id="cfgCloudProvider" class="form-control" onchange="Settings.toggleCloudProviderFields()">
+                      <option value="cloud_vault">خزنة سحابة رواسي الآمنة المدارة (Cloud Vault Managed)</option>
+                      <option value="local_cloud_folder">مجلد سحابي متزامن (Google Drive / OneDrive / Nextcloud)</option>
+                      <option value="s3_webhook">خادم سحابي خارجي (Webhook REST Endpoint / S3)</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group" id="grpCloudEndpoint" style="margin-bottom: 10px; display: none;">
+                    <label for="cfgCloudEndpoint" style="font-size: 0.85rem; font-weight: 600;">رابط الخادم السحابي (Cloud Endpoint URL)</label>
+                    <input type="text" id="cfgCloudEndpoint" class="form-control" placeholder="https://cloud.rawasi-aden.com/api/vault">
+                  </div>
+
+                  <div class="form-group" id="grpCloudToken" style="margin-bottom: 10px; display: none;">
+                    <label for="cfgCloudToken" style="font-size: 0.85rem; font-weight: 600;">رمز المصادقة (Auth Token / Secret Key)</label>
+                    <input type="password" id="cfgCloudToken" class="form-control" placeholder="Bearer Token أو المفتاح السري">
+                  </div>
+
+                  <div class="form-group" id="grpCloudFolder" style="margin-bottom: 10px; display: none;">
+                    <label for="cfgCloudFolder" style="font-size: 0.85rem; font-weight: 600;">مسار المجلد السحابي المتزامن</label>
+                    <input type="text" id="cfgCloudFolder" class="form-control" placeholder="مثال: /cloud_storage/drive_sync أو مسار مجلد السحابة">
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
+                      <input type="checkbox" id="cfgCloudAutoSync" checked>
+                      <span>مزامنة سحابية تلقائية فورية بعد كل نسخة احتياطية مجدولة ⚡</span>
+                    </label>
+                  </div>
+
+                  <div id="cloudConnectionTestResult" style="display: none; padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 0.8rem;"></div>
+
+                  <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.testCloudConnection()" id="btnTestCloudConn">
+                      🔍 فحص الاتصال السحابي
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-sm" style="background: #0284c7; border-color: #0284c7;">
+                      💾 حفظ إعدادات السحابة
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+            </div>
+
+            <!-- قسم الخزنة السحابية وسجل الأرشيفات المحفوظة مع فحص واستعادة -->
+            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                  <h4 style="color: #f8fafc; margin: 0 0 4px 0; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+                    <span>🏛️ خزنة الأرشيفات والنسخ السحابية (Cloud & Local Vault)</span>
+                  </h4>
+                  <p style="color: var(--text-secondary); font-size: 0.78rem; margin: 0;">
+                    قائمة بكافة الأرشيفات الشاملة المحفوظة مع إمكانية التنزيل المباشر أو الاستعادة وفك التشفير
+                  </p>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.openEncryptedRestoreModal()">
+                    🔓 استعادة أرشيف مشفر خارجي
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>اسم ملف الأرشيف والبيان</th>
+                      <th>نوع المحتوى</th>
+                      <th>مستوى التشفير</th>
+                      <th>الحجم</th>
+                      <th>حالة السحابة</th>
+                      <th>تاريخ الأرشفة</th>
+                      <th style="text-align: center;">الإجراءات المتاحة</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cloudVaultTableBody">
+                    <tr>
+                      <td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">جاري تحميل محتويات الخزنة...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
           <!-- بطاقة 2: تحميل واستعادة النسخ العامة -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
             <div class="panel-card" style="text-align: center; padding: 25px;">
@@ -6231,6 +6416,65 @@
           <span>بدء الاستعادة والتأكيد</span>
         </button>
         <button type="button" class="btn btn-secondary" onclick="App.closeModal('restoreBackupModal')">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة معالج استعادة وفحص الأرشيف المشفر الشامل (Encrypted System Restore Modal) -->
+  <div class="modal-overlay" id="encryptedRestoreModal">
+    <div class="modal-box" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span>🔓 استعادة وفك تشفير الأرشيف الشامل (Encrypted System Restore)</span>
+        </h3>
+        <button class="modal-close-btn" onclick="App.closeModal('encryptedRestoreModal')">&times;</button>
+      </div>
+      <div style="padding: 12px 0;">
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid var(--accent-red); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start;">
+          <span style="font-size: 1.4rem;">⚠️</span>
+          <div style="font-size: 0.85rem; line-height: 1.4; color: #fca5a5;">
+            <strong>تنبيه الأمان والرقابة:</strong> استعادة الأرشيف تقوم بتحديث قاعدة البيانات واسترجاع كافة وثائق المشاريع الموجودة في الحزمة. يقوم النظام بحفظ <strong>نقطة أمان واسترجاع طارئة تلقائياً</strong> قبل البدء.
+          </div>
+        </div>
+
+        <!-- منطقة اختيار أو رفع الملف -->
+        <div class="upload-dropzone" onclick="document.getElementById('vaultRestoreFileInput').click()" style="border: 2px dashed #38bdf8; border-radius: var(--radius-md); padding: 22px 16px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); transition: var(--transition); margin-bottom: 16px;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="#38bdf8" style="margin-bottom: 8px;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+          <div style="font-weight: 700; color: #38bdf8; margin-bottom: 4px;" id="vaultRestoreFileHeader">اضغط هنا لاختيار ملف الأرشيف (.rawasi.enc / .zip / .db)</div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);" id="vaultRestoreFileName">أو اسحب وأفلت الملف هنا مباشرة</div>
+          <input type="file" id="vaultRestoreFileInput" accept=".enc,.zip,.db,.sqlite" style="display: none;" onchange="Settings.handleVaultRestoreFileSelected(event)">
+        </div>
+
+        <!-- حقل كلمة مرور فك التشفير -->
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="vaultRestorePassphrase" style="font-size: 0.85rem; font-weight: 600; display: flex; justify-content: space-between;">
+            <span>كلمة مرور فك التشفير (Passphrase / Decryption Key)</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">(مطلوبة إذا كان الأرشيف مشفراً 🔒)</span>
+          </label>
+          <input type="password" id="vaultRestorePassphrase" class="form-control" placeholder="أدخل كلمة مرور التشفير المستخدمة عند إنشاء الأرشيف">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
+            <input type="checkbox" id="vaultRestoreFilesCheck" checked>
+            <span>استعادة ملفات ومستندات وعقود المشاريع المرفقة داخل الحزمة</span>
+          </label>
+        </div>
+
+        <!-- مربع نتيجة الفحص والمعاينة -->
+        <div id="vaultRestoreInspectionBox" style="display: none; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;"></div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.inspectSelectedArchive()" id="btnInspectArchive">
+            🔍 فحص سلامة الأرشيف ومعاينته
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="btnConfirmEncryptedRestore" onclick="Settings.executeEncryptedRestore()" disabled style="background: linear-gradient(135deg, #10b981, #059669); border-color: #10b981;">
+          <span>🛡️ تأكيد وتنفيذ الاستعادة الشاملة</span>
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="App.closeModal('encryptedRestoreModal')">إلغاء</button>
       </div>
     </div>
   </div>
@@ -8316,26 +8560,26 @@
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/auth.js?v=1.0.0.20261002-nbd7"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/auth.js?v=1.0.0.20261002-fnit"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/projects.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/accounting.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/inventory.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/hr.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/settings.js?v=1.0.0.20261002-nbd7"></script>
-  <script src="js/app.js?v=1.0.0.20261002-nbd7"></script>
+  <script src="js/reports.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/projects.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/accounting.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/inventory.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/hr.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/settings.js?v=1.0.0.20261002-fnit"></script>
+  <script src="js/app.js?v=1.0.0.20261002-fnit"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261002-nbd7')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261002-fnit')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

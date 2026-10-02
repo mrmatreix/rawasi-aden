@@ -13,6 +13,10 @@ server/database/*staging*.db*
 *.zip
 *.rar
 *.exe
+*.enc
+*.rawasi.enc
+server/database/backups/cloud_vault/*.enc
+server/database/backups/cloud_vault/*.zip
 android/.gradle/
 android/app/build/
 android/build/

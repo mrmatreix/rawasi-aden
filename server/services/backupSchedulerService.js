@@ -316,6 +316,18 @@ class BackupSchedulerService {
 
       console.log(`✅ [BackupScheduler] تم إنشاء النسخة المجدولة بنجاح: ${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB) في ${targetDir}`);
 
+      // محاولة المزامنة السحابية التلقائية إن كانت مفعلة
+      try {
+        const cloudService = require('./cloudBackupCryptoService');
+        cloudService.getCloudConfig().then(cCfg => {
+          if (cCfg.enabled && cCfg.autoSyncAfterBackup) {
+            cloudService.syncArchiveToCloud(fileName, cCfg).catch(cErr => {
+              console.warn('⚠️ [BackupScheduler] تحذير أثناء المزامنة السحابية التلقائية:', cErr.message);
+            });
+          }
+        }).catch(() => {});
+      } catch (e) {}
+
       return {
         success: true,
         fileName,

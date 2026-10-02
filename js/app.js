@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261002-nbd7',
+  assetVersion: '1.0.0.20261002-fnit',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,16 +11,16 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261002-nbd7',
-    projects: 'js/projects.js?v=1.0.0.20261002-nbd7',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261002-nbd7',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261002-nbd7',
-    accounting: 'js/accounting.js?v=1.0.0.20261002-nbd7',
-    hr: 'js/hr.js?v=1.0.0.20261002-nbd7',
-    reports: 'js/reports.js?v=1.0.0.20261002-nbd7',
-    inventory: 'js/inventory.js?v=1.0.0.20261002-nbd7',
-    settings: 'js/settings.js?v=1.0.0.20261002-nbd7',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261002-nbd7'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261002-fnit',
+    projects: 'js/projects.js?v=1.0.0.20261002-fnit',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261002-fnit',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261002-fnit',
+    accounting: 'js/accounting.js?v=1.0.0.20261002-fnit',
+    hr: 'js/hr.js?v=1.0.0.20261002-fnit',
+    reports: 'js/reports.js?v=1.0.0.20261002-fnit',
+    inventory: 'js/inventory.js?v=1.0.0.20261002-fnit',
+    settings: 'js/settings.js?v=1.0.0.20261002-fnit',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261002-fnit'
   },
   _loadedModules: {},
   _loadingPromises: {},
