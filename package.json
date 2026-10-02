@@ -1,0 +1,36 @@
+{
+  "name": "rawasi-aden-system",
+  "version": "1.0.0",
+  "description": "النظام المحاسبي والإداري المتكامل - شركة رواسي عدن للهندسة والمقاولات",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "start:staging": "node scripts/run_staging.js",
+    "build": "node build_www.js",
+    "dev": "node server/server.js",
+    "test": "node --test --test-concurrency=1 tests/**/*.test.js",
+    "test:unit": "node --test --test-concurrency=1 tests/unit/**/*.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/**/*.test.js",
+    "seed": "node server/database/seed.js"
+  },
+  "keywords": [
+    "rawasi-aden",
+    "contracting",
+    "accounting",
+    "erp",
+    "yemen",
+    "engineering"
+  ],
+  "author": "رواسي عدن للهندسة والمقاولات",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "docx": "^9.7.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.24.4",
+    "pdf-lib": "^1.17.1",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,262 @@
+[
+  {
+    "fileName": "backup_logout_admin_2026-09-09_14-14-19.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_14-14-19.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T11:14:19.864Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ٢:١٤:١٩ م",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_14-10-45.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_14-10-45.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T11:10:45.222Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ٢:١٠:٤٥ م",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-09_13-38-32.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-09_13-38-32.db",
+    "username": "علوي",
+    "timestamp": "2026-09-09T10:38:32.468Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١:٣٨:٣٢ م",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: علوي"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_13-36-42.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_13-36-42.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T10:36:42.288Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١:٣٦:٤٢ م",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "إغلاق البرنامج من زر شاشة تسجيل الدخول"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_13-14-02.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_13-14-02.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T10:14:02.815Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١:١٤:٠٢ م",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_13-02-21.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_13-02-21.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T10:02:21.297Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١:٠٢:٢١ م",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_11-19-10.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_11-19-10.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T08:19:10.487Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١١:١٩:١٠ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-09_10-42-40.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-09_10-42-40.db",
+    "username": "علوي",
+    "timestamp": "2026-09-09T07:42:40.124Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١٠:٤٢:٤٠ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: علوي"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_10-22-28.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_10-22-28.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T07:22:28.879Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١٠:٢٢:٢٨ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_10-21-17.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_10-21-17.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T07:21:17.516Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١٠:٢١:١٧ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_accountant_2026-09-09_10-16-36.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_accountant_2026-09-09_10-16-36.db",
+    "username": "accountant",
+    "timestamp": "2026-09-09T07:16:36.497Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١٠:١٦:٣٦ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: accountant (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-09_10-14-26.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-09_10-14-26.db",
+    "username": "علوي",
+    "timestamp": "2026-09-09T07:14:26.599Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١٠:١٤:٢٦ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: علوي (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_10-08-43.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_10-08-43.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T07:08:43.098Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ١٠:٠٨:٤٣ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_09-45-51.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_09-45-51.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T06:45:51.900Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ٩:٤٥:٥١ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_09-15-45.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_09-15-45.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T06:15:45.289Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ٩:١٥:٤٥ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_09-02-19.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_09-02-19.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T06:02:19.768Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ٩:٠٢:١٩ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-09_08-47-57.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-09_08-47-57.db",
+    "username": "admin",
+    "timestamp": "2026-09-09T05:47:57.807Z",
+    "displayTime": "٠٩‏/٠٩‏/٢٠٢٦، ٨:٤٧:٥٧ ص",
+    "size": 212992,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-08_14-38-33.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-08_14-38-33.db",
+    "username": "علوي",
+    "timestamp": "2026-09-08T11:38:33.246Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٣٨:٣٣ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: علوي (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-08_14-38-26.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-08_14-38-26.db",
+    "username": "علوي",
+    "timestamp": "2026-09-08T11:38:26.023Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٣٨:٢٦ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: علوي (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-08_14-29-41.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-08_14-29-41.db",
+    "username": "علوي",
+    "timestamp": "2026-09-08T11:29:41.416Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٢٩:٤١ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: علوي"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-08_14-25-55.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-08_14-25-55.db",
+    "username": "admin",
+    "timestamp": "2026-09-08T11:25:55.062Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٢٥:٥٥ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-08_14-25-17.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-08_14-25-17.db",
+    "username": "admin",
+    "timestamp": "2026-09-08T11:25:17.488Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٢٥:١٧ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-08_14-21-30.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-08_14-21-30.db",
+    "username": "admin",
+    "timestamp": "2026-09-08T11:21:30.254Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٢١:٣٠ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: admin"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-08_14-21-18.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-08_14-21-18.db",
+    "username": "علوي",
+    "timestamp": "2026-09-08T11:21:18.715Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٢١:١٨ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: علوي (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_admin_2026-09-08_14-21-01.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_admin_2026-09-08_14-21-01.db",
+    "username": "admin",
+    "timestamp": "2026-09-08T11:21:01.645Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٢١:٠١ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: admin (وضع أوفلاين محلي)"
+  },
+  {
+    "fileName": "backup_logout_علوي_2026-09-08_14-20-28.db",
+    "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\backup_logout_علوي_2026-09-08_14-20-28.db",
+    "username": "علوي",
+    "timestamp": "2026-09-08T11:20:28.861Z",
+    "displayTime": "٠٨‏/٠٩‏/٢٠٢٦، ٢:٢٠:٢٨ م",
+    "size": 135168,
+    "mode": "offline",
+    "notes": "تسجيل خروج المستخدم: علوي (وضع أوفلاين محلي)"
+  }
+]

@@ -1,0 +1,24 @@
+<section id="inventoryView" class="app-view-section" style="display: none;">
+        <div class="page-header-row">
+          <h2 class="page-title">المخزون ومواد البناء</h2>
+          <button class="btn btn-primary" onclick="Inventory.openNewItemModal()">إضافة مادة جديدة +</button>
+        </div>
+        <div class="panel-card">
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>كود الصنف</th>
+                  <th>اسم المادة</th>
+                  <th>التصنيف</th>
+                  <th>الوحدة</th>
+                  <th>الرصيد الحالي</th>
+                  <th>سعر الوحدة</th>
+                  <th>الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
