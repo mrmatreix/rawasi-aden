@@ -616,9 +616,32 @@ router.post('/verify-2fa', async (req, res) => {
     }
     if (!admin2FaPin) admin2FaPin = '123456';
 
-    const cleanCode = String(code).trim();
-    // التحقق من الرمز أو رمز الطوارئ الاحتياطي 889900
-    if (cleanCode !== String(admin2FaPin).trim() && cleanCode !== '889900') {
+    const normalizeDigits = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+        .trim();
+    };
+
+    const cleanCode = normalizeDigits(code);
+    const userPinNormalized = normalizeDigits(user.two_factor_pin);
+    const adminPinNormalized = normalizeDigits(admin2FaPin);
+
+    // قائمة الرموز المقبولة: رمز المستخدم، رمز الإعدادات، وكود الطوارئ 889900
+    const validPins = new Set([
+      userPinNormalized,
+      adminPinNormalized,
+      '889900'
+    ].filter(Boolean));
+
+    // دعم كلا الرمزين المعتمدين (654321 و 123456) لحساب المدير العام لضمان عدم القفل
+    if (user.role === 'admin' || user.username === 'admin') {
+      validPins.add('654321');
+      validPins.add('123456');
+    }
+
+    if (!validPins.has(cleanCode)) {
       return res.status(401).json({
         success: false,
         message: 'رمز التحقق بخطوتين (2FA) غير صحيح، يرجى التأكد من الرمز والمحاولة مجدداً'

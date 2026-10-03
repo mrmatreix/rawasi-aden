@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "items": [
+    {
+      "id": "vault_20261003_184252",
+      "fileName": "rawasi_archive_bundle_20261003_184252.rawasi.enc",
+      "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\cloud_vault\\rawasi_archive_bundle_20261003_184252.rawasi.enc",
+      "size": 1346984,
+      "rawZipSize": 1346932,
+      "createdAt": "2026-10-03T15:42:52.354Z",
+      "encrypted": true,
+      "includeProjectsFiles": true,
+      "sha256": "4ffe82e834082855d2b529c5ab3a4b5e8755ba6cc8fa5eac7086b602b31e7d78",
+      "stats": {
+        "projectsCount": 85,
+        "contractsCount": 0,
+        "journalEntriesCount": 490,
+        "vouchersCount": 0,
+        "usersCount": 14,
+        "boqItemsCount": 0
+      },
+      "cloudSynced": true,
+      "cloudSyncTime": "2026-10-03T15:42:53.758Z",
+      "cloudProvider": "cloud_vault"
+    },
+    {
+      "id": "vault_20261003_183214",
+      "fileName": "rawasi_archive_bundle_20261003_183214.rawasi.enc",
+      "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\cloud_vault\\rawasi_archive_bundle_20261003_183214.rawasi.enc",
+      "size": 1338368,
+      "rawZipSize": 1338316,
+      "createdAt": "2026-10-03T15:32:14.921Z",
+      "encrypted": true,
+      "includeProjectsFiles": true,
+      "sha256": "6fb309ae3c87d55b572880e794b5ec9fbdf4d22b8d2de20adedb58d3285d45fd",
+      "stats": {
+        "projectsCount": 81,
+        "contractsCount": 0,
+        "journalEntriesCount": 474,
+        "vouchersCount": 0,
+        "usersCount": 14,
+        "boqItemsCount": 0
+      },
+      "cloudSynced": true,
+      "cloudSyncTime": "2026-10-03T15:32:16.386Z",
+      "cloudProvider": "cloud_vault"
+    }
+  ]
+}
