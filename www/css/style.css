@@ -5601,6 +5601,94 @@ body.light-mode .filter-preset-btn:hover, body.light-mode .filter-preset-btn.act
   }
 }
 
+/* ==========================================================================
+   D3.js Interactive Project Financial Performance Charts Styles
+   ========================================================================== */
+.d3-project-analytics-card {
+  transition: box-shadow var(--transition);
+}
+.d3-project-analytics-card:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 15px rgba(212, 175, 55, 0.08);
+}
+
+.d3-view-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+.d3-view-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+.d3-view-btn.active {
+  background: var(--gold-primary);
+  color: #09111e;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.35);
+}
+
+.d3-tooltip {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  background: rgba(15, 28, 48, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.65), 0 0 18px rgba(212, 175, 55, 0.18);
+  z-index: 10000;
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  direction: rtl;
+  min-width: 220px;
+}
+
+.d3-chart-bar {
+  cursor: pointer;
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.d3-chart-bar:hover {
+  filter: brightness(1.22) drop-shadow(0 0 8px rgba(212, 175, 55, 0.5));
+}
+
+.d3-axis text {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  font-family: inherit;
+}
+.d3-axis line, .d3-axis path {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+.d3-grid line {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-dasharray: 3 3;
+}
+.d3-donut-slice {
+  cursor: pointer;
+  transition: transform 0.25s ease, filter 0.25s ease;
+}
+.d3-donut-slice:hover {
+  filter: brightness(1.2) drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+}
+
+@media (max-width: 992px) {
+  #d3ChartsMainGrid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
 
 
 

@@ -2,6 +2,28 @@
   "version": "1.0.0",
   "items": [
     {
+      "id": "vault_20261003_193526",
+      "fileName": "rawasi_archive_bundle_20261003_193526.rawasi.enc",
+      "filePath": "/app/applet/server/database/backups/cloud_vault/rawasi_archive_bundle_20261003_193526.rawasi.enc",
+      "size": 241320,
+      "rawZipSize": 241268,
+      "createdAt": "2026-10-03T19:35:26.015Z",
+      "encrypted": true,
+      "includeProjectsFiles": true,
+      "sha256": "77d37d1eec45d910632ec6cf92569c7f043a35c1eac07317f0f68198f431e3aa",
+      "stats": {
+        "projectsCount": 92,
+        "contractsCount": 0,
+        "journalEntriesCount": 602,
+        "vouchersCount": 0,
+        "usersCount": 9,
+        "boqItemsCount": 0
+      },
+      "cloudSynced": true,
+      "cloudSyncTime": "2026-10-03T19:35:26.139Z",
+      "cloudProvider": "cloud_vault"
+    },
+    {
       "id": "vault_20261003_192334",
       "fileName": "rawasi_archive_bundle_20261003_192334.rawasi.enc",
       "filePath": "/app/applet/server/database/backups/cloud_vault/rawasi_archive_bundle_20261003_192334.rawasi.enc",

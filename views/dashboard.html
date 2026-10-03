@@ -104,6 +104,112 @@
           </div>
         </div>
 
+        <!-- ==========================================================================
+             لوحة الأداء المالي والربحي للمشاريع - تفاعلية بواسطة D3.js
+             ========================================================================== -->
+        <div class="panel-card d3-project-analytics-card" style="margin-bottom: 24px; border: 1px solid var(--border-color); background: var(--bg-surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-md);">
+          <div class="panel-header" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-color); background: rgba(15, 28, 48, 0.65);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(212, 175, 55, 0.12); display: flex; align-items: center; justify-content: center; color: var(--gold-primary); flex-shrink: 0;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/>
+                  <path d="M19 19H5V5h14v2h2V3c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-4h-2v2z"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="panel-title" style="margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                  تحليل الأداء المالي للمشاريع
+                  <span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); color: var(--accent-blue); font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.3);">
+                    D3.js Interactive
+                  </span>
+                </h3>
+                <p style="margin: 3px 0 0 0; font-size: 0.78rem; color: var(--text-secondary);">
+                  مقارنة حية تفاعلية بين قيمة العقود، التكاليف الفعلية، الإيرادات المعترف بها (IFRS 15)، وهوامش الأرباح
+                </p>
+              </div>
+            </div>
+
+            <!-- أزرار التحكم وأوضاع العرض -->
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+              <!-- اختيار نمط المؤشرات المالية -->
+              <div class="d3-viewmode-group" style="display: inline-flex; background: rgba(0, 0, 0, 0.25); padding: 3px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <button type="button" class="d3-view-btn active" data-mode="contract_vs_cost" onclick="D3ProjectCharts.switchMode('contract_vs_cost')" title="العقد مقابل التكلفة">
+                  العقد والتكاليف
+                </button>
+                <button type="button" class="d3-view-btn" data-mode="revenue_vs_profit" onclick="D3ProjectCharts.switchMode('revenue_vs_profit')" title="الإيرادات وصافي الأرباح">
+                  الإيراد والأرباح
+                </button>
+                <button type="button" class="d3-view-btn" data-mode="billings_vs_cash" onclick="D3ProjectCharts.switchMode('billings_vs_cash')" title="المستخلصات مقابل التحصيل النقدي">
+                  المستخلصات والسيولة
+                </button>
+                <button type="button" class="d3-view-btn" data-mode="margin_vs_cpi" onclick="D3ProjectCharts.switchMode('margin_vs_cpi')" title="مؤشر التكلفة وهامش الربح">
+                  كفاءة CPI وهامش الربح
+                </button>
+              </div>
+
+              <!-- فلترة حالة المشروع -->
+              <select id="d3ProjectStatusFilter" class="form-control" style="width: auto; padding: 5px 12px; font-size: 0.8rem; height: 34px; background: rgba(0,0,0,0.25); border-color: var(--border-color); color: var(--text-primary);" onchange="D3ProjectCharts.filterByStatus(this.value)">
+                <option value="all">كل الحالات (المشاريع)</option>
+                <option value="active" selected>المشاريع النشطة</option>
+                <option value="completed">المشاريع المكتملة</option>
+              </select>
+
+              <!-- زر التحديث وتصدير الرسم -->
+              <button class="btn btn-secondary btn-sm" onclick="D3ProjectCharts.reload()" title="تحديث بيانات المشاريع" style="height: 34px; padding: 0 10px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><use href="#icon-refresh"></use></svg>
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="D3ProjectCharts.exportSVG()" title="تصدير المخطط SVG" style="height: 34px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+                <span>تصدير</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- شريط الإجماليات السريعة للمشاريع المعروضة -->
+          <div id="d3ProjectsMetricsBar" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 14px 20px; background: rgba(21, 38, 64, 0.4); border-bottom: 1px solid var(--border-color);">
+            <!-- يتم تعبئتها ديناميكياً بواسطة D3ProjectCharts -->
+          </div>
+
+          <!-- الحاوية الرئيسية للرسوم البيانية التفاعلية D3 -->
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; padding: 20px; min-height: 380px;" id="d3ChartsMainGrid">
+            <!-- 1. المخطط التفاعلي الرئيسي بالأعمدة المتعددة -->
+            <div style="display: flex; flex-direction: column; background: rgba(15, 28, 48, 0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; position: relative;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h4 id="d3BarChartTitle" style="margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">
+                  مقارنة العقد التقديري والتكاليف الفعلية المتكبدة
+                </h4>
+                <div id="d3BarLegend" style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.75rem;">
+                  <!-- وسيلة إيضاح ديناميكية حسب نمط العرض -->
+                </div>
+              </div>
+              <div id="d3BarChartContainer" style="width: 100%; height: 320px; position: relative; overflow: hidden;">
+                <!-- D3 SVG Bar Chart injects here -->
+              </div>
+            </div>
+
+            <!-- 2. المخطط الدائري التفاعلي لتوزيع هوامش الأرباح ومحفظة المشاريع -->
+            <div style="display: flex; flex-direction: column; background: rgba(15, 28, 48, 0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; position: relative;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h4 style="margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">
+                  توزيع أرباح المحفظة وهامش الربحية
+                </h4>
+                <span id="d3DonutSubtitle" style="font-size: 0.72rem; color: var(--gold-light);">حسب المشروع</span>
+              </div>
+              <div id="d3DonutContainer" style="width: 100%; height: 240px; position: relative; display: flex; align-items: center; justify-content: center;">
+                <!-- D3 SVG Donut injects here -->
+              </div>
+              <div id="d3DonutLegendList" style="max-height: 95px; overflow-y: auto; font-size: 0.75rem; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; margin-top: 6px;">
+                <!-- شرائح وأسماء المشاريع التفاعلية -->
+              </div>
+            </div>
+          </div>
+
+          <!-- تفاصيل سريعة للمشروع المحدد بالنقر (Project Quick Drill-down Card) -->
+          <div id="d3SelectedProjectCard" style="display: none; padding: 12px 20px; background: rgba(212, 175, 55, 0.06); border-top: 1px solid var(--gold-dark); align-items: center; justify-content: space-between;">
+            <!-- تفاصيل المشروع المختار عند النقر على أي عمود -->
+          </div>
+        </div>
+
         <!-- شبكة الرسوم البيانية الوسطى -->
         <div class="charts-grid">
           <!-- رسم المصروفات الدائري -->

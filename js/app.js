@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261003-1b2j',
+  assetVersion: '1.0.0.20261003-lw90',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,16 +11,16 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261003-1b2j',
-    projects: 'js/projects.js?v=1.0.0.20261003-1b2j',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261003-1b2j',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261003-1b2j',
-    accounting: 'js/accounting.js?v=1.0.0.20261003-1b2j',
-    hr: 'js/hr.js?v=1.0.0.20261003-1b2j',
-    reports: 'js/reports.js?v=1.0.0.20261003-1b2j',
-    inventory: 'js/inventory.js?v=1.0.0.20261003-1b2j',
-    settings: 'js/settings.js?v=1.0.0.20261003-1b2j',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261003-1b2j'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261003-lw90',
+    projects: 'js/projects.js?v=1.0.0.20261003-lw90',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261003-lw90',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261003-lw90',
+    accounting: 'js/accounting.js?v=1.0.0.20261003-lw90',
+    hr: 'js/hr.js?v=1.0.0.20261003-lw90',
+    reports: 'js/reports.js?v=1.0.0.20261003-lw90',
+    inventory: 'js/inventory.js?v=1.0.0.20261003-lw90',
+    settings: 'js/settings.js?v=1.0.0.20261003-lw90',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261003-lw90'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -486,6 +486,9 @@ const App = {
     if (viewId === 'dashboard') {
       if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) {
         Reports.loadDashboardKPIs();
+      }
+      if (typeof D3ProjectCharts !== 'undefined' && D3ProjectCharts.render) {
+        setTimeout(() => D3ProjectCharts.render(), 50);
       }
       if (typeof Projects !== 'undefined' && Projects.loadProjects) {
         Projects.loadProjects();
