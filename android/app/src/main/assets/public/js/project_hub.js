@@ -56,30 +56,6 @@ const ProjectHub = {
     if (dueEl) dueEl.value = Math.max(0, exec - paid + ret - pen);
   },
 
-  getActiveProjectId() {
-    let pid = Number(this.currentProjectId);
-    if (!pid || isNaN(pid) || pid <= 0) {
-      const select = document.getElementById('hubProjectSelect');
-      const selectVal = select?.value;
-      if (selectVal && !isNaN(Number(selectVal)) && Number(selectVal) > 0) {
-        pid = Number(selectVal);
-      } else if (this.data?.project?.id) {
-        pid = Number(this.data.project.id);
-      } else if (window.Projects && Projects.list && Projects.list.length > 0 && Projects.list[0].id) {
-        pid = Number(Projects.list[0].id);
-      }
-    }
-    if (pid && !isNaN(pid) && pid > 0) {
-      this.currentProjectId = pid;
-      const select = document.getElementById('hubProjectSelect');
-      if (select && select.value != String(pid)) {
-        select.value = pid;
-      }
-      return pid;
-    }
-    return null;
-  },
-
   async populateProjectSelect() {
     const select = document.getElementById('hubProjectSelect');
     if (!select) return;
@@ -88,17 +64,15 @@ const ProjectHub = {
       const res = await fetch('/api/projects');
       const json = await res.json().catch(() => ({ success: false, message: `تعذر استلام رد من الخادم (رمز ${res.status})` }));
       if (json.success && json.data && json.data.length > 0) {
-        if (!this.currentProjectId || !json.data.some(p => p.id == this.currentProjectId)) {
-          this.currentProjectId = json.data[0].id;
-        }
-
         select.innerHTML = json.data.map(p => `
           <option value="${p.id}" ${this.currentProjectId == p.id ? 'selected' : ''}>
             ${p.code || 'PRJ'} - ${p.name} (${p.client_name || 'عميل مباشر'})
           </option>
         `).join('');
 
-        select.value = this.currentProjectId;
+        if (!this.currentProjectId) {
+          this.currentProjectId = json.data[0].id;
+        }
       } else {
         select.innerHTML = `<option value="">لا توجد مشاريع مسجلة</option>`;
       }
@@ -247,16 +221,6 @@ const ProjectHub = {
     const activePane = document.getElementById(`hubPane_${tabId}`);
     if (activePane) activePane.style.display = 'block';
 
-    // ضمان توفر معرف المشروع المعتمد
-    if (!this.currentProjectId) {
-      const select = document.getElementById('hubProjectSelect');
-      if (select && select.value) {
-        this.currentProjectId = Number(select.value);
-      } else if (window.Projects && Projects.list && Projects.list.length > 0 && Projects.list[0].id) {
-        this.currentProjectId = Projects.list[0].id;
-      }
-    }
-
     // التبويبات المستقلة التي تجلب بياناتها ذاتياً
     if (tabId === 'integrated-quotation') {
       this.renderIntegratedQuotation();
@@ -264,22 +228,6 @@ const ProjectHub = {
     }
     if (tabId === 'project-files') {
       this.renderProjectFiles();
-      return;
-    }
-    if (tabId === 'smart-completion') {
-      ProjectControlUI.renderSmartCompletion(this.currentProjectId);
-      return;
-    }
-    if (tabId === 'wbs-schedule') {
-      ProjectControlUI.renderWBSSchedule(this.currentProjectId);
-      return;
-    }
-    if (tabId === 'evm-control') {
-      ProjectControlUI.renderEVM(this.currentProjectId);
-      return;
-    }
-    if (tabId === 'risks-claims') {
-      ProjectControlUI.renderRisksAndClaims(this.currentProjectId);
       return;
     }
 
@@ -301,10 +249,6 @@ const ProjectHub = {
       case 'handovers': this.renderHandovers(); break;
       case 'correspondence': this.renderCorrespondence(); break;
       case 'settlement': this.renderSettlement(); break;
-      case 'smart-completion': ProjectControlUI.renderSmartCompletion(this.currentProjectId); break;
-      case 'wbs-schedule': ProjectControlUI.renderWBSSchedule(this.currentProjectId); break;
-      case 'evm-control': ProjectControlUI.renderEVM(this.currentProjectId); break;
-      case 'risks-claims': ProjectControlUI.renderRisksAndClaims(this.currentProjectId); break;
     }
   },
 
@@ -610,715 +554,63 @@ const ProjectHub = {
   },
 
   // =========================================================================
-  // 3. جدول الكميات BOQ (Bill of Quantities - Smart Engine & Excel Sync)
+  // 3. جدول الكميات BOQ (Bill of Quantities)
   // =========================================================================
-  boqParsedItems: [],
-  boqCurrentWorkbook: null,
-
   renderBOQ() {
-    if (!this.data) return;
-    const boq = this.data.boq || [];
-    const curr = this.data.project.currency || 'ر.ي';
-
-    // 1. حساب إحصائيات ومؤشرات الأداء (KPIs)
-    let totalContractVal = 0;
-    let totalExecutedVal = 0;
-    let overbilledCount = 0;
-    const categoriesSet = new Set();
-
-    boq.forEach(b => {
-      const cQty = Number(b.contract_qty) || 0;
-      const eQty = Number(b.executed_qty) || 0;
-      const rate = Number(b.unit_rate) || 0;
-      const cTotal = Number(b.total_amount) || (cQty * rate);
-      const eTotal = eQty * rate;
-
-      totalContractVal += cTotal;
-      totalExecutedVal += eTotal;
-      if (eQty > cQty && cQty > 0) overbilledCount++;
-      if (b.category) categoriesSet.add(b.category);
-    });
-
-    const progressPct = totalContractVal > 0 ? Math.min(100, Math.round((totalExecutedVal / totalContractVal) * 100)) : 0;
-
-    // تحديث بطاقات الـ KPIs العلوية
-    const kpiContract = document.getElementById('boqKpiContractVal');
-    const kpiExecuted = document.getElementById('boqKpiExecutedVal');
-    const kpiPct = document.getElementById('boqKpiProgressPct');
-    const kpiBar = document.getElementById('boqKpiProgressBar');
-    const kpiCount = document.getElementById('boqKpiItemsCount');
-    const kpiOverbilled = document.getElementById('boqKpiOverbilledBadge');
-
-    if (kpiContract) kpiContract.innerHTML = `${App.formatNumber(totalContractVal)} <small style="font-size:0.75rem;">${curr}</small>`;
-    if (kpiExecuted) kpiExecuted.innerHTML = `${App.formatNumber(totalExecutedVal)} <small style="font-size:0.75rem;">${curr}</small>`;
-    if (kpiPct) kpiPct.innerText = `${progressPct}%`;
-    if (kpiBar) kpiBar.style.width = `${progressPct}%`;
-    if (kpiCount) kpiCount.innerText = `${boq.length} بند`;
-
-    if (kpiOverbilled) {
-      if (overbilledCount > 0) {
-        kpiOverbilled.style.display = 'inline-block';
-        kpiOverbilled.innerText = `⚠️ ${overbilledCount} تجاوز كمية`;
-      } else {
-        kpiOverbilled.style.display = 'none';
-      }
-    }
-
-    // تعبئة قائمة فلتر التصنيفات (WBS)
-    const catFilter = document.getElementById('boqCategoryFilter');
-    if (catFilter) {
-      const currentSelected = catFilter.value;
-      let optionsHtml = '<option value="">جميع التصنيفات الإنشائية (WBS)</option>';
-      Array.from(categoriesSet).sort().forEach(cat => {
-        optionsHtml += `<option value="${cat}" ${currentSelected === cat ? 'selected' : ''}>${cat}</option>`;
-      });
-      catFilter.innerHTML = optionsHtml;
-    }
-
-    // عرض الجدول المصفى
-    this.filterBoqTable();
-  },
-
-  filterBoqTable() {
     const tbody = document.getElementById('hubBoqTableBody');
     if (!tbody || !this.data) return;
 
     const boq = this.data.boq || [];
     const curr = this.data.project.currency || 'ر.ي';
 
-    const search = (document.getElementById('boqSearchInput')?.value || '').trim().toLowerCase();
-    const cat = document.getElementById('boqCategoryFilter')?.value || '';
-    const status = document.getElementById('boqStatusFilter')?.value || '';
-
-    const filtered = boq.filter(b => {
-      if (cat && b.category !== cat) return false;
-      if (status) {
-        if (status === 'overbilled') {
-          if (!((Number(b.executed_qty) || 0) > (Number(b.contract_qty) || 0) && (Number(b.contract_qty) || 0) > 0)) return false;
-        } else if (b.status !== status) {
-          return false;
-        }
-      }
-      if (search) {
-        const itemNoMatch = String(b.item_no || '').toLowerCase().includes(search);
-        const descMatch = String(b.description || '').toLowerCase().includes(search);
-        const catMatch = String(b.category || '').toLowerCase().includes(search);
-        const notesMatch = String(b.notes || '').toLowerCase().includes(search);
-        if (!itemNoMatch && !descMatch && !catMatch && !notesMatch) return false;
-      }
-      return true;
-    });
-
-    if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 35px; color: var(--text-secondary);">لا توجد بنود مطابقة لمعايير البحث في جدول الكميات.</td></tr>`;
+    if (boq.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد بنود في جدول الكميات حالياً.</td></tr>`;
       return;
     }
 
-    let subtotalContract = 0;
-    let subtotalExecuted = 0;
-
-    tbody.innerHTML = filtered.map(b => {
-      const cQty = Number(b.contract_qty) || 0;
-      const eQty = Number(b.executed_qty) || 0;
-      const rate = Number(b.unit_rate) || 0;
-      const cTotal = Number(b.total_amount) || (cQty * rate);
-      const eTotal = eQty * rate;
-      const remQty = Math.max(0, cQty - eQty);
-      const isOverbilled = eQty > cQty && cQty > 0;
-      const overbilledQty = isOverbilled ? (eQty - cQty) : 0;
-      const progress = cQty > 0 ? Math.min(100, Math.round((eQty / cQty) * 100)) : (eQty > 0 ? 100 : 0);
-
-      subtotalContract += cTotal;
-      subtotalExecuted += eTotal;
-
-      let remainingHtml = `<span>${App.formatNumber(remQty)}</span>`;
-      if (isOverbilled) {
-        remainingHtml = `<span class="badge" style="background: rgba(239,68,68,0.15); color: var(--accent-red); font-weight: 800;" title="تجاوز للكمية التعاقدية المعتمدة بمقدار ${overbilledQty}">+${App.formatNumber(overbilledQty)} ⚠️</span>`;
-      }
-
+    let totalContractVal = 0;
+    tbody.innerHTML = boq.map(b => {
+      totalContractVal += Number(b.total_amount) || 0;
+      const progress = b.contract_qty > 0 ? Math.min(100, Math.round((b.executed_qty / b.contract_qty) * 100)) : 0;
       return `
-        <tr style="${isOverbilled ? 'background: rgba(239,68,68,0.03);' : ''}">
-          <td><strong style="color: var(--gold-light);">${b.item_no}</strong></td>
+        <tr>
+          <td><strong>${b.item_no}</strong></td>
           <td>
-            <div style="font-weight: 700; color: #fff;">${b.description}</div>
-            ${b.notes ? `<div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">📝 ${b.notes}</div>` : ''}
+            <strong>${b.description}</strong>
+            <div style="font-size: 0.74rem; color: var(--text-secondary);">${b.category}</div>
           </td>
-          <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #cbd5e1; font-size: 0.72rem;">${b.category || 'عام'}</span></td>
-          <td style="text-align: center;"><strong>${b.unit}</strong></td>
-          <td><strong>${App.formatNumber(cQty)}</strong></td>
+          <td>${b.unit}</td>
+          <td><strong>${App.formatNumber(b.contract_qty)}</strong></td>
+          <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(b.executed_qty)}</td>
+          <td>${App.formatNumber(b.unit_rate)} <small>${curr}</small></td>
+          <td style="color: var(--gold-light); font-weight: 800;">${App.formatNumber(b.total_amount)} <small>${curr}</small></td>
           <td>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <strong style="color: var(--accent-green);">${App.formatNumber(eQty)}</strong>
-              <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.7rem; border-radius: 4px;" onclick="ProjectHub.openQuickProgressModal(${b.id})" title="تحديث كمية الإنجاز المنفذة بالموقع">⚡</button>
-            </div>
-          </td>
-          <td>${remainingHtml}</td>
-          <td>${App.formatNumber(rate)} <small>${curr}</small></td>
-          <td style="color: var(--gold-light); font-weight: 800;">${App.formatNumber(cTotal)} <small>${curr}</small></td>
-          <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(eTotal)} <small>${curr}</small></td>
-          <td>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <div class="progress-wrap" style="flex: 1; height: 6px;">
-                <div class="progress-bar-fill" style="width: ${progress}%; background: ${isOverbilled ? 'var(--accent-red)' : ''};"></div>
+              <div class="progress-wrap" style="flex: 1;">
+                <div class="progress-bar-fill" style="width: ${progress}%;"></div>
               </div>
-              <span style="font-size: 0.72rem; font-weight: 700; ${isOverbilled ? 'color: var(--accent-red);' : ''}">${progress}%</span>
+              <span style="font-size: 0.72rem; font-weight: 700;">${progress}%</span>
             </div>
           </td>
           <td>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-secondary btn-sm" onclick="ProjectHub.editBoqItem(${b.id})" title="تعديل مواصفات البند">✏️</button>
-              <button class="btn btn-danger btn-sm" onclick="ProjectHub.deleteBoqItem(${b.id})" title="حذف البند">🗑️</button>
+              <button class="btn btn-secondary btn-sm" onclick="ProjectHub.editBoqItem(${b.id})" title="تعديل">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="ProjectHub.deleteBoqItem(${b.id})" title="حذف">🗑️</button>
             </div>
           </td>
         </tr>
       `;
     }).join('') + `
       <tr style="background: rgba(212,175,55,0.08); font-weight: 800;">
-        <td colspan="4" style="text-align: right; color: var(--gold-light);">المجموع الإجمالي للبنود المعروضة:</td>
-        <td colspan="4"></td>
-        <td style="color: var(--gold-light); font-size: 1.05rem;">${App.formatNumber(subtotalContract)} ${curr}</td>
-        <td style="color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(subtotalExecuted)} ${curr}</td>
-        <td colspan="2"></td>
+        <td colspan="6" style="text-align: right; color: var(--gold-light);">إجمالي قيمة جدول الكميات BOQ:</td>
+        <td colspan="3" style="color: var(--gold-light); font-size: 1.05rem;">${App.formatNumber(totalContractVal)} ${curr}</td>
       </tr>
     `;
-  },
-
-  // =========================================================================
-  // نوافذ التحديث السريع والإكسيل لجدول الكميات
-  // =========================================================================
-  openQuickProgressModal(id) {
-    const b = (this.data?.boq || []).find(item => item.id == id);
-    if (!b) return;
-
-    document.getElementById('quickBoqItemId').value = b.id;
-    document.getElementById('quickBoqItemNo').innerText = `بند رقم: ${b.item_no}`;
-    document.getElementById('quickBoqItemUnit').innerText = `الوحدة: ${b.unit}`;
-    document.getElementById('quickBoqItemDesc').innerText = b.description;
-    document.getElementById('quickBoqContractQty').value = `${App.formatNumber(b.contract_qty)} ${b.unit}`;
-    document.getElementById('quickBoqUnitRate').value = `${App.formatNumber(b.unit_rate)} ${this.data.project.currency || 'ر.ي'}`;
-
-    const executedInput = document.getElementById('quickBoqExecutedQty');
-    executedInput.value = b.executed_qty || 0;
-    this.onQuickProgressQtyChange();
-
-    App.openModal('boqQuickProgressModal');
-  },
-
-  onQuickProgressQtyChange() {
-    const id = document.getElementById('quickBoqItemId').value;
-    const b = (this.data?.boq || []).find(item => item.id == id);
-    const notice = document.getElementById('quickBoqOverbillingNotice');
-    if (!b || !notice) return;
-
-    const val = Number(document.getElementById('quickBoqExecutedQty').value) || 0;
-    const contractVal = Number(b.contract_qty) || 0;
-
-    if (val > contractVal && contractVal > 0) {
-      notice.style.display = 'block';
-    } else {
-      notice.style.display = 'none';
-    }
-  },
-
-  async submitQuickProgress(e) {
-    if (e) e.preventDefault();
-    const id = document.getElementById('quickBoqItemId').value;
-    const executedQty = document.getElementById('quickBoqExecutedQty').value;
-
-    try {
-      const res = await fetch(`/api/project-hub/${this.currentProjectId}/boq/quick-progress/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ executed_qty: executedQty })
-      });
-      const json = await res.json();
-      if (json.success) {
-        App.showToast('تم تحديث كمية الإنجاز المنفذة بالموقع بنجاح ⚡', 'success');
-        App.closeModal('boqQuickProgressModal');
-        await this.loadProjectData();
-      } else {
-        App.showToast(json.message || 'فشل في تحديث الإنجاز', 'error');
-      }
-    } catch (err) {
-      App.showToast('حدث خطأ أثناء حفظ كمية الإنجاز', 'error');
-    }
-  },
-
-  // =========================================================================
-  // محرك استيراد وتصدير جداول الكميات عبر Excel
-  // =========================================================================
-  openBoqExcelImportModal() {
-    const pid = this.getActiveProjectId();
-    if (!pid) {
-      App.showToast('يرجى اختيار مشروع معتمد أولاً قبل استيراد جدول الكميات', 'warning');
-      const select = document.getElementById('hubProjectSelect');
-      if (select) select.focus();
-      return;
-    }
-
-    this.boqParsedItems = [];
-    this.boqCurrentWorkbook = null;
-
-    // تحديث شارة المشروع المستهدف في نافذة الاستيراد
-    const targetBadge = document.getElementById('boqImportTargetProjectName');
-    if (targetBadge) {
-      const projectName = this.data?.project?.name || (document.getElementById('hubProjectSelect')?.selectedOptions?.[0]?.text) || `مشروع رقم #${pid}`;
-      targetBadge.innerText = projectName;
-    }
-
-    const fileInput = document.getElementById('boqExcelFileInput');
-    if (fileInput) fileInput.value = '';
-    const infoBar = document.getElementById('boqFileInfoBar');
-    if (infoBar) infoBar.style.display = 'none';
-    const statsBar = document.getElementById('boqPreviewStatsBar');
-    if (statsBar) statsBar.style.display = 'none';
-    const previewContainer = document.getElementById('boqPreviewContainer');
-    if (previewContainer) previewContainer.style.display = 'none';
-    const execBtn = document.getElementById('boqExecuteImportBtn');
-    if (execBtn) execBtn.disabled = true;
-
-    App.openModal('boqExcelImportModal');
-  },
-
-  handleBoqFileSelected(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (typeof XLSX === 'undefined') {
-      App.showToast('مكتبة معالجة Excel قيد التحميل، يرجى إعادة المحاولة', 'warning');
-      return;
-    }
-
-    document.getElementById('boqSelectedFileName').innerText = file.name;
-    document.getElementById('boqSelectedFileSize').innerText = `${(file.size / 1024).toFixed(1)} KB`;
-    document.getElementById('boqFileInfoBar').style.display = 'flex';
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const data = new Uint8Array(evt.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        this.boqCurrentWorkbook = workbook;
-
-        // تعبئة قائمة أوراق العمل
-        const sheetSelect = document.getElementById('boqSheetSelect');
-        sheetSelect.innerHTML = workbook.SheetNames.map(name => `<option value="${name}">${name}</option>`).join('');
-
-        this.onBoqSheetChange();
-      } catch (err) {
-        console.error('Error parsing excel workbook:', err);
-        App.showToast('تعذر قراءة ملف Excel، تأكد من سلامة تنسيق الملف', 'error');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  },
-
-  onBoqSheetChange() {
-    if (!this.boqCurrentWorkbook) return;
-    const sheetName = document.getElementById('boqSheetSelect').value;
-    const sheet = this.boqCurrentWorkbook.Sheets[sheetName];
-    if (!sheet) return;
-
-    this.parseBoqSheet(sheet);
-  },
-
-  parseBoqSheet(sheet) {
-    // تحويل ورقة العمل إلى مصفوفة صفوف ثنائية
-    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    if (!rawData || rawData.length === 0) {
-      App.showToast('ورقة العمل المحددة فارغة', 'warning');
-      return;
-    }
-
-    // 1. اكتشاف سطر الترويسة (Header Row Detection)
-    let headerRowIdx = -1;
-    let colMap = { itemNo: -1, desc: -1, cat: -1, unit: -1, qty: -1, rate: -1, notes: -1 };
-
-    for (let r = 0; r < Math.min(10, rawData.length); r++) {
-      const row = rawData[r].map(cell => String(cell || '').trim().toLowerCase());
-      row.forEach((col, idx) => {
-        if (colMap.itemNo === -1 && (col.includes('رقم') || col.includes('كود') || col === 'م' || col.includes('item') || col.includes('code') || col === 'no')) colMap.itemNo = idx;
-        if (colMap.desc === -1 && (col.includes('وصف') || col.includes('بيان') || col.includes('اسم') || col.includes('desc') || col.includes('name') || col.includes('works'))) colMap.desc = idx;
-        if (colMap.cat === -1 && (col.includes('تصنيف') || col.includes('قسم') || col.includes('مرحلة') || col.includes('category') || col.includes('wbs'))) colMap.cat = idx;
-        if (colMap.unit === -1 && (col.includes('وحدة') || col.includes('unit'))) colMap.unit = idx;
-        if (colMap.qty === -1 && (col.includes('كمية') || col.includes('كميه') || col.includes('qty') || col.includes('quantity'))) colMap.qty = idx;
-        if (colMap.rate === -1 && (col.includes('سعر') || col.includes('فئة') || col.includes('rate') || col.includes('price'))) colMap.rate = idx;
-        if (colMap.notes === -1 && (col.includes('ملاحظ') || col.includes('notes') || col.includes('remarks'))) colMap.notes = idx;
-      });
-
-      // إذا وجدنا عمودين أساسيين على الأقل مثل البيان والكمية
-      if (colMap.desc !== -1 && (colMap.qty !== -1 || colMap.itemNo !== -1)) {
-        headerRowIdx = r;
-        break;
-      }
-    }
-
-    // إذا لم يتم اكتشاف الترويسة بالاسم، نعتمد الترتيب الافتراضي للأعمدة
-    if (headerRowIdx === -1) {
-      headerRowIdx = 0;
-      colMap = { itemNo: 0, cat: 1, desc: 2, unit: 3, qty: 4, rate: 5, notes: 6 };
-    }
-
-    // 2. استخراج البنود ومعالجة البيانات
-    const items = [];
-    let autoCounter = 1;
-    let totalEstVal = 0;
-
-    for (let r = headerRowIdx + 1; r < rawData.length; r++) {
-      const row = rawData[r];
-      if (!row || row.length === 0) continue;
-
-      const desc = colMap.desc !== -1 ? String(row[colMap.desc] || '').trim() : '';
-      if (!desc || desc === 'المجموع' || desc === 'الإجمالي' || desc.includes('total')) continue;
-
-      const itemNo = colMap.itemNo !== -1 && row[colMap.itemNo] !== '' ? String(row[colMap.itemNo]).trim() : `BOQ-${String(autoCounter).padStart(3, '0')}`;
-      const cat = colMap.cat !== -1 && row[colMap.cat] ? String(row[colMap.cat]).trim() : 'أعمال عامة';
-      const unit = colMap.unit !== -1 && row[colMap.unit] ? String(row[colMap.unit]).trim() : 'م3';
-      
-      const rawQty = colMap.qty !== -1 ? row[colMap.qty] : 0;
-      const rawRate = colMap.rate !== -1 ? row[colMap.rate] : 0;
-      const notes = colMap.notes !== -1 && row[colMap.notes] ? String(row[colMap.notes]).trim() : '';
-
-      const qty = Math.max(0, Number(String(rawQty).replace(/[^\d.-]/g, '')) || 0);
-      const rate = Math.max(0, Number(String(rawRate).replace(/[^\d.-]/g, '')) || 0);
-      const total = qty * rate;
-
-      totalEstVal += total;
-      autoCounter++;
-
-      items.push({
-        item_no: itemNo,
-        description: desc,
-        category: cat,
-        unit: unit,
-        contract_qty: qty,
-        unit_rate: rate,
-        total_amount: total,
-        notes: notes
-      });
-    }
-
-    if (items.length === 0) {
-      App.showToast('لم يتم العثور على بنود صالحة للاستيراد في ورقة العمل المحددة', 'warning');
-      return;
-    }
-
-    this.boqParsedItems = items;
-
-    // 3. تحديث واجهة المعاينة والإحصائيات
-    const statsBar = document.getElementById('boqPreviewStatsBar');
-    const container = document.getElementById('boqPreviewContainer');
-    const tbody = document.getElementById('boqPreviewTableBody');
-    const btnExecute = document.getElementById('boqExecuteImportBtn');
-
-    statsBar.style.display = 'grid';
-    container.style.display = 'block';
-    btnExecute.disabled = false;
-
-    document.getElementById('boqPreviewRowCount').innerText = `${items.length} بند`;
-    document.getElementById('boqPreviewTotalVal').innerHTML = `${App.formatNumber(totalEstVal)} <small>${this.data?.project?.currency || 'ر.ي'}</small>`;
-
-    tbody.innerHTML = items.slice(0, 100).map((it, idx) => `
-      <tr>
-        <td>${idx + 1}</td>
-        <td><strong style="color: var(--gold-light);">${it.item_no}</strong></td>
-        <td>${it.description}</td>
-        <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #cbd5e1;">${it.category}</span></td>
-        <td>${it.unit}</td>
-        <td><strong>${App.formatNumber(it.contract_qty)}</strong></td>
-        <td>${App.formatNumber(it.unit_rate)}</td>
-        <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(it.total_amount)}</td>
-      </tr>
-    `).join('') + (items.length > 100 ? `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">... والمزيد من البنود (${items.length - 100} بند إضافي)</td></tr>` : '');
-  },
-
-  async executeBoqImport() {
-    if (!this.boqParsedItems || this.boqParsedItems.length === 0) {
-      App.showToast('لا توجد بنود جاهزة للاستيراد', 'warning');
-      return;
-    }
-
-    const pid = this.getActiveProjectId();
-    if (!pid) {
-      App.showToast('لم يتم العثور على مشروع معتمد لتسجيل جدول الكميات إليه', 'error');
-      return;
-    }
-
-    const mode = document.querySelector('input[name="boqImportMode"]:checked')?.value || 'merge';
-    const updateContract = document.getElementById('boqUpdateContractValueCheck')?.checked || false;
-
-    if (mode === 'replace') {
-      if (!confirm(`⚠️ تحذير مهم:\nاخترت الاستبدال الكامل. سيتم حذف جميع بنود جدول الكميات الحالية لهذا المشروع (${this.data?.boq?.length || 0} بند) وإحلال ${this.boqParsedItems.length} بند جديد مكانها.\n\nهل تريد المتابعة بالتأكيد؟`)) {
-        return;
-      }
-    }
-
-    const btn = document.getElementById('boqExecuteImportBtn');
-    btn.disabled = true;
-    btn.innerHTML = `<span>جاري الاستيراد والترحيل... ⏳</span>`;
-
-    try {
-      const res = await fetch(`/api/project-hub/${pid}/boq/batch-import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: pid,
-          items: this.boqParsedItems,
-          mode: mode,
-          updateContract: updateContract
-        })
-      });
-      const json = await res.json();
-
-      if (json.success) {
-        App.showToast(`تم استيراد ${json.totalCount} بند بنجاح إلى جدول الكميات (قيمة: ${App.formatNumber(json.totalContractValue)} ${this.data?.project?.currency || 'ر.ي'}) 🎉`, 'success');
-        App.closeModal('boqExcelImportModal');
-        await this.loadProjectData();
-      } else {
-        App.showToast(json.message || 'فشل في استيراد جدول الكميات', 'error');
-      }
-    } catch (err) {
-      console.error('Error importing BOQ batch:', err);
-      App.showToast('حدث خطأ في الاتصال بالخادم أثناء استيراد البنود', 'error');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = `<span>🚀 بدء الاستيراد والترحيل لقاعدة البيانات</span>`;
-    }
-  },
-
-  // 1. تنزيل نموذج وقالب Excel فارغ ومجهز لجدول الكميات
-  downloadBoqSampleTemplate() {
-    try {
-      App.showToast('جاري إعداد وتنزيل قالب Excel النموذجي لجدول الكميات...', 'info');
-
-      // الطريقة الأولى: التوليد المباشر في المتصفح عبر SheetJS لضمان الفورية وعدم الاعتماد على الشبكة
-      if (typeof XLSX !== 'undefined') {
-        const templateRows = [
-          ['شركة رواسي عدن للهندسة والمقاولات'],
-          ['قالب استيراد جدول الكميات والمواصفات التعاقدية (BOQ Import Template)'],
-          ['توجيهات: يرجى عدم تعديل عناوين الأعمدة في السطر (4) لضمان القراءة والمطابقة الآلية عند الاستيراد'],
-          ['رقم البند', 'التصنيف الإنشائي', 'بيان ووصف بند العمل والمواصفات', 'الوحدة', 'الكمية', 'فئة السعر الإفرادي', 'ملاحظات'],
-          ['1.01', 'أعمال الحفريات والردم', 'حفر في تربة صخرية ومتوسطة لتأسيس القواعد والميدات حتى المنسوب المعتمد شاملاً نقل المخلفات لمقالب عمومية', 'م3', 450, 3500, 'يشمل النقل والتسوية والدمك'],
-          ['1.02', 'أعمال الحفريات والردم', 'ردم حول القواعد والميدات برمل نظيف مورد على طبقات 25 سم مع الرش بالماء والدمك بنسبة 95%', 'م3', 280, 1800, 'اختبار بروكتور مطلوب'],
-          ['2.01', 'أعمال خرسانية', 'خرسانة عادية نظافة أسفل القواعد سمك 10 سم مقاومة 200 كجم/سم2 مع المواد والمعدات والدمك', 'م3', 45, 18500, 'إسمنت مقاوم للكبريتات SRC'],
-          ['2.02', 'أعمال خرسانية', 'خرسانة مسلحة للقواعد والرقاب مقاومة 350 كجم/سم2 مع المواد وحديد التسليح رتبة 60', 'م3', 120, 48000, 'حديد سابك معتمد'],
-          ['2.03', 'أعمال خرسانية', 'خرسانة مسلحة للأعمدة والحوائط الخرسانية مقاومة 350 كجم/سم2 صب مضخة شاملاً الشدات الخشبية', 'م3', 65, 52000, 'صب بالمضخة وتثبيت كانات'],
-          ['2.04', 'أعمال خرسانية', 'خرسانة مسلحة للأسقف والكمرات الهوردي مقاومة 350 كجم/سم2 شاملاً القوالب والبلوك الهوردي والحديد', 'م3', 160, 54000, 'معالجة بالمياه 7 أيام متتالية'],
-          ['3.01', 'أعمال مباني وعزل', 'مباني طابوق أسمنتي مصمت للميدات سمك 20 سم بمونة إسمنتية 1:3', 'م2', 320, 2400, 'طابوق آلي عالي الكثافة'],
-          ['3.02', 'أعمال مباني وعزل', 'مباني طابوق أسمنتي مفرغ للقواطع الداخلية والخارجية سمك 20 سم بمونة إسمنتية', 'م2', 850, 1950, 'ربط بشبك مجلفن كل مدماكين'],
-          ['3.03', 'أعمال مباني وعزل', 'عزل مائي للقواعد ورقاب الأعمدة بطبقتين من البيتومين المطاطي على البارد', 'م2', 540, 650, 'دهان متعامد وجهين مع الأساس'],
-          ['4.01', 'أعمال تشطيبات', 'بياض ولياسة إسمنتية داخلية للأسقف والحوائط مع الطرطشة والشبك المعدني والزوايا', 'م2', 1800, 1200, 'استواء تام ووزن قامة وفق الأصول'],
-          ['4.02', 'أعمال تشطيبات', 'دهانات بلاستيكية داخلية 3 أوجه مقاومة للبكتيريا شاملاً المعجون والأساس والصنفرة', 'م2', 1800, 950, 'نوع جوتن أو ما يماثله'],
-          ['5.01', 'أعمال كهروميكانيكية', 'توريد وتمديد مواسير PVC وأسلاك النحاس للإنارة والمخارج لكل نقطة كاملة مع العلب والمفاتيح', 'نقطة', 240, 3200, 'أسلاك الرياض أو كابلات بحرة'],
-          ['5.02', 'أعمال كهروميكانيكية', 'تمديد خطوط الصرف الصحي ومواسير التغذية PPR الحرارية لكل حمام ومطبخ مع المحابس', 'مقطوع', 8, 45000, 'مواسير حرارية ألمانية معتمدة']
-        ];
-
-        const ws = XLSX.utils.aoa_to_sheet(templateRows);
-        if (!ws['!views']) ws['!views'] = [];
-        ws['!views'].push({ RTL: true });
-
-        ws['!cols'] = [
-          { wch: 14 }, // رقم البند
-          { wch: 24 }, // التصنيف
-          { wch: 60 }, // البيان والمواصفات
-          { wch: 10 }, // الوحدة
-          { wch: 14 }, // الكمية
-          { wch: 18 }, // فئة السعر
-          { wch: 30 }  // ملاحظات
-        ];
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'قالب جدول كميات نموذجي');
-
-        XLSX.writeFile(wb, 'قالب_جدول_الكميات_التعاقدي_رواسي_عدن_BOQ.xlsx');
-        App.showToast('تم تنزيل قالب Excel النموذجي بنجاح 🎉', 'success');
-        return;
-      }
-
-      // الطريقة الثانية: تنزيل آمن عبر fetch مع توكن المصادقة (Fallback)
-      const pid = this.currentProjectId || Number(document.getElementById('hubProjectSelect')?.value) || 1;
-      this.downloadBlobFile(`/api/project-hub/${pid}/boq/sample-template`, 'قالب_جدول_الكميات_التعاقدي_رواسي_عدن_BOQ.xlsx');
-    } catch (e) {
-      console.error('Error downloading BOQ template:', e);
-      App.showToast('حدث خطأ أثناء تنزيل قالب Excel: ' + (e.message || ''), 'error');
-    }
-  },
-
-  // 2. تصدير جدول الكميات الحالي إلى ملف Excel رسمي
-  exportBoqToExcel() {
-    try {
-      if (!this.currentProjectId) {
-        const select = document.getElementById('hubProjectSelect');
-        if (select && select.value) {
-          this.currentProjectId = Number(select.value);
-        }
-      }
-
-      const projectName = this.data?.project?.name || document.getElementById('hubProjectSelect')?.selectedOptions?.[0]?.text?.trim() || 'مشروع_رواسي_عدن';
-      const cleanProjectName = projectName.replace(/[\\/:*?"<>|]/g, '_');
-      const boqItems = this.data?.boq || [];
-
-      // إذا كانت القائمة فارغة
-      if (!boqItems || boqItems.length === 0) {
-        App.showToast('جدول الكميات لهذا المشروع فارغ حالياً (0 بند). جاري تنزيل قالب العمل لإدخال البنود...', 'warning');
-        this.downloadBoqSampleTemplate();
-        return;
-      }
-
-      App.showToast('جاري تصدير جدول الكميات إلى ملف Excel رسمي...', 'info');
-
-      // الطريقة الأولى: التصدير المباشر والمفصل عبر SheetJS (XLSX)
-      if (typeof XLSX !== 'undefined') {
-        const dateStr = new Date().toISOString().split('T')[0];
-        const currency = this.data?.project?.currency || 'ر.ي';
-
-        const rows = [
-          ['شركة رواسي عدن للهندسة والمقاولات'],
-          [`جدول الكميات والمواصفات التعاقدية (BOQ) - مشروع: ${projectName}`],
-          [`تاريخ التصدير: ${dateStr} | العملة: ${currency} | إجمالي البنود المسجلة: ${boqItems.length}`],
-          [], // سطر فارغ
-          [
-            'م', 'رقم البند', 'التصنيف الإنشائي (WBS)', 'بيان الأعمال والمواصفات التعاقدية',
-            'الوحدة', 'الكمية التعاقدية', 'الكمية المنفذة بالموقع', 'الكمية المتبقية',
-            `فئة السعر (${currency})`, `الإجمالي التعاقدي (${currency})`, `القيمة المنفذة (${currency})`,
-            'نسبة الإنجاز %', 'الحالة', 'ملاحظات'
-          ]
-        ];
-
-        let totalContract = 0;
-        let totalExecuted = 0;
-
-        boqItems.forEach((b, idx) => {
-          const cQty = Number(b.contract_qty) || 0;
-          const eQty = Number(b.executed_qty) || 0;
-          const rate = Number(b.unit_rate) || 0;
-          const cTotal = Number(b.total_amount) || (cQty * rate);
-          const eTotal = eQty * rate;
-          const rem = Math.max(0, cQty - eQty);
-          const pct = cQty > 0 ? Math.round((eQty / cQty) * 100) + '%' : '0%';
-
-          totalContract += cTotal;
-          totalExecuted += eTotal;
-
-          rows.push([
-            idx + 1,
-            b.item_no || `${idx + 1}.01`,
-            b.category || 'عام',
-            b.description || '',
-            b.unit || 'مقطوع',
-            cQty,
-            eQty,
-            rem,
-            rate,
-            cTotal,
-            eTotal,
-            pct,
-            b.status || 'جاري التنفيذ',
-            b.notes || ''
-          ]);
-        });
-
-        // سطر الإجماليات الختامي
-        const totalPct = totalContract > 0 ? Math.round((totalExecuted / totalContract) * 100) + '%' : '0%';
-        rows.push([
-          'الإجمالي العام', '', '', 'إجمالي قيمة جدول الكميات التعاقدي والمنفذ',
-          '', '', '', '', '',
-          totalContract,
-          totalExecuted,
-          totalPct,
-          '', ''
-        ]);
-
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-        if (!ws['!views']) ws['!views'] = [];
-        ws['!views'].push({ RTL: true });
-
-        ws['!cols'] = [
-          { wch: 6 },  // م
-          { wch: 14 }, // رقم البند
-          { wch: 22 }, // التصنيف
-          { wch: 55 }, // بيان الأعمال
-          { wch: 10 }, // الوحدة
-          { wch: 15 }, // الكمية التعاقدية
-          { wch: 16 }, // المنفذ
-          { wch: 15 }, // المتبقي
-          { wch: 16 }, // فئة السعر
-          { wch: 18 }, // الإجمالي التعاقدي
-          { wch: 18 }, // القيمة المنفذة
-          { wch: 14 }, // نسبة الإنجاز
-          { wch: 14 }, // الحالة
-          { wch: 25 }  // ملاحظات
-        ];
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'جدول الكميات BOQ');
-
-        const fileName = `BOQ_${cleanProjectName}_${dateStr}.xlsx`;
-        XLSX.writeFile(wb, fileName);
-        App.showToast(`تم تصدير ${boqItems.length} بند بنجاح إلى ملف Excel 📊`, 'success');
-        return;
-      }
-
-      // الطريقة الثانية: التنزيل الاحتياطي من الخادم مع المصادقة (Fallback)
-      const fileName = `BOQ_${cleanProjectName}.xlsx`;
-      const pid = this.currentProjectId || 1;
-      this.downloadBlobFile(`/api/project-hub/${pid}/boq/export-excel`, fileName);
-    } catch (e) {
-      console.error('Error exporting BOQ to Excel:', e);
-      App.showToast('حدث خطأ أثناء تصدير جدول الكميات: ' + (e.message || ''), 'error');
-    }
-  },
-
-  // أداة تنزيل الملفات الثنائية والتقارير بأمان مع توكن المصادقة (Authenticated Blob Downloader)
-  async downloadBlobFile(url, filename) {
-    try {
-      const token = (window.Auth && window.Auth.token)
-        || sessionStorage.getItem('rawasi_token')
-        || localStorage.getItem('rawasi_token');
-
-      const headers = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.message || `خطأ استجابة من الخادم (${res.status})`);
-      }
-
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename || 'download.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 250);
-      App.showToast('تم تنزيل الملف بنجاح 🎉', 'success');
-    } catch (err) {
-      console.error('Download blob error:', err);
-      // تجربة الرابط المباشر مع بارامتر التوكن كحل احتياطي أخير
-      const token = (window.Auth && window.Auth.token)
-        || sessionStorage.getItem('rawasi_token')
-        || localStorage.getItem('rawasi_token');
-      if (token) {
-        const sep = url.includes('?') ? '&' : '?';
-        window.open(`${url}${sep}token=${encodeURIComponent(token)}`, '_blank');
-      } else {
-        App.showToast(err.message || 'تعذر تنزيل الملف، يرجى تسجيل الدخول', 'error');
-      }
-    }
   },
 
   openNewBoqModal() {
     document.getElementById('boqModalForm').reset();
     document.getElementById('boqModalId').value = '';
-    const nextNo = `${(this.data?.boq?.length || 0) + 1}.01`;
-    document.getElementById('boqModalNo').value = nextNo;
     App.openModal('boqItemModal');
   },
 
@@ -1342,12 +634,8 @@ const ProjectHub = {
 
   async submitBoqForm(e) {
     if (e) e.preventDefault();
-    const pid = this.getActiveProjectId();
-    if (!pid) return App.showToast('يرجى تحديد المشروع أولاً', 'error');
-
     const id = document.getElementById('boqModalId').value;
     const payload = {
-      projectId: pid,
       item_no: document.getElementById('boqModalNo').value,
       description: document.getElementById('boqModalDesc').value,
       category: document.getElementById('boqModalCategory').value,
@@ -1360,8 +648,8 @@ const ProjectHub = {
     };
 
     const url = id
-      ? `/api/project-hub/${pid}/boq/${id}`
-      : `/api/project-hub/${pid}/boq`;
+      ? `/api/project-hub/${this.currentProjectId}/boq/${id}`
+      : `/api/project-hub/${this.currentProjectId}/boq`;
     const method = id ? 'PUT' : 'POST';
 
     const res = await fetch(url, {
@@ -1382,12 +670,10 @@ const ProjectHub = {
 
   async deleteBoqItem(id) {
     if (!confirm('هل أنت متأكد من حذف هذا البند من جدول الكميات؟')) return;
-    const pid = this.getActiveProjectId();
-    if (!pid) return;
-    const res = await fetch(`/api/project-hub/${pid}/boq/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/project-hub/${this.currentProjectId}/boq/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
-      App.showToast('تم حذف البند بنجاح', 'info');
+      App.showToast('تم حذف البند', 'info');
       await this.loadProjectData();
     }
   },
@@ -1889,83 +1175,41 @@ const ProjectHub = {
   },
 
   // =========================================================================
-  // 9. المستخلصات وشهادات الدفع الرسمية (FIDIC IPC Engine)
+  // 9. المستخلصات وشهادات الدفع (Invoices & IPCs)
   // =========================================================================
-  ipcDraftItems: [],
-
   renderInvoices() {
     const tbody = document.getElementById('hubInvoicesTableBody');
     if (!tbody || !this.data) return;
 
     const invoices = this.data.invoices || [];
-    const project = this.data.project || {};
-    const curr = project.currency || 'ر.ي';
-    const contractVal = Number(this.data.contract?.contract_value) || Number(project.contract_value) || 0;
-
-    // 1. حساب مؤشرات أداء المستخلصات (KPIs)
-    let totalGross = 0;
-    let totalDeductions = 0;
-    let totalNet = 0;
-
-    invoices.forEach(i => {
-      const g = Number(i.current_gross_amount) || 0;
-      const n = Number(i.net_amount) || 0;
-      const d = (Number(i.advance_deduction) || 0) + (Number(i.retention_deduction) || 0) + (Number(i.other_deductions) || 0) + (Number(i.tax_wht_amount) || 0);
-
-      totalGross += g;
-      totalDeductions += d;
-      totalNet += n;
-    });
-
-    const remainingContract = Math.max(0, contractVal - totalGross);
-
-    // تحديث بطاقات الـ KPIs
-    const kpiGross = document.getElementById('ipcKpiGrossVal');
-    const kpiDed = document.getElementById('ipcKpiDeductionsVal');
-    const kpiNet = document.getElementById('ipcKpiNetVal');
-    const kpiRem = document.getElementById('ipcKpiRemainingVal');
-
-    if (kpiGross) kpiGross.innerHTML = `${App.formatNumber(totalGross)} <small style="font-size:0.75rem;">${curr}</small>`;
-    if (kpiDed) kpiDed.innerHTML = `${App.formatNumber(totalDeductions)} <small style="font-size:0.75rem;">${curr}</small>`;
-    if (kpiNet) kpiNet.innerHTML = `${App.formatNumber(totalNet)} <small style="font-size:0.75rem;">${curr}</small>`;
-    if (kpiRem) kpiRem.innerHTML = `${App.formatNumber(remainingContract)} <small style="font-size:0.75rem;">${curr}</small>`;
+    const curr = this.data.project.currency || 'ر.ي';
 
     if (invoices.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 35px; color: var(--text-secondary);">لا توجد مستخلصات مسجلة لهذا المشروع بعد. اضغط على "إصدار مستخلص ذكي من جدول الكميات" للبدء.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد مستخلصات مسجلة للمشروع.</td></tr>`;
       return;
     }
 
+    let totalGross = 0;
+    let totalNet = 0;
+
     tbody.innerHTML = invoices.map(i => {
-      const totalDed = (Number(i.advance_deduction) || 0) + (Number(i.retention_deduction) || 0) + (Number(i.other_deductions) || 0) + (Number(i.tax_wht_amount) || 0);
-      let itemsCount = i.items_count || 0;
-      if (!itemsCount && i.items_json) {
-        try { itemsCount = JSON.parse(i.items_json).length; } catch (e) {}
-      }
-
-      let itemsBadge = `<span style="font-size: 0.74rem; color: var(--text-secondary);">إجمالي عام</span>`;
-      if (itemsCount > 0) {
-        itemsBadge = `<button class="btn btn-outline-primary btn-sm" style="padding: 2px 8px; font-size: 0.72rem; border-radius: 12px;" onclick="ProjectHub.viewIpcDetails(${i.id})" title="عرض كشف بنود الكميات المفصلة">${itemsCount} بند مفصل 📊</button>`;
-      }
-
-      const periodStr = (i.period_from && i.period_to) ? `${i.period_from} ➔ ${i.period_to}` : (i.period_to || '-');
+      totalGross += Number(i.current_gross_amount) || 0;
+      totalNet += Number(i.net_amount) || 0;
+      const totalDed = (Number(i.advance_deduction) || 0) + (Number(i.retention_deduction) || 0) + (Number(i.other_deductions) || 0);
 
       return `
         <tr>
-          <td><strong style="color: var(--gold-light); font-size: 0.95rem;">${i.invoice_no}</strong></td>
-          <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #cbd5e1;">${i.invoice_type}</span></td>
+          <td><strong>${i.invoice_no}</strong></td>
+          <td>${i.invoice_type}</td>
           <td>${i.date}</td>
-          <td style="font-size: 0.74rem; color: var(--text-secondary);">${periodStr}</td>
-          <td><strong>${App.formatNumber(i.cumulative_work_done)}</strong> <small>${curr}</small></td>
-          <td style="font-weight: 700; color: #fff;">${App.formatNumber(i.current_gross_amount)} <small>${curr}</small></td>
-          <td style="color: var(--accent-red); font-weight: 700;">-${App.formatNumber(totalDed)} <small>${curr}</small></td>
-          <td style="color: var(--accent-green); font-weight: 800; font-size: 1.05rem;">${App.formatNumber(i.net_amount)} <small>${curr}</small></td>
-          <td>${itemsBadge}</td>
-          <td><span class="drawing-badge-status approved">${i.status || 'معتمد'}</span></td>
+          <td>${App.formatNumber(i.cumulative_work_done)} <small>${curr}</small></td>
+          <td style="font-weight: 700;">${App.formatNumber(i.current_gross_amount)} <small>${curr}</small></td>
+          <td style="color: var(--accent-red);">${App.formatNumber(totalDed)} <small>${curr}</small></td>
+          <td style="color: var(--accent-green); font-weight: 800; font-size: 1rem;">${App.formatNumber(i.net_amount)} <small>${curr}</small></td>
+          <td><span class="drawing-badge-status approved">${i.status}</span></td>
           <td>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-secondary btn-sm" onclick="ProjectHub.viewIpcDetails(${i.id})" title="معاينة المستخلص والشهادة">👁️</button>
-              <button class="btn btn-primary btn-sm" onclick="ProjectHub.printOfficialIPC(${i.id})" title="طباعة شهادة الدفع الرسمية (PDF)">🖨️</button>
-              <button class="btn btn-secondary btn-sm" onclick="ProjectHub.exportIpcToExcel(${i.id})" title="تصدير إلى Excel (.xlsx)">📊</button>
+              <button class="btn btn-secondary btn-sm" onclick="ProjectHub.printOfficialIPC(${i.id})" title="طباعة شهادة المستخلص">🖨️</button>
               <button class="btn btn-danger btn-sm" onclick="ProjectHub.deleteInvoice(${i.id})" title="حذف">🗑️</button>
             </div>
           </td>
@@ -1974,241 +1218,18 @@ const ProjectHub = {
     }).join('') + `
       <tr style="background: rgba(16,185,129,0.08); font-weight: 800;">
         <td colspan="4" style="text-align: right; color: var(--accent-green);">إجمالي المستخلصات المعتمدة:</td>
-        <td style="color: #fff;"></td>
-        <td style="color: #fff; font-size: 1.05rem;">${App.formatNumber(totalGross)} ${curr}</td>
-        <td style="color: var(--accent-red); font-size: 1.05rem;">-${App.formatNumber(totalDeductions)} ${curr}</td>
-        <td style="color: var(--accent-green); font-size: 1.15rem;" colspan="4">صافي المستحق للمقاول: ${App.formatNumber(totalNet)} ${curr}</td>
+        <td style="color: #fff;">${App.formatNumber(totalGross)} ${curr}</td>
+        <td></td>
+        <td colspan="3" style="color: var(--accent-green); font-size: 1.05rem;">صافي المستحق: ${App.formatNumber(totalNet)} ${curr}</td>
       </tr>
     `;
   },
 
-  async openNewInvoiceModal(fromBoq = true) {
+  openNewInvoiceModal() {
     document.getElementById('ipcModalForm').reset();
-    this.ipcDraftItems = [];
-
-    const radioBoq = document.querySelector('input[name="ipcMode"][value="boq"]');
-    const radioManual = document.querySelector('input[name="ipcMode"][value="manual"]');
-
-    if (fromBoq && radioBoq) {
-      radioBoq.checked = true;
-    } else if (radioManual) {
-      radioManual.checked = true;
-    }
-    this.toggleIpcMode();
-
-    const curr = this.data?.project?.currency || 'ر.ي';
-    const currSpan = document.getElementById('ipcModalCurrency');
-    if (currSpan) currSpan.innerText = curr;
-
-    if (fromBoq) {
-      try {
-        const res = await fetch(`/api/project-hub/${this.currentProjectId}/invoices/prepare-from-boq`);
-        const json = await res.json();
-        if (json.success && json.draft) {
-          const d = json.draft;
-          document.getElementById('ipcModalNo').value = d.invoice_no;
-          document.getElementById('ipcModalDate').value = d.period_to;
-          document.getElementById('ipcModalFromDate').value = d.period_from;
-          document.getElementById('ipcModalToDate').value = d.period_to;
-          document.getElementById('ipcModalPrevBills').value = d.previous_bills_amount;
-          document.getElementById('ipcModalGross').value = d.current_gross_amount;
-          document.getElementById('ipcModalCumWork').value = d.cumulative_work_done;
-          document.getElementById('ipcModalAdvPct').value = d.advance_pct;
-          document.getElementById('ipcModalAdvDed').value = d.advance_deduction;
-          document.getElementById('ipcModalRetPct').value = d.retention_pct;
-          document.getElementById('ipcModalRetDed').value = d.retention_deduction;
-          document.getElementById('ipcModalOtherDed').value = 0;
-
-          this.ipcDraftItems = d.items || [];
-          this.renderIpcBoqItemsTable();
-          this.calcIpcNet();
-        }
-      } catch (err) {
-        console.error('Error preparing draft IPC:', err);
-      }
-    } else {
-      const nextNo = `IPC-${String((this.data?.invoices?.length || 0) + 1).padStart(2, '0')}`;
-      document.getElementById('ipcModalNo').value = nextNo;
-      document.getElementById('ipcModalDate').value = new Date().toISOString().split('T')[0];
-      document.getElementById('ipcModalAdvPct').value = this.data?.contract?.advance_payment_pct || 10;
-      document.getElementById('ipcModalRetPct').value = this.data?.contract?.retention_pct || 10;
-      this.calcIpcNet();
-    }
-
+    document.getElementById('ipcModalNo').value = `IPC-${String((this.data?.invoices?.length || 0) + 1).padStart(2, '0')}`;
+    document.getElementById('ipcModalDate').value = new Date().toISOString().split('T')[0];
     App.openModal('newIpcModal');
-  },
-
-  toggleIpcMode() {
-    const mode = document.querySelector('input[name="ipcMode"]:checked')?.value || 'boq';
-    const section = document.getElementById('ipcBoqItemsSection');
-    const actions = document.getElementById('ipcBoqActionBtns');
-
-    if (mode === 'boq') {
-      if (section) section.style.display = 'block';
-      if (actions) actions.style.display = 'flex';
-    } else {
-      if (section) section.style.display = 'none';
-      if (actions) actions.style.display = 'none';
-      this.ipcDraftItems = [];
-    }
-  },
-
-  renderIpcBoqItemsTable() {
-    const tbody = document.getElementById('ipcBoqItemsTableBody');
-    const summary = document.getElementById('ipcBoqItemsSummaryText');
-    if (!tbody) return;
-
-    if (!this.ipcDraftItems || this.ipcDraftItems.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد بنود في جدول الكميات BOQ مسجلة لهذا المشروع.</td></tr>`;
-      if (summary) summary.innerText = '0 بند';
-      return;
-    }
-
-    if (summary) summary.innerText = `${this.ipcDraftItems.length} بند مدرج في جدول الكميات`;
-
-    tbody.innerHTML = this.ipcDraftItems.map((it, idx) => {
-      return `
-        <tr>
-          <td><strong style="color: var(--gold-light);">${it.item_no}</strong></td>
-          <td>
-            <div style="font-weight: 600; color: #fff;">${it.description}</div>
-            <div style="font-size: 0.68rem; color: var(--text-secondary);">${it.category || ''}</div>
-          </td>
-          <td style="text-align: center;">${it.unit}</td>
-          <td>${App.formatNumber(it.contract_qty)}</td>
-          <td style="color: var(--text-secondary);">${App.formatNumber(it.previous_qty || 0)}</td>
-          <td style="background: rgba(212,175,55,0.06);">
-            <input type="number" step="0.01" min="0" value="${it.current_qty || 0}"
-                   class="form-control form-control-sm"
-                   style="width: 85px; font-weight: 700; color: var(--gold-light); background: rgba(0,0,0,0.3); border-color: rgba(212,175,55,0.4);"
-                   oninput="ProjectHub.onIpcItemQtyChange(${idx}, this.value)">
-          </td>
-          <td><strong id="ipcRowCumQty_${idx}">${App.formatNumber(it.cumulative_qty || 0)}</strong></td>
-          <td>${App.formatNumber(it.unit_rate)}</td>
-          <td style="color: var(--gold-light); font-weight: 700;" id="ipcRowCurAmt_${idx}">${App.formatNumber(it.current_amount || 0)}</td>
-          <td id="ipcRowPct_${idx}"><span class="badge" style="background: rgba(255,255,255,0.05);">${it.completion_pct || 0}%</span></td>
-        </tr>
-      `;
-    }).join('');
-  },
-
-  onIpcItemQtyChange(idx, val) {
-    const it = this.ipcDraftItems[idx];
-    if (!it) return;
-
-    const curQty = Math.max(0, Number(val) || 0);
-    const rate = Number(it.unit_rate) || 0;
-    const prevQty = Number(it.previous_qty) || 0;
-    const cQty = Number(it.contract_qty) || 0;
-
-    it.current_qty = curQty;
-    it.current_amount = curQty * rate;
-    it.cumulative_qty = prevQty + curQty;
-    it.cumulative_amount = it.cumulative_qty * rate;
-    it.completion_pct = cQty > 0 ? Math.min(100, Math.round((it.cumulative_qty / cQty) * 100)) : 0;
-
-    // تحديث قيم السطر في الواجهة
-    const elCum = document.getElementById(`ipcRowCumQty_${idx}`);
-    const elAmt = document.getElementById(`ipcRowCurAmt_${idx}`);
-    const elPct = document.getElementById(`ipcRowPct_${idx}`);
-
-    if (elCum) elCum.innerText = App.formatNumber(it.cumulative_qty);
-    if (elAmt) elAmt.innerText = App.formatNumber(it.current_amount);
-    if (elPct) elPct.innerHTML = `<span class="badge" style="background: rgba(255,255,255,0.05);">${it.completion_pct}%</span>`;
-
-    // إعادة جمع الأعمال الحالية والتراكمية
-    const grossSum = this.ipcDraftItems.reduce((acc, item) => acc + (Number(item.current_amount) || 0), 0);
-    const prevBills = Number(document.getElementById('ipcModalPrevBills')?.value) || 0;
-
-    document.getElementById('ipcModalGross').value = grossSum;
-    document.getElementById('ipcModalCumWork').value = prevBills + grossSum;
-
-    this.calcIpcNet();
-  },
-
-  fillIpcWithSiteProgress() {
-    if (!this.ipcDraftItems || this.ipcDraftItems.length === 0) return;
-    const boqMap = {};
-    (this.data?.boq || []).forEach(b => { boqMap[b.id] = Number(b.executed_qty) || 0; });
-
-    this.ipcDraftItems.forEach((it, idx) => {
-      const siteExec = boqMap[it.boq_item_id] !== undefined ? boqMap[it.boq_item_id] : (Number(it.contract_qty) || 0);
-      const prev = Number(it.previous_qty) || 0;
-      const cur = Math.max(0, siteExec - prev);
-
-      it.current_qty = cur;
-      it.current_amount = cur * (Number(it.unit_rate) || 0);
-      it.cumulative_qty = prev + cur;
-      it.cumulative_amount = it.cumulative_qty * (Number(it.unit_rate) || 0);
-      it.completion_pct = it.contract_qty > 0 ? Math.min(100, Math.round((it.cumulative_qty / it.contract_qty) * 100)) : 0;
-    });
-
-    this.renderIpcBoqItemsTable();
-
-    const grossSum = this.ipcDraftItems.reduce((acc, item) => acc + (Number(item.current_amount) || 0), 0);
-    const prevBills = Number(document.getElementById('ipcModalPrevBills')?.value) || 0;
-
-    document.getElementById('ipcModalGross').value = grossSum;
-    document.getElementById('ipcModalCumWork').value = prevBills + grossSum;
-
-    this.calcIpcNet();
-    App.showToast('تمت تعبئة المستخلص بنسب الإنجاز المنفذة فعلياً بالموقع ⚡', 'info');
-  },
-
-  resetIpcItemQuantities() {
-    if (!this.ipcDraftItems) return;
-    this.ipcDraftItems.forEach(it => {
-      it.current_qty = 0;
-      it.current_amount = 0;
-      it.cumulative_qty = Number(it.previous_qty) || 0;
-      it.cumulative_amount = it.cumulative_qty * (Number(it.unit_rate) || 0);
-      it.completion_pct = it.contract_qty > 0 ? Math.min(100, Math.round((it.cumulative_qty / it.contract_qty) * 100)) : 0;
-    });
-
-    this.renderIpcBoqItemsTable();
-
-    const prevBills = Number(document.getElementById('ipcModalPrevBills')?.value) || 0;
-    document.getElementById('ipcModalGross').value = 0;
-    document.getElementById('ipcModalCumWork').value = prevBills;
-
-    this.calcIpcNet();
-  },
-
-  calcIpcNet(isManualDeduction = false) {
-    const gross = Number(document.getElementById('ipcModalGross')?.value) || 0;
-    const prev = Number(document.getElementById('ipcModalPrevBills')?.value) || 0;
-    const cum = Number(document.getElementById('ipcModalCumWork')?.value) || 0;
-
-    const advPct = Number(document.getElementById('ipcModalAdvPct')?.value) || 0;
-    const retPct = Number(document.getElementById('ipcModalRetPct')?.value) || 0;
-
-    let advDed = Number(document.getElementById('ipcModalAdvDed')?.value) || 0;
-    let retDed = Number(document.getElementById('ipcModalRetDed')?.value) || 0;
-    const otherDed = Number(document.getElementById('ipcModalOtherDed')?.value) || 0;
-
-    if (!isManualDeduction) {
-      advDed = Math.round((gross * advPct) / 100);
-      retDed = Math.round((gross * retPct) / 100);
-      document.getElementById('ipcModalAdvDed').value = advDed;
-      document.getElementById('ipcModalRetDed').value = retDed;
-    }
-
-    const totalDed = advDed + retDed + otherDed;
-    const net = Math.max(0, gross - totalDed);
-
-    document.getElementById('ipcModalNet').value = net;
-    document.getElementById('ipcModalNetDisplay').innerText = App.formatNumber(net);
-
-    // التفقيط المالي بالريال بالحروف
-    const curr = this.data?.project?.currency || 'ر.ي';
-    let tafqeetText = '';
-    if (typeof Tafqeet !== 'undefined' && Tafqeet.tafqeet) {
-      tafqeetText = Tafqeet.tafqeet(net, curr);
-    } else {
-      tafqeetText = `${App.formatNumber(net)} ${curr}`;
-    }
-    const tafqeetEl = document.getElementById('ipcModalTafqeetDisplay');
-    if (tafqeetEl) tafqeetEl.innerText = tafqeetText;
   },
 
   async submitInvoiceForm(e) {
@@ -2221,177 +1242,38 @@ const ProjectHub = {
       cumulative_work_done: document.getElementById('ipcModalCumWork').value,
       previous_bills_amount: document.getElementById('ipcModalPrevBills').value || 0,
       current_gross_amount: document.getElementById('ipcModalGross').value,
-      advance_pct: document.getElementById('ipcModalAdvPct').value || 10,
       advance_deduction: document.getElementById('ipcModalAdvDed').value || 0,
-      retention_pct: document.getElementById('ipcModalRetPct').value || 10,
       retention_deduction: document.getElementById('ipcModalRetDed').value || 0,
       other_deductions: document.getElementById('ipcModalOtherDed').value || 0,
       net_amount: document.getElementById('ipcModalNet').value,
       status: document.getElementById('ipcModalStatus').value,
       date: document.getElementById('ipcModalDate').value,
-      notes: document.getElementById('ipcModalNotes').value,
-      items: this.ipcDraftItems || []
+      notes: document.getElementById('ipcModalNotes').value
     };
 
-    try {
-      const res = await fetch(`/api/project-hub/${this.currentProjectId}/invoices`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const json = await res.json();
+    const res = await fetch(`/api/project-hub/${this.currentProjectId}/invoices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
 
-      if (json.success) {
-        App.showToast('تم إصدار واعتماد شهادة المستخلص بنجاح ومزامنة جدول الكميات 📑', 'success');
-        App.closeModal('newIpcModal');
-        await this.loadProjectData();
-      } else {
-        App.showToast(json.message || 'فشل في حفظ المستخلص', 'error');
-      }
-    } catch (err) {
-      console.error('Error submitting IPC:', err);
-      App.showToast('حدث خطأ أثناء حفظ المستخلص', 'error');
+    if (json.success) {
+      App.showToast('تم إصدار واعتماد المستخلص بنجاح', 'success');
+      App.closeModal('newIpcModal');
+      await this.loadProjectData();
+    } else {
+      App.showToast(json.message || 'فشل في حفظ المستخلص', 'error');
     }
-  },
-
-  async viewIpcDetails(id) {
-    try {
-      const res = await fetch(`/api/project-hub/${this.currentProjectId}/invoices/${id}`);
-      const json = await res.json();
-      if (!json.success || !json.data) {
-        App.showToast('تعذر جلب تفاصيل المستخلص', 'error');
-        return;
-      }
-
-      const inv = json.data;
-      const proj = inv.project || this.data?.project || {};
-      const curr = proj.currency || 'ر.ي';
-      const items = inv.items || [];
-      const totalDed = (Number(inv.advance_deduction) || 0) + (Number(inv.retention_deduction) || 0) + (Number(inv.other_deductions) || 0);
-
-      document.getElementById('ipcDetailsModalTitle').innerText = `شهادة المستخلص الجاري المعتمد (${inv.invoice_no})`;
-      document.getElementById('ipcDetailsModalSubtitle').innerText = `مشروع: ${proj.name} | التاريخ: ${inv.date} | الفترة: ${inv.period_from || '-'} إلى ${inv.period_to || '-'}`;
-
-      document.getElementById('ipcDetailsPrintBtn').dataset.id = inv.id;
-      document.getElementById('ipcDetailsExcelBtn').dataset.id = inv.id;
-
-      let itemsHtml = '';
-      if (items.length > 0) {
-        itemsHtml = `
-          <div style="margin-top: 18px;">
-            <h5 style="color: var(--gold-light); margin-bottom: 8px;">كشف تفريغ وحصر بنود جدول الكميات للمستخلص:</h5>
-            <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
-              <table class="custom-table" style="font-size: 0.76rem;">
-                <thead style="position: sticky; top: 0; background: var(--bg-surface); z-index: 2;">
-                  <tr>
-                    <th>رقم البند</th>
-                    <th>بيان الأعمال</th>
-                    <th>الوحدة</th>
-                    <th>كمية العقد</th>
-                    <th>كمية سابقة</th>
-                    <th>كمية حالية</th>
-                    <th>إجمالي كمية</th>
-                    <th>فئة السعر</th>
-                    <th>قيمة حالية</th>
-                    <th>نسبة الإنجاز</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${items.map(it => `
-                    <tr>
-                      <td><strong style="color: var(--gold-light);">${it.item_no}</strong></td>
-                      <td>${it.description}</td>
-                      <td>${it.unit}</td>
-                      <td>${App.formatNumber(it.contract_qty)}</td>
-                      <td>${App.formatNumber(it.previous_qty || 0)}</td>
-                      <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(it.current_qty || 0)}</td>
-                      <td><strong>${App.formatNumber(it.cumulative_qty || (Number(it.previous_qty || 0) + Number(it.current_qty || 0)))}</strong></td>
-                      <td>${App.formatNumber(it.unit_rate)}</td>
-                      <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(it.current_amount || 0)}</td>
-                      <td><span class="badge" style="background: rgba(255,255,255,0.05);">${it.completion_pct || 0}%</span></td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `;
-      }
-
-      document.getElementById('ipcDetailsContent').innerHTML = `
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px;">
-          <!-- البيانات التعاقدية والمالية -->
-          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 14px;">
-            <table class="custom-table" style="font-size: 0.82rem; margin: 0;">
-              <tbody>
-                <tr>
-                  <td style="color: var(--text-secondary); width: 40%;">إجمالي الأعمال التراكمية حتى تاريخه:</td>
-                  <td><strong style="color: #fff;">${App.formatNumber(inv.cumulative_work_done)}</strong> ${curr}</td>
-                </tr>
-                <tr>
-                  <td style="color: var(--text-secondary);">يُخصم: المستخلصات السابقة المصروفة:</td>
-                  <td style="color: var(--accent-red); font-weight: 700;">-${App.formatNumber(inv.previous_bills_amount)} ${curr}</td>
-                </tr>
-                <tr style="background: rgba(212,175,55,0.06);">
-                  <td style="color: var(--gold-light); font-weight: 700;">قيمة الأعمال الجارية الحالية (Gross Work):</td>
-                  <td style="color: var(--gold-light); font-weight: 800; font-size: 1rem;">${App.formatNumber(inv.current_gross_amount)} ${curr}</td>
-                </tr>
-                <tr>
-                  <td style="color: var(--text-secondary);">يُخصم: استهلاك الدفعة المقدمة (${inv.advance_pct || 10}%):</td>
-                  <td style="color: var(--accent-red);">-${App.formatNumber(inv.advance_deduction)} ${curr}</td>
-                </tr>
-                <tr>
-                  <td style="color: var(--text-secondary);">يُخصم: محتجزات ضمان الأعمال Retention (${inv.retention_pct || 10}%):</td>
-                  <td style="color: var(--accent-red);">-${App.formatNumber(inv.retention_deduction)} ${curr}</td>
-                </tr>
-                ${inv.other_deductions > 0 ? `<tr><td style="color: var(--text-secondary);">استقطاعات وغرامات أخرى:</td><td style="color: var(--accent-red);">-${App.formatNumber(inv.other_deductions)} ${curr}</td></tr>` : ''}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- البطاقة التنفيذية لصافي الصرف -->
-          <div style="background: linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(14,28,50,0.6) 100%); border: 1px solid rgba(34,197,94,0.35); border-radius: var(--radius-sm); padding: 16px; display: flex; flex-direction: column; justify-content: center;">
-            <span style="font-size: 0.76rem; color: var(--text-secondary);">صافي المبلغ المستحق للصرف للمقاول:</span>
-            <h2 style="color: var(--accent-green); font-size: 1.6rem; margin: 6px 0 10px 0;">${App.formatNumber(inv.net_amount)} <small style="font-size: 0.85rem;">${curr}</small></h2>
-            <div style="background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: var(--radius-sm); font-size: 0.8rem; line-height: 1.4; color: #fff;">
-              <span style="color: var(--gold-light); font-size: 0.72rem; display: block;">المبلغ كتابةً:</span>
-              ${inv.tafqeet || '-'}
-            </div>
-            <div style="margin-top: 10px; display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary);">
-              <span>الحالة: <strong style="color: #fff;">${inv.status}</strong></span>
-              <span>تاريخ الإصدار: <strong>${inv.date}</strong></span>
-            </div>
-          </div>
-        </div>
-
-        ${itemsHtml}
-      `;
-
-      App.openModal('ipcDetailsModal');
-    } catch (err) {
-      console.error('Error viewing IPC details:', err);
-      App.showToast('حدث خطأ أثناء تحميل بيانات المستخلص', 'error');
-    }
-  },
-
-  exportIpcToExcel(id) {
-    const fileName = `مستخلص_مشروع_${id}.xlsx`;
-    this.downloadBlobFile(`/api/project-hub/${this.currentProjectId}/invoices/${id}/export-excel`, fileName);
   },
 
   async deleteInvoice(id) {
-    if (!confirm('هل أنت متأكد من حذف هذا المستخلص نهائياً؟')) return;
-    try {
-      const res = await fetch(`/api/project-hub/${this.currentProjectId}/invoices/${id}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.success) {
-        App.showToast('تم حذف المستخلص بنجاح', 'info');
-        await this.loadProjectData();
-      } else {
-        App.showToast(json.message || 'فشل في حذف المستخلص', 'error');
-      }
-    } catch (err) {
-      App.showToast('حدث خطأ أثناء حذف المستخلص', 'error');
+    if (!confirm('هل تريد حذف هذا المستخلص؟')) return;
+    const res = await fetch(`/api/project-hub/${this.currentProjectId}/invoices/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (json.success) {
+      App.showToast('تم حذف المستخلص', 'info');
+      await this.loadProjectData();
     }
   },
 
@@ -3008,208 +1890,70 @@ const ProjectHub = {
     if (!inv) return;
 
     const { project } = this.data;
-    const contract = this.data.contract || {};
-    const { headerHtml, footerHtml } = this.getPrintBaseConfig(`شهادة مستخلص جاري للأعمال (${inv.invoice_no})`, inv.invoice_no);
+    const { headerHtml, sigHtml, footerHtml } = this.getPrintBaseConfig(`شهادة مستخلص جاري للأعمال (${inv.invoice_no})`, inv.invoice_no);
     const curr = project.currency || 'ر.ي';
     const totalDed = (Number(inv.advance_deduction) || 0) + (Number(inv.retention_deduction) || 0) + (Number(inv.other_deductions) || 0);
-
-    let items = [];
-    if (inv.items_json) {
-      try { items = JSON.parse(inv.items_json); } catch (e) {}
-    }
-
-    let tafqeetText = inv.tafqeet || '';
-    if (!tafqeetText) {
-      if (typeof Tafqeet !== 'undefined' && Tafqeet.tafqeet) {
-        tafqeetText = Tafqeet.tafqeet(inv.net_amount, curr);
-      } else {
-        tafqeetText = `${App.formatNumber(inv.net_amount)} ${curr}`;
-      }
-    }
-
-    // جدول تفريغ بنود جدول الكميات إن وجد
-    let itemsBreakdownHtml = '';
-    if (items.length > 0) {
-      itemsBreakdownHtml = `
-        <div style="page-break-before: always; margin-top: 25px;">
-          <div style="border-bottom: 2px solid #0f2744; padding-bottom: 6px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: baseline;">
-            <h4 style="margin: 0; color: #0f2744;">كشف حصر وتفريغ كميات بنود الأعمال للمستخلص رقم (${inv.invoice_no})</h4>
-            <span style="font-size: 8pt; color: #64748b;">مشروع: ${project.name}</span>
-          </div>
-
-          <table class="official-report-table" style="font-size: 7.5pt; width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr style="background: #0f2744; color: #fff;">
-                <th style="width: 25px; padding: 4px; text-align: center;">م</th>
-                <th style="width: 55px; padding: 4px; text-align: center;">رقم البند</th>
-                <th style="padding: 4px; text-align: right;">بيان الأعمال والمواصفات</th>
-                <th style="width: 35px; padding: 4px; text-align: center;">الوحدة</th>
-                <th style="width: 50px; padding: 4px; text-align: center;">كمية العقد</th>
-                <th style="width: 50px; padding: 4px; text-align: center;">كمية سابقة</th>
-                <th style="width: 50px; padding: 4px; text-align: center; background: #1e3a8a;">كمية حالية</th>
-                <th style="width: 55px; padding: 4px; text-align: center;">إجمالي تراكمي</th>
-                <th style="width: 50px; padding: 4px; text-align: center;">فئة السعر</th>
-                <th style="width: 65px; padding: 4px; text-align: center; background: #1e3a8a;">قيمة حالي</th>
-                <th style="width: 65px; padding: 4px; text-align: center;">إجمالي القيمة</th>
-                <th style="width: 35px; padding: 4px; text-align: center;">إنجاز %</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.map((it, idx) => `
-                <tr style="border-bottom: 1px solid #e2e8f0; ${idx % 2 === 1 ? 'background: #f8fafc;' : ''}">
-                  <td style="text-align: center; padding: 4px;">${idx + 1}</td>
-                  <td style="text-align: center; padding: 4px; font-weight: bold;">${it.item_no}</td>
-                  <td style="padding: 4px; text-align: right;">${it.description}</td>
-                  <td style="text-align: center; padding: 4px;">${it.unit}</td>
-                  <td style="text-align: center; padding: 4px;">${App.formatNumber(it.contract_qty)}</td>
-                  <td style="text-align: center; padding: 4px; color: #64748b;">${App.formatNumber(it.previous_qty || 0)}</td>
-                  <td style="text-align: center; padding: 4px; font-weight: bold; background: #eff6ff;">${App.formatNumber(it.current_qty || 0)}</td>
-                  <td style="text-align: center; padding: 4px; font-weight: bold;">${App.formatNumber(it.cumulative_qty || (Number(it.previous_qty || 0) + Number(it.current_qty || 0)))}</td>
-                  <td style="text-align: center; padding: 4px;">${App.formatNumber(it.unit_rate)}</td>
-                  <td style="text-align: center; padding: 4px; font-weight: bold; background: #eff6ff;">${App.formatNumber(it.current_amount || 0)}</td>
-                  <td style="text-align: center; padding: 4px; font-weight: bold;">${App.formatNumber(it.cumulative_amount || 0)}</td>
-                  <td style="text-align: center; padding: 4px;">${it.completion_pct || 0}%</td>
-                </tr>
-              `).join('')}
-              <tr style="background: #e2e8f0; font-weight: bold; border-top: 2px solid #0f2744;">
-                <td colspan="9" style="text-align: right; padding: 6px;">إجمالي الأعمال المنفذة في هذا المستخلص:</td>
-                <td style="text-align: center; padding: 6px; color: #0f2744; font-size: 8.5pt;">${App.formatNumber(inv.current_gross_amount)}</td>
-                <td style="text-align: center; padding: 6px; color: #0f2744; font-size: 8.5pt;">${App.formatNumber(inv.cumulative_work_done)}</td>
-                <td></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
-
-    // جدول التوقيعات الرباعي المعتمد
-    const officialQuadrupleSignatures = `
-      <div style="margin-top: 30px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; border-top: 1.5px solid #0f2744; padding-top: 14px;">
-        <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px;">
-          <div style="font-size: 8pt; font-weight: bold; color: #475569; margin-bottom: 28px;">مهندس الموقع والمكتب الفني (المقاول)</div>
-          <div style="font-size: 8pt; color: #0f2744; border-top: 1px dashed #94a3b8; padding-top: 4px;">الاسم والتوقيع: .....................</div>
-        </div>
-        <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px;">
-          <div style="font-size: 8pt; font-weight: bold; color: #475569; margin-bottom: 28px;">مدير المشروع (المقاول)</div>
-          <div style="font-size: 8pt; color: #0f2744; border-top: 1px dashed #94a3b8; padding-top: 4px;">الاسم والتوقيع: .....................</div>
-        </div>
-        <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; background: #f8fafc;">
-          <div style="font-size: 8pt; font-weight: bold; color: #1e3a8a; margin-bottom: 28px;">المهندس الاستشاري المشرف المعتمد</div>
-          <div style="font-size: 8pt; color: #1e3a8a; border-top: 1px dashed #94a3b8; padding-top: 4px;">الختم والاعتماد: .....................</div>
-        </div>
-        <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px;">
-          <div style="font-size: 8pt; font-weight: bold; color: #047857; margin-bottom: 28px;">المصادقة والصرف (المالك / صاحب العمل)</div>
-          <div style="font-size: 8pt; color: #047857; border-top: 1px dashed #94a3b8; padding-top: 4px;">التوجيه بالصرف: .....................</div>
-        </div>
-      </div>
-    `;
 
     printArea.innerHTML = `
       <div class="multi-page-report-document border-classic density-medium margins-normal">
         ${headerHtml}
         <div class="report-content-body">
-          <!-- بطاقة بيانات المشروع والعقد الرسمية -->
-          <table class="official-report-table" style="margin-bottom: 14px; font-size: 8.5pt;">
+          <table class="official-report-table" style="margin-bottom: 16px;">
             <tr>
-              <td style="font-weight: 800; width: 18%; background: #f1f5f9;">اسم المشروع:</td>
+              <td style="font-weight: 800; width: 22%; background: #f1f5f9;">المشروع:</td>
               <td style="font-weight: 800; color: #0f2744;">${project.name}</td>
-              <td style="font-weight: 800; width: 18%; background: #f1f5f9;">الطرف الأول (المالك):</td>
-              <td>${inv.client_name || project.client_name || '-'}</td>
+              <td style="font-weight: 800; width: 22%; background: #f1f5f9;">العميل / المالك:</td>
+              <td>${inv.client_name || project.client_name}</td>
             </tr>
             <tr>
-              <td style="font-weight: 800; background: #f1f5f9;">الطرف الثاني (المقاول):</td>
-              <td style="font-weight: bold; color: #d97706;">شركة رواسي عدن للهندسة والمقاولات</td>
-              <td style="font-weight: 800; background: #f1f5f9;">قيمة العقد المعتمدة:</td>
-              <td style="font-weight: 800; color: #0f2744;">${App.formatNumber(contract.contract_value || project.contract_value)} ${curr}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: 800; background: #f1f5f9;">رقم المستخلص:</td>
-              <td style="font-weight: 900; color: #0f2744;">${inv.invoice_no} (${inv.invoice_type || 'مستخلص جاري'})</td>
-              <td style="font-weight: 800; background: #f1f5f9;">الفترة المحاسبية المغطاة:</td>
-              <td>من: <strong>${inv.period_from || '-'}</strong> إلى: <strong>${inv.period_to || '-'}</strong></td>
-            </tr>
-            <tr>
-              <td style="font-weight: 800; background: #f1f5f9;">تاريخ الاعتماد الرسمي:</td>
+              <td style="font-weight: 800; background: #f1f5f9;">الفترة المحاسبية:</td>
+              <td>من ${inv.period_from || '-'} إلى ${inv.period_to || '-'}</td>
+              <td style="font-weight: 800; background: #f1f5f9;">تاريخ الاعتماد:</td>
               <td>${inv.date}</td>
-              <td style="font-weight: 800; background: #f1f5f9;">حالة المستخلص:</td>
-              <td><strong style="color: #047857;">${inv.status || 'معتمد وجاهز للصرف'}</strong></td>
             </tr>
           </table>
 
-          <!-- جدول شهادة الدفع والملخص المالي المعتمد -->
-          <table class="official-report-table" style="margin-bottom: 14px; font-size: 9pt;">
+          <table class="official-report-table" style="margin-bottom: 16px;">
             <thead>
-              <tr style="background: #0f2744; color: #fff;">
-                <th style="padding: 6px 10px; text-align: right;">البيان المالي والهندسي المعتمد للمستخلص</th>
-                <th style="padding: 6px 10px; text-align: center; width: 120px;">النسبة / المرجع</th>
-                <th style="padding: 6px 10px; text-align: left; width: 160px;">المبلغ المعتمد (${curr})</th>
+              <tr>
+                <th>البيان المحاسبي والهندسي للمستخلص</th>
+                <th style="text-align: left;">المبلغ (${curr})</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>1. إجمالي قيمة الأعمال المنفذة التراكمية حتى تاريخه (Gross Cumulative Value):</td>
-                <td style="text-align: center; color: #64748b;">تراكمي حتى ${inv.period_to || inv.date}</td>
-                <td style="text-align: left; font-weight: bold; font-size: 10pt;">${App.formatNumber(inv.cumulative_work_done)}</td>
+                <td>إجمالي قيمة الأعمال المنفذة التراكمية حتى تاريخه:</td>
+                <td style="text-align: left; font-weight: bold;">${App.formatNumber(inv.cumulative_work_done)}</td>
               </tr>
               <tr>
-                <td>2. يُخصم: إجمالي المستخلصات السابقة المصروفة (Less: Previous IPCs Value):</td>
-                <td style="text-align: center; color: #64748b;">مستخلصات سابقة</td>
-                <td style="text-align: left; color: #dc2626; font-weight: bold;">-${App.formatNumber(inv.previous_bills_amount)}</td>
+                <td>يخصم: إجمالي المستخلصات السابقة المصروفة:</td>
+                <td style="text-align: left; color: #dc2626;">-${App.formatNumber(inv.previous_bills_amount)}</td>
               </tr>
-              <tr style="background: #f8fafc; font-weight: 800;">
-                <td style="color: #0f2744;">3. قيمة الأعمال المنجزة خلال هذا المستخلص الحالي (Current Gross Amount):</td>
-                <td style="text-align: center; color: #0f2744;">(1 - 2)</td>
-                <td style="text-align: left; color: #0f2744; font-size: 10.5pt;">${App.formatNumber(inv.current_gross_amount)}</td>
+              <tr style="background: #f8fafc; font-weight: bold;">
+                <td>قيمة الأعمال المنجزة خلال هذا المستخلص (Gross Amount):</td>
+                <td style="text-align: left; color: #0f2744;">${App.formatNumber(inv.current_gross_amount)}</td>
               </tr>
               <tr>
-                <td>4. يُخصم: استهلاك الدفعة المقدمة (Advance Payment Amortization):</td>
-                <td style="text-align: center;">${inv.advance_pct || 10}%</td>
+                <td>يخصم: استقطاع الدفعة المقدمة:</td>
                 <td style="text-align: left; color: #dc2626;">-${App.formatNumber(inv.advance_deduction)}</td>
               </tr>
               <tr>
-                <td>5. يُخصم: محتجزات ضمان حسن التنفيذ (Retention Guarantee Deduction):</td>
-                <td style="text-align: center;">${inv.retention_pct || 10}%</td>
+                <td>يخصم: استقطاع ضمان الأعمال (Retention):</td>
                 <td style="text-align: left; color: #dc2626;">-${App.formatNumber(inv.retention_deduction)}</td>
               </tr>
-              ${inv.other_deductions > 0 ? `
-              <tr>
-                <td>6. يُخصم: استقطاعات وغرامات أو مواد موردة أخرى:</td>
-                <td style="text-align: center;">مباشر</td>
-                <td style="text-align: left; color: #dc2626;">-${App.formatNumber(inv.other_deductions)}</td>
-              </tr>` : ''}
-              <tr style="background: #ecfdf5; font-weight: 900; font-size: 11pt; border-top: 2px solid #059669; border-bottom: 2px solid #059669;">
-                <td style="color: #065f46; padding: 10px;">صافي المبلغ المعتمد والمستحق للصرف للمقاول (Net Payable to Contractor):</td>
-                <td style="text-align: center; color: #047857;">صافي مستحق</td>
-                <td style="text-align: left; color: #047857; font-size: 12pt; padding: 10px;">${App.formatNumber(inv.net_amount)} ${curr}</td>
+              <tr style="background: #ecfdf5; font-weight: 900; font-size: 1.05rem;">
+                <td style="color: #065f46;">صافي المبلغ المعتمد والمستحق للصرف للمقاول (Net Amount):</td>
+                <td style="text-align: left; color: #059669;">${App.formatNumber(inv.net_amount)} ${curr}</td>
               </tr>
             </tbody>
           </table>
-
-          <!-- صندوق التفقيط المالي الرسمي -->
-          <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; font-size: 8.5pt;">
-            <span style="font-weight: bold; color: #475569;">المبلغ المستحق للصرف كتابةً بالحروف:</span>
-            <span style="font-weight: 800; color: #0f2744; font-size: 9.5pt; margin-right: 8px;">${tafqeetText}</span>
-          </div>
-
-          ${inv.notes ? `
-          <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 4px; padding: 8px 12px; margin-bottom: 16px; font-size: 8pt; color: #92400e;">
-            <strong>ملاحظات وشروط الاعتماد:</strong> ${inv.notes}
-          </div>` : ''}
-
-          <!-- التوقيعات الرباعية المعتمدة -->
-          ${officialQuadrupleSignatures}
         </div>
-
-        <!-- ملحق تفاصيل بنود جدول الكميات إن وجد -->
-        ${itemsBreakdownHtml}
-
+        ${sigHtml}
         ${footerHtml}
       </div>
     `;
-
-    // حفظ نسخة المستخلص تلقائياً في الأرشيف الرقمي للمشروع
-    this.saveReportToProjectFolder('مستخلص', `شهادة_مستخلص_${inv.invoice_no || 'IPC'}`, printArea.innerHTML, 'html', '04_المستخلصات_والفواتير');
+    // حفظ المستخلص تلقائياً في مجلد المشروع
+    this.saveReportToProjectFolder('مستخلص', `مستخلص_${inv.invoice_no || 'IPC'}`, printArea.innerHTML, 'html', '04_المستخلصات_والفواتير');
     window.print();
   },
 
@@ -5242,11 +3986,4 @@ const ProjectHub = {
     setTimeout(cleanup, 60000);
   }
 };
-
-if (typeof window !== 'undefined') {
-  window.ProjectHub = ProjectHub;
-}
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = ProjectHub;
-}
 

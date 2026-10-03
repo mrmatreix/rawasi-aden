@@ -162,23 +162,16 @@ const verifyCsrfToken = (req, res, next) => {
 // 3. التحقق من المصادقة (Require Authentication)
 // ==========================================
 const requireAuth = (req, res, next) => {
-  let token = null;
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
-  } else if (req.query && req.query.token) {
-    token = req.query.token;
-  } else if (req.cookies && req.cookies.rawasi_token) {
-    token = req.cookies.rawasi_token;
-  }
-
-  if (!token) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
       success: false,
       authenticated: false,
       message: 'يرجى تسجيل الدخول أولاً لتنفيذ هذه العملية'
     });
   }
+
+  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     if (decoded && decoded.isPending2FA) {

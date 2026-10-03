@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261003-5o5b',
+  assetVersion: '1.0.0.20261003-lw90',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,16 +11,16 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261003-5o5b',
-    projects: 'js/projects.js?v=1.0.0.20261003-5o5b',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261003-5o5b',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261003-5o5b',
-    accounting: 'js/accounting.js?v=1.0.0.20261003-5o5b',
-    hr: 'js/hr.js?v=1.0.0.20261003-5o5b',
-    reports: 'js/reports.js?v=1.0.0.20261003-5o5b',
-    inventory: 'js/inventory.js?v=1.0.0.20261003-5o5b',
-    settings: 'js/settings.js?v=1.0.0.20261003-5o5b',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261003-5o5b'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261003-lw90',
+    projects: 'js/projects.js?v=1.0.0.20261003-lw90',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261003-lw90',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261003-lw90',
+    accounting: 'js/accounting.js?v=1.0.0.20261003-lw90',
+    hr: 'js/hr.js?v=1.0.0.20261003-lw90',
+    reports: 'js/reports.js?v=1.0.0.20261003-lw90',
+    inventory: 'js/inventory.js?v=1.0.0.20261003-lw90',
+    settings: 'js/settings.js?v=1.0.0.20261003-lw90',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261003-lw90'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -148,18 +148,13 @@ const App = {
   },
 
   bindEvents() {
-    // إغلاق النوافذ المنبثقة بالنقر على الخلفية بالتفويض الشامل (Event Delegation)
-    document.addEventListener('click', (e) => {
-      if (e.target && (e.target.classList.contains('modal-overlay') || e.target.classList.contains('modal'))) {
-        this.closeModal(e.target.id);
-      }
-    });
-
-    // إغلاق النوافذ بمفتاح Escape
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        this.handleDismissOrBack();
-      }
+    // إغلاق النوافذ المنبثقة بالنقر على الخلفية
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          overlay.classList.remove('active');
+        }
+      });
     });
 
     // إغلاق قائمة الإشعارات المنسدلة عند النقر خارجها
@@ -491,6 +486,9 @@ const App = {
     if (viewId === 'dashboard') {
       if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) {
         Reports.loadDashboardKPIs();
+      }
+      if (typeof D3ProjectCharts !== 'undefined' && D3ProjectCharts.render) {
+        setTimeout(() => D3ProjectCharts.render(), 50);
       }
       if (typeof Projects !== 'undefined' && Projects.loadProjects) {
         Projects.loadProjects();
@@ -1012,15 +1010,13 @@ const App = {
   },
 
   closeModal(modalId) {
-    if (modalId) {
-      const modal = document.getElementById(modalId);
-      if (modal) {
-        modal.classList.remove('active');
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.remove('active');
+      const anyOtherModal = document.querySelectorAll('.modal-overlay.active, .modal.active');
+      if (anyOtherModal.length === 0) {
+        document.body.style.overflow = '';
       }
-    }
-    const anyOtherModal = document.querySelectorAll('.modal-overlay.active, .modal.active');
-    if (anyOtherModal.length === 0) {
-      document.body.style.overflow = '';
     }
   },
 

@@ -39,25 +39,6 @@ const ProjectControlUI = {
     return null;
   },
 
-  // دالة موحدة لطلب الـ API مع إرفاق التوكنات الأمنية
-  async fetch(url, options = {}) {
-    options = options || {};
-    options.headers = options.headers || {};
-    if (!options.headers['Authorization'] && !options.headers['authorization']) {
-      const token = (window.Auth && window.Auth.token)
-        || sessionStorage.getItem('rawasi_token')
-        || localStorage.getItem('rawasi_token');
-      if (token) options.headers['Authorization'] = `Bearer ${token}`;
-    }
-    const method = (options.method || 'GET').toUpperCase();
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-      const csrf = (window.Auth && window.Auth.csrfToken)
-        || sessionStorage.getItem('rawasi_csrf_token');
-      if (csrf) options.headers['X-CSRF-Token'] = csrf;
-    }
-    return window.fetch(url, options);
-  },
-
   // التحقق من وجود جلسة مصادقة نشطة
   isAuthenticated() {
     return !!((window.Auth && window.Auth.token) ||
@@ -123,7 +104,7 @@ const ProjectControlUI = {
     `;
 
     try {
-      const res = await this.fetch(this.apiUrl('completion'));
+      const res = await fetch(this.apiUrl('completion'));
       if (res.status === 401) {
         this.renderAuthRequired(container, 'مؤشرات تدقيق نسبة الإنجاز');
         return;
@@ -138,20 +119,8 @@ const ProjectControlUI = {
       }
 
       this.cache.completion = json.data;
-      const d = json.data || {};
-
-      // تأمين بيانات المصادر الخمسة مع قيم افتراضية آمنة تمنع أي خطأ برمجياً
-      const s = d.sources || {};
-      s.boq = s.boq || { percentage: 0, items_with_progress: 0, total_items_count: 0, executed_value: 0, total_boq_value: 0 };
-      s.invoices = s.invoices || { percentage: 0, approved_count: 0, approved_net_amount: 0, contract_value: 0 };
-      s.daily_reports = s.daily_reports || { percentage: 0, count: 0, latest_pct: 0 };
-      s.cost_ratio = s.cost_ratio || { percentage: 0, actual_cost: 0, budget: 0 };
-      s.engineer_cert = s.engineer_cert || { percentage: 0, count: 0, latest: null };
-
-      d.current_manual_percentage = Number(d.current_manual_percentage ?? 0);
-      d.recommended_percentage = Number(d.recommended_percentage ?? d.recommended_pct ?? 0);
-      d.variance = Number(d.variance ?? Math.round((d.current_manual_percentage - d.recommended_percentage) * 100) / 100);
-      d.validation_message = d.validation_message || (Math.abs(d.variance) <= 5 ? 'نسبة الإنجاز المسجلة في المشروع متوافقة هندسياً وفيزيائياً مع المؤشرات المستندية والميدانية.' : 'يوجد تباين بين النسبة المسجلة والنسبة المحسوبة يتطلب التدقيق.');
+      const d = json.data;
+      const s = d.sources;
 
       // تحديد ألوان وحالة الانحراف
       let statusColor = '#10b981';
@@ -159,12 +128,12 @@ const ProjectControlUI = {
       let statusBg = 'rgba(16, 185, 129, 0.12)';
       let statusBorder = 'rgba(16, 185, 129, 0.35)';
 
-      if (d.rational_status === 'unrealistic_critical' || Math.abs(d.variance) > 15) {
+      if (d.rational_status === 'unrealistic_critical') {
         statusColor = '#ef4444';
         statusText = '🚨 انحراف حرج غير منطقي (تجاوز كبير بدون مستندات داعمة)';
         statusBg = 'rgba(239, 68, 68, 0.12)';
         statusBorder = 'rgba(239, 68, 68, 0.4)';
-      } else if (d.rational_status === 'moderate_risk' || Math.abs(d.variance) > 5) {
+      } else if (d.rational_status === 'moderate_risk') {
         statusColor = '#f59e0b';
         statusText = '⚠️ تباين ملحوظ يتطلب مراجعة المستخلصات وتقارير الموقع';
         statusBg = 'rgba(245, 158, 11, 0.12)';
@@ -398,7 +367,7 @@ const ProjectControlUI = {
     const tbody = document.getElementById('engineerCertsTableBody');
     if (!tbody) return;
     try {
-      const res = await this.fetch(`/api/project-control/${projectId}/completion/engineer-certs`);
+      const res = await fetch(`/api/project-control/${projectId}/completion/engineer-certs`);
       const json = await res.json();
       if (!json.success || !json.data || json.data.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد شهادات اعتماد مسجلة من المهندس حتى الآن. انقر على "+ إضافة شهادة معاينة" للتوثيق.</td></tr>`;
@@ -427,7 +396,7 @@ const ProjectControlUI = {
     const pid = this.getProjectId();
     try {
       App.showToast('جاري تحديث نسبة الإنجاز واعتمادها...', 'info');
-      const res = await this.fetch(this.apiUrl('completion/manual'), {
+      const res = await fetch(this.apiUrl('completion/manual'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -472,7 +441,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري التحقق من مسوغات الإنجاز...', 'info');
-      const res = await this.fetch(this.apiUrl('completion/manual'), {
+      const res = await fetch(this.apiUrl('completion/manual'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ percent_complete: pct, justification })
@@ -512,7 +481,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري تسجيل شهادة الاستشاري...', 'info');
-      const res = await this.fetch(this.apiUrl('completion/engineer-cert'), {
+      const res = await fetch(this.apiUrl('completion/engineer-cert'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -557,8 +526,8 @@ const ProjectControlUI = {
 
     try {
       const [wbsRes, compRes] = await Promise.all([
-        this.fetch(this.apiUrl('wbs')),
-        this.fetch(this.apiUrl('wbs/compare-baseline'))
+        fetch(this.apiUrl('wbs')),
+        fetch(this.apiUrl('wbs/compare-baseline'))
       ]);
 
       if (wbsRes.status === 401 || compRes.status === 401) {
@@ -761,7 +730,7 @@ const ProjectControlUI = {
     const pid = this.getProjectId();
     try {
       App.showToast('جاري تشغيل خوارزمية المسار الحرج (CPM Forward/Backward Pass)...', 'info');
-      const res = await this.fetch(this.apiUrl('wbs/cpm'), { method: 'POST' });
+      const res = await fetch(this.apiUrl('wbs/cpm'), { method: 'POST' });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || 'فشل حساب المسار الحرج');
 
@@ -785,7 +754,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري حفظ لقطة خط الأساس...', 'info');
-      const res = await this.fetch(this.apiUrl('wbs/baseline'), {
+      const res = await fetch(this.apiUrl('wbs/baseline'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, notes })
@@ -827,7 +796,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري حفظ نشاط WBS...', 'info');
-      const res = await this.fetch(this.apiUrl('wbs'), {
+      const res = await fetch(this.apiUrl('wbs'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -847,7 +816,7 @@ const ProjectControlUI = {
     if (!confirm('هل أنت متأكد من رغبتك في حذف هذا النشاط؟')) return;
     const pid = this.getProjectId();
     try {
-      const res = await this.fetch(`/api/project-control/${pid}/wbs/${activityId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/project-control/${pid}/wbs/${activityId}`, { method: 'DELETE' });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || 'فشل حذف النشاط');
       App.showToast('تم حذف النشاط بنجاح', 'success');
@@ -892,7 +861,7 @@ const ProjectControlUI = {
     `;
 
     try {
-      const res = await this.fetch(this.apiUrl('evm'));
+      const res = await fetch(this.apiUrl('evm'));
       if (res.status === 401) {
         this.renderAuthRequired(container, 'مؤشرات القيمة المكتسبة EVM');
         return;
@@ -906,29 +875,10 @@ const ProjectControlUI = {
         throw new Error(json.message || 'فشل جلب مؤشرات EVM');
       }
 
-      const d = json.data || {};
+      const d = json.data;
       this.cache.evm = d;
-      const m = d.metrics || {};
-      const h = d.health_indicators || {};
-
-      m.CPI = Number(m.CPI ?? d.cpi ?? 1.0);
-      m.SPI = Number(m.SPI ?? d.spi ?? 1.0);
-      m.PV = Number(m.PV ?? d.pv ?? 0);
-      m.EV = Number(m.EV ?? d.ev ?? 0);
-      m.AC = Number(m.AC ?? d.ac ?? 0);
-      m.BAC = Number(m.BAC ?? d.bac ?? 0);
-      m.EAC = Number(m.EAC ?? d.eac ?? 0);
-      m.VAC = Number(m.VAC ?? d.vac ?? 0);
-      m.ETC = Number(m.ETC ?? d.etc ?? 0);
-      m.CV = Number(m.CV ?? d.cv ?? 0);
-      m.SV = Number(m.SV ?? d.sv ?? 0);
-      m.TCPI = Number(m.TCPI ?? d.tcpi_bac ?? 1.0);
-      m.progress_percentage = Number(m.progress_percentage ?? d.completion_pct ?? 0);
-
-      h.cost_status = h.cost_status || (m.CPI >= 1.0 ? 'green' : (m.CPI >= 0.85 ? 'yellow' : 'red'));
-      h.schedule_status = h.schedule_status || (m.SPI >= 1.0 ? 'green' : 'yellow');
-      d.currency = d.currency || 'ر.ي';
-      d.executive_summary = d.executive_summary || (Array.isArray(d.interpretation) ? d.interpretation.join(' | ') : 'تظهر المؤشرات أن التكلفة الفعلية ومعدل الإنجاز المكتسب يسيران وفق التقديرات المعتمدة.');
+      const m = d.metrics;
+      const h = d.health_indicators;
 
       // ألوان وحالة المؤشرات
       const isCpiHealthy = m.CPI >= 1.0;
@@ -1152,8 +1102,8 @@ const ProjectControlUI = {
                     <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 18px;">لا توجد لقطات تاريخية محفوظة بعد. انقر على "+ أخذ لقطة جديدة" لبدء بناء منحنى الأداء.</td></tr>
                   ` : (d.history || []).map(h => `
                     <tr>
-                      <td><span style="font-family: monospace;">${h.status_date || h.snapshot_date || '-'}</span></td>
-                      <td><strong>${h.percent_complete ?? h.completion_pct ?? 0}%</strong></td>
+                      <td><span style="font-family: monospace;">${h.snapshot_date || '-'}</span></td>
+                      <td><strong>${h.percent_complete || 0}%</strong></td>
                       <td><span style="font-family: monospace;">${App.formatNumber(h.pv || 0)}</span></td>
                       <td><span style="font-family: monospace; color: #10b981;">${App.formatNumber(h.ev || 0)}</span></td>
                       <td><span style="font-family: monospace; color: #f87171;">${App.formatNumber(h.ac || 0)}</span></td>
@@ -1190,7 +1140,7 @@ const ProjectControlUI = {
     const pid = this.getProjectId();
     try {
       App.showToast('جاري حفظ لقطة أداء EVM دورية...', 'info');
-      const res = await this.fetch(this.apiUrl('evm/snapshot'), { method: 'POST' });
+      const res = await fetch(this.apiUrl('evm/snapshot'), { method: 'POST' });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || 'فشل حفظ اللقطة');
 
@@ -1229,7 +1179,7 @@ const ProjectControlUI = {
     `;
 
     try {
-      const res = await this.fetch(this.apiUrl('risks/dashboard'));
+      const res = await fetch(this.apiUrl('risks/dashboard'));
       if (res.status === 401) {
         this.renderAuthRequired(container, 'سجلات الحوكمة والمخاطر والمطالبات');
         return;
@@ -1677,7 +1627,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري تسجيل الخطر وتقييمه...', 'info');
-      const res = await this.fetch(this.apiUrl('risks'), {
+      const res = await fetch(this.apiUrl('risks'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1712,7 +1662,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري توثيق المطالبة التعاقدية...', 'info');
-      const res = await this.fetch(this.apiUrl('claims'), {
+      const res = await fetch(this.apiUrl('claims'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1748,7 +1698,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري إصدار تقرير عدم المطابقة NCR...', 'info');
-      const res = await this.fetch(this.apiUrl('ncr'), {
+      const res = await fetch(this.apiUrl('ncr'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1783,7 +1733,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري إرسال طلب المعلومات RFI...', 'info');
-      const res = await this.fetch(this.apiUrl('rfi'), {
+      const res = await fetch(this.apiUrl('rfi'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1813,7 +1763,7 @@ const ProjectControlUI = {
 
     try {
       App.showToast('جاري تسجيل اعتماد الرد...', 'info');
-      const res = await this.fetch(`/api/project-control/${pid}/rfi/${rfiId}/reply`, {
+      const res = await fetch(`/api/project-control/${pid}/rfi/${rfiId}/reply`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ response, status: 'answered' })

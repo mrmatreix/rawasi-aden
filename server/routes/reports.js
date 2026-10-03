@@ -139,6 +139,7 @@ router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async
           pending_variations: summary.total_pending_variations
         },
         contracting_summary: summary,
+        project_financials: contractingMatrix.projects || [],
         expenses_by_type: expensesByType,
         monthly_trend: monthlyTrend,
         recent_transactions: recentTransactions
@@ -146,6 +147,103 @@ router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب بيانات لوحة التحكم: ' + err.message, error: err.message });
+  }
+});
+
+// تقرير الأداء المالي والربحي للمشاريع المخصص للرسوم البيانية التفاعلية D3.js
+router.get('/projects-financial-performance', requirePermission('dashboard:view,reports:view'), async (req, res) => {
+  try {
+    let allowedProjects = ['*'];
+    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+      allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
+    }
+
+    const { status = 'all', sort = 'revenue' } = req.query;
+
+    const matrix = await ContractingAccountingService.getCompanyWideSeparationMatrix({
+      allowedProjectIds: allowedProjects
+    });
+
+    let projects = (matrix.projects || []).map(p => {
+      const contractVal = Number(p.revised_contract_value || p.base_contract_value) || 0;
+      const actualCost = Number(p.cumulative_actual_cost) || 0;
+      const budgetCost = Number(p.revised_estimated_cost) || (contractVal * 0.8);
+      const recognizedRev = Number(p.recognized_revenue?.cumulative ?? p.cumulative_recognized_revenue) || 0;
+      const netProfit = Number(p.financial_analysis?.true_recognized_profit ?? p.recognized_net_profit) || (recognizedRev - actualCost);
+      const grossBillings = Number(p.progress_billings?.gross_billings ?? p.gross_billings) || 0;
+      const cashReceipts = Number(p.cash_receipts?.total ?? p.total_cash_receipts) || 0;
+      const profitMarginPct = Number(p.financial_analysis?.profit_margin_pct ?? p.recognized_profit_margin) || 
+        (recognizedRev > 0 ? Math.round((netProfit / recognizedRev) * 100 * 10) / 10 : 0);
+      
+      const earnedValue = budgetCost * (Number(p.cost_to_cost_poc_pct || p.engineering_progress_pct || 0) / 100);
+      const cpi = actualCost > 0 ? Math.round((earnedValue / actualCost) * 100) / 100 : 1.0;
+      
+      let financialHealth = 'ممتاز';
+      if (cpi < 0.9 || profitMarginPct < 5) financialHealth = 'خطر التجاوز';
+      else if (cpi < 1.0 || profitMarginPct < 12) financialHealth = 'تحت المراقبة';
+
+      return {
+        id: p.project_id,
+        name: p.project_name,
+        code: p.project_code,
+        client_name: p.client_name,
+        status: p.status,
+        contract_value: contractVal,
+        estimated_cost: budgetCost,
+        actual_cost: actualCost,
+        recognized_revenue: recognizedRev,
+        net_profit: netProfit,
+        profit_margin_pct: profitMarginPct,
+        progress_percentage: Number(p.engineering_progress_pct) || 0,
+        poc_percentage: Number(p.cost_to_cost_poc_pct) || 0,
+        gross_billings: grossBillings,
+        cash_receipts: cashReceipts,
+        uncollected_billings: Math.max(0, grossBillings - cashReceipts),
+        contract_asset_wip: Number(p.contract_assets_and_liabilities?.contract_asset_wip) || 0,
+        contract_liability: Number(p.contract_assets_and_liabilities?.total_contract_liabilities) || 0,
+        cpi,
+        financial_health: financialHealth
+      };
+    });
+
+    if (status && status !== 'all') {
+      projects = projects.filter(p => p.status === status);
+    }
+
+    if (sort === 'profit') {
+      projects.sort((a, b) => b.net_profit - a.net_profit);
+    } else if (sort === 'margin') {
+      projects.sort((a, b) => b.profit_margin_pct - a.profit_margin_pct);
+    } else if (sort === 'cost') {
+      projects.sort((a, b) => b.actual_cost - a.actual_cost);
+    } else if (sort === 'contract') {
+      projects.sort((a, b) => b.contract_value - a.contract_value);
+    } else {
+      projects.sort((a, b) => b.recognized_revenue - a.recognized_revenue);
+    }
+
+    const summary = {
+      total_projects: projects.length,
+      total_contract_value: projects.reduce((s, p) => s + p.contract_value, 0),
+      total_actual_cost: projects.reduce((s, p) => s + p.actual_cost, 0),
+      total_recognized_revenue: projects.reduce((s, p) => s + p.recognized_revenue, 0),
+      total_net_profit: projects.reduce((s, p) => s + p.net_profit, 0),
+      total_gross_billings: projects.reduce((s, p) => s + p.gross_billings, 0),
+      total_cash_receipts: projects.reduce((s, p) => s + p.cash_receipts, 0),
+      average_margin_pct: projects.length > 0 
+        ? Math.round((projects.reduce((s, p) => s + p.profit_margin_pct, 0) / projects.length) * 10) / 10 
+        : 0
+    };
+
+    res.json({
+      success: true,
+      data: {
+        summary,
+        projects
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب بيانات الأداء المالي للمشاريع: ' + err.message, error: err.message });
   }
 });
 
