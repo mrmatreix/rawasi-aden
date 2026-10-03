@@ -1361,6 +1361,17 @@ function initSqlite() {
     } catch (e) {
       console.warn('Daily reports migration note (SQLite):', e.message);
     }
+
+    // ضمان وجود عمود project_id في جدول cash_movements لحسابات وصناديق المشاريع
+    try {
+      const cashCols = sqliteDb.prepare("PRAGMA table_info(cash_movements)").all().map(c => c.name);
+      if (!cashCols.includes('project_id')) {
+        sqliteDb.exec("ALTER TABLE cash_movements ADD COLUMN project_id INTEGER;");
+        sqliteDb.exec("CREATE INDEX IF NOT EXISTS idx_cash_movements_project ON cash_movements(project_id, id);");
+      }
+    } catch (e) {
+      console.warn('cash_movements project_id migration note:', e.message);
+    }
   } catch (err) {
     console.warn('Project control migration note (SQLite):', err.message);
   }
@@ -1397,9 +1408,19 @@ initializeDatabase().catch(e => {
 // =================== دوال الاستعلام العامة (Unified Query Layer) ===================
 
 /**
+ * تنظيف وتأمين معاملات الاستعلام: تحويل أي قيمة undefined إلى null لمنع أخطاء SQLite
+ */
+function sanitizeParams(params) {
+  if (!params) return [];
+  if (!Array.isArray(params)) return params;
+  return params.map(p => (p === undefined ? null : p));
+}
+
+/**
  * استعلام يعيد كافة السجلات المطابقة كـ Array
  */
-async function query(sql, params = []) {
+async function query(sql, rawParams = []) {
+  const params = sanitizeParams(rawParams);
   const targetSql = normalizeSql(sql, activeEngine);
 
   if (activeEngine === 'mysql' && mysqlPool) {
@@ -1423,7 +1444,8 @@ async function query(sql, params = []) {
 /**
  * استعلام يعيد سجلاً واحداً (أو null)
  */
-async function get(sql, params = []) {
+async function get(sql, rawParams = []) {
+  const params = sanitizeParams(rawParams);
   const targetSql = normalizeSql(sql, activeEngine);
 
   if (activeEngine === 'mysql' && mysqlPool) {
@@ -1446,7 +1468,8 @@ async function get(sql, params = []) {
  * تنفيذ جمل INSERT / UPDATE / DELETE
  * يعيد كائناً موحداً يحتوي { lastInsertRowid, insertId, changes, affectedRows }
  */
-async function run(sql, params = []) {
+async function run(sql, rawParams = []) {
+  const params = sanitizeParams(rawParams);
   const targetSql = normalizeSql(sql, activeEngine);
 
   if (activeEngine === 'mysql' && mysqlPool) {
@@ -1507,16 +1530,16 @@ async function transaction(callback) {
     try {
       // توفير دوال تنفيذ محلية تابعة لنفس الاتصال المعزول
       const tx = {
-        query: async (sql, params = []) => {
-          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), params);
+        query: async (sql, rawParams = []) => {
+          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), sanitizeParams(rawParams));
           return rows;
         },
-        get: async (sql, params = []) => {
-          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), params);
+        get: async (sql, rawParams = []) => {
+          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), sanitizeParams(rawParams));
           return (rows && rows.length > 0) ? rows[0] : null;
         },
-        run: async (sql, params = []) => {
-          const [res] = await connection.query(normalizeSql(sql, 'mysql'), params);
+        run: async (sql, rawParams = []) => {
+          const [res] = await connection.query(normalizeSql(sql, 'mysql'), sanitizeParams(rawParams));
           return {
             lastInsertRowid: res.insertId,
             insertId: res.insertId,
@@ -1542,10 +1565,10 @@ async function transaction(callback) {
   sqliteDb.exec('BEGIN TRANSACTION;');
   try {
     const tx = {
-      query: async (sql, params = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).all(...params),
-      get: async (sql, params = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).get(...params) || null,
-      run: async (sql, params = []) => {
-        const res = sqliteDb.prepare(normalizeSql(sql, 'sqlite')).run(...params);
+      query: async (sql, rawParams = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).all(...sanitizeParams(rawParams)),
+      get: async (sql, rawParams = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).get(...sanitizeParams(rawParams)) || null,
+      run: async (sql, rawParams = []) => {
+        const res = sqliteDb.prepare(normalizeSql(sql, 'sqlite')).run(...sanitizeParams(rawParams));
         return {
           lastInsertRowid: res.lastInsertRowid,
           insertId: res.lastInsertRowid,

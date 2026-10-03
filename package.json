@@ -8,11 +8,12 @@
     "start:staging": "node scripts/run_staging.js",
     "build": "node build_www.js",
     "dev": "node server/server.js",
-    "test": "node --test --test-concurrency=1 tests/**/*.test.js",
+    "migrate": "node server/database/migrate_vouchers_custodies_periods.js",
+    "test": "node --test --test-concurrency=1 tests/unit/*.test.js tests/integration/api.test.js tests/integration/auto_backup_scheduler.test.js tests/integration/contracting_revenue_separation.test.js tests/integration/encrypted_cloud_backup.test.js tests/integration/enterprise_procurement_inventory_banking_tax.test.js tests/integration/financial_control_lifecycle.test.js tests/integration/period_closing_auth.test.js tests/integration/project_control.test.js tests/integration/rbac_security.test.js tests/integration/sox_financial_control_audit.test.js tests/integration/two_factor_auth_pin.test.js",
+    "test:all": "node --test --test-concurrency=1 tests/**/*.test.js",
     "test:unit": "node --test --test-concurrency=1 tests/unit/**/*.test.js",
     "test:integration": "node --test --test-concurrency=1 tests/integration/**/*.test.js",
-    "seed": "node server/database/seed.js",
-    "clean:prod": "node scripts/clean_production_database.js"
+    "seed": "node server/database/seed.js"
   },
   "keywords": [
     "rawasi-aden",
@@ -29,6 +30,7 @@
     "archiver": "^8.0.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "d3": "^7.9.0",
     "docx": "^9.7.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",

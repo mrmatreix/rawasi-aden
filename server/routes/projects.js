@@ -111,9 +111,17 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
     const trimmedName = name.trim();
     const selectedCurrency = currency || 'ر.ي';
 
-    // توليد كود المشروع تلقائياً
-    const countRes = await get('SELECT COUNT(*) as cnt FROM projects');
-    const code = `PRJ-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(3, '0')}`;
+    // استخدام كود المشروع المرسل أو توليد كود فريد تلقائياً
+    let code = (req.body.code && String(req.body.code).trim()) || '';
+    if (!code) {
+      const maxIdRes = await get('SELECT MAX(id) as max_id FROM projects');
+      const nextNum = ((maxIdRes ? maxIdRes.max_id : 0) || 0) + 1;
+      code = `PRJ-${String(nextNum).padStart(3, '0')}`;
+      const existing = await get('SELECT id FROM projects WHERE code = ?', [code]);
+      if (existing) {
+        code = `PRJ-${String(nextNum).padStart(3, '0')}-${Date.now().toString().slice(-4)}`;
+      }
+    }
 
     const result = await run(`
       INSERT INTO projects (

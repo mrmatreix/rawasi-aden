@@ -1,6 +1,10 @@
 # نظام رواسي عدن للهندسة والمقاولات (Rawasi Aden System)
 ### النظام المحاسبي والإداري المتكامل - إدارة المشاريع والمحاسبة والمالية
 
+[![Rawasi Aden CI & Quality Gate](https://github.com/mrmatreix/rawasi-aden/actions/workflows/ci.yml/badge.svg)](https://github.com/mrmatreix/rawasi-aden/actions/workflows/ci.yml)
+[![Node.js Version](https://img.shields.io/badge/Node.js-22.x%20LTS-brightgreen)](https://nodejs.org)
+[![Enterprise SOX Security](https://img.shields.io/badge/Security-SOX%20Compliant%20%7C%20AES--256--GCM-gold)](https://github.com/mrmatreix/rawasi-aden)
+
 نظام سحابي ومحلي متكامل لإدارة شركات المقاولات والهندسة المدنية، مصمم ومطور خصيصاً لشركة **رواسي عدن للهندسة والمقاولات** وفق أعلى المعايير الفنية والمالية وبنية برمجية قوية وواجهات مستخدم تفاعلية فاخرة (Dark Navy & Gold Luxury Theme).
 
 ---

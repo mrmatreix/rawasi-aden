@@ -3,18 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>نظام رواسي عدن للهندسة والمقاولات</title>
-  <meta name="description" content="النظام المحاسبي والإداري المتكامل لإدارة المشاريع والمقاولات والمشتريات والمخازن والمالية والحسابات العامة">
-  <meta property="og:title" content="نظام رواسي عدن للهندسة والمقاولات">
-  <meta property="og:description" content="النظام المحاسبي والإداري المتكامل لإدارة المشاريع والمقاولات والمشتريات والمخازن والمالية والحسابات العامة">
+  <title>نظام رواسي عدن للهندسة والمقاولات - النظام المحاسبي والإداري المتكامل</title>
   <meta name="theme-color" content="#0f172a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261003-47mq">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261003-47mq">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20260922-bhmo">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20260922-bhmo">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -138,15 +135,15 @@
     </div>
   </div>
 
-  <!-- ================== نافذة التحقق بخطوتين (2FA) ================== -->
+  <!-- ================== نافذة التحقق بخطوتين (2FA) للمدير العام ================== -->
   <div id="twoFactorModal" class="login-screen-overlay" style="display: none; z-index: 99999; background: rgba(5, 10, 20, 0.94); backdrop-filter: blur(10px);">
     <div class="login-card" style="max-width: 440px; text-align: center; border: 1.5px solid var(--gold-primary); box-shadow: 0 20px 60px rgba(0,0,0,0.85);">
       <div style="width: 68px; height: 68px; border-radius: 50%; background: rgba(212,175,55,0.15); border: 2px solid var(--gold-primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 2.2rem;">
         🛡️
       </div>
       <h3 style="color: var(--gold-light); margin-bottom: 6px; font-weight: 800; font-size: 1.25rem;">التحقق بخطوتين (2FA)</h3>
-      <p id="twoFactorSubtitle" style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
-        حسابك محمي بطبقة أمان مضاعفة. يرجى إدخال رمز الأمان (PIN) المكون من 6 أرقام للمتابعة والدخول للنظام.
+      <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
+        حساب المدير العام محمي بطبقة أمان مضاعفة. يرجى إدخال رمز الأمان (PIN) المكون من 6 أرقام للمتابعة والدخول للنظام.
       </p>
 
       <div id="twoFactorErrorMsg" class="login-error-box" style="display: none; margin-bottom: 16px;"></div>
@@ -154,16 +151,13 @@
       <form id="twoFactorForm" class="login-form" onsubmit="Auth.submit2FA(event)">
         <div class="form-group" style="margin-bottom: 20px;">
           <label for="twoFactorCodeInput" style="font-weight: 700; margin-bottom: 8px; display: block;">رمز التحقق (PIN)</label>
-          <div class="login-input-wrap" style="position: relative;">
-            <input type="password" id="twoFactorCodeInput" class="login-input" maxlength="6" placeholder="******" style="text-align: center; font-size: 1.8rem; letter-spacing: 10px; font-family: monospace; font-weight: 900; height: 52px; padding: 0 45px 0 12px;" required autocomplete="one-time-code" oninput="Auth.normalize2FaInput(this)">
-            <button type="button" onclick="Auth.toggle2FaLoginEye()" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #94a3b8; padding: 4px;" title="إظهار / إخفاء الرمز">
-              <span id="twoFactorLoginEyeIcon">👁️</span>
-            </button>
+          <div class="login-input-wrap">
+            <input type="password" id="twoFactorCodeInput" class="login-input" maxlength="6" placeholder="******" style="text-align: center; font-size: 1.8rem; letter-spacing: 10px; font-family: monospace; font-weight: 900; height: 52px; padding: 0 12px;" required autocomplete="one-time-code">
           </div>
         </div>
 
         <div style="font-size: 0.78rem; color: var(--text-secondary); background: rgba(212,175,55,0.07); border-radius: 6px; padding: 10px 14px; margin-bottom: 20px; line-height: 1.5; border-right: 3px solid var(--gold-primary); text-align: right;">
-          💡 <strong>رمز الأمان المعتمد:</strong> أدخل رمز الـ PIN المخصص لحسابك (أو الرمز الافتراضي <code>123456</code> / <code>654321</code>)، أو كود الطوارئ الدائم (<code>889900</code>).
+          💡 <strong>الرمز الافتراضي:</strong> (<code>123456</code>) أو كود الطوارئ (<code>889900</code>). يمكن تخصيصه من إعدادات الأمان.
         </div>
 
         <div style="display: flex; gap: 10px; justify-content: stretch;">
@@ -247,63 +241,6 @@
         <span class="theme-icon-light">☀️</span>
         <span class="theme-toggle-label" id="themeToggleLabel">ليلي</span>
       </button>
-
-      <!-- زر ومؤشر حالة النسخ الاحتياطي التلقائي المجدول في الهيدر -->
-      <div class="header-backup-status-wrap" id="headerBackupStatusWrap">
-        <button type="button" class="header-backup-status-btn" id="btnHeaderBackupStatus" onclick="App.toggleBackupStatusDropdown(event)" title="حالة النسخ الاحتياطي التلقائي المجدول ومسار التخزين">
-          <div class="backup-status-icon-wrap">
-            <span class="backup-status-icon" id="headerBackupIcon">🛡️</span>
-            <span class="backup-status-pulse" id="headerBackupPulse"></span>
-          </div>
-          <div class="backup-status-text">
-            <span class="backup-status-title" id="headerBackupTitle">النسخ الآلي: مجدول</span>
-            <span class="backup-status-sub" id="headerBackupSub">يومي | محمي</span>
-          </div>
-        </button>
-
-        <!-- لوحة تفاصيل وحالة النسخ التلقائي المنسدلة -->
-        <div class="backup-status-dropdown" id="backupStatusDropdown">
-          <div class="backup-dropdown-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 1.25rem;">🛡️</span>
-              <strong style="color: var(--gold-light); font-size: 0.95rem;">النسخ الاحتياطي الآلي المجدول</strong>
-            </div>
-            <span class="badge" id="headerBackupBadge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4);">مفعل</span>
-          </div>
-
-          <div class="backup-dropdown-body">
-            <div class="backup-info-row">
-              <span class="backup-info-label">الجدولة الدورية:</span>
-              <strong class="backup-info-val" id="dropdownBackupInterval">يومياً (الساعة 02:00)</strong>
-            </div>
-            <div class="backup-info-row">
-              <span class="backup-info-label">مسار التخزين المعتمد:</span>
-              <code class="backup-info-val backup-path-code" id="dropdownBackupPath" title="مسار حفظ النسخ الاحتياطية">server/database/backups</code>
-            </div>
-            <div class="backup-info-row">
-              <span class="backup-info-label">آخر نسخة محفوظة:</span>
-              <span class="backup-info-val" id="dropdownBackupLastTime" style="color: #4ade80;">-</span>
-            </div>
-            <div class="backup-info-row">
-              <span class="backup-info-label">حجم الملف:</span>
-              <span class="backup-info-val" id="dropdownBackupLastSize">-</span>
-            </div>
-            <div class="backup-info-row">
-              <span class="backup-info-label">النسخة القادمة:</span>
-              <strong class="backup-info-val" id="dropdownBackupNextTime" style="color: var(--accent-blue);">-</strong>
-            </div>
-          </div>
-
-          <div class="backup-dropdown-footer">
-            <button type="button" class="btn btn-sm btn-primary" onclick="App.triggerAutoBackupNow(event)" id="btnHeaderRunBackupNow" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;">
-              <span>⚡ نسخ احتياطي الآن</span>
-            </button>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="App.openBackupSettingsTab()" title="إدارة الجدولة والمسار في الإعدادات">
-              <span>⚙️ الإعدادات</span>
-            </button>
-          </div>
-        </div>
-      </div>
 
       <!-- زر وقائمة الإشعارات المنسدلة (تتضمن حالة وشعارات الاتصال بالمشروع بعد تسجيل الدخول) -->
       <div class="notifications-wrapper" id="notificationsWrapper">
@@ -602,7 +539,7 @@
             <li>
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('projectHub', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11z M3.5 13.5h17v7h-17z M12 5.5l2.5 4h-5z"/></svg>
-                <span>مركز إدارة ومستندات المشروع الشامل (20 قسم)</span>
+                <span>مركز مستندات المشروع الـ 16</span>
               </a>
             </li>
           </ul>
@@ -916,90 +853,6 @@
           </div>
         </div>
 
-        <!-- لوحة مصفوفة الفصل المالي لقطاع المقاولات (IFRS 15 Contracting Separation Banner) -->
-        <div class="panel-card" style="margin-bottom: 22px; border: 1px solid var(--border-color); background: linear-gradient(135deg, rgba(20, 32, 48, 0.95), rgba(15, 23, 42, 0.95)); border-radius: 12px; padding: 18px;">
-          <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div style="background: linear-gradient(135deg, #0284c7, #0ea5e9); padding: 10px; border-radius: 10px; color: white; display: flex; align-items: center; justify-content: center;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-              </div>
-              <div>
-                <h3 class="panel-title" style="margin: 0; font-size: 1.1rem; color: #f8fafc; font-weight: 700;">مصفوفة الفصل المالي لقطاع المقاولات (IFRS 15 / POC)</h3>
-                <span style="font-size: 0.8rem; color: #94a3b8;">الفصل الصارم بين المقبوضات النقدية، الإيرادات المعترف بها، المستخلصات، الدفعات المقدمة، ومحتجز الضمان</span>
-              </div>
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button type="button" class="btn btn-sm btn-primary" onclick="Reports.openRevenueRecognitionModal()" style="display: flex; align-items: center; gap: 6px; background: #0284c7; border-color: #0284c7;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                <span>إثبات إيراد دوري (POC)</span>
-              </button>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="Reports.openContractingSeparationModal()" style="display: flex; align-items: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3v18h18V3H3zm16 16H5V5h14v14zM11 7h2v6h-2zm0 8h2v2h-2z"/></svg>
-                <span>عرض مصفوفة المشاريع</span>
-              </button>
-            </div>
-          </div>
-          
-          <!-- شبكة ركائز المقاولات الـ 8 المفصولة بدقة -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;">
-            <!-- 1. المقبوضات النقدية -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #38bdf8; display: block; font-weight: 600; margin-bottom: 6px;">1. المقبوضات النقدية (السيولة)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixTotalReceipts">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">نقد متوفر بالخزينة (ليس إيراداً)</span>
-            </div>
-
-            <!-- 2. الإيرادات المعترف بها -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(74, 222, 128, 0.25); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #4ade80; display: block; font-weight: 600; margin-bottom: 6px;">2. الإيرادات المعترف بها</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixRecognizedRevenue">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إنجاز مكتسب وفق نسبة POC (IFRS 15)</span>
-            </div>
-
-            <!-- 3. المستخلصات المعتمدة -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #fbbf24; display: block; font-weight: 600; margin-bottom: 6px;">3. المستخلصات المعتمدة</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixGrossBillings">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إجمالي الأعمال المفوترة للعملاء</span>
-            </div>
-
-            <!-- 4. الدفعات المقدمة -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(248, 113, 113, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #f87171; display: block; font-weight: 600; margin-bottom: 6px;">4. الدفعات المقدمة (التزام)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixAdvanceLiability">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">التزام تعاقدي متداول غير مستهلك</span>
-            </div>
-
-            <!-- 5. محتجز الضمان -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(192, 132, 252, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #c084fc; display: block; font-weight: 600; margin-bottom: 6px;">5. محتجز الضمان (Retention)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixActiveRetention">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">أصل مؤجل يسترد بعد التسليم النهائي</span>
-            </div>
-
-            <!-- 6. الأعمال تحت التنفيذ WIP -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(45, 212, 191, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #2dd4bf; display: block; font-weight: 600; margin-bottom: 6px;">6. أعمال تحت التنفيذ (WIP)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixContractAssetWIP">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إيراد منجز غير مفوتر (أصل عقد)</span>
-            </div>
-
-            <!-- 7. أوامر التغيير المعتمدة -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(232, 121, 249, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #e879f9; display: block; font-weight: 600; margin-bottom: 6px;">7. أوامر التغيير المعتمدة</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixApprovedVariations">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إضافات معتمدة لقيمة العقد</span>
-            </div>
-
-            <!-- 8. صافي الأرباح الحقيقية -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #34d399; display: block; font-weight: 600; margin-bottom: 6px;">8. صافي الأرباح المحاسبية</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixTrueNetProfit">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">الإيراد المعترف به - التكاليف الفعلية</span>
-            </div>
-          </div>
-        </div>
-
         <!-- شبكة الرسوم البيانية الوسطى -->
         <div class="charts-grid">
           <!-- رسم المصروفات الدائري -->
@@ -1268,12 +1121,6 @@
                   <option value="">اختر العهدة المفتوحة للتصفية...</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label>الحساب المالي (العهد / الصندوق)</label>
-                <select id="quickCustodyAccountSelect" class="form-control">
-                  <option value="">اختر الحساب الفرعي...</option>
-                </select>
-              </div>
               <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
                 <div class="form-group">
                   <label id="quickCustodyAmountLabel">إجمالي العهدة</label>
@@ -1446,94 +1293,11 @@
         </div>
 
         <!-- أشرطة تصفية المشاريع -->
-        <div class="report-tabs-bar" style="margin-bottom: 12px;">
+        <div class="report-tabs-bar" style="margin-bottom: 16px;">
           <button class="report-tab-btn active" id="tabBtn_proj_all" onclick="Projects.filterStatus('all', this)">كافة المشاريع</button>
           <button class="report-tab-btn" id="tabBtn_proj_active" onclick="Projects.filterStatus('active', this)">المشاريع الجارية والمنفذة</button>
           <button class="report-tab-btn" id="tabBtn_proj_under_study" onclick="Projects.filterStatus('under_study', this)">مشاريع تحت الدراسة والعطاءات</button>
           <button class="report-tab-btn" id="tabBtn_proj_completed" onclick="Projects.filterStatus('completed', this)">المشاريع المكتملة</button>
-        </div>
-
-        <!-- شريط البحث والفلترة المتقدمة للمشاريع -->
-        <div class="projects-filter-bar">
-          <div class="projects-filter-grid">
-            <!-- 1. حقل البحث بالاسم والكود والملاحظات -->
-            <div class="filter-field-group">
-              <label for="projSearchInput">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                <span>بحث سريع</span>
-              </label>
-              <div class="filter-search-wrap">
-                <input type="text" id="projSearchInput" class="form-control filter-search-input" placeholder="اسم المشروع، الكود، الملاحظات..." oninput="Projects.applyFilters()" autocomplete="off">
-                <button type="button" id="projSearchClearBtn" class="filter-clear-icon-btn" onclick="Projects.clearSearchInput()" title="تفريغ البحث" style="display: none;">✕</button>
-              </div>
-            </div>
-
-            <!-- 2. فلتر حالة المشروع -->
-            <div class="filter-field-group">
-              <label for="projFilterStatus">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                <span>حالة المشروع</span>
-              </label>
-              <select id="projFilterStatus" class="form-control" onchange="Projects.onFilterStatusChange(this.value)">
-                <option value="all">كافة الحالات (الكل)</option>
-                <option value="active">جاري التنفيذ</option>
-                <option value="under_study">تحت الدراسة والتسعير</option>
-                <option value="completed">مكتمل ومستلم</option>
-                <option value="paused">متوقف مؤقتاً</option>
-              </select>
-            </div>
-
-            <!-- 3. فلتر العميل / المالك -->
-            <div class="filter-field-group">
-              <label for="projFilterClient">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
-                <span>العميل / المالك</span>
-              </label>
-              <select id="projFilterClient" class="form-control" onchange="Projects.applyFilters()">
-                <option value="all">جميع العملاء</option>
-              </select>
-            </div>
-
-            <!-- 4. النطاق الزمني: من تاريخ -->
-            <div class="filter-field-group">
-              <label for="projFilterDateFrom">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
-                <span>من تاريخ</span>
-              </label>
-              <input type="date" id="projFilterDateFrom" class="form-control" onchange="Projects.applyFilters()">
-            </div>
-
-            <!-- 5. النطاق الزمني: إلى تاريخ -->
-            <div class="filter-field-group">
-              <label for="projFilterDateTo">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
-                <span>إلى تاريخ</span>
-              </label>
-              <input type="date" id="projFilterDateTo" class="form-control" onchange="Projects.applyFilters()">
-            </div>
-
-            <!-- 6. زر إعادة التعيين -->
-            <div class="filter-field-group">
-              <button type="button" class="btn btn-secondary" onclick="Projects.resetFilters()" title="إعادة تعيين كافة الفلاتر والبحث" style="min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-                <span>إلغاء الفلاتر</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- السطر الإحصائي والتحديد السريع -->
-          <div class="filter-summary-row">
-            <div id="projFilterCounter" class="filter-counter-badge">
-              <span>عرض <strong id="projFilteredCount">0</strong> من إجمالي <strong id="projTotalCount">0</strong> مشروع</span>
-            </div>
-            <div class="filter-preset-chips">
-              <span style="font-size: 0.75rem; color: var(--text-secondary);">فترات سريعة:</span>
-              <button type="button" class="filter-preset-btn" onclick="Projects.setDatePreset('this_month')">هذا الشهر</button>
-              <button type="button" class="filter-preset-btn" onclick="Projects.setDatePreset('last_3_months')">آخر 3 أشهر</button>
-              <button type="button" class="filter-preset-btn" onclick="Projects.setDatePreset('this_year')">هذا العام</button>
-              <button type="button" class="filter-preset-btn" onclick="Projects.setDatePreset('all')">كافة الفترات</button>
-            </div>
-          </div>
         </div>
 
         <div class="panel-card">
@@ -1714,19 +1478,6 @@
               <span>🏷️ 16. عرض السعر والتسعير (المخازن والمواد والكميات)</span>
               <span class="tab-count-badge" id="cnt_integrated_quotation" style="background: #059669;">32</span>
             </button>
-            <button class="hub-tab-btn" id="hubTabBtn_smart-completion" onclick="ProjectHub.switchTab('smart-completion')" style="border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1);">
-              <span>🎯 17. الرقابة الذكية ونسبة الإنجاز</span>
-            </button>
-            <button class="hub-tab-btn" id="hubTabBtn_wbs-schedule" onclick="ProjectHub.switchTab('wbs-schedule')" style="border: 1px solid rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.1);">
-              <span>⏱️ 18. الجدول الزمني WBS والمسار الحرج</span>
-            </button>
-            <button class="hub-tab-btn" id="hubTabBtn_evm-control" onclick="ProjectHub.switchTab('evm-control')" style="border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1);">
-              <span>📈 19. القيمة المكتسبة EVM</span>
-            </button>
-            <button class="hub-tab-btn" id="hubTabBtn_risks-claims" onclick="ProjectHub.switchTab('risks-claims')" style="border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);">
-              <span>🛡️ 20. المخاطر والمطالبات وNCR وRFI</span>
-              <span class="tab-count-badge" id="cnt_risks" style="background: #ef4444;">0</span>
-            </button>
           </div>
         </div>
 
@@ -1781,95 +1532,26 @@
         <!-- 3. جدول الكميات BOQ -->
         <div id="hubPane_boq" class="hub-pane-view" style="display: none;">
           <div class="panel-card">
-            <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+            <div class="panel-header">
               <div>
-                <h3 class="panel-title">📊 محرك جداول الكميات والبنود التعاقدية (BOQ Engine & Excel Sync)</h3>
-                <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">إدارة بنود ومواصفات المشروع، استيراد وتصدير ملفات Excel، ومراقبة الكميات المنفذة والتجاوزات</p>
+                <h3 class="panel-title">📊 جدول الكميات والبنود التعاقدية (Bill of Quantities - BOQ)</h3>
+                <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">تفاصيل بنود الأعمال، الكميات التعاقدية، الكميات المنفذة، الفئات ونسب الإنجاز</p>
               </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-outline-primary btn-sm" onclick="ProjectHub.downloadBoqSampleTemplate()" title="تنزيل قالب إكسيل مجهز وفارغ">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                  <span>قالب Excel جاهز</span>
-                </button>
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openBoqExcelImportModal()" title="استيراد جداول الكميات من ملف Excel">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
-                  <span>📥 استيراد من Excel</span>
-                </button>
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.exportBoqToExcel()" title="تصدير جدول الكميات إلى ملف Excel رسمي">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
-                  <span>📤 تصدير Excel</span>
-                </button>
-                <button class="btn btn-primary btn-sm" onclick="ProjectHub.openNewBoqModal()">
-                  <span>+ إضافة بند جديد</span>
-                </button>
-              </div>
+              <button class="btn btn-primary btn-sm" onclick="ProjectHub.openNewBoqModal()">+ إضافة بند كميات جديد</button>
             </div>
-
-            <!-- بطاقات مؤشرات أداء جدول الكميات BOQ KPIs -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px;">
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">إجمالي قيمة جدول الكميات التعاقدي</span>
-                <strong id="boqKpiContractVal" style="font-size: 1.25rem; color: var(--gold-light);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">إجمالي القيمة المنفذة بالموقع</span>
-                <strong id="boqKpiExecutedVal" style="font-size: 1.25rem; color: var(--accent-green);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">نسبة الإنجاز المالي التراكمية</span>
-                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                  <strong id="boqKpiProgressPct" style="font-size: 1.25rem; color: #38bdf8;">0%</strong>
-                  <div class="progress-wrap" style="flex: 1; height: 8px;">
-                    <div id="boqKpiProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
-                  </div>
-                </div>
-              </div>
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">إجمالي عدد البنود / التجاوزات</span>
-                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-                  <strong id="boqKpiItemsCount" style="font-size: 1.25rem; color: #fff;">0 بند</strong>
-                  <span id="boqKpiOverbilledBadge" class="badge" style="background: rgba(239,68,68,0.15); color: var(--accent-red); display: none;">0 تجاوز كمية</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- شريط التصفية والبحث في جدول الكميات -->
-            <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; background: rgba(0,0,0,0.15); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
-              <div style="flex: 2; min-width: 200px;">
-                <input type="text" id="boqSearchInput" class="form-control form-control-sm" placeholder="🔍 بحث برقم البند أو الوصف أو المواصفة..." oninput="ProjectHub.filterBoqTable()">
-              </div>
-              <div style="flex: 1; min-width: 150px;">
-                <select id="boqCategoryFilter" class="form-control form-control-sm" onchange="ProjectHub.filterBoqTable()">
-                  <option value="">جميع التصنيفات الإنشائية (WBS)</option>
-                </select>
-              </div>
-              <div style="flex: 1; min-width: 140px;">
-                <select id="boqStatusFilter" class="form-control form-control-sm" onchange="ProjectHub.filterBoqTable()">
-                  <option value="">جميع الحالات</option>
-                  <option value="لم يبدأ">لم يبدأ</option>
-                  <option value="جاري التنفيذ">جاري التنفيذ</option>
-                  <option value="مكتمل">مكتمل</option>
-                  <option value="overbilled">⚠️ تجاوز الكمية التعاقدية</option>
-                </select>
-              </div>
-            </div>
-
             <div class="table-responsive">
-              <table class="custom-table" id="hubBoqTable">
+              <table class="custom-table">
                 <thead>
                   <tr>
-                    <th style="width: 80px;">رقم البند</th>
-                    <th>بيان الأعمال والمواصفات</th>
-                    <th>التصنيف (WBS)</th>
-                    <th style="width: 60px;">الوحدة</th>
+                    <th>رقم البند</th>
+                    <th>وصف وبيان بند العمل</th>
+                    <th>الوحدة</th>
                     <th>الكمية التعاقدية</th>
-                    <th>المنفذ بالموقع</th>
-                    <th>المتبقي</th>
+                    <th>المنفذ حتى الآن</th>
                     <th>فئة السعر</th>
                     <th>الإجمالي التعاقدي</th>
-                    <th>القيمة المنفذة</th>
-                    <th style="width: 110px;">نسبة الإنجاز</th>
-                    <th style="width: 100px;">الإجراء</th>
+                    <th>نسبة الإنجاز</th>
+                    <th>الإجراء</th>
                   </tr>
                 </thead>
                 <tbody id="hubBoqTableBody"></tbody>
@@ -2028,56 +1710,26 @@
         <!-- 9. المستخلصات -->
         <div id="hubPane_invoices" class="hub-pane-view" style="display: none;">
           <div class="panel-card">
-            <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+            <div class="panel-header">
               <div>
-                <h3 class="panel-title">📑 محرك المستخلصات وشهادات الدفع الرسمية (FIDIC IPC Engine)</h3>
-                <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">إصدار واعتماد مستخلصات الإنجاز الدورية، حساب الاستقطاعات التراكمية، وتوليد شهادات الدفع المعتمدة</p>
+                <h3 class="panel-title">📑 مستخلصات وشهادات الدفع المرحلية (Interim Payment Certificates - IPC)</h3>
+                <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">إصدار ومتابعة مستخلصات الإنجاز الدورية المقدمة للمالك والاستقطاعات التعاقدية</p>
               </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-outline-primary btn-sm" onclick="ProjectHub.openNewInvoiceModal(true)" title="توليد مستخلص تلقائي محسوب من إنجاز بنود جدول الكميات بالموقع">
-                  <span>⚡ إصدار مستخلص ذكي من جدول الكميات (BOQ)</span>
-                </button>
-                <button class="btn btn-primary btn-sm" onclick="ProjectHub.openNewInvoiceModal(false)">
-                  <span>+ إصدار مستخلص يدوي</span>
-                </button>
-              </div>
+              <button class="btn btn-primary btn-sm" onclick="ProjectHub.openNewInvoiceModal()">+ إصدار مستخلص جديد</button>
             </div>
-
-            <!-- بطاقات مؤشرات أداء المستخلصات IPC KPIs -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px;">
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">إجمالي قيمة الأعمال المنجزة المعتمدة (Gross)</span>
-                <strong id="ipcKpiGrossVal" style="font-size: 1.25rem; color: #fff;">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">إجمالي الاستقطاعات والضمانات المحتجزة</span>
-                <strong id="ipcKpiDeductionsVal" style="font-size: 1.25rem; color: var(--accent-red);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">صافي المبالغ المعتمدة للصرف للمقاول (Net)</span>
-                <strong id="ipcKpiNetVal" style="font-size: 1.25rem; color: var(--accent-green);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
-                <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">الرصيد المتبقي من قيمة العقد للصرف</span>
-                <strong id="ipcKpiRemainingVal" style="font-size: 1.25rem; color: var(--gold-light);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
-              </div>
-            </div>
-
             <div class="table-responsive">
-              <table class="custom-table" id="hubInvoicesTable">
+              <table class="custom-table">
                 <thead>
                   <tr>
-                    <th style="width: 90px;">رقم المستخلص</th>
+                    <th>رقم المستخلص</th>
                     <th>النوع</th>
-                    <th>تاريخ الإصدار</th>
-                    <th>الفترة المغطاة</th>
-                    <th>إجمالي التراكمي حتى تاريخه</th>
-                    <th>الأعمال الحالية (Gross)</th>
-                    <th>الاستقطاعات</th>
-                    <th>صافي المستحق (Net)</th>
-                    <th>تفاصيل البنود</th>
+                    <th>التاريخ</th>
+                    <th>إجمالي الأعمال التراكمية</th>
+                    <th>الأعمال الجارية الحالية</th>
+                    <th>إجمالي الاستقطاعات</th>
+                    <th>صافي المستحق للصرف</th>
                     <th>حالة الاعتماد</th>
-                    <th style="width: 120px;">الإجراء</th>
+                    <th>الإجراء</th>
                   </tr>
                 </thead>
                 <tbody id="hubInvoicesTableBody"></tbody>
@@ -2380,18 +2032,6 @@
 
           </div>
         </div>
-
-        <!-- 17. الرقابة الذكية ونسبة الإنجاز (Smart % Complete) -->
-        <div id="hubPane_smart-completion" class="hub-pane-view" style="display: none;"></div>
-
-        <!-- 18. الجدول الزمني وهيكل WBS والمسار الحرج (WBS & CPM Scheduler) -->
-        <div id="hubPane_wbs-schedule" class="hub-pane-view" style="display: none;"></div>
-
-        <!-- 19. إدارة القيمة المكتسبة EVM (Earned Value Management) -->
-        <div id="hubPane_evm-control" class="hub-pane-view" style="display: none;"></div>
-
-        <!-- 20. سجل المخاطر والمطالبات وNCR وRFI (Governance & Controls) -->
-        <div id="hubPane_risks-claims" class="hub-pane-view" style="display: none;"></div>
       </section>
 
       <!-- ================== شاشة المخزون والمواد ================== -->
@@ -2545,80 +2185,41 @@
         </div>
 
         <div id="hrPane_payroll" class="hr-pane" style="display:none;">
-          <div class="panel-card" style="display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px;padding:14px 18px;">
-            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-              <div class="form-group" style="margin:0;">
-                <label style="display:block;font-size:0.8rem;color:var(--text-secondary);margin-bottom:4px;font-weight:600;">شهر المسير</label>
-                <input id="hrPayrollMonth" class="form-control" type="month" onchange="HR.loadPayroll()" style="height:38px;min-width:145px;">
-              </div>
-              <button class="btn btn-primary" onclick="HR.generatePayroll()" style="height:38px;display:inline-flex;align-items:center;gap:6px;">
-                <span>1. إعداد مسير الرواتب</span>
-              </button>
-              <button class="btn btn-success" style="height:38px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;display:inline-flex;align-items:center;gap:6px;" onclick="HR.postPayrollToJournal()">
+          <div class="panel-card" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px;">
+            <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+              <div class="form-group" style="margin:0;"><label>شهر المسير</label><input id="hrPayrollMonth" class="form-control" type="month" onchange="HR.loadPayroll()"></div>
+              <button class="btn btn-primary" onclick="HR.generatePayroll()">1. إعداد مسير الرواتب</button>
+              <button class="btn btn-success" style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;" onclick="HR.postPayrollToJournal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
                 <span>2. ترحيل إلى قيد يومية متزن ⚡</span>
               </button>
-              <button class="btn btn-secondary" onclick="HR.exportPayrollToExcel()" title="تصدير كشف الراتب الشامل إلى Excel" style="height:38px;display:inline-flex;align-items:center;gap:6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                <span>تصدير Excel 📊</span>
-              </button>
-              <button class="btn btn-secondary" onclick="HR.printComprehensivePayroll()" title="طباعة كشف الراتب الشامل الرسمي" style="height:38px;display:inline-flex;align-items:center;gap:6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-                <span>طباعة الكشف 🖨️</span>
-              </button>
             </div>
-            <div style="display:flex;align-items:flex-end;">
-              <button type="button" class="btn-statutory-pill" onclick="HR.showStatutoryRulesModal()" title="دليل القواعد النظامية والضريبية لاحتساب الأجور">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                <span>قواعد التأمينات والضرائب النظامية</span>
-                <span class="badge-legal">المعايير المعتمدة ⚖️</span>
-              </button>
-            </div>
+            <button class="btn btn-secondary btn-sm" style="border:1px solid #38bdf8;color:#38bdf8;" onclick="HR.showStatutoryRulesModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+              <span>قواعد التأمينات والضرائب النظامية ⚖️</span>
+            </button>
           </div>
-          <div class="panel-card" style="padding:0;overflow:hidden;border:1px solid var(--border-color);border-radius:10px;">
-            <div id="payrollSheetHeaderBanner" style="background:#059669;color:#ffffff;text-align:center;padding:12px 16px;font-size:1.25rem;font-weight:bold;letter-spacing:0.5px;">
-              كشف الراتب الشامل لشهر اغسطس ٢٠٢٦م
-            </div>
-            <div class="table-responsive" style="max-height:650px;overflow-x:auto;">
-              <table id="hrComprehensivePayrollTable" class="custom-table" style="font-size:0.8rem;white-space:nowrap;margin:0;width:100%;text-align:center;">
-                <thead style="position:sticky;top:0;z-index:10;background:var(--bg-secondary);">
-                  <tr style="background:#1e293b;color:#f8fafc;">
-                    <th rowspan="2" style="vertical-align:middle;">م</th>
-                    <th rowspan="2" style="vertical-align:middle;min-width:140px;">الاسم</th>
-                    <th rowspan="2" style="vertical-align:middle;min-width:120px;">الوظيفة</th>
-                    <th rowspan="2" style="vertical-align:middle;">الرقم الوظيفي</th>
-                    <th rowspan="2" style="vertical-align:middle;">عدد الايام</th>
-                    <th rowspan="2" style="vertical-align:middle;">رقم الحساب</th>
-                    <th rowspan="2" style="vertical-align:middle;min-width:120px;">مركز التكلفه</th>
-                    <th rowspan="2" style="vertical-align:middle;">عدد ايام العمل</th>
-                    <th rowspan="2" style="vertical-align:middle;">الراتب الاساسي</th>
-                    <th rowspan="2" style="vertical-align:middle;">الاستحقاق الراتب الاساسي</th>
-                    <th colspan="6" style="background:#1e3a8a;color:#93c5fd;text-align:center;border-left:1px solid rgba(255,255,255,0.1);border-right:1px solid rgba(255,255,255,0.1);">الراتب الاساسي والبدلات</th>
-                    <th colspan="4" style="background:#451a03;color:#fdba74;text-align:center;border-left:1px solid rgba(255,255,255,0.1);border-right:1px solid rgba(255,255,255,0.1);">الاستقطاعات</th>
-                    <th rowspan="2" style="vertical-align:middle;">الوعاء</th>
-                    <th rowspan="2" style="vertical-align:middle;">الضريبة</th>
-                    <th rowspan="2" style="vertical-align:middle;">صافي الراتب</th>
-                    <th rowspan="2" style="vertical-align:middle;">%9 تأمين</th>
-                    <th rowspan="2" style="vertical-align:middle;">صندوق تنمية المهارات 1%</th>
-                    <th rowspan="2" style="vertical-align:middle;">الاجازة بدون راتب</th>
-                    <th rowspan="2" style="vertical-align:middle;color:var(--accent-green);">اجمالي الصافي</th>
-                    <th rowspan="2" style="vertical-align:middle;">الحالة / إجراء</th>
-                  </tr>
-                  <tr style="background:#0f172a;color:#cbd5e1;">
-                    <th>إنتقال 20%</th>
-                    <th>مظهر 25%</th>
-                    <th style="background:#fef08a;color:#854d0e;font-weight:bold;">بدل طبيعة عمل 30%</th>
-                    <th>بدل معيشة</th>
-                    <th style="background:#fef08a;color:#854d0e;font-weight:bold;">بدل تأمين صحي</th>
-                    <th style="color:var(--gold-light);font-weight:bold;">الراتب الشامل</th>
-                    <th style="color:#f87171;">التأمينات 6%</th>
-                    <th>خصميات غياب وجزاءات</th>
-                    <th>اقساط تمويل</th>
-                    <th>اجمالي الخصميات</th>
+          <div class="panel-card">
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>الموظف</th>
+                    <th>الشهر</th>
+                    <th>الأساسي</th>
+                    <th>الإضافي/البدلات</th>
+                    <th>الإجمالي</th>
+                    <th>تأمينات موظف (6%)</th>
+                    <th>مساهمة منشأة (9%)</th>
+                    <th>ضريبة كسب العمل</th>
+                    <th>الاستقطاعات/السلف</th>
+                    <th>الصافي المستحق</th>
+                    <th>الحالة</th>
+                    <th>القيد المحاسبي</th>
+                    <th>إجراء</th>
                   </tr>
                 </thead>
                 <tbody id="hrPayrollTableBody"></tbody>
-                <tfoot id="hrPayrollTableFoot" style="position:sticky;bottom:0;z-index:5;background:#0f172a;font-weight:bold;color:#f8fafc;border-top:2px solid var(--accent-green);"></tfoot>
               </table>
             </div>
           </div>
@@ -3350,11 +2951,9 @@
                   <th>رقم الحساب</th>
                   <th>اسم الحساب</th>
                   <th>التصنيف المالي</th>
-                  <th>الرتبة</th>
                   <th>الحساب الرئيسي (الأب)</th>
                   <th>الرصيد الدفتري</th>
                   <th style="text-align: center;">الحالة</th>
-                  <th style="text-align: center;">الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="chartOfAccountsTableBody"></tbody>
@@ -3375,7 +2974,7 @@
               <svg class="icon" width="16" height="16"><use href="#icon-plus"></use></svg>
               <span>إضافة مركز تكلفة جديد +</span>
             </button>
-            <button class="btn btn-secondary" onclick="Accounting.loadCostCentersTable()">تحديث</button>
+            <button class="btn btn-secondary" onclick="Accounting.loadCostCenters()">تحديث</button>
           </div>
         </div>
         <div class="panel-card">
@@ -3392,8 +2991,6 @@
                   <th>النوع</th>
                   <th>المشروع المرتبط</th>
                   <th>ملاحظات</th>
-                  <th style="text-align: center;">الحالة</th>
-                  <th style="text-align: center;">الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="costCentersTableBody"></tbody>
@@ -3496,7 +3093,6 @@
                 <tr>
                   <th>التاريخ</th>
                   <th>اسم ورقم الموظف</th>
-                  <th>الحساب المالي</th>
                   <th>نوع العملية / رقم السند</th>
                   <th>العهدة الأصلية (عند التصفية)</th>
                   <th>إجمالي العهدة</th>
@@ -3599,27 +3195,14 @@
         <div class="page-header-row">
           <div>
             <h2 class="page-title">حركة الصندوق والبنك والتدفقات النقدية</h2>
-            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">كشف الحساب النقدي وحركات الإيداع والصرف والسحوبات لجميع الصناديق والبنوك</p>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">كشف الحساب النقدي وحركات الإيداع والصرف والسحوبات</p>
           </div>
-          <div class="page-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button class="btn btn-secondary" onclick="Accounting.printCashMovement()">
-              <span>🖨️ طباعة كشف الحركة (PDF)</span>
-            </button>
-            <button class="btn btn-secondary" onclick="Accounting.exportCashMovementExcel()">
-              <span>📊 تصدير كشف الحركة (Excel)</span>
-            </button>
+          <div class="page-actions">
             <button class="btn btn-secondary" onclick="App.loadCashTable()">
               <svg class="icon" width="16" height="16"><use href="#icon-refresh"></use></svg>
               <span>تحديث الحساب</span>
             </button>
           </div>
-        </div>
-
-        <!-- شريط تبويبات فلترة نوع الحركة (نقدي / بنك / الكل) -->
-        <div class="report-tabs-bar" style="margin-bottom: 16px;">
-          <button class="report-tab-btn active" id="tabCashAll" onclick="Accounting.switchCashFilter('الكل', this)">🌐 كافة الحركات (الكل)</button>
-          <button class="report-tab-btn" id="tabCashCash" onclick="Accounting.switchCashFilter('نقدي', this)">💵 حركة نقدية (الصندوق والخزينة)</button>
-          <button class="report-tab-btn" id="tabCashBank" onclick="Accounting.switchCashFilter('بنك', this)">🏦 حركة بنكية (البنوك والشيكات)</button>
         </div>
 
         <div class="panel-card">
@@ -3628,7 +3211,6 @@
               <thead>
                 <tr>
                   <th>التاريخ</th>
-                  <th style="text-align: center;">نوع الحركة</th>
                   <th>الرصيد السابق</th>
                   <th>المقبوضات (إيرادات +)</th>
                   <th>المدفوعات (مصروفات -)</th>
@@ -4226,315 +3808,6 @@
             <div id="mysqlMigrationResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); margin-top: 16px;"></div>
           </div>
 
-          <!-- بطاقة: الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين المعتمد -->
-          <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold); background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(15, 23, 42, 0.6) 100%);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
-                  🛡️
-                </div>
-                <div>
-                  <h3 style="color: var(--gold-light); font-size: 1.1rem; margin: 0; font-weight: 700;">
-                    الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين (Automatic Backup Schedule)
-                  </h3>
-                  <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">
-                    حفظ نسخ احتياطية دورية لقاعدة البيانات آلياً في فترات يومية أو أسبوعية محددة إلى مسار التخزين المعتمد
-                  </p>
-                </div>
-              </div>
-              <div style="display: flex; gap: 8px;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadAutoBackupSchedule()">🔄 تحديث الحالة</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="Settings.runAutoBackupNow()" id="btnSettingsRunBackupNow" style="background: #10b981; border-color: #10b981;">⚡ نسخ احتياطي فوري الآن</button>
-              </div>
-            </div>
-
-            <!-- بطاقة الحالة اللحظية للنسخ المجدول -->
-            <div id="autoBackupStatusBox" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 20px;">
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
-                <div>
-                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">حالة الجدولة الآلية:</span>
-                  <strong id="liveBackupStatusBadge" style="font-size: 0.95rem; color: #4ade80;">🟢 مفعل ومنتظم</strong>
-                </div>
-                <div>
-                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">التكرار والموعد:</span>
-                  <strong id="liveBackupIntervalText" style="font-size: 0.95rem; color: #f8fafc;">يومياً في تمام 02:00 ص</strong>
-                </div>
-                <div>
-                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">آخر نسخة تم حفظها:</span>
-                  <strong id="liveBackupLastRunText" style="font-size: 0.95rem; color: var(--gold-light);">-</strong>
-                </div>
-                <div>
-                  <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">موعد النسخة القادمة:</span>
-                  <strong id="liveBackupNextRunText" style="font-size: 0.95rem; color: var(--accent-blue);">-</strong>
-                </div>
-              </div>
-            </div>
-
-            <!-- نموذج إعدادات الجدولة والمسار -->
-            <form id="autoBackupScheduleForm" onsubmit="Settings.saveAutoBackupSchedule(event)">
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 16px;">
-                <!-- تفعيل / تعطيل -->
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="cfgAutoBackupEnabled" style="font-weight: 600;">تفعيل النسخ الاحتياطي التلقائي</label>
-                  <select id="cfgAutoBackupEnabled" class="form-control" onchange="Settings.toggleAutoBackupFields()">
-                    <option value="true">✅ نعم - تفعيل الجدولة التلقائية</option>
-                    <option value="false">❌ تعطيل الجدولة التلقائية مؤقتاً</option>
-                  </select>
-                </div>
-
-                <!-- الفاصل الزمني (يومي / أسبوعي) -->
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="cfgAutoBackupInterval" style="font-weight: 600;">فترة التكرار المجدولة</label>
-                  <select id="cfgAutoBackupInterval" class="form-control" onchange="Settings.toggleAutoBackupFields()">
-                    <option value="daily">📅 يومياً (Daily)</option>
-                    <option value="weekly">📆 أسبوعياً (Weekly)</option>
-                  </select>
-                </div>
-
-                <!-- يوم الأسبوع (في حال أسبوعي) -->
-                <div class="form-group" id="cfgAutoBackupDayGroup" style="margin-bottom: 0; display: none;">
-                  <label for="cfgAutoBackupDayOfWeek" style="font-weight: 600;">يوم التنفيذ الأسبوعي</label>
-                  <select id="cfgAutoBackupDayOfWeek" class="form-control">
-                    <option value="5">الجمعة (موصى به في نهاية أسبوع العمل)</option>
-                    <option value="4">الخميس</option>
-                    <option value="6">السبت</option>
-                    <option value="0">الأحد</option>
-                    <option value="1">الاثنين</option>
-                    <option value="2">الثلاثاء</option>
-                    <option value="3">الأربعاء</option>
-                  </select>
-                </div>
-
-                <!-- وقت التنفيذ -->
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="cfgAutoBackupTime" style="font-weight: 600;">وقت تنفيذ النسخ (الساعة والدقيقة)</label>
-                  <input type="time" id="cfgAutoBackupTime" class="form-control" value="02:00" required>
-                  <small style="color: var(--text-secondary); font-size: 0.72rem; display: block; margin-top: 4px;">يُفضل اختيار وقت هدوء النظام كالساعة 02:00 صباحاً.</small>
-                </div>
-
-                <!-- أقصى عدد نسخ للاحتفاظ بها -->
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="cfgAutoBackupMaxFiles" style="font-weight: 600;">سياسة الاحتفاظ (عدد النسخ)</label>
-                  <select id="cfgAutoBackupMaxFiles" class="form-control">
-                    <option value="7">الاحتفاظ بآخر 7 نسخ</option>
-                    <option value="14" selected>الاحتفاظ بآخر 14 نسخة (أسبوعين)</option>
-                    <option value="30">الاحتفاظ بآخر 30 نسخة (شهر)</option>
-                    <option value="60">الاحتفاظ بآخر 60 نسخة (شهرين)</option>
-                  </select>
-                  <small style="color: var(--text-secondary); font-size: 0.72rem; display: block; margin-top: 4px;">يتم حذف النسخ الأقدم تلقائياً للحفاظ على مساحة القرص.</small>
-                </div>
-              </div>
-
-              <!-- مسار التخزين المعتمد -->
-              <div class="form-group" style="margin-bottom: 16px;">
-                <label for="cfgAutoBackupPath" style="font-weight: 600; display: flex; justify-content: space-between;">
-                  <span>مسار التخزين على القرص (Configured Storage Path)</span>
-                  <span id="cfgAutoBackupPathStatus" style="font-size: 0.8rem; font-weight: normal;"></span>
-                </label>
-                <div style="display: flex; gap: 8px;">
-                  <input type="text" id="cfgAutoBackupPath" class="form-control" placeholder="مثال: server/database/backups أو مسار مخصص على القرص" style="direction: ltr; font-family: monospace;" required>
-                  <button type="button" class="btn btn-secondary" onclick="Settings.testStoragePath()" style="white-space: nowrap;">📁 فحص المسار</button>
-                  <button type="button" class="btn btn-secondary" onclick="Settings.resetDefaultStoragePath()" title="استعادة المسار الافتراضي" style="white-space: nowrap;">↩️ افتراضي</button>
-                </div>
-                <small style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-top: 4px;">
-                  يمكن تحديد أي مجلد على السيرفر أو القرص المحلي. سيقوم النظام بإنشاء المجلد تلقائياً والتأكد من أذونات الكتابة.
-                </small>
-              </div>
-
-              <div id="autoBackupTestResultBox" style="display: none; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 16px; font-size: 0.82rem;"></div>
-
-              <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                <button type="submit" class="btn btn-primary" id="btnSaveAutoBackupConfig">
-                  <span>💾 حفظ وتطبيق إعدادات الجدولة والمسار</span>
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <!-- بطاقة استراتيجية متطورة: محرك الأرشفة الشاملة والمزامنة السحابية المشفرة (Encrypted Cloud Backup & Vault) -->
-          <div class="panel-card" style="margin-bottom: 24px; border: 1px solid #38bdf8; background: linear-gradient(135deg, rgba(56, 189, 248, 0.04) 0%, rgba(15, 23, 42, 0.75) 100%);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
-                  ☁️
-                </div>
-                <div>
-                  <h3 style="color: #38bdf8; font-size: 1.15rem; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-                    <span>الأرشفة الشاملة والمزامنة السحابية المشفرة</span>
-                    <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; border: 1px solid #34d399;">🔒 AES-256-GCM Military Grade</span>
-                  </h3>
-                  <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 3px 0 0 0;">
-                    أرشفة موحدة للنظام (قاعدة البيانات + مستندات وعقود ومخططات المشاريع) مع تشفير عسكري ومزامنة سحابية مؤمنة
-                  </p>
-                </div>
-              </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadCloudBackupStatus()">🔄 تحديث الخزنة</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="Settings.syncToCloudNow()" id="btnQuickCloudSync" style="background: #0284c7; border-color: #0284c7;">
-                  ☁️ مزامنة سحابية فورية
-                </button>
-              </div>
-            </div>
-
-            <!-- مؤشرات سريعة لحالة الخزنة والتشفير -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 20px;">
-              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">حالة المزامنة السحابية:</span>
-                <strong id="cloudStatusBadge" style="font-size: 0.95rem; color: #38bdf8;">جاري الفحص...</strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">آخر مزامنة ناجحة:</span>
-                <strong id="cloudLastSyncTimeText" style="font-size: 0.92rem; color: #f8fafc;">-</strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">خوارزمية حماية الخزنة:</span>
-                <strong style="font-size: 0.92rem; color: #34d399;">AES-256-GCM + PBKDF2 (100k)</strong>
-              </div>
-              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 12px;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">إجمالي الأرشيفات في الخزنة:</span>
-                <strong id="cloudVaultFilesCountText" style="font-size: 0.95rem; color: var(--gold-light);">0 أرشيف</strong>
-              </div>
-            </div>
-
-            <!-- شبكة العمليات الرئيسية: قسم الأرشفة والتشفير + قسم إعدادات السحابة -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
-              
-              <!-- القسم الأيمن: أرشفة النظام الشاملة والمشفرة -->
-              <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 16px;">
-                <h4 style="color: var(--gold-light); margin: 0 0 12px 0; font-size: 0.98rem; display: flex; align-items: center; gap: 6px;">
-                  <span>📦 إنشاء أرشيف شامل للنظام (Full Bundle Archive)</span>
-                </h4>
-                <p style="color: var(--text-secondary); font-size: 0.78rem; margin: 0 0 14px 0; line-height: 1.4;">
-                  يقوم هذا الإجراء بحزم قاعدة البيانات بالكامل + ملفات ومستندات وعقود المشاريع ومستخلصات الـ PDF مع تشفير اختياري بكلمة مرور.
-                </p>
-
-                <div class="form-group" style="margin-bottom: 12px;">
-                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600;">
-                    <input type="checkbox" id="cfgArchiveEncrypt" checked onchange="Settings.toggleArchiveCryptoFields()">
-                    <span>تشفير الأرشيف عسكرياً بمفتاح أمان (AES-256-GCM) 🔒</span>
-                  </label>
-                  <small style="color: var(--text-secondary); font-size: 0.72rem; display: block; margin-right: 24px;">
-                    حماية قصوى تمنع فتح الملف أو قراءة الحسابات والمشاريع بدون كلمة المرور.
-                  </small>
-                </div>
-
-                <div class="form-group" id="archivePassphraseGroup" style="margin-bottom: 12px;">
-                  <label for="cfgArchivePassphrase" style="font-size: 0.85rem; font-weight: 600;">كلمة مرور / مفتاح التشفير</label>
-                  <div style="display: flex; gap: 6px;">
-                    <input type="text" id="cfgArchivePassphrase" class="form-control" placeholder="أدخل كلمة مرور قوية أو اضغط توليد مفتاح" style="font-family: monospace;">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.generatePassphraseForArchive()" title="توليد مفتاح عشوائي فائق القوة">🔑 توليد</button>
-                  </div>
-                  <small style="color: #fbbf24; font-size: 0.72rem; display: block; margin-top: 3px;">
-                    ⚠️ يرجى حفظ هذا المفتاح في مكان آمن، لن يمكن فك تشفير النسخة بدونه إطلاقاً.
-                  </small>
-                </div>
-
-                <div class="form-group" style="margin-bottom: 16px;">
-                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="checkbox" id="cfgArchiveIncludeFiles" checked>
-                    <span>تضمين مجلد وثائق ومخططات وعقود المشاريع ومستخلصات فيديك 📑</span>
-                  </label>
-                </div>
-
-                <button type="button" class="btn btn-primary" id="btnCreateArchiveNow" onclick="Settings.createFullSystemArchive()" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #d97706, #b45309);">
-                  <span>📦🔒 إنشاء وتنزيل الأرشيف الشامل فوراً</span>
-                </button>
-              </div>
-
-              <!-- القسم الأيسر: إعدادات المزامنة السحابية والربط -->
-              <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 16px;">
-                <h4 style="color: #38bdf8; margin: 0 0 12px 0; font-size: 0.98rem; display: flex; align-items: center; gap: 6px;">
-                  <span>⚙️ إعدادات المزامنة والتخزين السحابي (Cloud Storage)</span>
-                </h4>
-
-                <form onsubmit="Settings.saveCloudSyncConfig(event)">
-                  <div class="form-group" style="margin-bottom: 10px;">
-                    <label for="cfgCloudProvider" style="font-size: 0.85rem; font-weight: 600;">موفر التخزين السحابي (Cloud Provider)</label>
-                    <select id="cfgCloudProvider" class="form-control" onchange="Settings.toggleCloudProviderFields()">
-                      <option value="cloud_vault">خزنة سحابة رواسي الآمنة المدارة (Cloud Vault Managed)</option>
-                      <option value="local_cloud_folder">مجلد سحابي متزامن (Google Drive / OneDrive / Nextcloud)</option>
-                      <option value="s3_webhook">خادم سحابي خارجي (Webhook REST Endpoint / S3)</option>
-                    </select>
-                  </div>
-
-                  <div class="form-group" id="grpCloudEndpoint" style="margin-bottom: 10px; display: none;">
-                    <label for="cfgCloudEndpoint" style="font-size: 0.85rem; font-weight: 600;">رابط الخادم السحابي (Cloud Endpoint URL)</label>
-                    <input type="text" id="cfgCloudEndpoint" class="form-control" placeholder="https://cloud.rawasi-aden.com/api/vault">
-                  </div>
-
-                  <div class="form-group" id="grpCloudToken" style="margin-bottom: 10px; display: none;">
-                    <label for="cfgCloudToken" style="font-size: 0.85rem; font-weight: 600;">رمز المصادقة (Auth Token / Secret Key)</label>
-                    <input type="password" id="cfgCloudToken" class="form-control" placeholder="Bearer Token أو المفتاح السري">
-                  </div>
-
-                  <div class="form-group" id="grpCloudFolder" style="margin-bottom: 10px; display: none;">
-                    <label for="cfgCloudFolder" style="font-size: 0.85rem; font-weight: 600;">مسار المجلد السحابي المتزامن</label>
-                    <input type="text" id="cfgCloudFolder" class="form-control" placeholder="مثال: /cloud_storage/drive_sync أو مسار مجلد السحابة">
-                  </div>
-
-                  <div class="form-group" style="margin-bottom: 14px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
-                      <input type="checkbox" id="cfgCloudAutoSync" checked>
-                      <span>مزامنة سحابية تلقائية فورية بعد كل نسخة احتياطية مجدولة ⚡</span>
-                    </label>
-                  </div>
-
-                  <div id="cloudConnectionTestResult" style="display: none; padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 0.8rem;"></div>
-
-                  <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.testCloudConnection()" id="btnTestCloudConn">
-                      🔍 فحص الاتصال السحابي
-                    </button>
-                    <button type="submit" class="btn btn-primary btn-sm" style="background: #0284c7; border-color: #0284c7;">
-                      💾 حفظ إعدادات السحابة
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-            </div>
-
-            <!-- قسم الخزنة السحابية وسجل الأرشيفات المحفوظة مع فحص واستعادة -->
-            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 16px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-                <div>
-                  <h4 style="color: #f8fafc; margin: 0 0 4px 0; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
-                    <span>🏛️ خزنة الأرشيفات والنسخ السحابية (Cloud & Local Vault)</span>
-                  </h4>
-                  <p style="color: var(--text-secondary); font-size: 0.78rem; margin: 0;">
-                    قائمة بكافة الأرشيفات الشاملة المحفوظة مع إمكانية التنزيل المباشر أو الاستعادة وفك التشفير
-                  </p>
-                </div>
-                <div style="display: flex; gap: 8px;">
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.openEncryptedRestoreModal()">
-                    🔓 استعادة أرشيف مشفر خارجي
-                  </button>
-                </div>
-              </div>
-
-              <div class="table-responsive">
-                <table class="custom-table">
-                  <thead>
-                    <tr>
-                      <th>اسم ملف الأرشيف والبيان</th>
-                      <th>نوع المحتوى</th>
-                      <th>مستوى التشفير</th>
-                      <th>الحجم</th>
-                      <th>حالة السحابة</th>
-                      <th>تاريخ الأرشفة</th>
-                      <th style="text-align: center;">الإجراءات المتاحة</th>
-                    </tr>
-                  </thead>
-                  <tbody id="cloudVaultTableBody">
-                    <tr>
-                      <td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">جاري تحميل محتويات الخزنة...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
 
           <!-- بطاقة 2: تحميل واستعادة النسخ العامة -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
@@ -4959,28 +4232,19 @@
         <button class="modal-close-btn" onclick="App.closeModal('newReceiptModal')">&times;</button>
       </div>
       <form id="modalReceiptForm" onsubmit="Accounting.submitReceiptVoucherModal(event)">
-        <!-- شريط رقم سند القبض داخل نفس الشاشة -->
-        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px;">
-          <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم سند القبض الرسمي:</span>
-          <strong id="modalRcReceiptNoBadge" style="font-family: monospace; font-size: 1.1rem; color: var(--accent-green); letter-spacing: 1px;">RC-2026-XXXX</strong>
-        </div>
-
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">العميل / المستلم منه <span style="color: var(--accent-red);">*</span></label>
+            <label style="margin-bottom: 0;">العميل <span style="color: var(--accent-red);">*</span></label>
             <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('modalRcClientSelect')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة عميل جديد</a>
           </div>
-          <input list="modalRcClientDatalist" id="modalRcClientInput" class="form-control" placeholder="اختر العميل أو اكتب اسمه مباشرة..." required oninput="Accounting.onClientInputChange(this.value)">
-          <datalist id="modalRcClientDatalist"></datalist>
-          <input type="hidden" id="modalRcClientSelect" value="">
+          <select id="modalRcClientSelect" class="form-control" required>
+            <option value="">اختر العميل...</option>
+          </select>
         </div>
         <div class="form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">الحساب المالي (آخر مستوى تحليلي) <span style="color: var(--accent-red);">*</span></label>
-            <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalRcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
-          </div>
+          <label>الحساب المالي (دليل الحسابات)</label>
           <select id="modalRcAccountSelect" class="form-control">
-            <option value="">اختر الحساب الفرعي النشط...</option>
+            <option value="">اختر الحساب (تلقائي: العملاء 112)...</option>
           </select>
         </div>
         <div class="form-group">
@@ -4991,11 +4255,11 @@
         </div>
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">المشروع المرتبط (اختياري - غير إلزامي)</label>
+            <label style="margin-bottom: 0;">المشروع المرتبط</label>
             <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة مشروع جديد</a>
           </div>
           <select id="modalRcProjectSelect" class="form-control">
-            <option value="">عام / بدون مشروع محدد...</option>
+            <option value="">اختر المشروع (اختياري)...</option>
           </select>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -5028,33 +4292,17 @@
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
             <label>المبلغ <span style="color: var(--accent-red);">*</span></label>
-            <input type="number" id="modalRcAmount" class="form-control" placeholder="150000" min="0.01" step="any" required oninput="Accounting.calcReceiptLocalAmount()">
+            <input type="number" id="modalRcAmount" class="form-control" placeholder="150000" min="1" required>
           </div>
           <div class="form-group">
             <label>العملة</label>
-            <select id="modalRcCurrency" class="form-control" onchange="Accounting.onReceiptCurrencyChange()">
+            <select id="modalRcCurrency" class="form-control">
               <option value="ر.ي" selected>ريال يمني (ر.ي)</option>
               <option value="ر.س">ريال سعودي (ر.س)</option>
               <option value="$">دولار أمريكي ($)</option>
             </select>
           </div>
         </div>
-
-        <!-- شريط تحويل العملات الأجنبية والمبلغ المعادل بالعملة المحلية (ر.ي) -->
-        <div id="modalRcCurrencyConversionRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem; color: #38bdf8; font-weight: bold;">سعر الصرف مقابل الريال (YER)</label>
-              <input type="number" id="modalRcExchangeRate" class="form-control" value="1.0" step="any" min="0.0001" oninput="Accounting.calcReceiptLocalAmount()">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem; color: var(--accent-green); font-weight: bold;">المبلغ المعادل بالعملة المحلية (ر.ي)</label>
-              <input type="number" id="modalRcLocalAmount" class="form-control" value="0" readonly style="font-weight: bold; color: var(--accent-green); direction: ltr; text-align: left;">
-            </div>
-          </div>
-          <div id="modalRcLocalTafqeet" style="font-size: 0.78rem; color: var(--gold-light); margin-top: 6px; font-weight: 500;"></div>
-        </div>
-
         <div class="form-group">
           <label>ملاحظات / البيان</label>
           <textarea id="modalRcNotes" class="form-control" rows="2" placeholder="دفعة من المستخلص / دفعة مقدمة"></textarea>
@@ -5075,22 +4323,21 @@
         <button class="modal-close-btn" onclick="App.closeModal('newExpenseModal')">&times;</button>
       </div>
       <form id="modalExpenseForm" onsubmit="Accounting.submitExpenseVoucherModal(event)">
-        <!-- شريط رقم سند الصرف داخل نفس الشاشة -->
-        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px;">
-          <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم سند الصرف الرسمي:</span>
-          <strong id="modalExpReceiptNoBadge" style="font-family: monospace; font-size: 1.1rem; color: var(--accent-red); letter-spacing: 1px;">PV-2026-XXXX</strong>
-        </div>
-
-        <!-- نوع المصروف اختياري ومرتبط بالحساب المالي تلقائياً -->
-        <input type="hidden" id="modalExpTypeSelect" value="مصروف عام">
-
         <div class="form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">الحساب المالي (المصروف / المستفيد) <span style="color: var(--accent-red);">*</span></label>
-            <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalExpAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
-          </div>
+          <label>نوع المصروف <span style="color: var(--accent-red);">*</span></label>
+          <select id="modalExpTypeSelect" class="form-control" required>
+            <option value="مواد بناء">مواد بناء</option>
+            <option value="أجور عمالة">أجور عمالة</option>
+            <option value="معدات">معدات</option>
+            <option value="نقل ومواصلات">نقل ومواصلات</option>
+            <option value="مصروفات إدارية">مصروفات إدارية</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الحساب المالي (دليل الحسابات)</label>
           <select id="modalExpAccountSelect" class="form-control">
-            <option value="">اختر الحساب الفرعي النشط...</option>
+            <option value="">اختر الحساب (تلقائي: تكاليف ومصروفات 5)...</option>
           </select>
         </div>
         <div class="form-group">
@@ -5101,21 +4348,21 @@
         </div>
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">المشروع المرتبط (اختياري - غير إلزامي)</label>
+            <label style="margin-bottom: 0;">المشروع المرتبط</label>
             <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
           </div>
           <select id="modalExpProjectSelect" class="form-control">
-            <option value="">عام / بدون مشروع محدد...</option>
+            <option value="">اختر المشروع (اختياري)...</option>
           </select>
         </div>
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">المورد / المستفيد / الجهة المستلمة <span style="color: var(--accent-red);">*</span></label>
+            <label style="margin-bottom: 0;">المورد / الجهة المستلمة</label>
             <a href="javascript:void(0)" onclick="Accounting.openNewSupplierModal('modalExpSupplierSelect')" style="font-size: 0.75rem; color: var(--accent-red); text-decoration: underline;">+ مورد جديد</a>
           </div>
-          <input list="modalExpSupplierDatalist" id="modalExpSupplierInput" class="form-control" placeholder="اختر المورد أو اكتب الاسم مباشرة..." required oninput="Accounting.onSupplierInputChange(this.value)">
-          <datalist id="modalExpSupplierDatalist"></datalist>
-          <input type="hidden" id="modalExpSupplierSelect" value="">
+          <select id="modalExpSupplierSelect" class="form-control">
+            <option value="">اختر المورد (اختياري)...</option>
+          </select>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div class="form-group">
@@ -5147,33 +4394,17 @@
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
             <label>المبلغ <span style="color: var(--accent-red);">*</span></label>
-            <input type="number" id="modalExpAmount" class="form-control" placeholder="45000" min="0.01" step="any" required oninput="Accounting.calcExpenseLocalAmount()">
+            <input type="number" id="modalExpAmount" class="form-control" placeholder="45000" min="1" required>
           </div>
           <div class="form-group">
             <label>العملة</label>
-            <select id="modalExpCurrency" class="form-control" onchange="Accounting.onExpenseCurrencyChange()">
+            <select id="modalExpCurrency" class="form-control">
               <option value="ر.ي" selected>ريال يمني (ر.ي)</option>
               <option value="ر.س">ريال سعودي (ر.س)</option>
               <option value="$">دولار أمريكي ($)</option>
             </select>
           </div>
         </div>
-
-        <!-- شريط تحويل العملات الأجنبية والمبلغ المعادل بالعملة المحلية (ر.ي) -->
-        <div id="modalExpCurrencyConversionRow" style="display: none; background: rgba(245, 158, 11, 0.08); border: 1px dashed #f59e0b; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem; color: #f59e0b; font-weight: bold;">سعر الصرف مقابل الريال (YER)</label>
-              <input type="number" id="modalExpExchangeRate" class="form-control" value="1.0" step="any" min="0.0001" oninput="Accounting.calcExpenseLocalAmount()">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem; color: var(--accent-green); font-weight: bold;">المبلغ المعادل بالعملة المحلية (ر.ي)</label>
-              <input type="number" id="modalExpLocalAmount" class="form-control" value="0" readonly style="font-weight: bold; color: var(--accent-green); direction: ltr; text-align: left;">
-            </div>
-          </div>
-          <div id="modalExpLocalTafqeet" style="font-size: 0.78rem; color: var(--gold-light); margin-top: 6px; font-weight: 500;"></div>
-        </div>
-
         <div class="form-group">
           <label>البيان / تفاصيل الصرف</label>
           <textarea id="modalExpNotes" class="form-control" rows="2" placeholder="شراء مواد / أجور عمال / دفعة مقاول باطن"></textarea>
@@ -5214,25 +4445,6 @@
           <select id="modalCustodyRelatedSelect" class="form-control" onchange="Accounting.onRelatedCustodySelect('modalCustodyRelatedSelect', 'modalCustodyTotalAmount', 'modalCustodySpentAmount')">
             <option value="">اختر العهدة المفتوحة للتصفية...</option>
           </select>
-        </div>
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <label style="margin-bottom: 0;">الحساب المالي (العهد / الصندوق) <span style="color: var(--accent-red);">*</span></label>
-              <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalCustodyAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب</a>
-            </div>
-            <select id="modalCustodyAccountSelect" class="form-control">
-              <option value="">اختر الحساب الفرعي النشط...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>طريقة الصرف</label>
-            <select id="modalCustodyPaymentMethod" class="form-control">
-              <option value="نقدي" selected>نقدي (صندوق)</option>
-              <option value="تحويل بنكي">تحويل بنكي</option>
-              <option value="شيك">شيك</option>
-            </select>
-          </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div class="form-group">
@@ -5282,12 +4494,6 @@
         <button class="modal-close-btn" onclick="App.closeModal('newJournalModal')">&times;</button>
       </div>
       <form id="modalJournalForm" onsubmit="Accounting.submitJournalEntryModal(event)">
-        <!-- شريط رقم قيد اليومية داخل نفس الشاشة -->
-        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px;">
-          <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم قيد اليومية المتسلسل:</span>
-          <strong id="modalJeEntryNoBadge" style="font-family: monospace; font-size: 1.1rem; color: #38bdf8; letter-spacing: 1px;">JV-2026-XXXX</strong>
-        </div>
-
         <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-group">
             <label>التاريخ <span style="color: var(--accent-red);">*</span></label>
@@ -5295,7 +4501,7 @@
           </div>
           <div class="form-group">
             <label>العملة</label>
-            <select id="modalJeCurrency" class="form-control" onchange="Accounting.onJournalCurrencyChange()">
+            <select id="modalJeCurrency" class="form-control">
               <option value="ر.ي" selected>ريال يمني (ر.ي)</option>
               <option value="ر.س">ريال سعودي (ر.س)</option>
               <option value="$">دولار أمريكي ($)</option>
@@ -5307,25 +4513,11 @@
           </div>
         </div>
 
-        <!-- شريط العملة الأجنبية لقيد اليومية -->
-        <div id="modalJeCurrencyRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;">
-          <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 180px;">
-              <label style="font-size: 0.82rem; color: #38bdf8; font-weight: bold;">سعر الصرف المعتمد مقابل الريال (YER):</label>
-              <input type="number" id="modalJeExchangeRate" class="form-control" value="1.0" step="any" min="0.0001" oninput="Accounting.calcJournalBalance()">
-            </div>
-            <div style="flex: 2; font-size: 0.82rem; color: var(--text-secondary);">
-              ℹ️ المبالغ في أسطر القيد تُسجل بالعملة المختارة، ويتم تقييد الأستاذ العام بالمعادل بالريال اليمني آلياً.
-            </div>
-          </div>
-        </div>
-
         <!-- جدول أطراف القيد اليومي (ديناميكي) -->
         <div style="margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
           <div style="background: #1e293b; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: bold; font-size: 0.9rem; color: var(--gold-light);">أطراف وسطور القيد (مدين / دائن - الحسابات التحليلية النشطة)</span>
+            <span style="font-weight: bold; font-size: 0.9rem; color: var(--gold-light);">أطراف وسطور القيد (مدين / دائن)</span>
             <div style="display: flex; gap: 8px;">
-              <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.openNewAccountModal()">+ حساب جديد للدليل</button>
               <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.addJournalRow()">+ إضافة طرف</button>
               <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.autoBalanceJournal()" title="موازنة القيد آلياً في الطرف الأخير">⚖️ موازنة تلقائية</button>
             </div>
@@ -5334,7 +4526,7 @@
             <table class="custom-table" style="margin-bottom: 0;">
               <thead>
                 <tr>
-                  <th style="width: 25%;">الحساب الفرعي (دليل الحسابات) <span style="color: var(--accent-red);">*</span></th>
+                  <th style="width: 25%;">الحساب (دليل الحسابات) <span style="color: var(--accent-red);">*</span></th>
                   <th style="width: 20%;">مركز التكلفة</th>
                   <th style="width: 15%;">مدين (منه)</th>
                   <th style="width: 15%;">دائن (له)</th>
@@ -5395,7 +4587,7 @@
     </div>
   </div>
 
-  <!-- ================== نافذة إضافة حساب مالي جديد إلى الدليل (الترقيم من الرتبة الثالثة) ================== -->
+  <!-- ================== نافذة إضافة حساب مالي جديد إلى الدليل ================== -->
   <div class="modal-overlay" id="accountModal">
     <div class="modal-box" style="max-width: 550px;">
       <div class="modal-header">
@@ -5404,21 +4596,9 @@
       </div>
       <form onsubmit="Accounting.submitNewAccount(event)">
         <div style="padding: 16px 20px;">
-          <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.82rem; color: #38bdf8;">
-            🔢 <strong>الترقيم من الرتبة الثالثة:</strong> الحسابات التشغيلية التي يتم تسجيل القيود عليها تكون من الرتبة الثالثة فما فوق (3 خانات فأكثر).
-          </div>
           <div class="form-group">
-            <label>الحساب الرئيسي (الأب)</label>
-            <select id="modalAccParentSelect" class="form-control" onchange="Accounting.onNewAccountParentChange()">
-              <option value="">اختر الحساب الأب لتوليد الكود المقترح تلقائياً...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <label style="margin-bottom: 0;">رقم / كود الحساب (الرتبة 3+) <span style="color: var(--accent-red);">*</span></label>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.suggestAccountCode()" style="padding: 2px 8px; font-size: 0.75rem;">🔢 اقتراح كود متسلسل</button>
-            </div>
-            <input type="text" id="modalAccCode" class="form-control" placeholder="مثال: 1111 أو 5204" required style="font-family: monospace; font-weight: bold; color: var(--gold-light);">
+            <label>رقم / كود الحساب <span style="color: var(--accent-red);">*</span></label>
+            <input type="text" id="modalAccCode" class="form-control" placeholder="مثال: 11105 أو 5204" required>
           </div>
           <div class="form-group">
             <label>اسم الحساب <span style="color: var(--accent-red);">*</span></label>
@@ -5426,141 +4606,27 @@
           </div>
           <div class="form-group">
             <label>التصنيف المالي الرئيسي <span style="color: var(--accent-red);">*</span></label>
-            <select id="modalAccType" class="form-control" required onchange="Accounting.suggestAccountCode()">
+            <select id="modalAccType" class="form-control" required>
               <option value="أصول">1 - أصول (Assets)</option>
               <option value="خصوم">2 - خصوم (Liabilities)</option>
-              <option value="حقوق ملكية">3 - حقوق ملكية (Equity)</option>
+              <option value="حقوق ملكية">22 - حقوق ملكية (Equity)</option>
+              <option value="مصروفات">3 - مصروفات إدارية وتشغيلية (Expenses)</option>
               <option value="إيرادات">4 - إيرادات ومبيعات (Revenues)</option>
-              <option value="مصروفات">5 - مصروفات وتكاليف مشاريع (Expenses & Costs)</option>
+              <option value="تكاليف">5 - تكاليف مشاريع ومقاولات (Costs)</option>
             </select>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group">
-              <label>حالة الحساب</label>
-              <select id="modalAccStatus" class="form-control">
-                <option value="active">نشط (يقبل العمليات)</option>
-                <option value="restricted">🔒 موقوف / مقيد (معطل)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>الرصيد الافتتاحي</label>
-              <input type="number" id="modalAccBalance" class="form-control" value="0" step="any">
-            </div>
+          <div class="form-group">
+            <label>الحساب الرئيسي (الأب - اختياري)</label>
+            <input type="text" id="modalAccParent" class="form-control" placeholder="مثال: 111 أو 21">
+          </div>
+          <div class="form-group">
+            <label>الرصيد الافتتاحي (اختياري)</label>
+            <input type="number" id="modalAccBalance" class="form-control" value="0" step="any">
           </div>
         </div>
         <div class="modal-footer">
           <button type="submit" class="btn btn-primary">حفظ الحساب في الدليل</button>
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('accountModal')">إلغاء</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- ================== نافذة تعديل بيانات حساب مالي ================== -->
-  <div class="modal-overlay" id="editAccountModal">
-    <div class="modal-box" style="max-width: 550px;">
-      <div class="modal-header">
-        <h3>تعديل بيانات الحساب المالي</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('editAccountModal')">&times;</button>
-      </div>
-      <form onsubmit="Accounting.submitEditAccount(event)">
-        <input type="hidden" id="editAccId">
-        <div style="padding: 16px 20px;">
-          <div class="form-group">
-            <label>رقم / كود الحساب <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="editAccCode" class="form-control" required style="font-family: monospace; font-weight: bold; color: var(--gold-light);">
-          </div>
-          <div class="form-group">
-            <label>اسم الحساب <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="editAccName" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label>التصنيف المالي الرئيسي <span style="color: var(--accent-red);">*</span></label>
-            <select id="editAccType" class="form-control" required>
-              <option value="أصول">1 - أصول (Assets)</option>
-              <option value="خصوم">2 - خصوم (Liabilities)</option>
-              <option value="حقوق ملكية">3 - حقوق ملكية (Equity)</option>
-              <option value="إيرادات">4 - إيرادات ومبيعات (Revenues)</option>
-              <option value="مصروفات">5 - مصروفات وتكاليف مشاريع (Expenses & Costs)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>الحساب الرئيسي (الأب)</label>
-            <select id="editAccParentSelect" class="form-control">
-              <option value="">بدون أب (حساب رئيسي أعلى مستوى)...</option>
-            </select>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group">
-              <label>حالة الحساب (تقييد / تنشيط)</label>
-              <select id="editAccStatus" class="form-control">
-                <option value="active">نشط (يقبل القيود والسندات)</option>
-                <option value="restricted">🔒 موقوف / مقيد (معطل)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>الرصيد الدفتري</label>
-              <input type="number" id="editAccBalance" class="form-control" step="any">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('editAccountModal')">إلغاء</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- ================== نافذة تعديل بيانات مركز التكلفة ================== -->
-  <div class="modal-overlay" id="editCostCenterModal">
-    <div class="modal-box" style="max-width: 550px;">
-      <div class="modal-header">
-        <h3>تعديل بيانات مركز التكلفة</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('editCostCenterModal')">&times;</button>
-      </div>
-      <form onsubmit="Accounting.submitEditCostCenter(event)">
-        <input type="hidden" id="editCcId">
-        <div style="padding: 16px 20px;">
-          <div class="form-group">
-            <label>رمز مركز التكلفة <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="editCcCode" class="form-control" required style="font-family: monospace; font-weight: bold; color: var(--gold-light);">
-          </div>
-          <div class="form-group">
-            <label>اسم مركز التكلفة <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="editCcName" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label>النوع</label>
-            <select id="editCcType" class="form-control">
-              <option value="مشروع">مشروع إنشائي</option>
-              <option value="قسم إداري">قسم إداري / تشغيلي</option>
-              <option value="آلية ومعدات">آليات ومعدات</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>ربط بمشروع محدد</label>
-            <select id="editCcProjectSelect" class="form-control">
-              <option value="">بدون مشروع (عام)...</option>
-            </select>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group">
-              <label>حالة المركز</label>
-              <select id="editCcStatus" class="form-control">
-                <option value="active">نشط</option>
-                <option value="inactive">موقوف</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>ملاحظات</label>
-              <input type="text" id="editCcNotes" class="form-control">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('editCostCenterModal')">إلغاء</button>
         </div>
       </form>
     </div>
@@ -5924,12 +4990,11 @@
           <div class="form-group">
             <label>الدور الوظيفي / القالب الافتراضي</label>
             <select id="userRoleVal" class="form-control" onchange="Settings.onRoleChange()">
-              <option value="admin">المدير العام (كافة الصلاحيات الكاملة دون قيود)</option>
-              <option value="accountant" selected>المحاسب المالي (قيود، فواتير، سندات، تقارير - بدون اعتماد فترات)</option>
-              <option value="auditor">المراجع والمدقق الداخلي (اعتماد، مراجعة، ترحيل، منع الصرف المباشر)</option>
-              <option value="project_manager">مهندس / مدير المشاريع (نطاق مشاريعه المعتمدة فقط)</option>
-              <option value="storekeeper">أمين المخزن (المخزون وأذونات الصرف والتوريد)</option>
-              <option value="custom">مخصص (تحديد يدوي دقيق للصلاحيات والنطاق)</option>
+              <option value="admin">المدير العام (كافة الصلاحيات)</option>
+              <option value="accountant" selected>المحاسب المالي (المالية، السندات، التقارير)</option>
+              <option value="project_manager">مهندس / مدير المشاريع (المشاريع، المواد، المصروفات)</option>
+              <option value="storekeeper">أمين المخزن (المخزون والمواد)</option>
+              <option value="custom">مخصص (تحديد يدوي دقيق للصلاحيات)</option>
             </select>
           </div>
         </div>
@@ -5952,49 +5017,6 @@
           </div>
         </div>
 
-        <!-- نطاق الصلاحيات الجغرافي والإداري (المشروع، الفرع، القسم) -->
-        <div class="user-scope-card" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.06), rgba(15, 23, 42, 0.75)); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-sm); padding: 12px 16px; margin: 12px 0 16px 0;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-            <span style="font-size: 1.25rem;">🌐</span>
-            <div>
-              <h4 style="margin: 0; font-size: 0.92rem; color: #38bdf8; font-weight: 700;">نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects Scope)</h4>
-              <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
-                تحديد الفرع، القسم، والمشاريع المصرح للمستخدم بالوصول إليها. منع الوصول افتراضياً Deny by Default لأي مشروع خارج النطاق.
-              </div>
-            </div>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1;">🏢 الفرع الجغرافي المصرح به:</label>
-              <select id="userBranchVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
-                <option value="">كافة الفروع (غير مقيد)</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1;">📑 القسم الإداري:</label>
-              <select id="userDepartmentVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
-                <option value="">كافة الأقسام (غير مقيد)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0;">🏗️ نطاق المشاريع المعتمدة (Project Scope):</label>
-              <label style="display: flex; align-items: center; gap: 5px; font-size: 0.74rem; cursor: pointer; color: var(--gold-light);">
-                <input type="checkbox" id="userAllProjectsScopeChk" checked onchange="Settings.onAllProjectsScopeToggle(this.checked)" style="accent-color: var(--gold-primary);">
-                <span>الوصول لكافة المشاريع الحالية والمستقبلية (*)</span>
-              </label>
-            </div>
-            <div id="userProjectsScopeContainer" style="display: none; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px;">
-              <div id="userProjectsCheckList" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                <!-- تُعبأ المشاريع برمجياً بواسطة JS -->
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- التحقق بخطوتين (2FA) - رمز الأمان (PIN) للمدير العام والمستخدمين -->
         <div class="user-2fa-card" id="user2FaCardContainer" style="background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(15, 23, 42, 0.75)); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: var(--radius-sm); padding: 12px 16px; margin: 12px 0 16px 0;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
@@ -6003,7 +5025,7 @@
               <div>
                 <h4 style="margin: 0; font-size: 0.92rem; color: var(--gold-light); font-weight: 700;">التحقق بخطوتين (2FA) - رمز الأمان (PIN)</h4>
                 <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
-                  حماية متقدمة للحساب برمز سري PIN مكون من 6 أرقام. يمكنك تغيير الرمز أو توليد رمز جديد في أي وقت.
+                  حساب المدير العام محمي بطبقة أمان مضاعفة. يمكن إدخال وتغيير رمز الأمان (PIN) المكون من 6 أرقام في أي لحظة.
                 </div>
               </div>
             </div>
@@ -6015,7 +5037,7 @@
 
           <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px;">
             <div style="position: relative; width: 220px;">
-              <input type="password" id="user2FaPinVal" class="form-control" placeholder="123456" maxlength="6" pattern="[0-9]{6}" autocomplete="off" style="font-family: monospace; font-size: 1.15rem; letter-spacing: 5px; text-align: center; font-weight: bold; padding-left: 38px; border-color: rgba(212, 175, 55, 0.45); background: #070c18; color: #fbbf24;" oninput="this.value=this.value.replace(/[٠-٩]/g, d=>'0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)]).replace(/[۰-۹]/g, d=>'0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)]).replace(/[^0-9]/g,'')">
+              <input type="password" id="user2FaPinVal" class="form-control" placeholder="123456" maxlength="6" pattern="[0-9]{6}" autocomplete="off" style="font-family: monospace; font-size: 1.15rem; letter-spacing: 5px; text-align: center; font-weight: bold; padding-left: 38px; border-color: rgba(212, 175, 55, 0.45); background: #070c18; color: #fbbf24;" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
               <button type="button" id="btnToggle2FaEye" onclick="Settings.toggle2FaPinVisibility()" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 1rem; padding: 2px;" title="إظهار / إخفاء الرمز">
                 <span id="user2FaEyeIcon">👁️</span>
               </button>
@@ -6040,7 +5062,7 @@
           <div class="permissions-header">
             <h4>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--gold-primary)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-              <span>مصفوفة العمليات والصلاحيات الإجرائية (7 عمليات رئيسية):</span>
+              <span>الصلاحيات المخصصة لهذا المستخدم:</span>
             </h4>
             <div class="perm-quick-btns">
               <button type="button" class="perm-quick-btn" onclick="Settings.selectAllPermissions(true)">تحديد الكل</button>
@@ -6054,11 +5076,7 @@
               <div class="perm-group-title">📊 لوحة التحكم والإحصائيات</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="dashboard:view" class="perm-chk">
-                <span>عرض المؤشرات المالية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="dashboard:export" class="perm-chk">
-                <span>تصدير وطباعة لوحة التحكم</span>
+                <span>عرض لوحة التحكم والمؤشرات المالية</span>
               </label>
             </div>
 
@@ -6067,118 +5085,49 @@
               <div class="perm-group-title">🏗️ إدارة المشاريع والمقاولات</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="projects:view" class="perm-chk">
-                <span>عرض قائمة وتفاصيل المشاريع</span>
+                <span>استعراض قائمة وتفاصيل المشاريع</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:create" class="perm-chk">
-                <span>إضافة مشروع جديد وتحديد العقد</span>
+                <input type="checkbox" name="userPerm" value="projects:manage" class="perm-chk">
+                <span>إضافة وتعديل بيانات المشاريع</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:edit" class="perm-chk">
-                <span>تعديل بيانات المشروع والمراحل</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:approve" class="perm-chk">
-                <span>اعتماد مستخلصات ومراحل الإنجاز</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:cancel" class="perm-chk">
-                <span>إلغاء أو حذف المشاريع</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:export" class="perm-chk">
-                <span>تصدير وطباعة تقارير ومستندات المشاريع</span>
+                <input type="checkbox" name="userPerm" value="projects:print" class="perm-chk">
+                <span>طباعة تقارير ومستخلصات المشاريع</span>
               </label>
             </div>
 
-            <!-- 3. المحاسبة والقيود -->
+            <!-- 3. الإيرادات -->
             <div class="perm-group-card">
-              <div class="perm-group-title">📒 الحسابات والقيود والمالية</div>
+              <div class="perm-group-title">💰 الإيرادات وسندات القبض</div>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:view" class="perm-chk">
-                <span>عرض الدليل المحاسبي وميزان المراجعة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:create" class="perm-chk">
-                <span>إنشاء قيود يومية وحسابات جديدة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:edit" class="perm-chk">
-                <span>تعديل القيود ومراكز التكلفة والعملات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:approve" class="perm-chk">
-                <span>اعتماد التسويات وإغلاق/إعادة فتح الفترات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:post" class="perm-chk">
-                <span>ترحيل القيود لسجل اليومية العامة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:export" class="perm-chk">
-                <span>تصدير القوائم المالية والميزانيات</span>
-              </label>
-            </div>
-
-            <!-- 4. الإيرادات والمستخلصات -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">💰 الإيرادات وسندات القبض والمستخلصات</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:view" class="perm-chk">
-                <span>عرض الفواتير وسندات القبض والمستخلصات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:create" class="perm-chk">
-                <span>إصدار مستخلص أو فاتورة إيراد جديدة</span>
+                <input type="checkbox" name="userPerm" value="revenues:view" class="perm-chk">
+                <span>استعراض سجل الإيرادات والقبوضات</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="revenues:create" class="perm-chk">
-                <span>إصدار وتسجيل سند قبض نقدي أو شيك</span>
+                <span>إصدار وتسجيل سند قبض جديد</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:approve" class="perm-chk">
-                <span>اعتماد المستخلصات وفواتير العملاء</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="revenues:cancel" class="perm-chk">
-                <span>إلغاء سندات القبض أو المستخلصات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:export" class="perm-chk">
-                <span>طباعة وتصدير المستخلصات وسندات القبض</span>
+                <input type="checkbox" name="userPerm" value="revenues:print" class="perm-chk">
+                <span>طباعة سندات القبض الرسمية</span>
               </label>
             </div>
 
-            <!-- 5. المصروفات -->
+            <!-- 4. المصروفات -->
             <div class="perm-group-card">
               <div class="perm-group-title">💸 المصروفات وسندات الصرف</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="expenses:view" class="perm-chk">
-                <span>استعراض سجل المصروفات وسندات الصرف</span>
+                <span>استعراض سجل المصروفات</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="expenses:create" class="perm-chk">
                 <span>تسجيل وإصدار سند صرف جديد</span>
               </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:edit" class="perm-chk">
-                <span>تعديل بيانات وتفاصيل سند الصرف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:approve" class="perm-chk">
-                <span>اعتماد وصرف سندات نفقات المشاريع</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:cancel" class="perm-chk">
-                <span>إلغاء وحذف سند صرف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:export" class="perm-chk">
-                <span>طباعة وتصدير كشوفات وسندات الصرف</span>
-              </label>
             </div>
 
-            <!-- 6. العهد والنثريات -->
+            <!-- 5. العهد والنثريات -->
             <div class="perm-group-card">
               <div class="perm-group-title">💼 النثريات والعهد الميدانية</div>
               <label class="perm-checkbox-item">
@@ -6186,70 +5135,12 @@
                 <span>استعراض سجل العهد والمصروفات</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:create" class="perm-chk">
-                <span>صرف وتسجيل عهدة ميدانية جديدة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:approve" class="perm-chk">
-                <span>اعتماد تسوية وتصفية العهد الميدانية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:export" class="perm-chk">
-                <span>تصدير وطباعة كشوفات العهد</span>
+                <input type="checkbox" name="userPerm" value="custody:manage" class="perm-chk">
+                <span>صرف وتسوية وتصفية العهد الميدانية</span>
               </label>
             </div>
 
-            <!-- 7. المخزون ومواد البناء -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">📦 المخزون ومواد البناء</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:view" class="perm-chk">
-                <span>استعراض رصيد وحركات وأسعار المواد</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:create" class="perm-chk">
-                <span>إضافة وتوريد أصناف مواد جديدة للمخزن</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:edit" class="perm-chk">
-                <span>تعديل بيانات وحدات وأسعار المواد</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:issue" class="perm-chk">
-                <span>إذن صرف مواد للمشاريع وتحديث التكلفة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:export" class="perm-chk">
-                <span>تصدير جرد المخزون وحركات الصرف</span>
-              </label>
-            </div>
-
-            <!-- 8. المشتريات والموردين -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">🏢 المشتريات والموردين</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="purchases:view" class="perm-chk">
-                <span>عرض فواتير المشتريات والموردين</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="purchases:create" class="perm-chk">
-                <span>تسجيل فاتورة شراء مواد وتوريدها</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="purchases:approve" class="perm-chk">
-                <span>اعتماد ومصادقة أوامر وفواتير الشراء</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:create" class="perm-chk">
-                <span>إضافة وتعديل بيانات الموردين ومقاولي الباطن</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:export" class="perm-chk">
-                <span>كشف حساب مورد مفصل وطباعته وتصديره</span>
-              </label>
-            </div>
-
-            <!-- 9. العملاء -->
+            <!-- 6. العملاء -->
             <div class="perm-group-card">
               <div class="perm-group-title">👥 دليل العملاء والمستثمرين</div>
               <label class="perm-checkbox-item">
@@ -6257,76 +5148,77 @@
                 <span>عرض سجل العملاء وأرصدتهم</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="clients:create" class="perm-chk">
+                <input type="checkbox" name="userPerm" value="clients:manage" class="perm-chk">
                 <span>إضافة وتعديل بيانات العملاء</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="clients:export" class="perm-chk">
-                <span>كشف حساب عميل مفصل وطباعته وتصديره</span>
+                <input type="checkbox" name="userPerm" value="clients:statement" class="perm-chk">
+                <span>كشف حساب عميل مفصل وطباعته</span>
               </label>
             </div>
 
-            <!-- 10. الموارد البشرية والرواتب -->
+            <!-- 7. الموردون -->
             <div class="perm-group-card">
-              <div class="perm-group-title">👔 الموارد البشرية والرواتب (HR)</div>
+              <div class="perm-group-title">🏢 الموردون ومقاولو الباطن</div>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:view" class="perm-chk">
-                <span>عرض الموظفين والحضور ومسيرات الرواتب</span>
+                <input type="checkbox" name="userPerm" value="suppliers:view" class="perm-chk">
+                <span>عرض سجل الموردين والمستحقات</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:create" class="perm-chk">
-                <span>إضافة موظفين وتسجيل الحضور والسلف</span>
+                <input type="checkbox" name="userPerm" value="suppliers:manage" class="perm-chk">
+                <span>إضافة وتعديل بيانات الموردين</span>
               </label>
               <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:edit" class="perm-chk">
-                <span>تعديل بيانات ورواتب الموظفين</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:approve" class="perm-chk">
-                <span>اعتماد طلبات الإجازات والسلف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:post" class="perm-chk">
-                <span>ترحيل مسير الرواتب إلى القيود المحاسبية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:export" class="perm-chk">
-                <span>تصدير وطباعة كشوفات الرواتب والحضور</span>
+                <input type="checkbox" name="userPerm" value="suppliers:statement" class="perm-chk">
+                <span>كشف حساب مورد مفصل وطباعته</span>
               </label>
             </div>
 
-            <!-- 11. الصندوق والبنك -->
+            <!-- 8. المخزون -->
+            <div class="perm-group-card">
+              <div class="perm-group-title">📦 المخزون ومواد البناء</div>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:view" class="perm-chk">
+                <span>استعراض رصيد وأسعار المخزون</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:manage" class="perm-chk">
+                <span>إضافة وتعديل أصناف المواد</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="inventory:issue" class="perm-chk">
+                <span>صرف مواد للمشاريع وتحديث التكلفة</span>
+              </label>
+            </div>
+
+            <!-- 9. الصندوق والبنك -->
             <div class="perm-group-card">
               <div class="perm-group-title">🏦 حركة الصندوق والبنك</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="cash:view" class="perm-chk">
-                <span>استعراض حركة التدفقات النقدية للصندوق</span>
+                <span>استعراض حركة التدفقات النقدية</span>
               </label>
             </div>
 
-            <!-- 12. التقارير -->
+            <!-- 10. التقارير -->
             <div class="perm-group-card">
               <div class="perm-group-title">📑 مركز التقارير والأرباح</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="reports:view" class="perm-chk">
-                <span>استعراض تقارير الأرباح والميزانية العمومية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="reports:export" class="perm-chk">
-                <span>تصدير التقارير المالية إلى Excel و PDF</span>
+                <span>استعراض تقارير الأرباح والميزانية</span>
               </label>
             </div>
 
-            <!-- 13. إعدادات النظام -->
+            <!-- 11. إعدادات النظام -->
             <div class="perm-group-card">
               <div class="perm-group-title">⚙️ إعدادات النظام والأمان</div>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="settings:company" class="perm-chk">
-                <span>تعديل بيانات وإعدادات الشركة ومحرك البيانات</span>
+                <span>تعديل بيانات وإعدادات الشركة</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="settings:users" class="perm-chk">
-                <span>إدارة المستخدمين ومنح الصلاحيات والنطاقات</span>
+                <span>إدارة المستخدمين ومنح الصلاحيات</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="settings:backup" class="perm-chk">
@@ -6467,65 +5359,6 @@
           <span>بدء الاستعادة والتأكيد</span>
         </button>
         <button type="button" class="btn btn-secondary" onclick="App.closeModal('restoreBackupModal')">إلغاء</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- نافذة معالج استعادة وفحص الأرشيف المشفر الشامل (Encrypted System Restore Modal) -->
-  <div class="modal-overlay" id="encryptedRestoreModal">
-    <div class="modal-box" style="max-width: 640px;">
-      <div class="modal-header">
-        <h3 style="display: flex; align-items: center; gap: 8px;">
-          <span>🔓 استعادة وفك تشفير الأرشيف الشامل (Encrypted System Restore)</span>
-        </h3>
-        <button class="modal-close-btn" onclick="App.closeModal('encryptedRestoreModal')">&times;</button>
-      </div>
-      <div style="padding: 12px 0;">
-        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid var(--accent-red); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start;">
-          <span style="font-size: 1.4rem;">⚠️</span>
-          <div style="font-size: 0.85rem; line-height: 1.4; color: #fca5a5;">
-            <strong>تنبيه الأمان والرقابة:</strong> استعادة الأرشيف تقوم بتحديث قاعدة البيانات واسترجاع كافة وثائق المشاريع الموجودة في الحزمة. يقوم النظام بحفظ <strong>نقطة أمان واسترجاع طارئة تلقائياً</strong> قبل البدء.
-          </div>
-        </div>
-
-        <!-- منطقة اختيار أو رفع الملف -->
-        <div class="upload-dropzone" onclick="document.getElementById('vaultRestoreFileInput').click()" style="border: 2px dashed #38bdf8; border-radius: var(--radius-md); padding: 22px 16px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); transition: var(--transition); margin-bottom: 16px;">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="#38bdf8" style="margin-bottom: 8px;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-          <div style="font-weight: 700; color: #38bdf8; margin-bottom: 4px;" id="vaultRestoreFileHeader">اضغط هنا لاختيار ملف الأرشيف (.rawasi.enc / .zip / .db)</div>
-          <div style="font-size: 0.8rem; color: var(--text-secondary);" id="vaultRestoreFileName">أو اسحب وأفلت الملف هنا مباشرة</div>
-          <input type="file" id="vaultRestoreFileInput" accept=".enc,.zip,.db,.sqlite" style="display: none;" onchange="Settings.handleVaultRestoreFileSelected(event)">
-        </div>
-
-        <!-- حقل كلمة مرور فك التشفير -->
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label for="vaultRestorePassphrase" style="font-size: 0.85rem; font-weight: 600; display: flex; justify-content: space-between;">
-            <span>كلمة مرور فك التشفير (Passphrase / Decryption Key)</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">(مطلوبة إذا كان الأرشيف مشفراً 🔒)</span>
-          </label>
-          <input type="password" id="vaultRestorePassphrase" class="form-control" placeholder="أدخل كلمة مرور التشفير المستخدمة عند إنشاء الأرشيف">
-        </div>
-
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
-            <input type="checkbox" id="vaultRestoreFilesCheck" checked>
-            <span>استعادة ملفات ومستندات وعقود المشاريع المرفقة داخل الحزمة</span>
-          </label>
-        </div>
-
-        <!-- مربع نتيجة الفحص والمعاينة -->
-        <div id="vaultRestoreInspectionBox" style="display: none; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;"></div>
-
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.inspectSelectedArchive()" id="btnInspectArchive">
-            🔍 فحص سلامة الأرشيف ومعاينته
-          </button>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" id="btnConfirmEncryptedRestore" onclick="Settings.executeEncryptedRestore()" disabled style="background: linear-gradient(135deg, #10b981, #059669); border-color: #10b981;">
-          <span>🛡️ تأكيد وتنفيذ الاستعادة الشاملة</span>
-        </button>
-        <button type="button" class="btn btn-secondary" onclick="App.closeModal('encryptedRestoreModal')">إلغاء</button>
       </div>
     </div>
   </div>
@@ -6899,172 +5732,6 @@
         <div class="modal-footer">
           <button type="submit" class="btn btn-primary">حفظ بند الكميات 📊</button>
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('boqItemModal')">إلغاء</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 3.1 نافذة استيراد جدول الكميات الذكي من ملف Excel -->
-  <div class="modal-overlay" id="boqExcelImportModal">
-    <div class="modal-box" style="max-width: 900px;">
-      <div class="modal-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 1.4rem;">📥</span>
-          <div>
-            <h3 style="margin: 0;">استيراد جدول الكميات (BOQ) من ملف Excel</h3>
-            <span style="font-size: 0.76rem; color: var(--text-secondary);">استيراد وقراءة بنود المقايسات والمناقصات بضغطة زر مع المعاينة والمطابقة الذكية</span>
-          </div>
-        </div>
-        <button class="modal-close-btn" onclick="App.closeModal('boqExcelImportModal')">&times;</button>
-      </div>
-
-      <div style="padding: 10px 0;">
-        <!-- بطاقة المشروع المستهدف للاستيراد -->
-        <div id="boqImportTargetProjectBadge" style="display: flex; align-items: center; justify-content: space-between; background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.25); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 12px; font-size: 0.82rem;">
-          <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 1.1rem;">📂</span>
-            <span>المشروع المستهدف للترحيل والاستيراد:</span>
-          </span>
-          <strong id="boqImportTargetProjectName" style="color: var(--gold-light); font-size: 0.88rem;">-</strong>
-        </div>
-
-        <!-- منطقة اختيار وسحب وإفلات ملف الإكسيل -->
-        <div id="boqDropZone" style="border: 2px dashed rgba(212,175,55,0.4); background: rgba(212,175,55,0.03); border-radius: var(--radius-md); padding: 25px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; margin-bottom: 15px;" onclick="document.getElementById('boqExcelFileInput').click()">
-          <input type="file" id="boqExcelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="ProjectHub.handleBoqFileSelected(event)">
-          <div style="font-size: 2.5rem; margin-bottom: 8px;">📊</div>
-          <h4 style="color: #fff; margin: 0 0 6px 0;">انقر لاختيار ملف Excel أو اسحب الملف وأفلته هنا</h4>
-          <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 0 0 10px 0;">يدعم ملفات: Microsoft Excel (.xlsx, .xls) والملفات المجدولة (.csv)</p>
-          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,255,255,0.05); border-radius: 20px; font-size: 0.78rem; color: var(--gold-light);">
-            <span>📁 اختيار ملف من الجهاز</span>
-          </div>
-        </div>
-
-        <!-- شريط الملف المحدد والورقة النشطة -->
-        <div id="boqFileInfoBar" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-weight: 700; color: #fff;" id="boqSelectedFileName">-</span>
-            <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8;" id="boqSelectedFileSize">-</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <label style="font-size: 0.8rem; color: var(--text-secondary); margin: 0;">ورقة العمل (Sheet):</label>
-            <select id="boqSheetSelect" class="form-control form-control-sm" style="width: auto; min-width: 140px;" onchange="ProjectHub.onBoqSheetChange()"></select>
-          </div>
-        </div>
-
-        <!-- خيارات ومعايير الاستيراد -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: var(--radius-sm);">
-          <div>
-            <label style="font-size: 0.82rem; font-weight: 700; color: #fff; margin-bottom: 6px; display: block;">وضع الاستيراد (Import Mode):</label>
-            <div style="display: flex; gap: 14px; font-size: 0.82rem;">
-              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                <input type="radio" name="boqImportMode" value="merge" checked>
-                <span><strong>دمج وتحديث</strong> (تحديث البند إذا وُجد رقم البند وإضافة الجديد)</span>
-              </label>
-              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--accent-red);">
-                <input type="radio" name="boqImportMode" value="replace">
-                <span><strong>استبدال كامل</strong> (حذف الجدول الحالي وإحلال الجديد)</span>
-              </label>
-            </div>
-          </div>
-          <div>
-            <label style="font-size: 0.82rem; font-weight: 700; color: #fff; margin-bottom: 6px; display: block;">قيمة العقد الإجمالية:</label>
-            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; cursor: pointer;">
-              <input type="checkbox" id="boqUpdateContractValueCheck" checked>
-              <span>تحديث القيمة الإجمالية للمشروع والعقد تلقائياً بمجموع جدول الكميات الجديد</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- ملخص إحصائيات ما بعد الفحص (Preview Stats) -->
-        <div id="boqPreviewStatsBar" style="display: none; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
-          <div style="background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
-            <span style="font-size: 0.72rem; color: var(--text-secondary); display: block;">عدد البنود الجاهزة للاستيراد</span>
-            <strong id="boqPreviewRowCount" style="font-size: 1.15rem; color: #38bdf8;">0 بند</strong>
-          </div>
-          <div style="background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
-            <span style="font-size: 0.72rem; color: var(--text-secondary); display: block;">إجمالي قيمة البنود التقديرية</span>
-            <strong id="boqPreviewTotalVal" style="font-size: 1.15rem; color: var(--gold-light);">0 <small>ر.ي</small></strong>
-          </div>
-          <div style="background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
-            <span style="font-size: 0.72rem; color: var(--text-secondary); display: block;">حالة الفحص والمطابقة</span>
-            <strong id="boqPreviewStatus" style="font-size: 0.95rem; color: var(--accent-green);">جاهز للاستيراد ✅</strong>
-          </div>
-        </div>
-
-        <!-- جدول المعاينة المباشرة للبيانات المستخرجة من الإكسيل -->
-        <div id="boqPreviewContainer" style="display: none; max-height: 260px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm); margin-bottom: 14px;">
-          <table class="custom-table" style="font-size: 0.78rem;">
-            <thead style="position: sticky; top: 0; background: var(--bg-surface); z-index: 2;">
-              <tr>
-                <th style="width: 50px;">#</th>
-                <th style="width: 80px;">رقم البند</th>
-                <th>بيان الأعمال والمواصفات</th>
-                <th>التصنيف (WBS)</th>
-                <th style="width: 60px;">الوحدة</th>
-                <th>الكمية</th>
-                <th>فئة السعر</th>
-                <th>الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody id="boqPreviewTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-        <button type="button" class="btn btn-outline-primary btn-sm" onclick="ProjectHub.downloadBoqSampleTemplate()">
-          <span>📑 تحميل قالب Excel النموذجي</span>
-        </button>
-        <div style="display: flex; gap: 8px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('boqExcelImportModal')">إلغاء</button>
-          <button type="button" id="boqExecuteImportBtn" class="btn btn-primary" disabled onclick="ProjectHub.executeBoqImport()">
-            <span>🚀 بدء الاستيراد والترحيل لقاعدة البيانات</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 3.2 نافذة التحديث السريع لكمية الإنجاز المنفذة بالموقع -->
-  <div class="modal-overlay" id="boqQuickProgressModal">
-    <div class="modal-box" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3>⚡ تحديث كمية الإنجاز الميداني للبند</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('boqQuickProgressModal')">&times;</button>
-      </div>
-      <form id="boqQuickProgressForm" onsubmit="ProjectHub.submitQuickProgress(event)">
-        <input type="hidden" id="quickBoqItemId">
-        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-            <strong style="color: var(--gold-light);" id="quickBoqItemNo">-</strong>
-            <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8;" id="quickBoqItemUnit">-</span>
-          </div>
-          <div style="font-size: 0.85rem; color: #fff; line-height: 1.5;" id="quickBoqItemDesc">-</div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-          <div class="form-group">
-            <label>الكمية التعاقدية المعتمدة</label>
-            <input type="text" id="quickBoqContractQty" class="form-control" readonly style="background: rgba(0,0,0,0.25); color: var(--text-secondary); font-weight: 700;">
-          </div>
-          <div class="form-group">
-            <label>فئة السعر التعاقدي</label>
-            <input type="text" id="quickBoqUnitRate" class="form-control" readonly style="background: rgba(0,0,0,0.25); color: var(--text-secondary); font-weight: 700;">
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label style="font-weight: 700; color: var(--gold-light);">إجمالي الكمية المنفذة فعلياً حتى اليوم <span style="color: var(--accent-red);">*</span></label>
-          <input type="number" id="quickBoqExecutedQty" class="form-control" step="0.01" required min="0" oninput="ProjectHub.onQuickProgressQtyChange()">
-        </div>
-
-        <div id="quickBoqOverbillingNotice" style="display: none; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px; font-size: 0.8rem; color: #fca5a5;">
-          ⚠️ <strong>تنبيه:</strong> الكمية المدخلة تتجاوز الكمية التعاقدية المعتمدة! سيتم تمييز البند كـ تجاوز كمية مع إمكانية إصدار أمر تغيير (Variation Order).
-        </div>
-
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">حفظ وتحديث الإنجاز ⚡</button>
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('boqQuickProgressModal')">إلغاء</button>
         </div>
       </form>
     </div>
@@ -7459,43 +6126,13 @@
 
   <!-- 9. نافذة إصدار مستخلص جديد IPC -->
   <div class="modal-overlay" id="newIpcModal">
-    <div class="modal-box" style="max-width: 980px;">
+    <div class="modal-box" style="max-width: 720px;">
       <div class="modal-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 1.4rem;">📑</span>
-          <div>
-            <h3 style="margin: 0;">إصدار شهادة ومستخلص جاري (Interim Payment Certificate - IPC)</h3>
-            <span style="font-size: 0.76rem; color: var(--text-secondary);">وفق معايير فيديك (FIDIC) مع الربط التلقائي بجدول الكميات BOQ والاستقطاعات المعتمدة</span>
-          </div>
-        </div>
+        <h3>📑 إصدار شهادة ومستخلص جاري (Interim Payment Certificate - IPC)</h3>
         <button class="modal-close-btn" onclick="App.closeModal('newIpcModal')">&times;</button>
       </div>
-
-      <!-- تبديل الوضع: ربط تفصيلي بجدول الكميات أو إدخال إجمالي -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); flex-wrap: wrap; gap: 8px;">
-        <div style="display: flex; gap: 12px; font-size: 0.84rem;">
-          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-            <input type="radio" name="ipcMode" value="boq" checked onchange="ProjectHub.toggleIpcMode()">
-            <span style="color: var(--gold-light); font-weight: 700;">📊 مستخلص تفصيلي مربوط ببنود جدول الكميات BOQ</span>
-          </label>
-          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-            <input type="radio" name="ipcMode" value="manual" onchange="ProjectHub.toggleIpcMode()">
-            <span>⚡ مستخلص إجمالي يدوي وسريع</span>
-          </label>
-        </div>
-        <div id="ipcBoqActionBtns" style="display: flex; gap: 6px;">
-          <button type="button" class="btn btn-outline-primary btn-sm" onclick="ProjectHub.fillIpcWithSiteProgress()" title="سحب جميع الكميات المنفذة في الموقع وتفريغها تلقائياً بالمستخلص">
-            <span>⚡ تعبئة بإنجاز الموقع الفعلي</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.resetIpcItemQuantities()">
-            <span>تصفير الكميات</span>
-          </button>
-        </div>
-      </div>
-
       <form id="ipcModalForm" onsubmit="ProjectHub.submitInvoiceForm(event)">
-        <!-- بيانات المستخلص الأساسية -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
           <div class="form-group">
             <label>رقم المستخلص <span style="color: var(--accent-red);">*</span></label>
             <input type="text" id="ipcModalNo" class="form-control" required placeholder="IPC-01">
@@ -7509,92 +6146,45 @@
             </select>
           </div>
           <div class="form-group">
-            <label>تاريخ الإصدار والتقديم <span style="color: var(--accent-red);">*</span></label>
+            <label>تاريخ الإصدار <span style="color: var(--accent-red);">*</span></label>
             <input type="date" id="ipcModalDate" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label>حالة الاعتماد</label>
-            <select id="ipcModalStatus" class="form-control">
-              <option value="معتمد">معتمد وجاهز للصرف</option>
-              <option value="مسودة">مسودة قيد المراجعة</option>
-              <option value="مقدم للاستشاري">مقدم للاستشاري للفحص</option>
-              <option value="مدفوع">مدفوع ومصروف</option>
-            </select>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div class="form-group">
-            <label>عن فترة العمل المنفذ من:</label>
+            <label>عن فترة العمل من</label>
             <input type="date" id="ipcModalFromDate" class="form-control">
           </div>
           <div class="form-group">
-            <label>إلى تاريخ:</label>
+            <label>إلى تاريخ</label>
             <input type="date" id="ipcModalToDate" class="form-control">
           </div>
         </div>
 
-        <!-- جدول تفريغ بنود الكميات BOQ التفصيلي -->
-        <div id="ipcBoqItemsSection" style="margin-bottom: 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label style="font-weight: 700; color: #fff; margin: 0;">كشف حصر وتفريغ كميات بنود جدول الكميات للمستخلص:</label>
-            <span style="font-size: 0.74rem; color: var(--text-secondary);" id="ipcBoqItemsSummaryText">0 بند متاح</span>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>إجمالي الأعمال التراكمية <span style="color: var(--accent-red);">*</span></label>
+            <input type="number" id="ipcModalCumWork" class="form-control" required placeholder="500000" oninput="ProjectHub.calcIpcNet()">
           </div>
-          <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
-            <table class="custom-table" style="font-size: 0.76rem;" id="ipcBoqItemsTable">
-              <thead style="position: sticky; top: 0; background: var(--bg-surface); z-index: 2;">
-                <tr>
-                  <th style="width: 70px;">رقم البند</th>
-                  <th>بيان الأعمال والمواصفات</th>
-                  <th style="width: 50px;">الوحدة</th>
-                  <th style="width: 75px;">كمية العقد</th>
-                  <th style="width: 75px;">سابق</th>
-                  <th style="width: 95px; background: rgba(212,175,55,0.15); color: var(--gold-light);">حالي (المنفذ)</th>
-                  <th style="width: 75px;">تراكمي</th>
-                  <th style="width: 80px;">فئة السعر</th>
-                  <th style="width: 95px;">قيمة حالي</th>
-                  <th style="width: 60px;">إنجاز</th>
-                </tr>
-              </thead>
-              <tbody id="ipcBoqItemsTableBody"></tbody>
-            </table>
+          <div class="form-group">
+            <label>المستخلصات السابقة المعتمدة</label>
+            <input type="number" id="ipcModalPrevBills" class="form-control" value="0" oninput="ProjectHub.calcIpcNet()">
+          </div>
+          <div class="form-group">
+            <label>قيمة الأعمال الجارية الحالية <span style="color: var(--accent-red);">*</span></label>
+            <input type="number" id="ipcModalGross" class="form-control" required placeholder="500000">
           </div>
         </div>
 
-        <!-- الحسابات المالية التراكمية والاستقطاعات -->
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
           <div class="form-group">
-            <label>إجمالي الأعمال التراكمية (السابق + الحالي)</label>
-            <input type="number" id="ipcModalCumWork" class="form-control" required style="font-weight: 700;" oninput="ProjectHub.calcIpcNet()">
+            <label>استقطاع دفعة مقدمة (10%)</label>
+            <input type="number" id="ipcModalAdvDed" class="form-control" value="0" oninput="ProjectHub.calcIpcNet()">
           </div>
           <div class="form-group">
-            <label>يُخصم: المستخلصات السابقة المعتمدة</label>
-            <input type="number" id="ipcModalPrevBills" class="form-control" value="0" readonly style="background: rgba(0,0,0,0.25); color: var(--text-secondary);" oninput="ProjectHub.calcIpcNet()">
-          </div>
-          <div class="form-group">
-            <label style="color: var(--gold-light); font-weight: 700;">قيمة الأعمال الجارية الحالية (Gross Work)</label>
-            <input type="number" id="ipcModalGross" class="form-control" required style="font-weight: 800; font-size: 1.05rem; color: var(--gold-light);" oninput="ProjectHub.calcIpcNet()">
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-              <label>استقطاع دفعة مقدمة</label>
-              <div style="display: flex; align-items: center; gap: 4px; font-size: 0.74rem;">
-                <input type="number" id="ipcModalAdvPct" value="10" min="0" max="100" style="width: 40px; text-align: center; border-radius: 3px;" oninput="ProjectHub.calcIpcNet()"> %
-              </div>
-            </div>
-            <input type="number" id="ipcModalAdvDed" class="form-control" value="0" oninput="ProjectHub.calcIpcNet(true)">
-          </div>
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-              <label>استقطاع ضمان أعمال (Retention)</label>
-              <div style="display: flex; align-items: center; gap: 4px; font-size: 0.74rem;">
-                <input type="number" id="ipcModalRetPct" value="10" min="0" max="100" style="width: 40px; text-align: center; border-radius: 3px;" oninput="ProjectHub.calcIpcNet()"> %
-              </div>
-            </div>
-            <input type="number" id="ipcModalRetDed" class="form-control" value="0" oninput="ProjectHub.calcIpcNet(true)">
+            <label>استقطاع ضمان أعمال (10%)</label>
+            <input type="number" id="ipcModalRetDed" class="form-control" value="0" oninput="ProjectHub.calcIpcNet()">
           </div>
           <div class="form-group">
             <label>استقطاعات وغرامات أخرى</label>
@@ -7602,27 +6192,24 @@
           </div>
         </div>
 
-        <!-- بطاقة صافي المستحق للصرف والتفقيط -->
-        <div style="background: linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(14,28,50,0.6) 100%); border: 1px solid rgba(34,197,94,0.3); border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div>
-              <span style="font-size: 0.78rem; color: var(--text-secondary);">صافي المبلغ المعتمد والمستحق للصرف للمقاول (Net Payable):</span>
-              <div style="display: flex; align-items: baseline; gap: 6px;">
-                <strong id="ipcModalNetDisplay" style="font-size: 1.45rem; color: var(--accent-green);">0</strong>
-                <span style="color: var(--accent-green);" id="ipcModalCurrency">-</span>
-              </div>
-            </div>
-            <div style="flex: 1; max-width: 450px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: var(--radius-sm);">
-              <span style="font-size: 0.7rem; color: var(--gold-light); display: block;">التفقيط المالي الرسمي (كتابةً):</span>
-              <span id="ipcModalTafqeetDisplay" style="font-size: 0.82rem; font-weight: 700; color: #fff; line-height: 1.4;">فقط صفر ريال لا غير</span>
-            </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>صافي المبلغ المستحق للصرف <span style="color: var(--accent-red);">*</span></label>
+            <input type="number" id="ipcModalNet" class="form-control" required style="font-weight: 800; font-size: 1.1rem; color: var(--accent-green);">
           </div>
-          <input type="hidden" id="ipcModalNet">
+          <div class="form-group">
+            <label>حالة الاعتماد</label>
+            <select id="ipcModalStatus" class="form-control">
+              <option value="معتمد">معتمد وجاهز للصرف</option>
+              <option value="مسودة">مسودة قيد المراجعة</option>
+              <option value="مدفوع">مدفوع ومصروف</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-group">
-          <label>ملاحظات واعتماد الاستشاري المشرف</label>
-          <input type="text" id="ipcModalNotes" class="form-control" placeholder="معتمد من المهندس المشرف ومطابق للمواصفات ونسب الإنجاز الميدانية...">
+          <label>ملاحظات واعتماد الاستشاري</label>
+          <input type="text" id="ipcModalNotes" class="form-control" placeholder="معتمد من المهندس المشرف ومطابق لنسب الإنجاز...">
         </div>
 
         <div class="modal-footer">
@@ -7630,38 +6217,6 @@
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('newIpcModal')">إلغاء</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- 9.1 نافذة استعراض وتفاصيل المستخلص الرسمي (IPC Details & Print Preview) -->
-  <div class="modal-overlay" id="ipcDetailsModal">
-    <div class="modal-box" style="max-width: 950px;">
-      <div class="modal-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 1.4rem;">📑</span>
-          <div>
-            <h3 style="margin: 0;" id="ipcDetailsModalTitle">شهادة المستخلص الجاري المعتمد</h3>
-            <span style="font-size: 0.76rem; color: var(--text-secondary);" id="ipcDetailsModalSubtitle">-</span>
-          </div>
-        </div>
-        <button class="modal-close-btn" onclick="App.closeModal('ipcDetailsModal')">&times;</button>
-      </div>
-
-      <div style="padding: 10px 0;">
-        <div id="ipcDetailsContent"></div>
-      </div>
-
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; gap: 8px;">
-          <button type="button" class="btn btn-primary btn-sm" id="ipcDetailsPrintBtn" onclick="ProjectHub.printOfficialIPC(this.dataset.id)">
-            <span>🖨️ طباعة الشهادة الرسمية وتوليد PDF</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" id="ipcDetailsExcelBtn" onclick="ProjectHub.exportIpcToExcel(this.dataset.id)">
-            <span>📊 تصدير إلى Excel (.xlsx)</span>
-          </button>
-        </div>
-        <button type="button" class="btn btn-secondary" onclick="App.closeModal('ipcDetailsModal')">إغلاق</button>
-      </div>
     </div>
   </div>
 
@@ -8162,412 +6717,6 @@
     </div>
   </div>
 
-  <!-- ================== نوافذ التحكم والرقابة المتقدمة على المشاريع ================== -->
-
-  <!-- 1. نافذة تعديل نسبة الإنجاز يدوياً مع اشتراط المسوّغ الهندسي المعتمد -->
-  <div class="modal-overlay" id="manualCompletionModal">
-    <div class="modal-box" style="max-width: 580px;">
-      <div class="modal-header">
-        <h3>🎯 تعديل نسبة الإنجاز مع التدقيق الرقابي</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('manualCompletionModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitManualOverride(event)">
-        <div style="background: rgba(245, 158, 11, 0.1); border-right: 4px solid var(--accent-amber); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 0.85rem;">
-          ⚠️ <b>نظام منع التلاعب:</b> النسبة المسجلة حالياً: <b id="manualOverrideCurrentVal" style="color:var(--gold-light);">0%</b> | النسبة المحسوبة فيزيائياً: <b id="manualOverrideRecommendedVal" style="color:#10b981;">0%</b>.
-          يُحظر حفظ نسب إنجاز تبتعد بأكثر من 15% عن الواقع الفيزيائي بدون تقديم مسوّغ هندسي موثق.
-        </div>
-        <div class="form-group">
-          <label>نسبة الإنجاز المطلوبة (%) <span style="color: var(--accent-red);">*</span></label>
-          <input type="number" id="manualOverrideInput" class="form-control" min="0" max="100" step="0.5" required placeholder="مثال: 45">
-        </div>
-        <div class="form-group">
-          <label>المسوّغ الهندسي الميداني والمستندات الداعمة <span style="color: var(--accent-red);">*</span></label>
-          <textarea id="manualOverrideJustification" class="form-control" rows="4" required placeholder="اكتب مبررات التعديل الميداني، رقم محضر الاستلام أو المستخلص قيد الاعتماد... (15 حرفاً على الأقل)"></textarea>
-          <small style="color: var(--text-muted);">سيتم تسجيل هذا التعديل وتوقيع المستخدم في سجل التدقيق الرقابي غير القابل للتعديل.</small>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('manualCompletionModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #d97706, #f59e0b);">توثيق وتعديل النسبة</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 2. نافذة تسجيل شهادة اعتماد استشاري / مهندس -->
-  <div class="modal-overlay" id="engineerCertModal">
-    <div class="modal-box" style="max-width: 620px;">
-      <div class="modal-header">
-        <h3>👨‍💼 تسجيل شهادة معاينة واعتماد استشاري / مهندس</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('engineerCertModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitEngineerCert(event)">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>نسبة الإنجاز المعتمدة (%) <span style="color: var(--accent-red);">*</span></label>
-            <input type="number" id="engCertPct" class="form-control" min="0" max="100" step="0.5" required placeholder="مثال: 55">
-          </div>
-          <div class="form-group">
-            <label>تاريخ المعاينة الميدانية <span style="color: var(--accent-red);">*</span></label>
-            <input type="date" id="engCertDate" class="form-control" required>
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>اسم المهندس / الاستشاري <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="engCertName" class="form-control" required placeholder="م. محمد علي">
-          </div>
-          <div class="form-group">
-            <label>الصفة والجهة المشرفة</label>
-            <input type="text" id="engCertRole" class="form-control" placeholder="استشاري المالك / مكتب دار الهندسة">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>ملاحظات وتوصيات الاستشاري</label>
-          <textarea id="engCertNotes" class="form-control" rows="3" placeholder="ملاحظات فحص الأعمال، العينات، ومطابقة المواصفات..."></textarea>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('engineerCertModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary">حفظ واعتماد الشهادة</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 3. نافذة إضافة نشاط / حزمة عمل WBS -->
-  <div class="modal-overlay" id="wbsActivityModal">
-    <div class="modal-box" style="max-width: 680px;">
-      <div class="modal-header">
-        <h3>🏗️ إضافة نشاط / حزمة عمل WBS للبرنامج الزمني</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('wbsActivityModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitWbsActivity(event)">
-        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
-          <div class="form-group">
-            <label>رمز WBS <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="wbsModalCode" class="form-control" required placeholder="مثال: 1.1 أو 2.3.1">
-          </div>
-          <div class="form-group">
-            <label>مسمى النشاط أو حزمة العمل <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="wbsModalName" class="form-control" required placeholder="أعمال القواعد الخرسانية المسلحة">
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>تاريخ البداية المخططة</label>
-            <input type="date" id="wbsModalStart" class="form-control">
-          </div>
-          <div class="form-group">
-            <label>تاريخ النهاية المخططة</label>
-            <input type="date" id="wbsModalEnd" class="form-control">
-          </div>
-          <div class="form-group">
-            <label>المدة (أيام) <span style="color: var(--accent-red);">*</span></label>
-            <input type="number" id="wbsModalDuration" class="form-control" min="1" value="10" required>
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>الاعتماديات والأنشطة المسبقة (Predecessors)</label>
-            <input type="text" id="wbsModalPredecessors" class="form-control" placeholder="مثال: 1.1 FS, 1.2 SS">
-            <small style="color: var(--text-muted);">أدخل رمز النشاط السابق لاعتماده بالمسار الحرج CPM</small>
-          </div>
-          <div class="form-group">
-            <label>نسبة إنجاز النشاط الحالية (%)</label>
-            <input type="number" id="wbsModalProgress" class="form-control" min="0" max="100" value="0">
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>الموارد والعمالة المقدرة (Resources)</label>
-            <input type="text" id="wbsModalResources" class="form-control" placeholder="طاقم نجارة، مضخة خرسانة، مهندس موقع">
-          </div>
-          <div class="form-group">
-            <label>التكلفة التقديرية للنشاط</label>
-            <input type="number" id="wbsModalCost" class="form-control" placeholder="0">
-          </div>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('wbsActivityModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #4f46e5, #6366f1);">حفظ النشاط بالجدول</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 4. نافذة حفظ خط الأساس التعاقدي للجدول الزمني -->
-  <div class="modal-overlay" id="saveBaselineModal">
-    <div class="modal-box" style="max-width: 500px;">
-      <div class="modal-header">
-        <h3>📌 حفظ لقطة خط الأساس (Schedule Baseline)</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('saveBaselineModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitSaveBaseline(event)">
-        <div class="form-group">
-          <label>مسمى خط الأساس التعاقدي <span style="color: var(--accent-red);">*</span></label>
-          <input type="text" id="baselineModalName" class="form-control" required value="خط الأساس المعتمد Baseline-1">
-        </div>
-        <div class="form-group">
-          <label>ملاحظات وسند التثبيت</label>
-          <textarea id="baselineModalNotes" class="form-control" rows="3" placeholder="موافقة الاستشاري على البرنامج الزمني الأولي"></textarea>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('saveBaselineModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary">تثبيت وحفظ خط الأساس</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 5. نافذة تسجيل خطر جديد في مصفوفة 5x5 -->
-  <div class="modal-overlay" id="riskModal">
-    <div class="modal-box" style="max-width: 680px;">
-      <div class="modal-header">
-        <h3>⚠️ تسجيل خطر جديد في سجل ومصفوفة المخاطر</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('riskModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitRiskForm(event)">
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>عنوان الخطر <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="riskModalTitle" class="form-control" required placeholder="مثال: تأخر توريد حديد التسليح المستورد">
-          </div>
-          <div class="form-group">
-            <label>تصنيف الخطر</label>
-            <select id="riskModalCategory" class="form-control">
-              <option value="technical">فني وهندسي</option>
-              <option value="financial">مالي وتدفقات نقدية</option>
-              <option value="contractual">تعاقدي وقانوني</option>
-              <option value="supply_chain">سلسلة التوريد والمواد</option>
-              <option value="environmental">بيئي وموقعي</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>وصف الخطر ومسبباته المحتملة</label>
-          <textarea id="riskModalDesc" class="form-control" rows="2" placeholder="شرح تفصيلي للظروف التي قد تؤدي لحدوث هذا الخطر..."></textarea>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>الاحتمالية (1 إلى 5) <span style="color: var(--accent-red);">*</span></label>
-            <select id="riskModalProbability" class="form-control">
-              <option value="1">1 - نادر جداً (Rare)</option>
-              <option value="2">2 - منخفض (Unlikely)</option>
-              <option value="3" selected>3 - متوسط (Possible)</option>
-              <option value="4">4 - مرجح (Likely)</option>
-              <option value="5">5 - شبه مؤكد (Almost Certain)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>شدة التأثير (1 إلى 5) <span style="color: var(--accent-red);">*</span></label>
-            <select id="riskModalImpact" class="form-control">
-              <option value="1">1 - ضئيل (Insignificant)</option>
-              <option value="2">2 - محدود (Minor)</option>
-              <option value="3" selected>3 - متوسط (Moderate)</option>
-              <option value="4">4 - جسيم (Major)</option>
-              <option value="5">5 - كارثي (Catastrophic)</option>
-            </select>
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>الأثر المالي المتوقع (ر.ي)</label>
-            <input type="number" id="riskModalFinancial" class="form-control" placeholder="0">
-          </div>
-          <div class="form-group">
-            <label>التأثير الزمني المتوقع (أيام تأخير)</label>
-            <input type="number" id="riskModalSchedule" class="form-control" placeholder="0">
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
-          <div class="form-group">
-            <label>استراتيجية المعالجة</label>
-            <select id="riskModalTreatment" class="form-control">
-              <option value="mitigate" selected>تخفيف (Mitigate)</option>
-              <option value="avoid">تجنب (Avoid)</option>
-              <option value="transfer">نقل / تأمين (Transfer)</option>
-              <option value="accept">قبول ومراقبة (Accept)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>خطة المعالجة والإجراءات الوقائية</label>
-            <input type="text" id="riskModalPlan" class="form-control" placeholder="تأمين موردين بدائل محلياً، الدفع المبكر...">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>تاريخ المراجعة الدوري</label>
-          <input type="date" id="riskModalReviewDate" class="form-control">
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('riskModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #b91c1c, #ef4444);">تسجيل الخطر بالمصفوفة</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 6. نافذة تسجيل مطالبة تعاقدية / نزاع / تمديد وقت -->
-  <div class="modal-overlay" id="claimModal">
-    <div class="modal-box" style="max-width: 680px;">
-      <div class="modal-header">
-        <h3>📑 تسجيل مطالبة تعاقدية / تمديد وقت (Claim & Dispute)</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('claimModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitClaimForm(event)">
-        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
-          <div class="form-group">
-            <label>نوع المطالبة <span style="color: var(--accent-red);">*</span></label>
-            <select id="claimModalType" class="form-control">
-              <option value="extension_of_time">تمديد زمني (EOT)</option>
-              <option value="additional_cost">تكاليف إضافية (Cost)</option>
-              <option value="contractual_dispute">نزاع تعاقدي (Dispute)</option>
-              <option value="site_delay">توقف / عائق موقعي (Delay)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>موضوع وعنوان المطالبة <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="claimModalTitle" class="form-control" required placeholder="مطالبة تمديد زمني لتأخر تسليم المخططات التنفيذية">
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>التمديد الزمني المطلوب (أيام)</label>
-            <input type="number" id="claimModalDays" class="form-control" min="0" placeholder="0">
-          </div>
-          <div class="form-group">
-            <label>المبلغ المالي المطالب به</label>
-            <input type="number" id="claimModalAmount" class="form-control" min="0" placeholder="0">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>السند التعاقدي / القانوني (وفق شروط العقد)</label>
-          <input type="text" id="claimModalRef" class="form-control" placeholder="المادة (44) من الشروط العامة لعقد المقاولات الموحد">
-        </div>
-        <div class="form-group">
-          <label>المسوغات والوقائع الميدانية والأدلة</label>
-          <textarea id="claimModalJustification" class="form-control" rows="4" placeholder="شرح تفاصيل سبب التأخير أو التكلفة والمراسلات المتبادلة مع الاستشاري..."></textarea>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('claimModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary">توثيق وحفظ المطالبة</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 7. نافذة تقرير عدم المطابقة الفنية NCR -->
-  <div class="modal-overlay" id="ncrModal">
-    <div class="modal-box" style="max-width: 620px;">
-      <div class="modal-header">
-        <h3>🛠️ إصدار تقرير عدم مطابقة فنية (NCR Report)</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('ncrModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitNCRForm(event)">
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>العيب الفني / المخالفة <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="ncrModalTitle" class="form-control" required placeholder="تعشيش في خرسانة الأعمدة / حديد غير مطابق">
-          </div>
-          <div class="form-group">
-            <label>درجة الخطورة</label>
-            <select id="ncrModalSeverity" class="form-control">
-              <option value="minor">بسيط (Minor)</option>
-              <option value="moderate" selected>متوسط (Moderate)</option>
-              <option value="critical">حرج / جسيم (Critical)</option>
-            </select>
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>الموقع والبند المعني</label>
-            <input type="text" id="ncrModalLocation" class="form-control" placeholder="الدور الأول - محور (C-4)">
-          </div>
-          <div class="form-group">
-            <label>تاريخ الفحص والملاحظة</label>
-            <input type="date" id="ncrModalDate" class="form-control">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>وصف العيب الفني بالتفصيل <span style="color: var(--accent-red);">*</span></label>
-          <textarea id="ncrModalDesc" class="form-control" rows="3" required placeholder="وصف كامل لحالة عدم المطابقة والمواصفة الفنية المخالفة..."></textarea>
-        </div>
-        <div class="form-group">
-          <label>الإجراء التصحيحي المطلوب تنفيذه</label>
-          <textarea id="ncrModalAction" class="form-control" rows="2" placeholder="معالجة التعشيش بمونة إيبوكسية غير قابلة للانكماش وإعادة الفحص..."></textarea>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('ncrModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #b91c1c, #ef4444);">إصدار تقرير NCR</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 8. نافذة طلب معلومات فنية RFI -->
-  <div class="modal-overlay" id="rfiModal">
-    <div class="modal-box" style="max-width: 620px;">
-      <div class="modal-header">
-        <h3>❓ إرسال طلب استفسار ومعلومات فنية (RFI)</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('rfiModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitRFIForm(event)">
-        <div class="form-group">
-          <label>موضوع الاستفسار الفني <span style="color: var(--accent-red);">*</span></label>
-          <input type="text" id="rfiModalSubject" class="form-control" required placeholder="استفسار بشأن تفاصيل تسليح الفتحات بالمخطط الإنشائي S-104">
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>الجهة الموجه إليها</label>
-            <input type="text" id="rfiModalTo" class="form-control" value="استشاري المالك">
-          </div>
-          <div class="form-group">
-            <label>درجة الاستعجال</label>
-            <select id="rfiModalUrgency" class="form-control">
-              <option value="normal">عادي</option>
-              <option value="urgent">عاجل</option>
-              <option value="critical">حرج (يوقف العمل)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>الموعد الأقصى للرد</label>
-            <input type="date" id="rfiModalDueDate" class="form-control">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>نص وتفاصيل الاستفسار الفني <span style="color: var(--accent-red);">*</span></label>
-          <textarea id="rfiModalQuestion" class="form-control" rows="4" required placeholder="اكتب السؤال الفني والمقترحات والرسومات المرجعية المطلوب اعتمادها..."></textarea>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('rfiModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #0284c7, #38bdf8);">إرسال وتوثيق RFI</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 9. نافذة تسجيل رد الاستشاري على طلب RFI -->
-  <div class="modal-overlay" id="rfiReplyModal">
-    <div class="modal-box" style="max-width: 540px;">
-      <div class="modal-header">
-        <h3>📝 تسجيل اعتماد رد الاستشاري على RFI</h3>
-        <button class="modal-close-btn" onclick="App.closeModal('rfiReplyModal')">&times;</button>
-      </div>
-      <form onsubmit="ProjectControlUI.submitRFIReply(event)">
-        <input type="hidden" id="rfiReplyId">
-        <div style="background: rgba(56, 189, 248, 0.1); border-right: 4px solid var(--accent-blue); padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 0.85rem;">
-          الموضوع: <strong id="rfiReplySubject" style="color: #fff;">-</strong>
-        </div>
-        <div class="form-group">
-          <label>الرد الرسمي والاعتماد الهندسي <span style="color: var(--accent-red);">*</span></label>
-          <textarea id="rfiReplyText" class="form-control" rows="5" required placeholder="اكتب نص الرد الرسمي المعتمد من الاستشاري أو المالك..."></textarea>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" onclick="App.closeModal('rfiReplyModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #059669, #10b981);">اعتماد وإغلاق الاستفسار</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <!-- حاوية الطباعة الخاصة بالسندات الرسمية -->
   <div id="printArea" class="print-area" style="display: none;"></div>
 
@@ -8619,27 +6768,16 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/auth.js?v=1.0.0.20261003-47mq"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20260922-bhmo"></script>
+  <script src="js/auth.js?v=1.0.0.20260922-bhmo"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/projects.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/accounting.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/inventory.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/hr.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/settings.js?v=1.0.0.20261003-47mq"></script>
-  <script src="js/app.js?v=1.0.0.20261003-47mq"></script>
+  <script src="js/app.js?v=1.0.0.20260922-bhmo"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261003-47mq')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20260922-bhmo')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً
@@ -8701,22 +6839,6 @@
       <div style="margin-bottom: 14px; background: rgba(255,255,255,0.03); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border-color);">
         <div>الفترة المستهدفة: <strong id="closePeriodNameLabel" style="color: #fff;">-</strong></div>
         <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;" id="closePeriodRangeLabel">-</div>
-      </div>
-
-      <!-- فحص وترحيل السندات والقيود المعلقة قبل الإقفال -->
-      <div id="closePeriodUnpostedContainer" style="margin-bottom: 14px; background: rgba(56, 189, 248, 0.06); border: 1px dashed #38bdf8; border-radius: 8px; padding: 12px 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <strong style="color: #38bdf8; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
-            <span>📋 السندات والقيود غير المرحلة لهذه الفترة:</span>
-          </strong>
-          <span id="closePeriodUnpostedBadge" class="badge" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 0.82rem;">جاري الفحص...</span>
-        </div>
-        <div id="closePeriodUnpostedDetails" style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 8px;">
-          فحص القيود وسندات الصرف والقبض غير المعتمدة أو غير المرحلة...
-        </div>
-        <button type="button" id="btnPostAllInPeriod" class="btn btn-primary btn-sm" style="width: 100%; display: none; background: linear-gradient(135deg, #0284c7, #0369a1); border: none; font-weight: 700; padding: 8px 12px;" onclick="Accounting.postAllUnpostedInCurrentPeriod()">
-          ⚡ ترحيل كافة السندات والقيود المعلقة لهذه الفترة دفعة واحدة
-        </button>
       </div>
 
       <form id="formClosePeriod" onsubmit="Accounting.submitClosePeriod(event)">
@@ -8841,131 +6963,6 @@
     </div>
   </div>
 </div>
-
-<!-- ================== نافذة مصفوفة الفصل المالي للمقاولات IFRS 15 ================== -->
-<div class="modal-backdrop" id="contractingSeparationModal" style="display: none; z-index: 1050;">
-  <div class="modal-dialog modal-xl" style="max-width: 95vw; width: 1300px;">
-    <div class="modal-header">
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 1.5rem;">🏗️</span>
-        <div>
-          <h3 style="color: var(--gold-light); margin: 0; font-size: 1.2rem;">مصفوفة الفصل المالي الشاملة لقطاع المقاولات (IFRS 15 / POC)</h3>
-          <span style="font-size: 0.8rem; color: var(--text-secondary);">فصل معتمد: المقبوضات النقدية vs الإيرادات vs المستخلصات vs الدفعات المقدمة vs محتجز الضمان vs الأعمال تحت التنفيذ</span>
-        </div>
-      </div>
-      <button type="button" class="btn-close" onclick="App.closeModal('contractingSeparationModal')">&times;</button>
-    </div>
-    <div class="modal-body" style="padding: 20px;">
-      <!-- ملخص إحصائي سريع للمصفوفة -->
-      <div id="contractingMatrixSummaryCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px;">
-        <!-- يتم ملؤها ديناميكياً -->
-      </div>
-
-      <!-- جدول تفاصيل المشاريع -->
-      <div class="table-responsive" style="max-height: 520px; overflow-y: auto;">
-        <table class="custom-table" style="font-size: 0.82rem; white-space: nowrap;">
-          <thead>
-            <tr>
-              <th>المشروع والعميل</th>
-              <th>قيمة العقد المنقحة</th>
-              <th>التكلفة الفعلية</th>
-              <th>نسبة الإنجاز POC</th>
-              <th>الإيراد المعترف به</th>
-              <th>المستخلصات المعتمدة</th>
-              <th>أعمال تحت التنفيذ WIP</th>
-              <th>المقبوضات النقدية</th>
-              <th>دفعة مقدمة غير مستهلكة</th>
-              <th>محتجز ضمان قائم</th>
-              <th>صافي الربح الحقيقي</th>
-              <th>صافي السيولة النقدية</th>
-              <th>إجراءات</th>
-            </tr>
-          </thead>
-          <tbody id="contractingMatrixTableBody">
-            <tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">جاري تحميل مصفوفة المقاولات...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="modal-footer" style="display: flex; justify-content: space-between;">
-      <span style="font-size: 0.8rem; color: #94a3b8;">* مطبق وفق المعيار الدولي IFRS 15 وطريقة التكلفة للتكلفة (Cost-to-Cost Method).</span>
-      <div style="display: flex; gap: 8px;">
-        <button type="button" class="btn btn-primary" onclick="Reports.openRevenueRecognitionModal()">+ إثبات إيراد دوري</button>
-        <button type="button" class="btn btn-secondary" onclick="App.closeModal('contractingSeparationModal')">إغلاق</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ================== نافذة إثبات الإيراد الدوري للمشروع POC ================== -->
-<div class="modal-backdrop" id="revenueRecognitionModal" style="display: none; z-index: 1060;">
-  <div class="modal-dialog modal-md" style="max-width: 600px; width: 95vw;">
-    <div class="modal-header">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 1.3rem;">📊</span>
-        <h3 style="color: var(--gold-light); margin: 0; font-size: 1.15rem;">إثبات إيراد تعاقدي دوري (IFRS 15 POC)</h3>
-      </div>
-      <button type="button" class="btn-close" onclick="App.closeModal('revenueRecognitionModal')">&times;</button>
-    </div>
-    <form id="revenueRecognitionForm" onsubmit="Reports.submitRevenueRecognition(event)">
-      <div class="modal-body" style="padding: 20px;">
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label class="form-label" style="font-weight: 600;">اختيار المشروع *</label>
-          <select id="revRecProjectId" class="form-control" required onchange="Reports.onRevenueProjectChanged(this.value)">
-            <option value="">-- اختر المشروع لتحديث المعايير ونسبة الإنجاز --</option>
-          </select>
-        </div>
-
-        <!-- بطاقة المعاينة الحسابية اللحظية -->
-        <div id="revRecPreviewCard" style="display: none; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.83rem;">
-            <div>
-              <span style="color: #94a3b8; display: block;">قيمة العقد المنقحة:</span>
-              <strong id="prevContractVal" style="color: #f8fafc;">0</strong>
-            </div>
-            <div>
-              <span style="color: #94a3b8; display: block;">التكلفة الفعلية المنفذة:</span>
-              <strong id="prevActualCost" style="color: #f8fafc;">0</strong>
-            </div>
-            <div>
-              <span style="color: #94a3b8; display: block;">نسبة الإنجاز المحاسبية (POC):</span>
-              <strong id="prevPocPct" style="color: #38bdf8;">0%</strong>
-            </div>
-            <div>
-              <span style="color: #94a3b8; display: block;">الإيراد المثبت سابقاً:</span>
-              <strong id="prevPostedRev" style="color: #fbbf24;">0</strong>
-            </div>
-          </div>
-          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.88rem; color: #4ade80; font-weight: 700;">الإيراد المستحق للإثبات الآن:</span>
-            <span id="prevUnpostedRev" style="font-size: 1.15rem; color: #4ade80; font-weight: 800;">0</span>
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label class="form-label" style="font-weight: 600;">تاريخ قيد الإثبات *</label>
-          <input type="date" id="revRecDate" class="form-control" required />
-        </div>
-
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label class="form-label">ملاحظات وبيان القيد</label>
-          <textarea id="revRecNotes" class="form-control" rows="2" placeholder="إثبات إيراد أعمال الفترة وفق نسبة الإنجاز المعتمدة..."></textarea>
-        </div>
-
-        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px; font-size: 0.78rem; color: #38bdf8;">
-          ℹ️ سيقوم النظام آلياً بإنشاء قيد يومية متزن:<br>
-          • <strong>مدين:</strong> أصول تعاقدية - إيرادات مستحقة غير مفوترة (1128)<br>
-          • <strong>دائن:</strong> إيرادات عقود المقاولات المعترف بها (4101)
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="submit" class="btn btn-primary" id="btnSubmitRevRec">تأكيد وترحيل قيد الإيراد</button>
-        <button type="button" class="btn btn-secondary" onclick="App.closeModal('revenueRecognitionModal')">إلغاء</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 
   <!-- ================== شريط التنقل السفلي للهواتف الذكية والأجهزة المحمولة (Android & iPhone Bottom Nav) ================== -->
   <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="شريط التنقل الرئيسي للجوال">

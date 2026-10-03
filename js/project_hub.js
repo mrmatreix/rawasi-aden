@@ -56,30 +56,6 @@ const ProjectHub = {
     if (dueEl) dueEl.value = Math.max(0, exec - paid + ret - pen);
   },
 
-  getActiveProjectId() {
-    let pid = Number(this.currentProjectId);
-    if (!pid || isNaN(pid) || pid <= 0) {
-      const select = document.getElementById('hubProjectSelect');
-      const selectVal = select?.value;
-      if (selectVal && !isNaN(Number(selectVal)) && Number(selectVal) > 0) {
-        pid = Number(selectVal);
-      } else if (this.data?.project?.id) {
-        pid = Number(this.data.project.id);
-      } else if (window.Projects && Projects.list && Projects.list.length > 0 && Projects.list[0].id) {
-        pid = Number(Projects.list[0].id);
-      }
-    }
-    if (pid && !isNaN(pid) && pid > 0) {
-      this.currentProjectId = pid;
-      const select = document.getElementById('hubProjectSelect');
-      if (select && select.value != String(pid)) {
-        select.value = pid;
-      }
-      return pid;
-    }
-    return null;
-  },
-
   async populateProjectSelect() {
     const select = document.getElementById('hubProjectSelect');
     if (!select) return;
@@ -88,17 +64,15 @@ const ProjectHub = {
       const res = await fetch('/api/projects');
       const json = await res.json().catch(() => ({ success: false, message: `تعذر استلام رد من الخادم (رمز ${res.status})` }));
       if (json.success && json.data && json.data.length > 0) {
-        if (!this.currentProjectId || !json.data.some(p => p.id == this.currentProjectId)) {
-          this.currentProjectId = json.data[0].id;
-        }
-
         select.innerHTML = json.data.map(p => `
           <option value="${p.id}" ${this.currentProjectId == p.id ? 'selected' : ''}>
             ${p.code || 'PRJ'} - ${p.name} (${p.client_name || 'عميل مباشر'})
           </option>
         `).join('');
 
-        select.value = this.currentProjectId;
+        if (!this.currentProjectId) {
+          this.currentProjectId = json.data[0].id;
+        }
       } else {
         select.innerHTML = `<option value="">لا توجد مشاريع مسجلة</option>`;
       }
@@ -848,34 +822,14 @@ const ProjectHub = {
   // محرك استيراد وتصدير جداول الكميات عبر Excel
   // =========================================================================
   openBoqExcelImportModal() {
-    const pid = this.getActiveProjectId();
-    if (!pid) {
-      App.showToast('يرجى اختيار مشروع معتمد أولاً قبل استيراد جدول الكميات', 'warning');
-      const select = document.getElementById('hubProjectSelect');
-      if (select) select.focus();
-      return;
-    }
-
     this.boqParsedItems = [];
     this.boqCurrentWorkbook = null;
 
-    // تحديث شارة المشروع المستهدف في نافذة الاستيراد
-    const targetBadge = document.getElementById('boqImportTargetProjectName');
-    if (targetBadge) {
-      const projectName = this.data?.project?.name || (document.getElementById('hubProjectSelect')?.selectedOptions?.[0]?.text) || `مشروع رقم #${pid}`;
-      targetBadge.innerText = projectName;
-    }
-
-    const fileInput = document.getElementById('boqExcelFileInput');
-    if (fileInput) fileInput.value = '';
-    const infoBar = document.getElementById('boqFileInfoBar');
-    if (infoBar) infoBar.style.display = 'none';
-    const statsBar = document.getElementById('boqPreviewStatsBar');
-    if (statsBar) statsBar.style.display = 'none';
-    const previewContainer = document.getElementById('boqPreviewContainer');
-    if (previewContainer) previewContainer.style.display = 'none';
-    const execBtn = document.getElementById('boqExecuteImportBtn');
-    if (execBtn) execBtn.disabled = true;
+    document.getElementById('boqExcelFileInput').value = '';
+    document.getElementById('boqFileInfoBar').style.display = 'none';
+    document.getElementById('boqPreviewStatsBar').style.display = 'none';
+    document.getElementById('boqPreviewContainer').style.display = 'none';
+    document.getElementById('boqExecuteImportBtn').disabled = true;
 
     App.openModal('boqExcelImportModal');
   },
@@ -1038,12 +992,6 @@ const ProjectHub = {
       return;
     }
 
-    const pid = this.getActiveProjectId();
-    if (!pid) {
-      App.showToast('لم يتم العثور على مشروع معتمد لتسجيل جدول الكميات إليه', 'error');
-      return;
-    }
-
     const mode = document.querySelector('input[name="boqImportMode"]:checked')?.value || 'merge';
     const updateContract = document.getElementById('boqUpdateContractValueCheck')?.checked || false;
 
@@ -1058,19 +1006,32 @@ const ProjectHub = {
     btn.innerHTML = `<span>جاري الاستيراد والترحيل... ⏳</span>`;
 
     try {
-      const res = await fetch(`/api/project-hub/${pid}/boq/batch-import`, {
+      const res = await fetch(`/api/project-hub/${this.currentProjectId}/boq/batch-import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: pid,
           items: this.boqParsedItems,
-          mode: mode,
-          updateContract: updateContract
+          mode: mode
         })
       });
       const json = await res.json();
 
       if (json.success) {
+        // تحديث قيمة العقد إذا طُلب ذلك
+        if (updateContract && json.totalContractValue > 0) {
+          try {
+            await fetch(`/api/project-hub/${this.currentProjectId}/contract`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contract_value: json.totalContractValue
+              })
+            });
+          } catch (e) {
+            console.warn('Note updating contract value:', e);
+          }
+        }
+
         App.showToast(`تم استيراد ${json.totalCount} بند بنجاح إلى جدول الكميات (قيمة: ${App.formatNumber(json.totalContractValue)} ${this.data?.project?.currency || 'ر.ي'}) 🎉`, 'success');
         App.closeModal('boqExcelImportModal');
         await this.loadProjectData();
@@ -1086,232 +1047,12 @@ const ProjectHub = {
     }
   },
 
-  // 1. تنزيل نموذج وقالب Excel فارغ ومجهز لجدول الكميات
   downloadBoqSampleTemplate() {
-    try {
-      App.showToast('جاري إعداد وتنزيل قالب Excel النموذجي لجدول الكميات...', 'info');
-
-      // الطريقة الأولى: التوليد المباشر في المتصفح عبر SheetJS لضمان الفورية وعدم الاعتماد على الشبكة
-      if (typeof XLSX !== 'undefined') {
-        const templateRows = [
-          ['شركة رواسي عدن للهندسة والمقاولات'],
-          ['قالب استيراد جدول الكميات والمواصفات التعاقدية (BOQ Import Template)'],
-          ['توجيهات: يرجى عدم تعديل عناوين الأعمدة في السطر (4) لضمان القراءة والمطابقة الآلية عند الاستيراد'],
-          ['رقم البند', 'التصنيف الإنشائي', 'بيان ووصف بند العمل والمواصفات', 'الوحدة', 'الكمية', 'فئة السعر الإفرادي', 'ملاحظات'],
-          ['1.01', 'أعمال الحفريات والردم', 'حفر في تربة صخرية ومتوسطة لتأسيس القواعد والميدات حتى المنسوب المعتمد شاملاً نقل المخلفات لمقالب عمومية', 'م3', 450, 3500, 'يشمل النقل والتسوية والدمك'],
-          ['1.02', 'أعمال الحفريات والردم', 'ردم حول القواعد والميدات برمل نظيف مورد على طبقات 25 سم مع الرش بالماء والدمك بنسبة 95%', 'م3', 280, 1800, 'اختبار بروكتور مطلوب'],
-          ['2.01', 'أعمال خرسانية', 'خرسانة عادية نظافة أسفل القواعد سمك 10 سم مقاومة 200 كجم/سم2 مع المواد والمعدات والدمك', 'م3', 45, 18500, 'إسمنت مقاوم للكبريتات SRC'],
-          ['2.02', 'أعمال خرسانية', 'خرسانة مسلحة للقواعد والرقاب مقاومة 350 كجم/سم2 مع المواد وحديد التسليح رتبة 60', 'م3', 120, 48000, 'حديد سابك معتمد'],
-          ['2.03', 'أعمال خرسانية', 'خرسانة مسلحة للأعمدة والحوائط الخرسانية مقاومة 350 كجم/سم2 صب مضخة شاملاً الشدات الخشبية', 'م3', 65, 52000, 'صب بالمضخة وتثبيت كانات'],
-          ['2.04', 'أعمال خرسانية', 'خرسانة مسلحة للأسقف والكمرات الهوردي مقاومة 350 كجم/سم2 شاملاً القوالب والبلوك الهوردي والحديد', 'م3', 160, 54000, 'معالجة بالمياه 7 أيام متتالية'],
-          ['3.01', 'أعمال مباني وعزل', 'مباني طابوق أسمنتي مصمت للميدات سمك 20 سم بمونة إسمنتية 1:3', 'م2', 320, 2400, 'طابوق آلي عالي الكثافة'],
-          ['3.02', 'أعمال مباني وعزل', 'مباني طابوق أسمنتي مفرغ للقواطع الداخلية والخارجية سمك 20 سم بمونة إسمنتية', 'م2', 850, 1950, 'ربط بشبك مجلفن كل مدماكين'],
-          ['3.03', 'أعمال مباني وعزل', 'عزل مائي للقواعد ورقاب الأعمدة بطبقتين من البيتومين المطاطي على البارد', 'م2', 540, 650, 'دهان متعامد وجهين مع الأساس'],
-          ['4.01', 'أعمال تشطيبات', 'بياض ولياسة إسمنتية داخلية للأسقف والحوائط مع الطرطشة والشبك المعدني والزوايا', 'م2', 1800, 1200, 'استواء تام ووزن قامة وفق الأصول'],
-          ['4.02', 'أعمال تشطيبات', 'دهانات بلاستيكية داخلية 3 أوجه مقاومة للبكتيريا شاملاً المعجون والأساس والصنفرة', 'م2', 1800, 950, 'نوع جوتن أو ما يماثله'],
-          ['5.01', 'أعمال كهروميكانيكية', 'توريد وتمديد مواسير PVC وأسلاك النحاس للإنارة والمخارج لكل نقطة كاملة مع العلب والمفاتيح', 'نقطة', 240, 3200, 'أسلاك الرياض أو كابلات بحرة'],
-          ['5.02', 'أعمال كهروميكانيكية', 'تمديد خطوط الصرف الصحي ومواسير التغذية PPR الحرارية لكل حمام ومطبخ مع المحابس', 'مقطوع', 8, 45000, 'مواسير حرارية ألمانية معتمدة']
-        ];
-
-        const ws = XLSX.utils.aoa_to_sheet(templateRows);
-        if (!ws['!views']) ws['!views'] = [];
-        ws['!views'].push({ RTL: true });
-
-        ws['!cols'] = [
-          { wch: 14 }, // رقم البند
-          { wch: 24 }, // التصنيف
-          { wch: 60 }, // البيان والمواصفات
-          { wch: 10 }, // الوحدة
-          { wch: 14 }, // الكمية
-          { wch: 18 }, // فئة السعر
-          { wch: 30 }  // ملاحظات
-        ];
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'قالب جدول كميات نموذجي');
-
-        XLSX.writeFile(wb, 'قالب_جدول_الكميات_التعاقدي_رواسي_عدن_BOQ.xlsx');
-        App.showToast('تم تنزيل قالب Excel النموذجي بنجاح 🎉', 'success');
-        return;
-      }
-
-      // الطريقة الثانية: تنزيل آمن عبر fetch مع توكن المصادقة (Fallback)
-      const pid = this.currentProjectId || Number(document.getElementById('hubProjectSelect')?.value) || 1;
-      this.downloadBlobFile(`/api/project-hub/${pid}/boq/sample-template`, 'قالب_جدول_الكميات_التعاقدي_رواسي_عدن_BOQ.xlsx');
-    } catch (e) {
-      console.error('Error downloading BOQ template:', e);
-      App.showToast('حدث خطأ أثناء تنزيل قالب Excel: ' + (e.message || ''), 'error');
-    }
+    window.location.href = `/api/project-hub/${this.currentProjectId}/boq/sample-template`;
   },
 
-  // 2. تصدير جدول الكميات الحالي إلى ملف Excel رسمي
   exportBoqToExcel() {
-    try {
-      if (!this.currentProjectId) {
-        const select = document.getElementById('hubProjectSelect');
-        if (select && select.value) {
-          this.currentProjectId = Number(select.value);
-        }
-      }
-
-      const projectName = this.data?.project?.name || document.getElementById('hubProjectSelect')?.selectedOptions?.[0]?.text?.trim() || 'مشروع_رواسي_عدن';
-      const cleanProjectName = projectName.replace(/[\\/:*?"<>|]/g, '_');
-      const boqItems = this.data?.boq || [];
-
-      // إذا كانت القائمة فارغة
-      if (!boqItems || boqItems.length === 0) {
-        App.showToast('جدول الكميات لهذا المشروع فارغ حالياً (0 بند). جاري تنزيل قالب العمل لإدخال البنود...', 'warning');
-        this.downloadBoqSampleTemplate();
-        return;
-      }
-
-      App.showToast('جاري تصدير جدول الكميات إلى ملف Excel رسمي...', 'info');
-
-      // الطريقة الأولى: التصدير المباشر والمفصل عبر SheetJS (XLSX)
-      if (typeof XLSX !== 'undefined') {
-        const dateStr = new Date().toISOString().split('T')[0];
-        const currency = this.data?.project?.currency || 'ر.ي';
-
-        const rows = [
-          ['شركة رواسي عدن للهندسة والمقاولات'],
-          [`جدول الكميات والمواصفات التعاقدية (BOQ) - مشروع: ${projectName}`],
-          [`تاريخ التصدير: ${dateStr} | العملة: ${currency} | إجمالي البنود المسجلة: ${boqItems.length}`],
-          [], // سطر فارغ
-          [
-            'م', 'رقم البند', 'التصنيف الإنشائي (WBS)', 'بيان الأعمال والمواصفات التعاقدية',
-            'الوحدة', 'الكمية التعاقدية', 'الكمية المنفذة بالموقع', 'الكمية المتبقية',
-            `فئة السعر (${currency})`, `الإجمالي التعاقدي (${currency})`, `القيمة المنفذة (${currency})`,
-            'نسبة الإنجاز %', 'الحالة', 'ملاحظات'
-          ]
-        ];
-
-        let totalContract = 0;
-        let totalExecuted = 0;
-
-        boqItems.forEach((b, idx) => {
-          const cQty = Number(b.contract_qty) || 0;
-          const eQty = Number(b.executed_qty) || 0;
-          const rate = Number(b.unit_rate) || 0;
-          const cTotal = Number(b.total_amount) || (cQty * rate);
-          const eTotal = eQty * rate;
-          const rem = Math.max(0, cQty - eQty);
-          const pct = cQty > 0 ? Math.round((eQty / cQty) * 100) + '%' : '0%';
-
-          totalContract += cTotal;
-          totalExecuted += eTotal;
-
-          rows.push([
-            idx + 1,
-            b.item_no || `${idx + 1}.01`,
-            b.category || 'عام',
-            b.description || '',
-            b.unit || 'مقطوع',
-            cQty,
-            eQty,
-            rem,
-            rate,
-            cTotal,
-            eTotal,
-            pct,
-            b.status || 'جاري التنفيذ',
-            b.notes || ''
-          ]);
-        });
-
-        // سطر الإجماليات الختامي
-        const totalPct = totalContract > 0 ? Math.round((totalExecuted / totalContract) * 100) + '%' : '0%';
-        rows.push([
-          'الإجمالي العام', '', '', 'إجمالي قيمة جدول الكميات التعاقدي والمنفذ',
-          '', '', '', '', '',
-          totalContract,
-          totalExecuted,
-          totalPct,
-          '', ''
-        ]);
-
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-        if (!ws['!views']) ws['!views'] = [];
-        ws['!views'].push({ RTL: true });
-
-        ws['!cols'] = [
-          { wch: 6 },  // م
-          { wch: 14 }, // رقم البند
-          { wch: 22 }, // التصنيف
-          { wch: 55 }, // بيان الأعمال
-          { wch: 10 }, // الوحدة
-          { wch: 15 }, // الكمية التعاقدية
-          { wch: 16 }, // المنفذ
-          { wch: 15 }, // المتبقي
-          { wch: 16 }, // فئة السعر
-          { wch: 18 }, // الإجمالي التعاقدي
-          { wch: 18 }, // القيمة المنفذة
-          { wch: 14 }, // نسبة الإنجاز
-          { wch: 14 }, // الحالة
-          { wch: 25 }  // ملاحظات
-        ];
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'جدول الكميات BOQ');
-
-        const fileName = `BOQ_${cleanProjectName}_${dateStr}.xlsx`;
-        XLSX.writeFile(wb, fileName);
-        App.showToast(`تم تصدير ${boqItems.length} بند بنجاح إلى ملف Excel 📊`, 'success');
-        return;
-      }
-
-      // الطريقة الثانية: التنزيل الاحتياطي من الخادم مع المصادقة (Fallback)
-      const fileName = `BOQ_${cleanProjectName}.xlsx`;
-      const pid = this.currentProjectId || 1;
-      this.downloadBlobFile(`/api/project-hub/${pid}/boq/export-excel`, fileName);
-    } catch (e) {
-      console.error('Error exporting BOQ to Excel:', e);
-      App.showToast('حدث خطأ أثناء تصدير جدول الكميات: ' + (e.message || ''), 'error');
-    }
-  },
-
-  // أداة تنزيل الملفات الثنائية والتقارير بأمان مع توكن المصادقة (Authenticated Blob Downloader)
-  async downloadBlobFile(url, filename) {
-    try {
-      const token = (window.Auth && window.Auth.token)
-        || sessionStorage.getItem('rawasi_token')
-        || localStorage.getItem('rawasi_token');
-
-      const headers = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.message || `خطأ استجابة من الخادم (${res.status})`);
-      }
-
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename || 'download.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 250);
-      App.showToast('تم تنزيل الملف بنجاح 🎉', 'success');
-    } catch (err) {
-      console.error('Download blob error:', err);
-      // تجربة الرابط المباشر مع بارامتر التوكن كحل احتياطي أخير
-      const token = (window.Auth && window.Auth.token)
-        || sessionStorage.getItem('rawasi_token')
-        || localStorage.getItem('rawasi_token');
-      if (token) {
-        const sep = url.includes('?') ? '&' : '?';
-        window.open(`${url}${sep}token=${encodeURIComponent(token)}`, '_blank');
-      } else {
-        App.showToast(err.message || 'تعذر تنزيل الملف، يرجى تسجيل الدخول', 'error');
-      }
-    }
+    window.location.href = `/api/project-hub/${this.currentProjectId}/boq/export-excel`;
   },
 
   openNewBoqModal() {
@@ -1342,12 +1083,8 @@ const ProjectHub = {
 
   async submitBoqForm(e) {
     if (e) e.preventDefault();
-    const pid = this.getActiveProjectId();
-    if (!pid) return App.showToast('يرجى تحديد المشروع أولاً', 'error');
-
     const id = document.getElementById('boqModalId').value;
     const payload = {
-      projectId: pid,
       item_no: document.getElementById('boqModalNo').value,
       description: document.getElementById('boqModalDesc').value,
       category: document.getElementById('boqModalCategory').value,
@@ -1360,8 +1097,8 @@ const ProjectHub = {
     };
 
     const url = id
-      ? `/api/project-hub/${pid}/boq/${id}`
-      : `/api/project-hub/${pid}/boq`;
+      ? `/api/project-hub/${this.currentProjectId}/boq/${id}`
+      : `/api/project-hub/${this.currentProjectId}/boq`;
     const method = id ? 'PUT' : 'POST';
 
     const res = await fetch(url, {
@@ -1382,9 +1119,7 @@ const ProjectHub = {
 
   async deleteBoqItem(id) {
     if (!confirm('هل أنت متأكد من حذف هذا البند من جدول الكميات؟')) return;
-    const pid = this.getActiveProjectId();
-    if (!pid) return;
-    const res = await fetch(`/api/project-hub/${pid}/boq/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/project-hub/${this.currentProjectId}/boq/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
       App.showToast('تم حذف البند بنجاح', 'info');
@@ -2375,8 +2110,7 @@ const ProjectHub = {
   },
 
   exportIpcToExcel(id) {
-    const fileName = `مستخلص_مشروع_${id}.xlsx`;
-    this.downloadBlobFile(`/api/project-hub/${this.currentProjectId}/invoices/${id}/export-excel`, fileName);
+    window.location.href = `/api/project-hub/${this.currentProjectId}/invoices/${id}/export-excel`;
   },
 
   async deleteInvoice(id) {

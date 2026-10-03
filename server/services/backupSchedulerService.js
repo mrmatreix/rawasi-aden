@@ -86,7 +86,12 @@ class BackupSchedulerService {
       this.config.interval = (map.auto_backup_interval === 'weekly') ? 'weekly' : 'daily';
       this.config.time = map.auto_backup_time || '02:00';
       this.config.dayOfWeek = map.auto_backup_day_of_week !== undefined ? Number(map.auto_backup_day_of_week) : 5;
-      this.config.storagePath = map.auto_backup_path ? path.resolve(map.auto_backup_path) : this.defaultStoragePath;
+      const rawPath = map.auto_backup_path ? String(map.auto_backup_path).trim() : '';
+      if (rawPath && fs.existsSync(rawPath)) {
+        this.config.storagePath = path.resolve(rawPath);
+      } else {
+        this.config.storagePath = this.defaultStoragePath;
+      }
       this.config.maxFiles = Math.max(1, Number(map.auto_backup_max_files) || 14);
       this.config.lastRun = map.auto_backup_last_run || null;
       this.config.lastStatus = map.auto_backup_last_status || null;
@@ -170,8 +175,16 @@ class BackupSchedulerService {
       }
       return true;
     } catch (err) {
-      console.error(`⚠️ [BackupScheduler] تعذر إنشاء مجلد النسخ (${dirPath}):`, err.message);
-      return false;
+      console.warn(`⚠️ [BackupScheduler] تعذر إنشاء مجلد النسخ (${dirPath}): ${err.message}. العودة للمسار الافتراضي.`);
+      this.config.storagePath = this.defaultStoragePath;
+      try {
+        if (!fs.existsSync(this.defaultStoragePath)) {
+          fs.mkdirSync(this.defaultStoragePath, { recursive: true });
+        }
+        return true;
+      } catch (e2) {
+        return false;
+      }
     }
   }
 

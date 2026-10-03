@@ -1,0 +1,41 @@
+name: Rawasi Aden ERP - Enterprise CI & Quality Gate
+
+on:
+  push:
+    branches: [ 'main', 'master', 'staging' ]
+  pull_request:
+    branches: [ 'main', 'master' ]
+  workflow_dispatch:
+
+jobs:
+  verification-and-tests:
+    name: Build Verification & Integration Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js Runtime (v22 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 📦 Install Clean Dependencies
+        run: npm ci || npm install --no-audit
+
+      - name: 🏗️ Build Web Assets & Check Version Hash
+        run: npm run build
+
+      - name: 🌱 Seed Database Schema & Run Migrations
+        run: |
+          npm run seed
+          npm run migrate
+
+      - name: 🧪 Execute Enterprise Integration & Security Tests
+        run: npm run test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: rawasi_ci_testing_secret_key_2026

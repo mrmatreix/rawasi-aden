@@ -7,6 +7,9 @@ const Reports = {
 
   async init() {
     await this.loadDashboardKPIs();
+    if (window.D3ProjectCharts && (!D3ProjectCharts.data || D3ProjectCharts.data.length === 0)) {
+      D3ProjectCharts.init();
+    }
   },
 
   async loadDashboardKPIs() {
@@ -25,11 +28,21 @@ const Reports = {
       const res = await fetch('/api/reports/dashboard');
       const json = await res.json();
       if (json.success) {
-        const { kpis, expenses_by_type, monthly_trend, recent_transactions, contracting_summary } = json.data;
+        const { kpis, expenses_by_type, monthly_trend, recent_transactions, contracting_summary, project_financials } = json.data;
         this.updateKPIElements(kpis, contracting_summary);
         this.renderExpensesDonutChart(expenses_by_type);
         this.renderMonthlyTrendChart(monthly_trend);
         this.renderRecentOperationsTable(recent_transactions);
+
+        // تحديث الرسوم البيانية التفاعلية D3.js لتحليل أداء المشاريع
+        if (window.D3ProjectCharts) {
+          if (project_financials && project_financials.length > 0) {
+            D3ProjectCharts.mapFromDashboardData(project_financials, contracting_summary);
+            D3ProjectCharts.render();
+          } else {
+            D3ProjectCharts.init();
+          }
+        }
       }
     } catch (e) {
       console.error('Error loading dashboard KPIs:', e);
