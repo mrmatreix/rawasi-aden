@@ -540,38 +540,37 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
-    // التحقق هل الحساب مفعل له 2FA (المدير العام أو أي مستخدم مفعّل له التحقق بخطوتين)
-    let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
-      ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
-      : (user.role === 'admin' || user.username === 'admin');
-
+    // التحقق هل الحساب للمدير العام وهل ميزة 2FA مفعلة
     if (user.role === 'admin' || user.username === 'admin') {
+      let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
+        ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
+        : true;
       try {
         const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
         if (row2fa && (user.two_factor_enabled === undefined || user.two_factor_enabled === null)) {
           is2FaEnabled = (row2fa.value === '1' || row2fa.value === 'true');
         }
       } catch (e) {}
-    }
 
-    if (is2FaEnabled) {
-      const tempToken = jwt.sign(
-        { id: user.id, username: user.username, role: user.role, isPending2FA: true },
-        JWT_SECRET,
-        { expiresIn: '5m' }
-      );
-      return res.json({
-        success: true,
-        requires2FA: true,
-        tempToken,
-        user: {
-          id: user.id,
-          username: user.username,
-          full_name: user.full_name,
-          role: user.role
-        },
-        message: `مرحباً بك (${user.full_name || user.username})! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️`
-      });
+      if (is2FaEnabled) {
+        const tempToken = jwt.sign(
+          { id: user.id, username: user.username, role: user.role, isPending2FA: true },
+          JWT_SECRET,
+          { expiresIn: '5m' }
+        );
+        return res.json({
+          success: true,
+          requires2FA: true,
+          tempToken,
+          user: {
+            id: user.id,
+            username: user.username,
+            full_name: user.full_name,
+            role: user.role
+          },
+          message: 'مرحباً بالمدير العام! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️'
+        });
+      }
     }
 
     // إكمال تسجيل الدخول الاعتيادي
@@ -582,7 +581,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   }
 });
 
-// 1.1 التحقق من رمز التحقق بخطوتين (2FA)
+// 1.1 التحقق من رمز التحقق بخطوتين (2FA) للمدير العام
 router.post('/verify-2fa', async (req, res) => {
   try {
     const { tempToken, code, force, deviceInfo, deviceId, deviceName } = req.body;
@@ -597,7 +596,7 @@ router.post('/verify-2fa', async (req, res) => {
       return res.status(401).json({ success: false, message: 'جلسة التحقق المؤقتة منتهية، يرجى إعادة تسجيل الدخول' });
     }
 
-    if (!decoded || !decoded.isPending2FA) {
+    if (!decoded || !decoded.isPending2FA || decoded.role !== 'admin') {
       return res.status(401).json({ success: false, message: 'طلب التحقق غير صالح' });
     }
 
@@ -617,32 +616,9 @@ router.post('/verify-2fa', async (req, res) => {
     }
     if (!admin2FaPin) admin2FaPin = '123456';
 
-    const normalizeDigits = (str) => {
-      if (!str) return '';
-      return String(str)
-        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
-        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
-        .trim();
-    };
-
-    const cleanCode = normalizeDigits(code);
-    const userPinNormalized = normalizeDigits(user.two_factor_pin);
-    const adminPinNormalized = normalizeDigits(admin2FaPin);
-
-    // قائمة الرموز المقبولة: رمز المستخدم، رمز الإعدادات، وكود الطوارئ 889900
-    const validPins = new Set([
-      userPinNormalized,
-      adminPinNormalized,
-      '889900'
-    ].filter(Boolean));
-
-    // دعم كلا الرمزين المعتمدين (654321 و 123456) لحساب المدير العام لضمان عدم القفل
-    if (user.role === 'admin' || user.username === 'admin') {
-      validPins.add('654321');
-      validPins.add('123456');
-    }
-
-    if (!validPins.has(cleanCode)) {
+    const cleanCode = String(code).trim();
+    // التحقق من الرمز أو رمز الطوارئ الاحتياطي 889900
+    if (cleanCode !== String(admin2FaPin).trim() && cleanCode !== '889900') {
       return res.status(401).json({
         success: false,
         message: 'رمز التحقق بخطوتين (2FA) غير صحيح، يرجى التأكد من الرمز والمحاولة مجدداً'

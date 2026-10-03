@@ -54,79 +54,44 @@ const RISK_MATRIX = {
 const SmartCompletionEngine = {
 
   async computeProjectCompletion(projectId) {
-    const [project, boqResult, invoiceResult, costResult, dailyResult, engineerCertResult] = await Promise.all([
-      get('SELECT id, name, progress_percentage, contract_value, actual_cost FROM projects WHERE id = ?', [projectId]),
+    const [boqResult, invoiceResult, costResult, wbsResult, engineerCert] = await Promise.all([
       this._computeFromBOQ(projectId),
       this._computeFromApprovedInvoices(projectId),
       this._computeFromCostRatio(projectId),
-      this._computeFromDailyReports(projectId),
+      this._computeFromWBS(projectId),
       this._getLatestEngineerCertification(projectId),
     ]);
 
-    const sources = {
-      boq: boqResult,
-      invoices: invoiceResult,
-      daily_reports: dailyResult,
-      cost_ratio: costResult,
-      engineer_cert: engineerCertResult
-    };
-
-    const breakdown = [
-      { method: 'weighted_boq',       pct: boqResult.pct,      weight: 0.35, label: 'BOQ المنفذ',            data: boqResult },
-      { method: 'approved_invoices',  pct: invoiceResult.pct,  weight: 0.25, label: 'المستخلصات المعتمدة',  data: invoiceResult },
-      { method: 'daily_reports',      pct: dailyResult.pct,    weight: 0.15, label: 'تقارير الموقع',         data: dailyResult },
-      { method: 'cost_ratio',         pct: costResult.pct,     weight: 0.15, label: 'نسبة التكلفة المنصرفة', data: costResult },
-      { method: 'engineer_cert',      pct: engineerCertResult.pct, weight: 0.10, label: 'شهادة الاستشاري',  data: engineerCertResult },
+    const sources = [
+      { method: COMPLETION_METHODS.WEIGHTED_BOQ,      pct: boqResult.pct,     weight: 0.35, label: 'BOQ المنفذ',           data: boqResult },
+      { method: COMPLETION_METHODS.APPROVED_INVOICES,  pct: invoiceResult.pct, weight: 0.30, label: 'المستخلصات المعتمدة', data: invoiceResult },
+      { method: COMPLETION_METHODS.COST_RATIO,         pct: costResult.pct,    weight: 0.15, label: 'نسبة التكلفة',         data: costResult },
+      { method: COMPLETION_METHODS.WBS_WEIGHTED,       pct: wbsResult.pct,     weight: 0.20, label: 'أنشطة WBS الموزونة',  data: wbsResult },
     ];
 
-    const validBreakdown = breakdown.filter(s => s.pct !== null && s.pct >= 0);
-    let weightedAvg = 0;
-    if (validBreakdown.length > 0) {
-      const totalWeight = validBreakdown.reduce((sum, s) => sum + s.weight, 0);
-      weightedAvg = validBreakdown.reduce((sum, s) => sum + (s.pct * s.weight), 0) / totalWeight;
+    const validSources = sources.filter(s => s.pct !== null && s.pct >= 0);
+    let weightedAvg = null;
+    if (validSources.length > 0) {
+      const totalWeight = validSources.reduce((sum, s) => sum + s.weight, 0);
+      weightedAvg = validSources.reduce((sum, s) => sum + (s.pct * s.weight), 0) / totalWeight;
     }
-    weightedAvg = Math.round(weightedAvg * 100) / 100;
 
     let recommendedPct = weightedAvg;
     let primarySource = 'weighted_average';
-    if (engineerCertResult.latest && engineerCertResult.pct !== null) {
-      const certDate = new Date(engineerCertResult.latest.inspection_date || engineerCertResult.latest.created_at);
-      const certAge = (Date.now() - certDate.getTime()) / 86400000;
+    if (engineerCert && engineerCert.pct !== null) {
+      const certAge = (Date.now() - new Date(engineerCert.certified_at).getTime()) / 86400000;
       if (certAge <= 30) {
-        recommendedPct = engineerCertResult.pct;
+        recommendedPct = engineerCert.pct;
         primarySource = 'engineer_certification';
       }
     }
 
-    const currentManualPct = project ? Number(project.progress_percentage) || 0 : 0;
-    const variance = Math.round((currentManualPct - recommendedPct) * 100) / 100;
-
-    let rationalStatus = 'realistic';
-    let validationMessage = 'نسبة الإنجاز المسجلة في المشروع متوافقة هندسياً وفيزيائياً مع المؤشرات المستندية والميدانية بنسبة انحراف مقبولة.';
-    if (Math.abs(variance) > 15) {
-      rationalStatus = 'unrealistic_critical';
-      if (variance > 0) {
-        validationMessage = `🚨 انحراف حرج: النسبة المسجلة بالنظام (${currentManualPct}%) أعلى بكثير (+${variance}%) من الإنجاز الفيزيائي الفعلي المحسوب (${recommendedPct}%) من واقع البنود والمستخلصات والتكاليف.`;
-      } else {
-        validationMessage = `إنجاز فيزيائي متقدم: واقع المشروع على الأرض والكميات المنفذة المحسوبة (${recommendedPct}%) أعلى من النسبة المسجلة بالنظام (${currentManualPct}%) بفارق (${Math.abs(variance)}%).`;
-      }
-    } else if (Math.abs(variance) > 5) {
-      rationalStatus = 'moderate_risk';
-      validationMessage = `⚠️ تباين ملحوظ بمقدار (${variance > 0 ? '+' : ''}${variance}%): يتطلب مراجعة المستخلصات وتقارير الموقع وتحديث قياسات المهندس الميداني.`;
-    }
-
     return {
-      current_manual_percentage: currentManualPct,
-      recommended_percentage: recommendedPct,
-      recommended_pct: recommendedPct,
-      variance: variance,
-      rational_status: rationalStatus,
-      validation_message: validationMessage,
+      recommended_pct: recommendedPct !== null ? Math.round(recommendedPct * 100) / 100 : null,
       primary_source: primarySource,
-      engineer_cert: engineerCertResult.latest,
-      sources: sources,
-      breakdown: breakdown,
-      computed_at: new Date().toISOString()
+      engineer_cert: engineerCert,
+      breakdown: sources,
+      computed_at: new Date().toISOString(),
     };
   },
 
@@ -136,20 +101,24 @@ const SmartCompletionEngine = {
     }
 
     const computed = await this.computeProjectCompletion(projectId);
-    const deviation = Math.abs(manualPct - computed.recommended_percentage);
+    if (computed.recommended_pct === null) {
+      return { accepted: true, warning: 'لا توجد بيانات كافية للتحقق التلقائي - تم القبول مع التسجيل', computed };
+    }
+
+    const deviation = Math.abs(manualPct - computed.recommended_pct);
     const MAX_ALLOWED_DEVIATION = 15;
 
     if (deviation > MAX_ALLOWED_DEVIATION) {
       if (!justification || justification.trim().length < 20) {
         throw new Error(
-          `⛔ الانحراف المرفوض: النسبة المُدخلة (${manualPct}%) تنحرف ${deviation.toFixed(1)}% عن النسبة المحسوبة (${computed.recommended_percentage}%). ` +
+          `\u26d4 الانحراف المرفوض: النسبة المُدخلة (${manualPct}%) تنحرف ${deviation.toFixed(1)}% عن النسبة المحسوبة (${computed.recommended_pct}%). ` +
           `يجب تقديم مبرر تفصيلي (20 حرف على الأقل) لقبول هذا الانحراف الكبير.`
         );
       }
       await logAudit(null, {
         action: 'MANUAL_COMPLETION_OVERRIDE',
         entity_type: 'projects', entity_id: projectId,
-        details: JSON.stringify({ computed_pct: computed.recommended_percentage, manual_pct: manualPct, deviation, justification }),
+        details: JSON.stringify({ computed_pct: computed.recommended_pct, manual_pct: manualPct, deviation, justification }),
       });
       return { accepted: true, warning: `تم القبول مع التوثيق: انحراف ${deviation.toFixed(1)}%`, computed };
     }
@@ -165,94 +134,34 @@ const SmartCompletionEngine = {
          FROM project_boq WHERE project_id = ? AND contract_qty > 0`,
         [projectId]
       );
-      if (!items || !items.length) {
-        return { percentage: 0, pct: null, total_boq_value: 0, executed_value: 0, total_items_count: 0, items_with_progress: 0 };
-      }
+      if (!items.length) return { pct: null, total_boq_value: 0, total_executed_value: 0 };
 
-      let totalBOQ = 0, totalExecuted = 0, itemsWithProg = 0;
+      let totalBOQ = 0, totalExecuted = 0;
       for (const item of items) {
         const unitPrice = Number(item.unit_rate) || 0;
-        const cQty = Number(item.contract_qty) || 0;
-        const eQty = Number(item.exec_qty) || 0;
-        totalBOQ += cQty * unitPrice;
-        totalExecuted += eQty * unitPrice;
-        if (eQty > 0) itemsWithProg++;
+        totalBOQ      += (Number(item.contract_qty)  || 0) * unitPrice;
+        totalExecuted += (Number(item.exec_qty)       || 0) * unitPrice;
       }
-      const pct = totalBOQ > 0 ? Math.min(Math.round((totalExecuted / totalBOQ) * 10000) / 100, 100) : 0;
-      return {
-        percentage: pct,
-        pct: totalBOQ > 0 ? pct : null,
-        total_boq_value: Math.round(totalBOQ * 100) / 100,
-        executed_value: Math.round(totalExecuted * 100) / 100,
-        total_items_count: items.length,
-        items_with_progress: itemsWithProg
-      };
-    } catch {
-      return { percentage: 0, pct: null, total_boq_value: 0, executed_value: 0, total_items_count: 0, items_with_progress: 0, error: true };
-    }
+      const pct = totalBOQ > 0 ? Math.min((totalExecuted / totalBOQ) * 100, 100) : null;
+      return { pct, total_boq_value: totalBOQ, total_executed_value: totalExecuted };
+    } catch { return { pct: null, error: true }; }
   },
 
   async _computeFromApprovedInvoices(projectId) {
     try {
       const contract = await get('SELECT contract_value FROM project_contracts WHERE project_id = ?', [projectId]);
-      let contractValue = Number(contract?.contract_value) || 0;
-      if (!contractValue) {
-        const p = await get('SELECT contract_value FROM projects WHERE id = ?', [projectId]);
-        contractValue = Number(p?.contract_value) || 0;
-      }
+      const contractValue = Number(contract?.contract_value) || 0;
+      if (!contractValue) return { pct: null, contract_value: 0 };
 
       const invoices = await query(
-        `SELECT COUNT(*) as count, SUM(COALESCE(net_amount, current_gross_amount, 0)) as total
-         FROM project_invoices WHERE project_id = ? AND (status IN ('معتمد','مرحل','مدفوع') OR status LIKE '%approved%' OR status LIKE '%paid%')`,
+        `SELECT SUM(COALESCE(net_amount, current_gross_amount, 0)) as total
+         FROM project_invoices WHERE project_id = ? AND status IN ('معتمد','مرحل','مدفوع')`,
         [projectId]
       );
       const totalApproved = Number(invoices[0]?.total) || 0;
-      const count = Number(invoices[0]?.count) || 0;
-      const pct = contractValue > 0 ? Math.min(Math.round((totalApproved / contractValue) * 10000) / 100, 100) : 0;
-      return {
-        percentage: pct,
-        pct: contractValue > 0 ? pct : null,
-        contract_value: contractValue,
-        approved_invoices: totalApproved,
-        approved_net_amount: totalApproved,
-        approved_count: count
-      };
-    } catch {
-      return { percentage: 0, pct: null, contract_value: 0, approved_invoices: 0, approved_net_amount: 0, approved_count: 0, error: true };
-    }
-  },
-
-  async _computeFromDailyReports(projectId) {
-    try {
-      const reports = await query(
-        `SELECT id, work_performed, notes, created_at, date
-         FROM project_daily_reports WHERE project_id = ?
-         ORDER BY date DESC, id DESC`,
-        [projectId]
-      );
-      const count = reports ? reports.length : 0;
-      let latestPct = 0;
-      let pct = 0;
-      if (count > 0) {
-        for (const r of reports) {
-          const txt = (r.work_performed || '') + ' ' + (r.notes || '');
-          const match = txt.match(/(\d+(?:\.\d+)?)\s*%/);
-          if (match) {
-            latestPct = parseFloat(match[1]);
-            break;
-          }
-        }
-        pct = latestPct || Math.min(count * 2, 100);
-      }
-      return {
-        percentage: Math.round(pct * 100) / 100,
-        pct: count > 0 ? Math.round(pct * 100) / 100 : null,
-        count: count,
-        latest_pct: latestPct
-      };
-    } catch {
-      return { percentage: 0, pct: null, count: 0, latest_pct: 0 };
-    }
+      const pct = Math.min((totalApproved / contractValue) * 100, 100);
+      return { pct, contract_value: contractValue, approved_invoices: totalApproved };
+    } catch { return { pct: null, error: true }; }
   },
 
   async _computeFromCostRatio(projectId) {
@@ -261,51 +170,48 @@ const SmartCompletionEngine = {
         'SELECT SUM(COALESCE(planned_cost,0)) as total FROM project_budgets WHERE project_id = ?',
         [projectId]
       );
-      let totalBudget = Number(budget?.total) || 0;
-      if (!totalBudget) {
-        const p = await get('SELECT estimated_cost, contract_value FROM projects WHERE id = ?', [projectId]);
-        totalBudget = Number(p?.estimated_cost) || Number(p?.contract_value) || 0;
-      }
+      const totalBudget = Number(budget?.total) || 0;
+      if (!totalBudget) return { pct: null, total_budget: 0 };
 
-      const [purchases, labor, directExpenses] = await Promise.all([
+      const [purchases, labor] = await Promise.all([
         query('SELECT SUM(COALESCE(total_amount,0)) as total FROM project_purchases WHERE project_id = ?', [projectId]),
         query('SELECT SUM(COALESCE(total_amount,0)) as total FROM project_labor_expenses WHERE project_id = ?', [projectId]),
-        query("SELECT SUM(COALESCE(amount,0)) as total FROM expenses WHERE project_id = ? AND status != 'cancelled'", [projectId]).catch(() => [{ total: 0 }])
       ]);
-      const actualCost = (Number(purchases[0]?.total) || 0) + (Number(labor[0]?.total) || 0) + (Number(directExpenses[0]?.total) || 0);
-      const pct = totalBudget > 0 ? Math.min(Math.round((actualCost / totalBudget) * 10000) / 100, 100) : 0;
-      return {
-        percentage: pct,
-        pct: totalBudget > 0 ? pct : null,
-        total_budget: totalBudget,
-        budget: totalBudget,
-        actual_cost: actualCost
-      };
-    } catch {
-      return { percentage: 0, pct: null, total_budget: 0, budget: 0, actual_cost: 0, error: true };
-    }
+      const actualCost = (Number(purchases[0]?.total) || 0) + (Number(labor[0]?.total) || 0);
+      const pct = Math.min((actualCost / totalBudget) * 100, 100);
+      return { pct, total_budget: totalBudget, actual_cost: actualCost };
+    } catch { return { pct: null, error: true }; }
+  },
+
+  async _computeFromWBS(projectId) {
+    try {
+      const activities = await query(
+        `SELECT status, weight FROM project_wbs_activities WHERE project_id = ? AND weight > 0`,
+        [projectId]
+      );
+      if (!activities.length) return { pct: null, activities_count: 0 };
+
+      const totalWeight = activities.reduce((sum, a) => sum + (Number(a.weight) || 0), 0);
+      let completedWeight = 0;
+      for (const act of activities) {
+        const w = Number(act.weight) || 0;
+        if (act.status === ACTIVITY_STATUS.COMPLETED) completedWeight += w;
+        else if (act.status === ACTIVITY_STATUS.IN_PROGRESS) completedWeight += w * 0.5;
+      }
+      const pct = totalWeight > 0 ? Math.min((completedWeight / totalWeight) * 100, 100) : null;
+      return { pct, total_activities: activities.length, completed_weight: completedWeight, total_weight: totalWeight };
+    } catch { return { pct: null, error: true }; }
   },
 
   async _getLatestEngineerCertification(projectId) {
     try {
-      const certs = await query(
-        `SELECT id, pct, certified_by, certifier_name, certifier_role, inspection_date, notes, created_at
+      return await get(
+        `SELECT pct, certified_by, certified_at, notes
          FROM project_engineer_certifications WHERE project_id = ?
-         ORDER BY inspection_date DESC, id DESC`,
+         ORDER BY certified_at DESC LIMIT 1`,
         [projectId]
       );
-      const count = certs ? certs.length : 0;
-      const latest = count > 0 ? certs[0] : null;
-      const pct = latest ? Number(latest.pct) || 0 : 0;
-      return {
-        percentage: pct,
-        pct: latest ? pct : null,
-        count: count,
-        latest: latest
-      };
-    } catch {
-      return { percentage: 0, pct: null, count: 0, latest: null };
-    }
+    } catch { return null; }
   },
 };
 
@@ -499,14 +405,13 @@ const EVMEngine = {
     const asOf = statusDate ? new Date(statusDate) : new Date();
     const asOfStr = asOf.toISOString().split('T')[0];
 
-    const [project, contract, budget, activities, invoiceRows, costRows, directExpenses] = await Promise.all([
-      get('SELECT id, name, contract_value, estimated_cost, actual_cost, progress_percentage, currency, start_date, end_date FROM projects WHERE id = ?', [projectId]),
+    const [contract, budget, activities, invoiceRows, costRows] = await Promise.all([
       get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]),
       query('SELECT SUM(COALESCE(planned_cost,0)) as total FROM project_budgets WHERE project_id = ?', [projectId]),
       query('SELECT * FROM project_wbs_activities WHERE project_id = ?', [projectId]),
       query(
         `SELECT SUM(COALESCE(net_amount, current_gross_amount, 0)) as total
-         FROM project_invoices WHERE project_id = ? AND (status IN ('معتمد','مرحل','مدفوع') OR status LIKE '%approved%' OR status LIKE '%paid%') AND date <= ?`,
+         FROM project_invoices WHERE project_id = ? AND status IN ('معتمد','مرحل','مدفوع') AND date <= ?`,
         [projectId, asOfStr]
       ),
       query(
@@ -515,175 +420,93 @@ const EVMEngine = {
            (SELECT COALESCE(SUM(total_amount),0) FROM project_labor_expenses WHERE project_id=? AND date<=?) as total`,
         [projectId, asOfStr, projectId, asOfStr]
       ),
-      query("SELECT SUM(COALESCE(amount,0)) as total FROM expenses WHERE project_id = ? AND status != 'cancelled' AND date <= ?", [projectId, asOfStr]).catch(() => [{ total: 0 }])
     ]);
 
-    const BAC = Number(budget[0]?.total) || Number(contract?.contract_value) || Number(project?.estimated_cost) || Number(project?.contract_value) || 0;
+    const BAC = Number(budget[0]?.total) || Number(contract?.contract_value) || 0;
+    if (!BAC) return { error: 'الميزانية الإجمالية (BAC) غير محددة' };
 
     const wbsResult = await SmartCompletionEngine.computeProjectCompletion(projectId);
-    const completionPct = (wbsResult.recommended_pct ?? project?.progress_percentage ?? 0) / 100;
+    const completionPct = (wbsResult.recommended_pct || 0) / 100;
 
-    let PV = this._computePlannedValue(activities, asOf, BAC);
-    // إذا لم تكن هناك أنشطة WBS بعد، نحسب PV استناداً إلى الجدول الزمني العام للمشروع
-    if (PV === 0 && project && project.start_date && project.end_date) {
-      const s = new Date(project.start_date).getTime();
-      const e = new Date(project.end_date).getTime();
-      const now = asOf.getTime();
-      if (e > s) {
-        let linearPct = 0;
-        if (now >= e) linearPct = 1.0;
-        else if (now > s) linearPct = (now - s) / (e - s);
-        PV = Math.round(BAC * linearPct * 100) / 100;
-      }
-    }
-    // إذا لم يتوفر أي جدول زمني، نعتبر القيمة المخططة مساوية للقيمة المكتسبة
-    if (PV === 0 && BAC > 0) {
-      PV = Math.round(BAC * completionPct * 100) / 100;
-    }
+    const PV = this._computePlannedValue(activities, asOf, BAC);
+    const EV = BAC * completionPct;
+    const AC = Number(costRows[0]?.total) || 0;
 
-    const EV = Math.round(BAC * completionPct * 100) / 100;
-    const purchasesAndLabor = Number(costRows[0]?.total) || 0;
-    const expensesCost = Number(directExpenses[0]?.total) || 0;
-    let AC = purchasesAndLabor + expensesCost;
-    if (AC === 0 && project?.actual_cost) {
-      AC = Number(project.actual_cost) || 0;
-    }
-    AC = Math.round(AC * 100) / 100;
-
-    const CV  = Math.round((EV - AC) * 100) / 100;
-    const SV  = Math.round((EV - PV) * 100) / 100;
-    const CPI = AC > 0 ? Math.round((EV / AC) * 1000) / 1000 : 1.0;
-    const SPI = PV > 0 ? Math.round((EV / PV) * 1000) / 1000 : 1.0;
-
-    const TCPI_BAC = (BAC - AC) > 0 ? Math.round(((BAC - EV) / (BAC - AC)) * 1000) / 1000 : 1.0;
-    const EAC_typical  = CPI > 0 ? Math.round((BAC / CPI) * 100) / 100 : BAC;
-    const EAC_atypical = Math.round((AC + (BAC - EV)) * 100) / 100;
-    const EAC_combined = CPI > 0 && SPI > 0 ? Math.round((AC + (BAC - EV) / (CPI * SPI)) * 100) / 100 : EAC_typical;
+    const CV  = EV - AC;
+    const SV  = EV - PV;
+    const CPI = AC > 0 ? EV / AC : null;
+    const SPI = PV > 0 ? EV / PV : null;
+    const TCPI_BAC = (BAC - EV) > 0 && (BAC - AC) > 0 ? (BAC - EV) / (BAC - AC) : null;
+    const EAC_typical  = CPI ? BAC / CPI : null;
+    const EAC_atypical = AC + (BAC - EV);
+    const EAC_combined = CPI && SPI ? AC + (BAC - EV) / (CPI * SPI) : null;
     const EAC = EAC_typical;
-    const ETC = Math.max(0, Math.round((EAC - AC) * 100) / 100);
-    const VAC = Math.round((BAC - EAC) * 100) / 100;
+    const ETC = EAC !== null ? EAC - AC : null;
+    const VAC = EAC !== null ? BAC - EAC : null;
 
     const tl = (val, isIndex = true) => {
-      if (val === null || val === undefined) return 'grey';
-      if (isIndex) return val >= 1.0 ? 'green' : val >= 0.85 ? 'yellow' : 'red';
-      return val >= 0 ? 'green' : val >= -0.05 * (BAC || 1) ? 'yellow' : 'red';
+      if (val === null) return 'grey';
+      if (isIndex) return val >= 1.0 ? 'green' : val >= 0.9 ? 'yellow' : 'red';
+      return val >= 0 ? 'green' : val >= -0.05 * BAC ? 'yellow' : 'red';
     };
 
-    const costStatus = CPI >= 1.0 ? 'green' : (CPI >= 0.85 ? 'yellow' : 'red');
-    const scheduleStatus = SPI >= 1.0 ? 'green' : 'yellow';
-
-    const health_indicators = {
-      cost_status: costStatus,
-      schedule_status: scheduleStatus,
-      cost: costStatus,
-      schedule: scheduleStatus
-    };
-
-    const metrics = {
-      PV: PV,
-      EV: EV,
-      AC: AC,
-      BAC: BAC,
-      CPI: CPI,
-      SPI: SPI,
-      EAC: EAC,
-      VAC: VAC,
-      ETC: ETC,
-      CV: CV,
-      SV: SV,
-      TCPI: TCPI_BAC,
-      progress_percentage: Math.round(completionPct * 10000) / 100
-    };
-
-    const interp = this._interpretEVM(CPI, SPI, CV, SV, BAC);
-    const executive_summary = interp.join(' | ');
-
-    // جلب اللقطات التاريخية
-    let history = [];
-    try {
-      history = await query(
-        `SELECT * FROM project_evm_snapshots WHERE project_id = ? ORDER BY status_date DESC, id DESC LIMIT 20`,
-        [projectId]
-      );
-      history = (history || []).map(row => ({
-        ...row,
-        snapshot_date: row.status_date,
-        percent_complete: row.completion_pct
-      }));
-    } catch (_) {}
+    const r = (v) => v !== null ? Math.round(v * 100) / 100 : null;
+    const ri = (v) => v !== null ? Math.round(v * 1000) / 1000 : null;
 
     const result = {
-      // 1. كائن المؤشرات الرئيسية للواجهة
-      metrics,
-      health_indicators,
-      executive_summary,
-      currency: project?.currency || 'ر.ي',
-      history,
-
-      // 2. المفاتيح الكلاسيكية للتوافق العكسي الكامل
       status_date: asOfStr,
-      bac: BAC, pv: PV, ev: EV, ac: AC,
-      cv: CV, sv: SV,
-      cpi: CPI, spi: SPI, tcpi_bac: TCPI_BAC,
-      eac: EAC, etc: ETC, vac: VAC,
-      eac_scenarios: { typical: EAC_typical, atypical: EAC_atypical, combined: EAC_combined },
-      completion_pct: metrics.progress_percentage,
+      bac: r(BAC), pv: r(PV), ev: r(EV), ac: r(AC),
+      cv: r(CV), sv: r(SV),
+      cpi: ri(CPI), spi: ri(SPI), tcpi_bac: ri(TCPI_BAC),
+      eac: r(EAC), etc: r(ETC), vac: r(VAC),
+      eac_scenarios: { typical: r(EAC_typical), atypical: r(EAC_atypical), combined: r(EAC_combined) },
+      completion_pct: wbsResult.recommended_pct,
       status_lights: { cost: tl(CPI, true), schedule: tl(SPI, true), cv: tl(CV, false), sv: tl(SV, false), vac: tl(VAC, false) },
-      interpretation: interp,
+      interpretation: this._interpretEVM(CPI, SPI, CV, SV, BAC),
     };
 
-    // حفظ لقطة تاريخية تلقائية (إذا لم تكن مسجلة اليوم)
+    // حفظ لقطة تاريخية
     try {
       await run(
         `INSERT OR REPLACE INTO project_evm_snapshots
            (project_id, status_date, bac, pv, ev, ac, cv, sv, cpi, spi, eac, etc, vac, completion_pct, created_at)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
-        [projectId, asOfStr, BAC, PV, EV, AC, CV, SV, CPI, SPI, EAC, ETC, VAC, metrics.progress_percentage]
+        [projectId, asOfStr, result.bac, result.pv, result.ev, result.ac,
+         result.cv, result.sv, result.cpi, result.spi,
+         result.eac, result.etc, result.vac, result.completion_pct]
       );
-    } catch (_) {}
+    } catch (_) { /* جدول قد لا يكون موجوداً بعد */ }
 
     return result;
   },
 
   _computePlannedValue(activities, asOf, BAC) {
-    if (!activities || !activities.length) return 0;
+    if (!activities.length) return 0;
     const totalWeight = activities.reduce((s, a) => s + (Number(a.weight) || 0), 0);
+    if (!totalWeight) return 0;
+
     let plannedPct = 0;
     const asOfMs = asOf.getTime();
     for (const act of activities) {
       const start  = act.planned_start  ? new Date(act.planned_start).getTime()  : null;
       const finish = act.planned_finish ? new Date(act.planned_finish).getTime() : null;
-      const weight = totalWeight > 0 ? (Number(act.weight) || 0) / totalWeight : (1 / activities.length);
+      const weight = (Number(act.weight) || 0) / totalWeight;
       if (!start || !finish || finish <= start) continue;
       if (asOfMs >= finish) plannedPct += weight;
       else if (asOfMs > start) plannedPct += weight * ((asOfMs - start) / (finish - start));
     }
-    return Math.round(BAC * plannedPct * 100) / 100;
+    return BAC * plannedPct;
   },
 
   _interpretEVM(CPI, SPI, CV, SV, BAC) {
     const lines = [];
-    if (CPI === null && SPI === null) return ['بيانات غير كافية لتفسير EVM'];
-    if (CPI !== null && SPI !== null) {
-      if (CPI >= 1.0 && SPI >= 1.0) {
-        lines.push('الأداء المالي والهندسي ممتاز: متقدم عن الجدول الزمني وضمن الميزانية المعتمدة ✅');
-      } else if (CPI >= 1.0 && SPI < 1.0) {
-        lines.push('الأداء المالي سليم وضمن الميزانية، ولكن وتيرة الإنجاز الميداني متأخرة عن الجدول الزمني ⏳');
-      } else if (CPI < 1.0 && SPI >= 1.0) {
-        lines.push('وتيرة الإنجاز متقدمة، ولكن توجد زيادة في التكاليف الفعلية تتجاوز الميزانية المحددة 💰');
-      } else {
-        lines.push('إنذار رقابي مبكر: المشروع متأخر عن الخطة وتكاليفه الفعلية تتجاوز الميزانية 🚨');
-      }
-    }
-    if (CPI !== null && CPI < 0.85) {
-      lines.push(`كفاءة التكلفة منخفضة (${CPI}): كل 1 ر.ي مصروف يُحقق عائداً فيزيائياً بقيمة ${CPI} ر.ي`);
-    }
-    if (SPI !== null && SPI < 0.85) {
-      lines.push(`معدل الجدول الزمني متأخر (${SPI}): وتيرة العمل أقل من الخطة`);
-    }
-    if (!lines.length) {
-      lines.push('المؤشرات المالية والزمنية متوازنة وضمن النطاق التشغيلي المقبول');
-    }
+    if (CPI === null || SPI === null) return ['بيانات غير كافية لتفسير EVM'];
+    if (CPI >= 1.0 && SPI >= 1.0) lines.push('المشروع في وضع ممتاز: أمام الجدول وضمن الميزانية');
+    else if (CPI >= 1.0 && SPI < 1.0) lines.push('التكلفة جيدة لكن المشروع متأخر عن الجدول الزمني');
+    else if (CPI < 1.0 && SPI >= 1.0) lines.push('الجدول جيد لكن التكاليف تتجاوز الميزانية');
+    else lines.push('وضع حرج: المشروع متأخر وتكاليفه تتجاوز الميزانية - يستوجب اجتماع إدارة فوري');
+    if (CPI < 0.85) lines.push(`كل ريال يصرف ينتج ${(CPI * 100).toFixed(0)} هللة فقط`);
+    if (SPI < 0.85) lines.push(`كفاءة الجدول ${(SPI * 100).toFixed(0)}% - تأخر ملحوظ`);
     return lines;
   },
 };

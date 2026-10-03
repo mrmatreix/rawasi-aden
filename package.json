@@ -8,11 +8,11 @@
     "start:staging": "node scripts/run_staging.js",
     "build": "node build_www.js",
     "dev": "node server/server.js",
+    "migrate": "node server/database/migrate_vouchers_custodies_periods.js",
     "test": "node --test --test-concurrency=1 tests/**/*.test.js",
     "test:unit": "node --test --test-concurrency=1 tests/unit/**/*.test.js",
     "test:integration": "node --test --test-concurrency=1 tests/integration/**/*.test.js",
-    "seed": "node server/database/seed.js",
-    "clean:prod": "node scripts/clean_production_database.js"
+    "seed": "node server/database/seed.js"
   },
   "keywords": [
     "rawasi-aden",
