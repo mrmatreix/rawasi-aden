@@ -11,7 +11,8 @@
     "test": "node --test --test-concurrency=1 tests/**/*.test.js",
     "test:unit": "node --test --test-concurrency=1 tests/unit/**/*.test.js",
     "test:integration": "node --test --test-concurrency=1 tests/integration/**/*.test.js",
-    "seed": "node server/database/seed.js"
+    "seed": "node server/database/seed.js",
+    "clean:prod": "node scripts/clean_production_database.js"
   },
   "keywords": [
     "rawasi-aden",

@@ -2992,24 +2992,28 @@ const Accounting = {
       return;
     }
 
-    tbody.innerHTML = items.map(c => `
+    tbody.innerHTML = items.map(c => {
+      const rate = Number(c.exchange_rate ?? c.rate_to_base ?? 1.0);
+      const isDefault = Boolean(c.is_default || c.is_base || c.code === 'YER');
+      return `
       <tr>
         <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${c.code}</td>
         <td><strong>${c.name}</strong></td>
         <td style="font-weight: bold;">${c.symbol || '-'}</td>
         <td style="font-family: monospace; font-weight: bold; color: var(--accent-green); font-size: 1.05rem; direction: ltr; text-align: left;">
-          ${Number(c.exchange_rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} YER
+          ${rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} YER
         </td>
-        <td>${c.is_default ? '<span class="badge badge-active">عملة الأساس الرئيسية (1.0)</span>' : '<span class="badge badge-info">عملة أجنبية</span>'}</td>
+        <td>${isDefault ? '<span class="badge badge-active">عملة الأساس الرئيسية (1.0)</span>' : '<span class="badge badge-info">عملة أجنبية</span>'}</td>
         <td style="text-align: center;">
-          ${c.is_default ? '<span style="color: var(--text-secondary); font-size: 0.8rem;">أساس (ثابت)</span>' : `
-            <button class="btn btn-sm btn-secondary" onclick="Accounting.quickUpdateCurrencyRate(${c.id}, ${c.exchange_rate})" title="تعديل سعر الصرف اليومي">
+          ${isDefault ? '<span style="color: var(--text-secondary); font-size: 0.8rem;">أساس (ثابت)</span>' : `
+            <button class="btn btn-sm btn-secondary" onclick="Accounting.quickUpdateCurrencyRate(${c.id}, ${rate})" title="تعديل سعر الصرف اليومي">
               ✏️ تحديث السعر
             </button>
           `}
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
   },
 
   openNewCurrencyModal() {
@@ -3040,7 +3044,7 @@ const Accounting = {
       const res = await fetch('/api/accounting/currencies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, symbol, exchange_rate })
+        body: JSON.stringify({ code, name, symbol, rate_to_base: exchange_rate, exchange_rate })
       });
       const data = await res.json();
       if (data.success) {
@@ -3057,11 +3061,12 @@ const Accounting = {
   },
 
   async quickUpdateCurrencyRate(id, currentRate) {
-    const newRateStr = prompt(`أدخل سعر الصرف الجديد مقابل الريال اليمني (YER):\nالسعر الحالي: ${currentRate}`, currentRate);
+    const defaultVal = (!currentRate || isNaN(currentRate)) ? '' : String(currentRate);
+    const newRateStr = prompt(`أدخل سعر الصرف الجديد مقابل الريال اليمني (YER):\nالسعر الحالي: ${defaultVal || 'غير محدد'}`, defaultVal);
     if (!newRateStr) return;
-    const rate = parseFloat(newRateStr);
+    const rate = parseFloat(newRateStr.replace(/,/g, '').trim());
     if (isNaN(rate) || rate <= 0) {
-      App.showToast('سعر الصرف غير صحيح', 'error');
+      App.showToast('سعر الصرف غير صحيح، يرجى إدخال رقم موجب', 'error');
       return;
     }
 
@@ -3069,11 +3074,11 @@ const Accounting = {
       const res = await fetch(`/api/accounting/currencies/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exchange_rate: rate })
+        body: JSON.stringify({ rate_to_base: rate, exchange_rate: rate })
       });
       const data = await res.json();
       if (data.success) {
-        App.showToast('تم تحديث سعر الصرف بنجاح', 'success');
+        App.showToast('تم تحديث سعر الصرف بنجاح ✅', 'success');
         await this.loadCurrenciesTable();
       } else {
         App.showToast(data.message || 'فشل التحديث', 'error');
@@ -3103,16 +3108,15 @@ const Accounting = {
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'accountingPeriodsModal';
-      modal.className = 'modal';
+      modal.className = 'modal-overlay';
       modal.innerHTML = `
-        <div class="modal-dialog modal-lg" style="max-width: 850px;">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
-                <span>🔒 إدارة الفترات المحاسبية وإغلاق الدفاتر</span>
-              </h3>
-              <button type="button" class="btn-close" onclick="App.closeModal('accountingPeriodsModal')">✕</button>
-            </div>
+        <div class="modal-box" style="max-width: 850px; width: 95%;">
+          <div class="modal-header">
+            <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+              <span>🔒 إدارة الفترات المحاسبية وإغلاق الدفاتر</span>
+            </h3>
+            <button type="button" class="modal-close-btn" onclick="App.closeModal('accountingPeriodsModal')">&times;</button>
+          </div>
             <div class="modal-body">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <p style="color: var(--text-secondary); margin: 0; font-size: 0.88rem;">
@@ -3315,16 +3319,15 @@ const Accounting = {
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'auditLogModal';
-      modal.className = 'modal';
+      modal.className = 'modal-overlay';
       modal.innerHTML = `
-        <div class="modal-dialog modal-xl" style="max-width: 1050px;">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
-                <span>📜 سجل التدقيق والرقابة المالية (Audit Trail)</span>
-              </h3>
-              <button type="button" class="btn-close" onclick="App.closeModal('auditLogModal')">✕</button>
-            </div>
+        <div class="modal-box" style="max-width: 1050px; width: 95%;">
+          <div class="modal-header">
+            <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+              <span>📜 سجل التدقيق والرقابة المالية (Audit Trail)</span>
+            </h3>
+            <button type="button" class="modal-close-btn" onclick="App.closeModal('auditLogModal')">&times;</button>
+          </div>
             <div class="modal-body">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <p style="color: var(--text-secondary); margin: 0; font-size: 0.88rem;">

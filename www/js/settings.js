@@ -1396,7 +1396,7 @@ const Settings = {
           if (u.role === 'admin' || u.username === 'admin' || has2Fa) {
             const currentPin = u.two_factor_pin || '123456';
             tfaBadgeHtml = `<div style="margin-top: 5px;">
-              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id})" title="رمز التحقق بخطوتين (PIN) المعتمد لهذا الحساب - انقر للتعديل في أي وقت">
+              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="رمز التحقق بخطوتين (PIN) المعتمد لهذا الحساب - انقر للتعديل وتغيير الرمز">
                 🔐 PIN: <strong style="font-family: monospace; letter-spacing: 1px; color: #fbbf24;">${currentPin}</strong>
               </span>
             </div>`;
@@ -1606,7 +1606,7 @@ const Settings = {
   },
 
   // ================== نافذة تعديل مستخدم ==================
-  async openEditUserModal(userId) {
+  async openEditUserModal(userId, focus2Fa = false) {
     const user = this._cachedUsers.find(u => u.id === userId);
     if (!user) {
       App.showToast('لم يتم العثور على بيانات المستخدم', 'error');
@@ -1693,6 +1693,27 @@ const Settings = {
     }
 
     App.openModal('newUserModal');
+
+    if (focus2Fa) {
+      setTimeout(() => {
+        const card = document.getElementById('user2FaCardContainer');
+        const pinInput = document.getElementById('user2FaPinVal');
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.style.transition = 'box-shadow 0.4s ease, border-color 0.4s ease';
+          card.style.borderColor = 'var(--gold-primary)';
+          card.style.boxShadow = '0 0 16px rgba(212, 175, 55, 0.4)';
+          setTimeout(() => {
+            card.style.boxShadow = '';
+            card.style.borderColor = 'rgba(212, 175, 55, 0.35)';
+          }, 1500);
+        }
+        if (pinInput) {
+          pinInput.focus();
+          pinInput.select();
+        }
+      }, 350);
+    }
   },
 
   // ================== دوال التحكم برمز التحقق بخطوتين (2FA PIN) ==================
@@ -2151,7 +2172,17 @@ const Settings = {
     // قراءة والتحقق من رمز التحقق بخطوتين (2FA PIN)
     const pinInput = document.getElementById('user2FaPinVal');
     const tfaEnabledChk = document.getElementById('user2FaEnabledVal');
-    const twoFactorPin = pinInput ? pinInput.value.trim() : '123456';
+    
+    const normalizeDigits = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+        .replace(/[^0-9]/g, '')
+        .trim();
+    };
+
+    const twoFactorPin = normalizeDigits(pinInput ? pinInput.value : '123456');
     const twoFactorEnabled = tfaEnabledChk ? (tfaEnabledChk.checked ? 1 : 0) : 1;
 
     if (twoFactorEnabled && twoFactorPin) {

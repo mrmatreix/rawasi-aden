@@ -540,37 +540,38 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
-    // التحقق هل الحساب للمدير العام وهل ميزة 2FA مفعلة
+    // التحقق هل الحساب مفعل له 2FA (المدير العام أو أي مستخدم مفعّل له التحقق بخطوتين)
+    let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
+      ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
+      : (user.role === 'admin' || user.username === 'admin');
+
     if (user.role === 'admin' || user.username === 'admin') {
-      let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
-        ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
-        : true;
       try {
         const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
         if (row2fa && (user.two_factor_enabled === undefined || user.two_factor_enabled === null)) {
           is2FaEnabled = (row2fa.value === '1' || row2fa.value === 'true');
         }
       } catch (e) {}
+    }
 
-      if (is2FaEnabled) {
-        const tempToken = jwt.sign(
-          { id: user.id, username: user.username, role: user.role, isPending2FA: true },
-          JWT_SECRET,
-          { expiresIn: '5m' }
-        );
-        return res.json({
-          success: true,
-          requires2FA: true,
-          tempToken,
-          user: {
-            id: user.id,
-            username: user.username,
-            full_name: user.full_name,
-            role: user.role
-          },
-          message: 'مرحباً بالمدير العام! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️'
-        });
-      }
+    if (is2FaEnabled) {
+      const tempToken = jwt.sign(
+        { id: user.id, username: user.username, role: user.role, isPending2FA: true },
+        JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+      return res.json({
+        success: true,
+        requires2FA: true,
+        tempToken,
+        user: {
+          id: user.id,
+          username: user.username,
+          full_name: user.full_name,
+          role: user.role
+        },
+        message: `مرحباً بك (${user.full_name || user.username})! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️`
+      });
     }
 
     // إكمال تسجيل الدخول الاعتيادي
@@ -581,7 +582,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   }
 });
 
-// 1.1 التحقق من رمز التحقق بخطوتين (2FA) للمدير العام
+// 1.1 التحقق من رمز التحقق بخطوتين (2FA)
 router.post('/verify-2fa', async (req, res) => {
   try {
     const { tempToken, code, force, deviceInfo, deviceId, deviceName } = req.body;
@@ -596,7 +597,7 @@ router.post('/verify-2fa', async (req, res) => {
       return res.status(401).json({ success: false, message: 'جلسة التحقق المؤقتة منتهية، يرجى إعادة تسجيل الدخول' });
     }
 
-    if (!decoded || !decoded.isPending2FA || decoded.role !== 'admin') {
+    if (!decoded || !decoded.isPending2FA) {
       return res.status(401).json({ success: false, message: 'طلب التحقق غير صالح' });
     }
 

@@ -315,7 +315,18 @@ router.delete('/accounts/:id', requirePermission('accounting:delete,settings:com
 router.get('/currencies', requirePermission('accounting:view'), async (req, res) => {
   try {
     const currencies = await query('SELECT * FROM currencies ORDER BY is_base DESC, code ASC');
-    res.json({ success: true, data: currencies });
+    const enriched = (currencies || []).map(c => {
+      const rate = Number(c.rate_to_base ?? c.exchange_rate ?? 1.0);
+      const isBase = (c.is_base === 1 || c.is_base === true || c.is_default === 1 || c.code === 'YER') ? 1 : 0;
+      return {
+        ...c,
+        rate_to_base: rate,
+        exchange_rate: rate,
+        is_base: isBase,
+        is_default: isBase
+      };
+    });
+    res.json({ success: true, data: enriched });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب العملات', error: err.message });
   }
@@ -324,23 +335,29 @@ router.get('/currencies', requirePermission('accounting:view'), async (req, res)
 // إضافة عملة جديدة
 router.post('/currencies', requirePermission('accounting:create,settings:company'), async (req, res) => {
   try {
-    const { code, name, symbol, rate_to_base = 1.0, is_base = 0 } = req.body;
-    if (!code || !name || !symbol) {
-      return res.status(400).json({ success: false, message: 'كود العملة، الاسم، والرمز حقول مطلوبة' });
+    const code = req.body.code ? String(req.body.code).trim().toUpperCase() : '';
+    const name = req.body.name ? String(req.body.name).trim() : '';
+    const symbol = req.body.symbol ? String(req.body.symbol).trim() : '';
+    const rawRate = req.body.rate_to_base ?? req.body.exchange_rate ?? 1.0;
+    const rate_to_base = Number(rawRate) || 1.0;
+    const is_base = (req.body.is_base === 1 || req.body.is_base === true || req.body.is_default === 1) ? 1 : 0;
+
+    if (!code || !name) {
+      return res.status(400).json({ success: false, message: 'كود العملة واسم العملة حقول مطلوبة' });
     }
-    const existing = await get('SELECT id FROM currencies WHERE code = ?', [code.trim().toUpperCase()]);
+    const existing = await get('SELECT id FROM currencies WHERE code = ?', [code]);
     if (existing) {
       return res.status(400).json({ success: false, message: 'رمز العملة مسجل مسبقاً' });
     }
 
-    if (Number(is_base) === 1) {
+    if (is_base === 1) {
       await run('UPDATE currencies SET is_base = 0');
     }
 
     const result = await run(`
       INSERT INTO currencies (code, name, symbol, rate_to_base, is_base)
       VALUES (?, ?, ?, ?, ?)
-    `, [code.trim().toUpperCase(), name.trim(), symbol.trim(), Number(rate_to_base || 1.0), Number(is_base || 0)]);
+    `, [code, name, symbol || null, rate_to_base, is_base]);
 
     res.json({ success: true, message: 'تمت إضافة العملة بنجاح', id: result.lastInsertRowid || result.insertId });
   } catch (err) {
@@ -352,12 +369,17 @@ router.post('/currencies', requirePermission('accounting:create,settings:company
 router.put('/currencies/:id', requirePermission('accounting:edit,settings:company'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { rate_to_base, name, symbol, is_base } = req.body;
-    if (rate_to_base !== undefined && Number(rate_to_base) <= 0) {
+    const rawRate = req.body.rate_to_base ?? req.body.exchange_rate;
+    const rate_to_base = rawRate !== undefined ? Number(rawRate) : null;
+    const name = req.body.name ? String(req.body.name).trim() : null;
+    const symbol = req.body.symbol ? String(req.body.symbol).trim() : null;
+    const is_base = req.body.is_base !== undefined ? (Number(req.body.is_base) ? 1 : 0) : (req.body.is_default !== undefined ? (Number(req.body.is_default) ? 1 : 0) : null);
+
+    if (rate_to_base !== null && (isNaN(rate_to_base) || rate_to_base <= 0)) {
       return res.status(400).json({ success: false, message: 'سعر الصرف يجب أن يكون أكبر من الصفر' });
     }
 
-    if (Number(is_base) === 1) {
+    if (is_base === 1) {
       await run('UPDATE currencies SET is_base = 0');
     }
 
@@ -369,7 +391,7 @@ router.put('/currencies/:id', requirePermission('accounting:edit,settings:compan
           is_base = COALESCE(?, is_base),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [rate_to_base !== undefined ? Number(rate_to_base) : null, name, symbol, is_base !== undefined ? Number(is_base) : null, id]);
+    `, [rate_to_base, name, symbol, is_base, id]);
 
     res.json({ success: true, message: 'تم تحديث العملة وسعر الصرف بنجاح' });
   } catch (err) {

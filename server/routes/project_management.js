@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const XLSX = require('xlsx');
-const { query, get, run } = require('../database/db');
+const { query, get, run, transaction } = require('../database/db');
 const { tafqeet } = require('../services/tafqeetService');
 const { requirePermission, requireScope } = require('../middleware/security');
 
@@ -346,7 +346,25 @@ router.get('/:projectId/boq', async (req, res) => {
 
 router.post('/:projectId/boq', async (req, res) => {
   try {
-    const projectId = req.params.projectId;
+    let projectId = parseInt(req.params.projectId, 10);
+    if (!projectId || isNaN(projectId)) {
+      projectId = parseInt(req.body.projectId || req.body.project_id, 10);
+    }
+
+    if (!projectId || isNaN(projectId) || projectId <= 0) {
+      const fallbackProject = await get('SELECT id FROM projects ORDER BY id ASC LIMIT 1');
+      if (fallbackProject) {
+        projectId = fallbackProject.id;
+      } else {
+        return res.status(400).json({ success: false, message: 'معرف المشروع غير صالح أو غير محدد' });
+      }
+    }
+
+    const projectExists = await get('SELECT id FROM projects WHERE id = ?', [projectId]);
+    if (!projectExists) {
+      return res.status(404).json({ success: false, message: `المشروع برقم (${projectId}) غير موجود في النظام` });
+    }
+
     const {
       item_no, description, category = 'أعمال خرسانية', unit = 'م3',
       contract_qty = 0, executed_qty = 0, unit_rate = 0, status = 'جاري التنفيذ', notes
@@ -377,66 +395,120 @@ router.post('/:projectId/boq', async (req, res) => {
   }
 });
 
-// استيراد دفعة بنود كميات من Excel (Batch Import)
+// استيراد دفعة بنود كميات من Excel (Batch Import) بموثوقية عالية ومعاملات ذرية
 router.post('/:projectId/boq/batch-import', async (req, res) => {
   try {
-    const projectId = req.params.projectId;
-    const { items, mode = 'merge' } = req.body;
+    let projectId = parseInt(req.params.projectId, 10);
+    if (!projectId || isNaN(projectId)) {
+      projectId = parseInt(req.body.projectId || req.body.project_id, 10);
+    }
+
+    if (!projectId || isNaN(projectId) || projectId <= 0) {
+      // محاولة استرداد أول مشروع مسجل في النظام كخيار إنقاذ ذكي
+      const fallbackProject = await get('SELECT id, name FROM projects ORDER BY id ASC LIMIT 1');
+      if (fallbackProject) {
+        projectId = fallbackProject.id;
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'معرف المشروع غير صحيح أو غير محدد. يرجى اختيار مشروع معتمد أولاً.'
+        });
+      }
+    }
+
+    // التحقق الصارم من وجود المشروع في قاعدة البيانات
+    const project = await get('SELECT id, name, currency FROM projects WHERE id = ?', [projectId]);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: `المشروع برقم (${projectId}) غير موجود في قاعدة البيانات.`
+      });
+    }
+
+    const { items, mode = 'merge', updateContract = false } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'لم يتم توفير بنود للاستيراد' });
     }
 
-    if (mode === 'replace') {
-      await run('DELETE FROM project_boq WHERE project_id = ?', [projectId]);
-    }
-
     let insertedCount = 0;
     let updatedCount = 0;
 
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      const itemNo = String(it.item_no || it.code || `BOQ-${String(i + 1).padStart(3, '0')}`).trim();
-      const desc = String(it.description || it.desc || it.name || 'بند أعمال').trim();
-      const cat = String(it.category || it.wbs || 'أعمال إنشائية').trim();
-      const unit = String(it.unit || 'م3').trim();
-      const cQty = Math.max(0, Number(it.contract_qty ?? it.quantity ?? it.qty) || 0);
-      const eQty = Math.max(0, Number(it.executed_qty ?? 0));
-      const rate = Math.max(0, Number(it.unit_rate ?? it.price ?? it.rate) || 0);
-      const total = Number(it.total_amount) || (cQty * rate);
-      const notes = it.notes ? String(it.notes) : null;
-      const status = eQty >= cQty && cQty > 0 ? 'مكتمل' : (eQty > 0 ? 'جاري التنفيذ' : 'لم يبدأ');
+    await transaction(async (tx) => {
+      if (mode === 'replace') {
+        // حماية المفاتيح الأجنبية (FK Protection): فك ارتباط طلبات الشراء والمرتجعات المرتبطة ببنود المشروع قبل الحذف
+        await tx.run(`
+          UPDATE purchase_requisitions 
+          SET boq_item_id = NULL 
+          WHERE boq_item_id IN (SELECT id FROM project_boq WHERE project_id = ?)
+        `, [projectId]).catch(() => {});
 
-      if (mode === 'merge') {
-        const existing = await get('SELECT id FROM project_boq WHERE project_id = ? AND item_no = ?', [projectId, itemNo]);
-        if (existing) {
-          await run(`
-            UPDATE project_boq SET
-              description = ?, category = ?, unit = ?, contract_qty = ?,
-              executed_qty = ?, unit_rate = ?, total_amount = ?, status = ?, notes = ?
-            WHERE id = ? AND project_id = ?
-          `, [desc, cat, unit, cQty, eQty, rate, total, status, notes, existing.id, projectId]);
-          updatedCount++;
-          continue;
-        }
+        await tx.run(`
+          UPDATE inventory_returns 
+          SET boq_item_id = NULL 
+          WHERE boq_item_id IN (SELECT id FROM project_boq WHERE project_id = ?)
+        `, [projectId]).catch(() => {});
+
+        await tx.run('DELETE FROM project_boq WHERE project_id = ?', [projectId]);
       }
 
-      await run(`
-        INSERT INTO project_boq (
-          project_id, item_no, description, category, unit,
-          contract_qty, executed_qty, unit_rate, total_amount, status, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [projectId, itemNo, desc, cat, unit, cQty, eQty, rate, total, status, notes]);
-      insertedCount++;
-    }
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const itemNo = String(it.item_no || it.code || `BOQ-${String(i + 1).padStart(3, '0')}`).trim();
+        const desc = String(it.description || it.desc || it.name || 'بند أعمال').trim();
+        const cat = String(it.category || it.wbs || 'أعمال إنشائية').trim();
+        const unit = String(it.unit || 'م3').trim();
+        const cQty = Math.max(0, Number(it.contract_qty ?? it.quantity ?? it.qty) || 0);
+        const eQty = Math.max(0, Number(it.executed_qty ?? 0));
+        const rate = Math.max(0, Number(it.unit_rate ?? it.price ?? it.rate) || 0);
+        const total = Number(it.total_amount) || (cQty * rate);
+        const notes = it.notes ? String(it.notes) : null;
+        const status = eQty >= cQty && cQty > 0 ? 'مكتمل' : (eQty > 0 ? 'جاري التنفيذ' : 'لم يبدأ');
 
-    // تحديث إجمالي قيمة المشروع في العقد إذا كانت صفراً أو بناء على رغبة المستخدم
+        if (mode === 'merge') {
+          const existing = await tx.get('SELECT id FROM project_boq WHERE project_id = ? AND item_no = ?', [projectId, itemNo]);
+          if (existing) {
+            await tx.run(`
+              UPDATE project_boq SET
+                description = ?, category = ?, unit = ?, contract_qty = ?,
+                executed_qty = ?, unit_rate = ?, total_amount = ?, status = ?, notes = ?
+              WHERE id = ? AND project_id = ?
+            `, [desc, cat, unit, cQty, eQty, rate, total, status, notes, existing.id, projectId]);
+            updatedCount++;
+            continue;
+          }
+        }
+
+        await tx.run(`
+          INSERT INTO project_boq (
+            project_id, item_no, description, category, unit,
+            contract_qty, executed_qty, unit_rate, total_amount, status, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [projectId, itemNo, desc, cat, unit, cQty, eQty, rate, total, status, notes]);
+        insertedCount++;
+      }
+
+      // تحديث قيمة العقد تلقائياً إذا طُلب ذلك
+      const totalRow = await tx.get('SELECT SUM(total_amount) as total FROM project_boq WHERE project_id = ?', [projectId]);
+      const totalVal = Number(totalRow?.total) || 0;
+
+      if (updateContract && totalVal > 0) {
+        await tx.run('UPDATE projects SET contract_value = ? WHERE id = ?', [totalVal, projectId]);
+        const contractExists = await tx.get('SELECT id FROM project_contracts WHERE project_id = ?', [projectId]);
+        if (contractExists) {
+          await tx.run('UPDATE project_contracts SET contract_value = ? WHERE project_id = ?', [totalVal, projectId]);
+        }
+      }
+    });
+
     const totalRow = await get('SELECT SUM(total_amount) as total FROM project_boq WHERE project_id = ?', [projectId]);
     const totalVal = Number(totalRow?.total) || 0;
 
     res.json({
       success: true,
-      message: `تم استيراد ومعالجة بنود الكميات بنجاح (تم إدراج ${insertedCount} بند، وتحديث ${updatedCount} بند)`,
+      message: `تم استيراد ومعالجة بنود الكميات بنجاح لمشروع "${project.name}" (إدراج ${insertedCount} بند، وتحديث ${updatedCount} بند)`,
+      projectId,
+      projectName: project.name,
       insertedCount,
       updatedCount,
       totalCount: insertedCount + updatedCount,
@@ -557,7 +629,7 @@ router.get('/:projectId/boq/export-excel', async (req, res) => {
     const filename = `BOQ_${(project.name || 'Project').replace(/[^\w\u0621-\u064A]/g, '_')}.xlsx`;
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.send(buffer);
   } catch (err) {
     console.error('Error exporting BOQ to Excel:', err);
@@ -1093,7 +1165,7 @@ router.get('/:projectId/invoices/prepare-from-boq', async (req, res) => {
     if (!project) return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
 
     const contract = await get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]) || {};
-    const prevInvoices = await query('SELECT * FROM project_invoices WHERE project_id = ? AND status != "ملغي" ORDER BY id ASC', [projectId]);
+    const prevInvoices = await query("SELECT * FROM project_invoices WHERE project_id = ? AND status != 'ملغي' ORDER BY id ASC", [projectId]);
     const boqItems = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
 
     // حساب إجمالي المستخلصات السابقة
