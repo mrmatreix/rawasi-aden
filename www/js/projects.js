@@ -386,14 +386,17 @@ const Projects = {
     }
   },
 
-  openNewModal() {
-    // ملء قائمة العملاء في نموذج المشروع
+  openNewModal(preSelectedClientId = null) {
+    // ملء قائمة العملاء في نموذج المشروع مع إمكانية التحديد المسبق
     const select = document.getElementById('projClientSelect');
     if (select) {
       fetch('/api/clients').then(r => r.json()).then(res => {
         if (res.success) {
-          select.innerHTML = `<option value="">اختر العميل...</option>` + 
-            res.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+          select.innerHTML = `<option value="">اختر العميل لربطه بالمشروع والعقد...</option>` + 
+            res.data.map(c => `<option value="${c.id}" ${preSelectedClientId && String(c.id) === String(preSelectedClientId) ? 'selected' : ''}>${c.name} (${c.company || 'فردي'})</option>`).join('');
+          if (preSelectedClientId) {
+            select.value = String(preSelectedClientId);
+          }
         }
       });
     }
@@ -495,7 +498,24 @@ const Projects = {
                   <span>طباعة التقرير</span>
                 </button>
               </div>
-              <p style="color: var(--text-secondary); font-size: 0.85rem;">العميل: <strong>${p.client_name || 'غير محدد'}</strong> | هاتف: ${p.client_phone || 'غير مسجل'}</p>
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px;">
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                  العميل: <strong style="color: #fff;">${p.client_name || 'غير محدد'}</strong> ${p.client_phone ? `| هاتف: ${p.client_phone}` : ''}
+                </p>
+                ${p.client_id ? `
+                  <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${p.client_id})" style="font-size: 0.72rem; padding: 2px 8px;">
+                      <span>🔗 سلسلة العميل المالية</span>
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${p.client_id}; Reports.fetchFullClientStatement();" style="font-size: 0.72rem; padding: 2px 8px;">
+                      <span>كشف الحساب</span>
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px; border-color: var(--gold-light); color: var(--gold-light);">
+                      <span>+ مستخلص</span>
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px;">
                 <div><span style="font-size:0.75rem; color:var(--text-secondary)">قيمة العقد:</span> <strong style="color:var(--gold-light)">${App.formatNumber(p.contract_value)} ${p.currency || 'ر.ي'}</strong></div>
                 <div><span style="font-size:0.75rem; color:var(--text-secondary)">التكلفة الفعلية:</span> <strong>${App.formatNumber(p.actual_cost)} ${p.currency || 'ر.ي'}</strong></div>

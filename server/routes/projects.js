@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
+const clientChainService = require('../services/clientChainService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 // جلب جميع المشاريع مع اسم العميل وتطبيق نطاق الصلاحيات
@@ -129,6 +130,23 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
 
     const newId = result.lastInsertRowid || result.insertId;
 
+    // ربط العميل بالعقد والمشروع تلقائياً وإنشاء العقد الأولي
+    if (client_id || Number(contract_value) > 0) {
+      const contractCount = await get('SELECT COUNT(*) as cnt FROM project_contracts');
+      const contractNo = `CNT-${code}-${String(((contractCount?.cnt || 0) + 1)).padStart(2, '0')}`;
+      await run(`
+        INSERT INTO project_contracts (
+          project_id, client_id, contract_no, contract_value, currency,
+          advance_payment_pct, retention_pct, signing_date, status, notes
+        ) VALUES (?, ?, ?, ?, ?, 10, 10, date('now'), 'معتمد', ?)
+      `, [newId, client_id ? Number(client_id) : null, contractNo, Number(contract_value) || 0, selectedCurrency, `عقد مشروع ${trimmedName}`]);
+
+      // مزامنة الأثر المالي اللحظي في حساب العميل
+      if (client_id) {
+        await clientChainService.syncClientBalances(Number(client_id));
+      }
+    }
+
     const confirmedProject = await get(`
       SELECT p.*, c.name as client_name 
       FROM projects p 
@@ -138,7 +156,7 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
 
     res.json({
       success: true,
-      message: `تم حفظ وتأكيد إضافة المشروع (${confirmedProject ? confirmedProject.name : trimmedName}) في قاعدة البيانات بنجاح`,
+      message: `تم حفظ وتأكيد إضافة المشروع (${confirmedProject ? confirmedProject.name : trimmedName}) وربطه بالعميل والعقد بنجاح`,
       data: confirmedProject,
       id: newId,
       code: confirmedProject ? confirmedProject.code : code
@@ -189,7 +207,15 @@ router.put('/:id', requirePermission('projects:edit', { projectParam: 'id' }), a
       start_date, end_date, notes, req.params.id
     ]);
 
-    res.json({ success: true, message: 'تم تحديث بيانات المشروع بنجاح' });
+    // تحديث العقد المرتبط بالعميل إن وجد
+    if (client_id !== undefined) {
+      await run('UPDATE project_contracts SET client_id = ? WHERE project_id = ?', [client_id ? Number(client_id) : null, req.params.id]);
+      if (client_id) {
+        await clientChainService.syncClientBalances(Number(client_id));
+      }
+    }
+
+    res.json({ success: true, message: 'تم تحديث بيانات المشروع وربطه بالعميل بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في تعديل المشروع', error: err.message });
   }

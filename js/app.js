@@ -2470,6 +2470,18 @@ const App = {
     await this.openClientChainModal(this.currentChainClientId);
   },
 
+  openNewProjectForClientFromChain() {
+    if (!this.currentChainClientId) return;
+    const clientId = this.currentChainClientId;
+    this.closeModal('clientChainModal');
+    this.navigate('projects');
+    setTimeout(() => {
+      if (typeof Projects !== 'undefined' && Projects.openNewModal) {
+        Projects.openNewModal(clientId);
+      }
+    }, 250);
+  },
+
   openNewClientBillFromChain() {
     if (!this.currentChainClientId) return;
     this.openNewClientBillModal(this.currentChainClientId);

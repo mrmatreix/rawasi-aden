@@ -419,33 +419,123 @@ const Reports = {
       const res = await fetch(`/api/reports/client-statement/${clientId}`);
       const json = await res.json();
       if (json.success) {
-        const { client, statement } = json.data;
+        const { client, statement, chain_nine_stages, summary } = json.data;
         const cCurr = client.currency || 'ر.ي';
+        const st = chain_nine_stages || {};
+
         document.getElementById('repClientInfo').innerHTML = `
-          <div style="background: rgba(212,175,55,0.06); border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-md); margin-bottom: 14px;">
-            <h4 style="color: var(--gold-light);">${client.name}</h4>
-            <div style="display: flex; gap: 24px; font-size: 0.85rem; margin-top: 8px;">
-              <span>الهاتف: <strong>${client.phone || '-'}</strong></span>
-              <span>الرصيد السابق: <strong>${App.formatNumber(client.previous_balance)} ${cCurr}</strong></span>
-              <span>الرصيد الحالي المستحق: <strong style="color: var(--accent-red); font-size: 1rem;">${App.formatNumber(client.current_balance)} ${cCurr}</strong></span>
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 1.2rem;">${client.name} ${client.company ? `<span style="font-size: 0.85rem; color: #38bdf8;">(${client.company})</span>` : ''}</h3>
+                <span style="font-size: 0.78rem; color: var(--text-secondary);">الهاتف: ${client.phone || '-'} | العنوان: ${client.address || '-'}</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${client.id})">
+                  <span>🔗 استعراض السلسلة الهرمية</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${client.id})">
+                  <span>+ مستخلص جديد</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- شريط السلسلة التساعية التفاعلي 1 إلى 9 المكتمل بالأرقام الفعلية -->
+            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+              <div style="font-size: 0.75rem; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
+                ⚡ شريط السلسلة المالية المرتبطة للعميل (1 إلى 9):
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 6px; text-align: center; font-size: 0.72rem;">
+                <div style="background: rgba(212,175,55,0.12); border: 1px solid rgba(212,175,55,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: var(--gold-light);">1. العميل</span>
+                  <div style="font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${client.name}</div>
+                </div>
+                <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #38bdf8;">2. العقود</span>
+                  <div style="font-weight: 700; color: #fff;">${st.stage_2_contracts_count || 0} (${App.formatNumber(st.stage_2_total_contract_value || 0)})</div>
+                </div>
+                <div style="background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #a78bfa;">3. المشاريع</span>
+                  <div style="font-weight: 700; color: #fff;">${st.stage_3_projects_count || 0} مشاريع</div>
+                </div>
+                <div style="background: rgba(234,179,8,0.12); border: 1px solid rgba(234,179,8,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #facc15;">4. المستخلصات</span>
+                  <div style="font-weight: 700; color: #fff;">${st.stage_4_bills_count || 0} مستخلص</div>
+                </div>
+                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #f59e0b;">5. المطالبات</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_5_total_invoiced_claims || 0)}</div>
+                </div>
+                <div style="background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.35); border-radius: 5px; padding: 5px;">
+                  <span style="color: #38bdf8;">6. دفعات مقدمة</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_6_total_advance_received || 0)}</div>
+                </div>
+                <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: var(--accent-green);">7. المبالغ المحصلة</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_7_total_collections || 0)}</div>
+                </div>
+                <div style="background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.35); border-radius: 5px; padding: 5px;">
+                  <span style="color: #f59e0b;">8. محتجزات الضمان</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_8_active_retention_balance || 0)}</div>
+                </div>
+                <div style="background: rgba(239,68,68,0.15); border: 1px solid var(--accent-red); border-radius: 5px; padding: 5px;">
+                  <span style="color: var(--accent-red); font-weight: 700;">9. الرصيد المستحق</span>
+                  <div style="font-weight: 800; color: var(--accent-red);">${App.formatNumber(st.stage_9_outstanding_due_balance || 0)} ${cCurr}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- شريط ملخص الأرصدة المدققة -->
+            <div style="display: flex; gap: 20px; font-size: 0.85rem; flex-wrap: wrap; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px;">
+              <span>الرصيد الافتتاحي: <strong>${App.formatNumber(client.previous_balance || 0)} ${cCurr}</strong></span>
+              <span>إجمالي المطالبات المفوترة: <strong style="color: var(--gold-light);">${App.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></span>
+              <span>إجمالي المحصل: <strong style="color: var(--accent-green);">${App.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></span>
+              <span>محتجزات الضمان المعلقة: <strong style="color: #f59e0b;">${App.formatNumber(summary.active_retention || 0)} ${cCurr}</strong></span>
+              <span>الرصيد النهائي المستحق: <strong style="color: var(--accent-red); font-size: 1.05rem;">${App.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></span>
             </div>
           </div>
         `;
 
         const tbody = document.getElementById('repClientStatementTable');
         if (tbody) {
-          let runningBalance = Number(client.previous_balance || 0);
+          if (statement.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا العميل</td></tr>`;
+            return;
+          }
+
           tbody.innerHTML = statement.map(s => {
-            runningBalance += (s.debit || 0) - (s.credit || 0);
+            const contractBadge = (s.contract_no && s.contract_no !== '-') 
+              ? `<span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8;">${s.contract_no}</span>` 
+              : '-';
+
+            const projectBadge = (s.project_name && s.project_name !== '-') 
+              ? `<span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa;">${s.project_name}</span>` 
+              : '-';
+
+            const billBadge = (s.bill_no && s.bill_no !== '-') 
+              ? `<span class="badge" style="background: rgba(234,179,8,0.15); color: #facc15;">${s.bill_no}</span>` 
+              : '-';
+
+            const retentionTxt = s.retention_deduction > 0 
+              ? `<span style="color: #f59e0b; font-weight: 600;">-${App.formatNumber(s.retention_deduction)}</span>` 
+              : '-';
+
+            const runBal = Number(s.running_balance || 0);
+            const runBalColor = runBal > 0 ? 'var(--accent-red)' : (runBal < 0 ? 'var(--accent-green)' : 'var(--text-secondary)');
+
             return `
               <tr>
-                <td>${s.date}</td>
-                <td>${s.type}</td>
-                <td>${s.ref || '-'}</td>
+                <td>${s.date || '-'}</td>
+                <td><strong>${s.type}</strong></td>
+                <td><span style="font-family: monospace; color: #fff;">${s.ref || '-'}</span></td>
+                <td>${contractBadge}</td>
+                <td>${projectBadge}</td>
+                <td>${billBadge}</td>
                 <td style="color: var(--accent-red); font-weight: bold;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
                 <td style="color: var(--accent-green); font-weight: bold;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
-                <td style="font-weight: bold;">${App.formatNumber(runningBalance)}</td>
-                <td>${s.notes || '-'}</td>
+                <td>${retentionTxt}</td>
+                <td style="font-weight: 800; color: ${runBalColor};">${App.formatNumber(runBal)}</td>
+                <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 200px;">${s.notes || '-'}</td>
               </tr>
             `;
           }).join('');

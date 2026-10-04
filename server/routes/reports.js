@@ -240,18 +240,37 @@ router.get('/client-statement/:id', requirePermission('clients:view,reports:view
 
     const clientId = req.params.id;
 
-    // المستخلصات/الفواتير - ما استحق على العميل (مدين)
+    // جلب العقود والمشاريع المرتبطة بالعميل
+    const contracts = await query('SELECT * FROM project_contracts WHERE client_id = ?', [clientId]);
+    const projects = await query('SELECT * FROM projects WHERE client_id = ? OR id IN (SELECT project_id FROM project_contracts WHERE client_id = ?)', [clientId, clientId]);
+
+    // المستخلصات/الفواتير - ما استحق على العميل (مدين) مع ربط المشروع والعقد
     const bills = await query(
-      `SELECT b.*, p.name as project_name
+      `SELECT b.*, 
+              p.name as project_name, 
+              p.code as project_code,
+              c.contract_no
        FROM bills b
        LEFT JOIN projects p ON b.project_id = p.id
-       WHERE b.client_id = ? ORDER BY b.date ASC`,
+       LEFT JOIN project_contracts c ON b.contract_id = c.id
+       WHERE b.client_id = ? AND b.status != 'ملغي'
+       ORDER BY b.date ASC`,
       [clientId]
     );
 
-    // سندات القبض من payments (دائن - ما تم تحصيله)
+    // سندات القبض (دائن - ما تم تحصيله) مع ربط المشروع والعقد والمستخلص
     const payments = await query(
-      "SELECT * FROM payments WHERE client_id = ? AND type = 'قبض' ORDER BY date ASC",
+      `SELECT p.*, 
+              pr.name as project_name, 
+              pr.code as project_code,
+              c.contract_no, 
+              b.bill_no
+       FROM payments p
+       LEFT JOIN projects pr ON p.project_id = pr.id
+       LEFT JOIN project_contracts c ON p.contract_id = c.id
+       LEFT JOIN bills b ON p.bill_id = b.id
+       WHERE p.client_id = ? AND p.type = 'قبض' AND p.status != 'ملغي'
+       ORDER BY p.date ASC`,
       [clientId]
     );
 
@@ -281,25 +300,50 @@ router.get('/client-statement/:id', requirePermission('clients:view,reports:view
       const netAmt = Number(b.net_amount) || Number(b.amount) || 0;
       statement.push({
         date: b.date,
-        type: b.bill_type || 'مستخلص/فاتورة',
+        type: b.bill_type || 'مستخلص أعمال',
         ref: b.bill_no,
+        contract_id: b.contract_id || null,
+        contract_no: b.contract_no || '-',
+        project_id: b.project_id || null,
+        project_name: b.project_name || '-',
+        bill_id: b.id,
+        bill_no: b.bill_no,
+        gross_amount: Number(b.gross_amount) || netAmt,
         debit: netAmt,
         credit: 0,
-        notes: (b.project_name ? 'مشروع: ' + b.project_name : '') + (b.notes ? ' | ' + b.notes : ''),
         advance_deduction: Number(b.advance_deduction) || 0,
         retention_deduction: Number(b.retention_deduction) || 0,
-        status: b.status
+        notes: b.notes || `مستخلص أعمال رقم ${b.bill_no}`,
+        status: b.status,
+        remaining_amount: Number(b.remaining_amount) || 0
       });
     });
 
-    // إضافة سندات القبض (دائن - ما تم تحصيله)
+    // إضافة سندات القبض والدفعات (دائن - ما تم تحصيله)
     payments.forEach(p => {
+      let movementType = 'سند قبض';
+      if (p.receipt_category === 'advance_payment') {
+        movementType = 'دفعة مقدمة على العقد';
+      } else if (p.receipt_category === 'retention_release') {
+        movementType = 'إفراج محتجز ضمان';
+      } else if (p.bill_no) {
+        movementType = `تحصيل مستخلص (${p.bill_no})`;
+      }
+
       statement.push({
         date: p.date,
-        type: p.payment_method ? 'سند قبض (' + p.payment_method + ')' : 'سند قبض',
-        ref: p.receipt_no || ('PAY-' + p.id),
+        type: movementType,
+        ref: p.receipt_no || ('RC-' + p.id),
+        contract_id: p.contract_id || null,
+        contract_no: p.contract_no || '-',
+        project_id: p.project_id || null,
+        project_name: p.project_name || '-',
+        bill_id: p.bill_id || null,
+        bill_no: p.bill_no || '-',
         debit: 0,
         credit: Number(p.amount) || 0,
+        payment_method: p.payment_method || 'نقدي',
+        receipt_category: p.receipt_category || 'general',
         notes: p.notes || ''
       });
     });
@@ -346,15 +390,41 @@ router.get('/client-statement/:id', requirePermission('clients:view,reports:view
     const totalCredit = statement.reduce((s, i) => s + (i.credit || 0), 0);
     const netBalance = Math.round((totalDebit - totalCredit) * 100) / 100;
 
+    // حساب محتجزات الضمان والدفعات المقدمة بدقة
+    const totalRetentionHeld = bills.reduce((sum, b) => sum + (Number(b.retention_deduction) || 0), 0);
+    const totalRetentionReleased = payments.filter(p => p.receipt_category === 'retention_release').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const activeRetentionBalance = Math.max(0, totalRetentionHeld - totalRetentionReleased);
+
+    const totalAdvanceReceived = payments.filter(p => p.receipt_category === 'advance_payment').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const totalAdvanceDeducted = bills.reduce((sum, b) => sum + (Number(b.advance_deduction) || 0), 0);
+    const totalContractValue = contracts.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
+
     res.json({
       success: true,
       data: {
         client,
         statement: enrichedStatement,
+        // ملخص السلسلة التساعية الشاملة (1 إلى 9)
+        chain_nine_stages: {
+          stage_1_client_name: client.name,
+          stage_2_contracts_count: contracts.length,
+          stage_2_total_contract_value: totalContractValue,
+          stage_3_projects_count: projects.length,
+          stage_4_bills_count: bills.length,
+          stage_5_total_invoiced_claims: totalDebit,
+          stage_6_total_advance_received: totalAdvanceReceived,
+          stage_6_total_advance_deducted: totalAdvanceDeducted,
+          stage_7_total_collections: totalCredit,
+          stage_8_total_retention_held: totalRetentionHeld,
+          stage_8_total_retention_released: totalRetentionReleased,
+          stage_8_active_retention_balance: activeRetentionBalance,
+          stage_9_outstanding_due_balance: netBalance
+        },
         summary: {
           total_invoiced: totalDebit,
           total_collected: totalCredit,
-          outstanding_balance: netBalance
+          outstanding_balance: netBalance,
+          active_retention: activeRetentionBalance
         }
       }
     });

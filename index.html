@@ -3230,8 +3230,12 @@
                     <th>التاريخ</th>
                     <th>نوع الحركة</th>
                     <th>المرجع / السند</th>
-                    <th>مدين (عقد/مستخلص)</th>
-                    <th>دائن (سداد/قبض)</th>
+                    <th>العقد المرتبط</th>
+                    <th>المشروع المرتبط</th>
+                    <th>المستخلص</th>
+                    <th>مدين (مطالبات)</th>
+                    <th>دائن (سداد/دفعات)</th>
+                    <th>محتجز ضمان</th>
                     <th>الرصيد المستحق</th>
                     <th>البيان والملاحظات</th>
                   </tr>
@@ -5407,6 +5411,9 @@
 
         <!-- شريط الإجراءات السريعة داخل النافذة -->
         <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
+          <button class="btn btn-primary btn-sm" onclick="App.openNewProjectForClientFromChain()" style="background: var(--accent-blue); border-color: var(--accent-blue);">
+            <span>🏗️ إضافة مشروع جديد للعميل</span>
+          </button>
           <button class="btn btn-primary btn-sm" onclick="App.openNewClientBillFromChain()">
             <span>➕ إصدار مستخلص جديد مرتبط</span>
           </button>
