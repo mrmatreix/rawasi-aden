@@ -5229,7 +5229,16 @@
         <p style="color: var(--gold-light); font-weight: bold; margin-bottom: 12px;" id="issueItemName"></p>
         <div class="form-group">
           <label>المشروع المستلم</label>
-          <select id="issueProjectSelect" class="form-control" required></select>
+          <select id="issueProjectSelect" class="form-control" required onchange="Inventory.onIssueProjectChange(this.value)"></select>
+        </div>
+        <div class="form-group" id="issueBoqGroup" style="display: none;">
+          <label style="display: flex; justify-content: space-between; align-items: center;">
+            <span>بند جدول الكميات المرتبط (BOQ Item)</span>
+            <span style="font-size: 0.72rem; color: #38bdf8;">🔗 ربط هندسي ومحاسبي</span>
+          </label>
+          <select id="issueBoqSelect" class="form-control">
+            <option value="">صرف عام للمشروع (أو اختر بند BOQ)...</option>
+          </select>
         </div>
         <div class="form-group">
           <label>الكمية المصروفة (<span id="issueUnitLabel"></span>)</label>

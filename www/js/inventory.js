@@ -175,6 +175,11 @@ const Inventory = {
         Projects.list.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
     }
 
+    const boqGroup = document.getElementById('issueBoqGroup');
+    if (boqGroup) boqGroup.style.display = 'none';
+    const boqSelect = document.getElementById('issueBoqSelect');
+    if (boqSelect) boqSelect.innerHTML = '<option value="">صرف عام للمشروع (أو اختر بند BOQ)...</option>';
+
     document.getElementById('issueItemId').value = item.id;
     document.getElementById('issueItemName').textContent = `${item.name} (المتوفر: ${item.current_quantity} ${item.unit})`;
     document.getElementById('issueUnitLabel').textContent = item.unit;
@@ -182,10 +187,42 @@ const Inventory = {
     App.openModal('issueMaterialModal');
   },
 
+  async onIssueProjectChange(projectId) {
+    const boqGroup = document.getElementById('issueBoqGroup');
+    const boqSelect = document.getElementById('issueBoqSelect');
+    if (!boqGroup || !boqSelect) return;
+
+    if (!projectId) {
+      boqGroup.style.display = 'none';
+      boqSelect.innerHTML = '<option value="">صرف عام للمشروع (أو اختر بند BOQ)...</option>';
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/project-management/${projectId}/boq`);
+      const json = await res.json();
+      if (json.success && json.data && json.data.length > 0) {
+        boqSelect.innerHTML = `<option value="">صرف عام للمشروع (أو اختر بند BOQ)...</option>` +
+          json.data.map(b => {
+            const rem = b.remainingQty !== undefined ? b.remainingQty : (Number(b.contract_qty || 0) - Number(b.executed_qty || 0));
+            return `<option value="${b.id}">[${b.item_no || b.id}] ${b.description} (التعاقدي: ${b.contract_qty} ${b.unit} | المتبقي: ${rem})</option>`;
+          }).join('');
+        boqGroup.style.display = 'block';
+      } else {
+        boqGroup.style.display = 'none';
+        boqSelect.innerHTML = '<option value="">صرف عام للمشروع (لا توجد بنود BOQ مسجلة)</option>';
+      }
+    } catch (e) {
+      console.warn('Could not load BOQ items for project:', e);
+      boqGroup.style.display = 'none';
+    }
+  },
+
   async submitIssueMaterial(e) {
     e.preventDefault();
     const item_id = document.getElementById('issueItemId').value;
     const project_id = document.getElementById('issueProjectSelect').value;
+    const boq_item_id = document.getElementById('issueBoqSelect')?.value || null;
     const quantity = document.getElementById('issueQuantity').value;
     const recipient = document.getElementById('issueRecipient').value;
     const notes = document.getElementById('issueNotes').value;
@@ -199,11 +236,23 @@ const Inventory = {
       const res = await fetch('/api/inventory/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id, project_id, type: 'out', quantity, recipient, notes })
+        body: JSON.stringify({
+          item_id,
+          project_id,
+          boq_item_id: boq_item_id ? Number(boq_item_id) : null,
+          type: 'out',
+          quantity,
+          recipient,
+          notes
+        })
       });
       const data = await res.json();
       if (data.success) {
-        App.showToast(`تم صرف المادة بنجاح (${data.reference_no}) وإضافتها لتكلفة المشروع`, 'success');
+        const boqBadge = boq_item_id ? ' [مقيد ببند BOQ 🔗]' : '';
+        App.showToast(`تم صرف المادة بنجاح (${data.reference_no})${boqBadge} وإضافتها لتكلفة المشروع`, 'success');
+        if (data.boqWarning) {
+          App.showToast(data.boqWarning, 'warning');
+        }
         App.closeModal('issueMaterialModal');
         document.getElementById('issueMaterialForm').reset();
         await this.loadItems();

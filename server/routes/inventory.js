@@ -106,6 +106,7 @@ router.post('/transactions', (req, res, next) => {
     const {
       item_id,
       project_id,
+      boq_item_id,
       type = 'out', // 'out' (صرف لمشروع) أو 'in' (توريد للمخزن)
       quantity,
       unit_price,
@@ -139,6 +140,23 @@ router.post('/transactions', (req, res, next) => {
       const parsedPrice = unit_price !== undefined ? Number(unit_price) : Number(item.unit_price || 0);
       const totalAmount = parsedQty * parsedPrice;
 
+      let boqWarning = null;
+      if (type === 'out' && project_id && boq_item_id) {
+        const boq = await tx.get('SELECT * FROM project_boq WHERE id = ? AND project_id = ?', [boq_item_id, project_id]);
+        if (boq) {
+          const priorIssues = await tx.get(`
+            SELECT COALESCE(SUM(quantity), 0) as issued_qty 
+            FROM inventory_transactions 
+            WHERE project_id = ? AND boq_item_id = ? AND type = 'out'
+          `, [project_id, boq_item_id]);
+
+          const totalIssued = Number(priorIssues?.issued_qty || 0) + parsedQty;
+          if (totalIssued > Number(boq.contract_qty)) {
+            boqWarning = `تنبيه: إجمالي الكمية المصروفة للبند [${boq.item_no} - ${boq.description}] (${totalIssued}) تجاوزت الكمية المعتمدة في جدول الكميات التعاقدي (${boq.contract_qty})`;
+          }
+        }
+      }
+
       if (type === 'out') {
         if (Number(item.current_quantity) < parsedQty) {
           throw new Error(`الكمية المتوفرة في المخزن (${item.current_quantity} ${item.unit}) لا تكفي للصرف المطلوب (${parsedQty} ${item.unit})`);
@@ -155,17 +173,19 @@ router.post('/transactions', (req, res, next) => {
         await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [parsedQty, item_id]);
       }
 
+      const finalNotes = notes ? `${notes} ${boqWarning ? ' | ' + boqWarning : ''}` : (boqWarning || '');
+
       const result = await tx.run(`
         INSERT INTO inventory_transactions (
-          item_id, project_id, type, quantity, unit_price, total_amount, 
+          item_id, project_id, boq_item_id, type, quantity, unit_price, total_amount, 
           reference_no, recipient, date, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        item_id, project_id || null, type, parsedQty, parsedPrice, totalAmount,
-        reference_no, recipient || '', date, notes || ''
+        item_id, project_id || null, boq_item_id ? Number(boq_item_id) : null, type, parsedQty, parsedPrice, totalAmount,
+        reference_no, recipient || '', date, finalNotes
       ]);
 
-      return { result, totalAmount, parsedPrice };
+      return { result, totalAmount, parsedPrice, boqWarning };
     });
 
 
