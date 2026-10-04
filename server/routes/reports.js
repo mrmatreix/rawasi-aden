@@ -238,19 +238,124 @@ router.get('/client-statement/:id', requirePermission('clients:view,reports:view
       return res.status(404).json({ success: false, message: 'العميل غير موجود' });
     }
 
-    const bills = await query('SELECT * FROM bills WHERE client_id = ? ORDER BY date ASC', [req.params.id]);
-    const payments = await query("SELECT * FROM payments WHERE client_id = ? AND type = 'قبض' ORDER BY date ASC", [req.params.id]);
+    const clientId = req.params.id;
 
-    const statement = [
-      ...bills.map(b => ({ date: b.date, type: 'مستخلص/فاتورة', ref: b.bill_no, debit: Number(b.net_amount) || 0, credit: 0, notes: b.notes })),
-      ...payments.map(p => ({ date: p.date, type: 'سند قبض', ref: p.receipt_no, debit: 0, credit: Number(p.amount) || 0, notes: p.notes }))
-    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+    // المستخلصات/الفواتير - ما استحق على العميل (مدين)
+    const bills = await query(
+      `SELECT b.*, p.name as project_name
+       FROM bills b
+       LEFT JOIN projects p ON b.project_id = p.id
+       WHERE b.client_id = ? ORDER BY b.date ASC`,
+      [clientId]
+    );
+
+    // سندات القبض من payments (دائن - ما تم تحصيله)
+    const payments = await query(
+      "SELECT * FROM payments WHERE client_id = ? AND type = 'قبض' ORDER BY date ASC",
+      [clientId]
+    );
+
+    // الشيكات المستلمة من العميل
+    const cheques = await query(
+      "SELECT * FROM cheques WHERE client_id = ? AND type = 'received' ORDER BY issue_date ASC",
+      [clientId]
+    );
+
+    const statement = [];
+
+    // الرصيد الافتتاحي
+    const openingBalance = Number(client.previous_balance) || 0;
+    if (openingBalance > 0) {
+      statement.push({
+        date: client.created_at ? client.created_at.split('T')[0].split(' ')[0] : 'بداية الفترة',
+        type: 'رصيد افتتاحي',
+        ref: 'رصيد أول المدة',
+        debit: openingBalance,
+        credit: 0,
+        notes: 'الرصيد الافتتاحي للعميل'
+      });
+    }
+
+    // إضافة المستخلصات والفواتير (مدين - مستحق على العميل)
+    bills.forEach(b => {
+      const netAmt = Number(b.net_amount) || Number(b.amount) || 0;
+      statement.push({
+        date: b.date,
+        type: b.bill_type || 'مستخلص/فاتورة',
+        ref: b.bill_no,
+        debit: netAmt,
+        credit: 0,
+        notes: (b.project_name ? 'مشروع: ' + b.project_name : '') + (b.notes ? ' | ' + b.notes : ''),
+        advance_deduction: Number(b.advance_deduction) || 0,
+        retention_deduction: Number(b.retention_deduction) || 0,
+        status: b.status
+      });
+    });
+
+    // إضافة سندات القبض (دائن - ما تم تحصيله)
+    payments.forEach(p => {
+      statement.push({
+        date: p.date,
+        type: p.payment_method ? 'سند قبض (' + p.payment_method + ')' : 'سند قبض',
+        ref: p.receipt_no || ('PAY-' + p.id),
+        debit: 0,
+        credit: Number(p.amount) || 0,
+        notes: p.notes || ''
+      });
+    });
+
+    // إضافة الشيكات المحصّلة (المقبوضة)
+    const paymentRefs = new Set(payments.map(p => p.receipt_no).filter(Boolean));
+    cheques.forEach(chq => {
+      if (chq.status === 'cleared') {
+        statement.push({
+          date: chq.clearance_date || chq.issue_date,
+          type: 'شيك محصّل',
+          ref: chq.cheque_no || ('CHQ-' + chq.id),
+          debit: 0,
+          credit: Number(chq.amount) || 0,
+          notes: (chq.notes || '')
+        });
+      } else if (chq.status === 'received' || chq.status === 'bounced') {
+        statement.push({
+          date: chq.issue_date,
+          type: chq.status === 'bounced' ? 'شيك مرتجع ⚠️' : 'شيك قيد التحصيل',
+          ref: chq.cheque_no || ('CHQ-' + chq.id),
+          debit: 0,
+          credit: chq.status === 'bounced' ? 0 : Number(chq.amount) || 0,
+          notes: chq.status === 'bounced' ? (chq.bounce_reason || 'شيك مرتجع') : (chq.notes || '')
+        });
+      }
+    });
+
+    // ترتيب الحركات زمنياً
+    statement.sort((a, b) => {
+      if (a.ref === 'رصيد أول المدة') return -1;
+      if (b.ref === 'رصيد أول المدة') return 1;
+      return new Date(a.date) - new Date(b.date);
+    });
+
+    // حساب الرصيد التراكمي
+    let running = 0;
+    const enrichedStatement = statement.map(item => {
+      running += (item.debit - item.credit);
+      return { ...item, running_balance: Math.round(running * 100) / 100 };
+    });
+
+    const totalDebit = statement.reduce((s, i) => s + (i.debit || 0), 0);
+    const totalCredit = statement.reduce((s, i) => s + (i.credit || 0), 0);
+    const netBalance = Math.round((totalDebit - totalCredit) * 100) / 100;
 
     res.json({
       success: true,
       data: {
         client,
-        statement
+        statement: enrichedStatement,
+        summary: {
+          total_invoiced: totalDebit,
+          total_collected: totalCredit,
+          outstanding_balance: netBalance
+        }
       }
     });
   } catch (err) {
@@ -258,7 +363,128 @@ router.get('/client-statement/:id', requirePermission('clients:view,reports:view
   }
 });
 
-// كشف حساب مورد
+// ملف العميل الشامل: عقد → مشاريع → مستخلصات → شيكات → دفعات → رصيد
+router.get('/client-profile/:id', requirePermission('clients:view,reports:view,accounting:view'), async (req, res) => {
+  try {
+    const client = await get('SELECT * FROM clients WHERE id = ?', [req.params.id]);
+    if (!client) {
+      return res.status(404).json({ success: false, message: 'العميل غير موجود' });
+    }
+
+    const clientId = req.params.id;
+
+    // المشاريع المرتبطة بالعميل
+    const projects = await query(
+      `SELECT p.*, 
+              (SELECT COUNT(*) FROM bills WHERE project_id = p.id AND client_id = ?) as bills_count,
+              (SELECT COALESCE(SUM(gross_amount),0) FROM bills WHERE project_id = p.id AND client_id = ? AND status != 'reversed') as total_billed,
+              (SELECT COALESCE(SUM(advance_deduction),0) FROM bills WHERE project_id = p.id AND client_id = ? AND status != 'reversed') as total_advance_ded,
+              (SELECT COALESCE(SUM(retention_deduction),0) FROM bills WHERE project_id = p.id AND client_id = ? AND status != 'reversed') as total_retention_ded,
+              (SELECT COALESCE(SUM(net_amount),0) FROM bills WHERE project_id = p.id AND client_id = ? AND status != 'reversed') as total_net_billed
+       FROM projects p
+       WHERE p.client_id = ?
+       ORDER BY p.created_at ASC`,
+      [clientId, clientId, clientId, clientId, clientId, clientId]
+    );
+
+    // العقود المرتبطة بمشاريع العميل
+    const projectIds = projects.map(p => p.id);
+    let contracts = [];
+    if (projectIds.length > 0) {
+      const placeholders = projectIds.map(() => '?').join(',');
+      contracts = await query(
+        `SELECT pc.*, p.name as project_name 
+         FROM project_contracts pc
+         LEFT JOIN projects p ON pc.project_id = p.id
+         WHERE pc.project_id IN (${placeholders}) ORDER BY pc.created_at ASC`,
+        projectIds
+      );
+    }
+
+    // المستخلصات والفواتير
+    const bills = await query(
+      `SELECT b.*, p.name as project_name
+       FROM bills b
+       LEFT JOIN projects p ON b.project_id = p.id
+       WHERE b.client_id = ? ORDER BY b.date DESC`,
+      [clientId]
+    );
+
+    // سندات القبض
+    const payments = await query(
+      "SELECT * FROM payments WHERE client_id = ? AND type = 'قبض' ORDER BY date DESC",
+      [clientId]
+    );
+
+    // الشيكات
+    const cheques = await query(
+      "SELECT * FROM cheques WHERE client_id = ? ORDER BY issue_date DESC",
+      [clientId]
+    );
+
+    // الدفعات المقدمة (advance payments = advance_deduction من المستخلصات)
+    const totalGrossBilled = bills
+      .filter(b => b.status !== 'reversed')
+      .reduce((s, b) => s + (Number(b.gross_amount) || 0), 0);
+    const totalNetBilled = bills
+      .filter(b => b.status !== 'reversed')
+      .reduce((s, b) => s + (Number(b.net_amount) || 0), 0);
+    const totalAdvanceDed = bills
+      .filter(b => b.status !== 'reversed')
+      .reduce((s, b) => s + (Number(b.advance_deduction) || 0), 0);
+    const totalRetentionDed = bills
+      .filter(b => b.status !== 'reversed')
+      .reduce((s, b) => s + (Number(b.retention_deduction) || 0), 0);
+    const totalCollected = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const totalCheques = cheques
+      .filter(c => c.type === 'received')
+      .reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const totalChequesClear = cheques
+      .filter(c => c.status === 'cleared')
+      .reduce((s, c) => s + (Number(c.amount) || 0), 0);
+
+    // إجمالي المحتجزات النشطة (retention still held)
+    const activeRetention = totalRetentionDed - totalChequesClear; // تقريبي
+
+    // الرصيد المستحق = صافي المستخلصات - المحصّل
+    const outstandingBalance = totalNetBilled - totalCollected;
+
+    // الملخص المالي الشامل
+    const financialSummary = {
+      total_gross_billed: totalGrossBilled,
+      total_net_billed: totalNetBilled,
+      total_advance_deductions: totalAdvanceDed,
+      total_retention_deductions: totalRetentionDed,
+      total_collected: totalCollected,
+      total_cheques: totalCheques,
+      total_cheques_cleared: totalChequesClear,
+      active_retention: Math.max(0, activeRetention),
+      outstanding_balance: outstandingBalance,
+      bills_count: bills.filter(b => b.status !== 'reversed').length,
+      payments_count: payments.length
+    };
+
+    client.name = client.name || 'عميل';
+    client.currency = client.currency || 'ر.ي';
+
+    res.json({
+      success: true,
+      data: {
+        client,
+        projects,
+        contracts,
+        bills,
+        payments,
+        cheques,
+        financial_summary: financialSummary
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب ملف العميل', error: err.message });
+  }
+});
+
+// كشف حساب مورد تفصيلي مع الرصيد الافتتاحي والتراكمي
 router.get('/supplier-statement/:id', requirePermission('suppliers:view,reports:view,accounting:view'), async (req, res) => {
   try {
     const supplier = await get('SELECT * FROM suppliers WHERE id = ?', [req.params.id]);
@@ -266,21 +492,164 @@ router.get('/supplier-statement/:id', requirePermission('suppliers:view,reports:
       return res.status(404).json({ success: false, message: 'المورد غير موجود' });
     }
 
-    const purchases = await query('SELECT * FROM purchases WHERE supplier_id = ? ORDER BY date ASC', [req.params.id]);
-    const expenses = await query('SELECT * FROM expenses WHERE supplier_id = ? ORDER BY date ASC', [req.params.id]);
-    const payments = await query("SELECT * FROM payments WHERE supplier_id = ? AND type = 'صرف' ORDER BY date ASC", [req.params.id]);
+    const supplierId = req.params.id;
 
-    const statement = [
-      ...purchases.map(p => ({ date: p.date, type: 'فاتورة مشتريات', ref: p.invoice_no, credit: Number(p.total_amount) || 0, debit: 0, notes: p.notes })),
-      ...expenses.map(e => ({ date: e.date, type: 'سند صرف', ref: e.receipt_no, credit: 0, debit: Number(e.amount) || 0, notes: e.notes })),
-      ...payments.map(p => ({ date: p.date, type: 'سند صرف نقدي', ref: p.receipt_no, credit: 0, debit: Number(p.amount) || 0, notes: p.notes }))
-    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+    // أوامر الشراء - مستحقات للمورد (دائن)
+    const purchaseOrders = await query(
+      `SELECT po.id, po.po_no, po.date, po.total_amount, po.status, po.notes, po.currency,
+              p.name as project_name
+       FROM purchase_orders po
+       LEFT JOIN projects p ON po.project_id = p.id
+       WHERE po.supplier_id = ? ORDER BY po.date ASC`,
+      [supplierId]
+    );
+
+    // وصولات استلام البضاعة (GRN)
+    const grns = await query(
+      `SELECT grn.id, grn.grn_no, grn.received_date as date, grn.po_id, grn.notes, grn.status,
+              po.total_amount, po.po_no
+       FROM goods_receipt_notes grn
+       LEFT JOIN purchase_orders po ON grn.po_id = po.id
+       WHERE grn.supplier_id = ? ORDER BY grn.received_date ASC`,
+      [supplierId]
+    );
+
+    // فواتير المشتريات القديمة (purchases) - للتوافق مع البيانات القديمة
+    const oldPurchases = await query(
+      'SELECT * FROM purchases WHERE supplier_id = ? ORDER BY date ASC',
+      [supplierId]
+    );
+
+    // سندات الصرف للمورد من payments (مدين)
+    const payments = await query(
+      "SELECT * FROM payments WHERE supplier_id = ? AND type = 'صرف' ORDER BY date ASC",
+      [supplierId]
+    );
+
+    // المصروفات المرتبطة بالمورد (مدين)
+    const expenses = await query(
+      'SELECT * FROM expenses WHERE supplier_id = ? ORDER BY date ASC',
+      [supplierId]
+    );
+
+    const statement = [];
+
+    // الرصيد الافتتاحي من ملف المورد
+    const openingBalance = Number(supplier.balance) || 0;
+    if (openingBalance > 0) {
+      const openDate = supplier.created_at ? supplier.created_at.split('T')[0].split(' ')[0] : 'بداية الفترة';
+      statement.push({
+        date: openDate,
+        type: 'رصيد افتتاحي (مشتريات سابقة)',
+        ref: 'رصيد أول المدة',
+        credit: openingBalance,
+        debit: 0,
+        notes: supplier.notes || 'الرصيد الافتتاحي المقيد بملف المورد'
+      });
+    }
+
+    // إضافة أوامر الشراء - الأوامر التي لديها GRN نتجاهلها ونستخدم GRN بدلاً عنها
+    const grnsPoIds = new Set(grns.map(g => g.po_id));
+    purchaseOrders.forEach(po => {
+      if (!grnsPoIds.has(po.id)) {
+        // أمر شراء بدون وصل استلام - نسجله مباشرة
+        const statusLabel = po.status === 'received' ? 'مستلم' : po.status === 'approved' ? 'معتمد' : 'جاري';
+        statement.push({
+          date: po.date,
+          type: 'أمر شراء (' + statusLabel + ')',
+          ref: po.po_no || ('PO-' + po.id),
+          credit: Number(po.total_amount) || 0,
+          debit: 0,
+          notes: (po.project_name ? 'مشروع: ' + po.project_name : '') + (po.notes ? ' | ' + po.notes : '')
+        });
+      }
+    });
+
+    // إضافة وصولات الاستلام الفعلي (GRN) - تمثل الاستحقاق الحقيقي
+    grns.forEach(grn => {
+      statement.push({
+        date: grn.date,
+        type: 'وصل استلام بضاعة',
+        ref: grn.grn_no || ('GRN-' + grn.id),
+        credit: Number(grn.total_amount) || 0,
+        debit: 0,
+        notes: 'أمر شراء: ' + (grn.po_no || grn.po_id) + (grn.notes ? ' | ' + grn.notes : '')
+      });
+    });
+
+    // إضافة فواتير المشتريات القديمة
+    const poRefs = new Set(purchaseOrders.map(p => p.po_no).filter(Boolean));
+    oldPurchases.forEach(p => {
+      statement.push({
+        date: p.date,
+        type: 'فاتورة مشتريات',
+        ref: p.invoice_no || ('PUR-' + p.id),
+        credit: Number(p.total_amount) || 0,
+        debit: 0,
+        notes: p.notes || ''
+      });
+    });
+
+    // إضافة سندات الصرف (مدين)
+    payments.forEach(p => {
+      statement.push({
+        date: p.date,
+        type: p.payment_method ? 'سند صرف (' + p.payment_method + ')' : 'سند صرف للمورد',
+        ref: p.receipt_no || ('PAY-' + p.id),
+        credit: 0,
+        debit: Number(p.amount) || 0,
+        notes: p.notes || ''
+      });
+    });
+
+    // إضافة المصروفات غير المكررة
+    const existingPayRefs = new Set(payments.map(p => p.receipt_no).filter(Boolean));
+    expenses.forEach(e => {
+      if (!e.receipt_no || !existingPayRefs.has(e.receipt_no)) {
+        statement.push({
+          date: e.date,
+          type: 'سند صرف مصروفات',
+          ref: e.receipt_no || ('EXP-' + e.id),
+          credit: 0,
+          debit: Number(e.amount) || 0,
+          notes: e.notes || ''
+        });
+      }
+    });
+
+    // ترتيب الحركات زمنياً مع تثبيت الرصيد الافتتاحي أولاً
+    statement.sort((a, b) => {
+      if (a.ref === 'رصيد أول المدة') return -1;
+      if (b.ref === 'رصيد أول المدة') return 1;
+      return new Date(a.date) - new Date(b.date);
+    });
+
+    // حساب الرصيد التراكمي
+    let running = 0;
+    const enrichedStatement = statement.map(item => {
+      running += (item.credit - item.debit);
+      return { ...item, running_balance: Math.round(running * 100) / 100 };
+    });
+
+    const totalCredit = statement.reduce((sum, item) => sum + item.credit, 0);
+    const totalDebit = statement.reduce((sum, item) => sum + item.debit, 0);
+    const netBalance = Math.round((totalCredit - totalDebit) * 100) / 100;
+
+    supplier.name = supplier.company_name || supplier.name || 'مورد';
+    supplier.currency = supplier.default_currency || supplier.currency || 'YER';
+    supplier.outstanding_balance = netBalance;
 
     res.json({
       success: true,
       data: {
         supplier,
-        statement
+        statement: enrichedStatement,
+        summary: {
+          total_invoiced: totalCredit,
+          total_paid: totalDebit,
+          outstanding_balance: netBalance,
+          currency: supplier.currency
+        }
       }
     });
   } catch (err) {

@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261003-5o5b',
+  assetVersion: '1.0.0.20261004-vmtb',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,16 +11,17 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261003-5o5b',
-    projects: 'js/projects.js?v=1.0.0.20261003-5o5b',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261003-5o5b',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261003-5o5b',
-    accounting: 'js/accounting.js?v=1.0.0.20261003-5o5b',
-    hr: 'js/hr.js?v=1.0.0.20261003-5o5b',
-    reports: 'js/reports.js?v=1.0.0.20261003-5o5b',
-    inventory: 'js/inventory.js?v=1.0.0.20261003-5o5b',
-    settings: 'js/settings.js?v=1.0.0.20261003-5o5b',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261003-5o5b'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261004-vmtb',
+    projects: 'js/projects.js?v=1.0.0.20261004-vmtb',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261004-vmtb',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261004-vmtb',
+    accounting: 'js/accounting.js?v=1.0.0.20261004-vmtb',
+    hr: 'js/hr.js?v=1.0.0.20261004-vmtb',
+    reports: 'js/reports.js?v=1.0.0.20261004-vmtb',
+    inventory: 'js/inventory.js?v=1.0.0.20261004-vmtb',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261004-vmtb',
+    settings: 'js/settings.js?v=1.0.0.20261004-vmtb',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261004-vmtb'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -82,6 +83,7 @@ const App = {
       cash: ['tafqeet', 'accounting'],
       reports: ['reports', 'tafqeet', 'accounting', 'excelExport'],
       inventory: ['inventory'],
+      projectCloseout: ['projects', 'projectCloseout', 'tafqeet'],
       hr: ['hr'],
       settings: ['settings']
     };
@@ -419,6 +421,9 @@ const App = {
     } else if (viewId === 'inventory' && typeof Inventory !== 'undefined' && !Inventory._initialized && Inventory.init) {
       await Inventory.init();
       Inventory._initialized = true;
+    } else if (viewId === 'projectCloseout' && typeof ProjectCloseout !== 'undefined' && !ProjectCloseout._initialized && ProjectCloseout.init) {
+      await ProjectCloseout.init();
+      ProjectCloseout._initialized = true;
     } else if (viewId === 'hr' && typeof HR !== 'undefined' && !HR._initialized && HR.init) {
       HR.init();
       HR._initialized = true;
@@ -901,21 +906,69 @@ const App = {
           if (pag) pag.innerHTML = '';
         } else {
           const renderRows = (pageList) => {
-            tbody.innerHTML = pageList.map(s => `
+            tbody.innerHTML = pageList.map(s => {
+              const fin = s.financial_summary || {};
+              const balance = fin.outstanding_balance !== undefined ? fin.outstanding_balance : (s.balance || 0);
+              
+              // حساب عدد الفواتير بدقة (تشمل فواتير المشتريات والمرفقات)
+              let invCount = fin.total_purchase_invoices_count;
+              if (invCount === undefined || invCount === 0) {
+                if (s.invoice_attachment) {
+                  try {
+                    const parsed = typeof s.invoice_attachment === 'string' ? JSON.parse(s.invoice_attachment) : s.invoice_attachment;
+                    invCount = Array.isArray(parsed) ? parsed.length : 1;
+                  } catch (e) {
+                    invCount = 1;
+                  }
+                } else {
+                  invCount = 0;
+                }
+              }
+
+              const totalPaid = fin.total_amount_paid !== undefined ? this.formatNumber(fin.total_amount_paid) : '0';
+              const catBadge = s.industry_category || s.category || 'عام';
+              const phone = s.phone_number || s.phone || '-';
+              const currency = s.default_currency || s.currency || 'ر.ي';
+              const contact = s.contact_person ? `<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;"><i class="fa fa-user" style="font-size: 0.7rem; margin-left: 3px;"></i>${s.contact_person}</div>` : '';
+              const leadTime = s.supply_lead_time_days ? `<div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;"><i class="fa fa-clock" style="font-size: 0.7rem;"></i> توريد: ${s.supply_lead_time_days} أيام</div>` : '';
+
+              const invBadgeText = invCount === 1 ? '1 فاتورة' : `${invCount} فواتير`;
+
+              return `
               <tr>
-                <td><strong>${s.name}</strong></td>
-                <td><span class="badge badge-active">${s.category || 'مواد بناء'}</span></td>
-                <td>${s.phone || '-'}</td>
-                <td>${s.address || '-'}</td>
-                <td style="color: var(--accent-amber); font-weight: bold;">${this.formatNumber(s.balance)} ${s.currency || 'ر.ي'}</td>
-                <td>${s.notes || '-'}</td>
                 <td>
-                  <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('supplier-statement'); document.getElementById('repSupplierSelect').value = ${s.id}; Reports.fetchFullSupplierStatement();">
+                  <strong style="color: var(--text-primary);">${s.company_name || s.name}</strong>
+                  ${contact}
+                </td>
+                <td>
+                  <span class="badge badge-active" style="font-size: 0.8rem;">${catBadge}</span>
+                  ${leadTime}
+                </td>
+                <td dir="ltr" style="text-align: right; font-family: monospace;">${phone}</td>
+                <td style="text-align: center;">
+                  <span class="badge" style="background: rgba(59,130,246,0.12); color: #3b82f6; font-weight: bold; padding: 4px 8px;">
+                    ${invBadgeText}
+                  </span>
+                </td>
+                <td style="color: var(--accent-green); font-weight: 600;">
+                  ${totalPaid} <small>${currency}</small>
+                </td>
+                <td style="color: ${balance > 0 ? 'var(--accent-amber)' : 'var(--accent-green)'}; font-weight: bold; font-size: 0.95rem;">
+                  ${this.formatNumber(balance)} <small>${currency}</small>
+                </td>
+                <td style="text-align: center; white-space: nowrap;">
+                  <button class="btn btn-primary btn-sm" onclick="App.openVendorProfileModal(${s.id})" title="عرض ملف المورد الشامل (SRM)">
+                    <i class="fa fa-id-card"></i> ملف المورد
+                  </button>
+                  <button class="btn btn-secondary btn-sm" onclick="Accounting.openEditSupplierModal(${s.id})" title="تعديل بيانات المورد">
+                    <i class="fa fa-edit"></i> تعديل
+                  </button>
+                  <button class="btn btn-secondary btn-sm" onclick="Reports.showSupplierStatement(${s.id})" title="كشف الحساب">
                     كشف الحساب
                   </button>
                 </td>
               </tr>
-            `).join('');
+            `;}).join('');
           };
 
           if (window.UI && UI.Pagination && document.getElementById('suppliersPagination')) {
@@ -930,7 +983,388 @@ const App = {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error loading suppliers table:', e);
+    }
+  },
+
+  /**
+   * فتح نافذة ملف تعريف المورد الشامل (SRM Vendor Profile Modal)
+   * يعرض البيانات الأساسية الصارمة والتجميعات المالية الحية في الوقت الفعلي
+   */
+  async openVendorProfileModal(vendorId) {
+    if (!vendorId) return;
+
+    this.showDynamicModal(
+      'ملف تعريف المورد (SRM Profile)',
+      `<div style="text-align: center; padding: 40px;"><i class="fa fa-spinner fa-spin fa-2x" style="color: var(--accent-blue);"></i><p style="margin-top: 10px; color: var(--text-secondary);">جاري جلب الملف التعريفي والتحليلات المالية الحية...</p></div>`
+    );
+
+    try {
+      const res = await fetch(`/api/suppliers/${vendorId}/profile?include_recent=true`);
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        document.getElementById('dynamicAppModalBody').innerHTML = `
+          <div class="alert alert-danger" style="margin: 20px;">
+            تعذر جلب ملف المورد: ${json.message || 'المورد غير موجود'}
+          </div>
+        `;
+        return;
+      }
+
+      const v = json.data;
+      const fin = v.financial_summary || {};
+      const bank = v.bank_details || {};
+      const currency = v.default_currency || 'YER';
+
+      // شارة حالة السداد
+      let statusColor = '#10b981';
+      let statusBg = 'rgba(16, 185, 129, 0.12)';
+      if (fin.settlement_status === 'pending_settlement') {
+        statusColor = '#ef4444';
+        statusBg = 'rgba(239, 68, 68, 0.12)';
+      } else if (fin.settlement_status === 'partially_settled') {
+        statusColor = '#f59e0b';
+        statusBg = 'rgba(245, 158, 11, 0.12)';
+      }
+
+      const content = `
+        <div class="srm-profile-container" style="direction: rtl; font-family: inherit;">
+          
+          <!-- بطاقة الترويسة الرئيسية -->
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; background: var(--bg-secondary, #1e293b); padding: 18px 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--border-color, #334155);">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <h2 style="margin: 0; font-size: 1.35rem; color: var(--text-primary); font-weight: 700;">${v.company_name}</h2>
+                <span class="badge" style="background: rgba(59,130,246,0.15); color: #3b82f6; font-size: 0.85rem; padding: 4px 10px;">${v.industry_category}</span>
+                <span class="badge" style="background: ${statusBg}; color: ${statusColor}; font-size: 0.85rem; padding: 4px 10px;">${fin.settlement_status_label || 'نشط'}</span>
+              </div>
+              <div style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 6px;">
+                معرف المورد: <code>#VEN-${v.id}</code> &nbsp;|&nbsp; الشخص المسؤول: <strong>${v.contact_person || 'غير محدد'}</strong> &nbsp;|&nbsp; العملة: <strong>${currency}</strong>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+              <button class="btn btn-primary btn-sm" onclick="Accounting.openEditSupplierModal(${v.id}); App.closeModal('dynamicAppModal');">
+                <i class="fa fa-edit"></i> تعديل بيانات المورد
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="Reports.showSupplierStatement(${v.id}); App.closeModal('dynamicAppModal');">
+                <i class="fa fa-file-text-o"></i> كشف الحساب
+              </button>
+            </div>
+          </div>
+
+          <!-- المؤشرات المالية التجميعية اللحظية (تلقائية 100%) -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 24px;">
+            
+            <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; border-right: 4px solid #3b82f6;">
+              <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">إجمالي المشتريات من سابق (عدد الفواتير)</div>
+              <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;">${fin.total_purchase_invoices_count} <span style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted);">فاتورة شراء (تلقائي)</span></div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">إجمالي المفوتر: <strong>${this.formatNumber(fin.total_invoiced_amount)} ${currency}</strong></div>
+            </div>
+
+            <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; border-right: 4px solid #10b981;">
+              <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">المبالغ المسددة من سابق (SUM Paid)</div>
+              <div style="font-size: 1.4rem; font-weight: 700; color: #10b981;">${this.formatNumber(fin.total_amount_paid)} <span style="font-size: 0.8rem; font-weight: normal;">${currency}</span></div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">معاملات الصرف المسواة (${fin.payment_coverage_ratio_pct}% سداد)</div>
+            </div>
+
+            <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; border-right: 4px solid ${fin.outstanding_balance > 0 ? '#f59e0b' : '#10b981'};">
+              <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">إجمالي الرصيد المستحق (المتبقي له)</div>
+              <div style="font-size: 1.4rem; font-weight: 700; color: ${fin.outstanding_balance > 0 ? '#f59e0b' : '#10b981'};">
+                ${this.formatNumber(fin.outstanding_balance)} <span style="font-size: 0.8rem; font-weight: normal;">${currency}</span>
+              </div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">(المفوتر - المسدد) ديناميكياً 100%</div>
+            </div>
+
+          </div>
+
+          <!-- تفاصيل البيانات الأساسية + البيانات المصرفية الآمنة -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-bottom: 24px;">
+            
+            <!-- البيانات الأساسية والتشغيلية -->
+            <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px;">
+              <h4 style="margin-top: 0; margin-bottom: 16px; font-size: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border-color, #334155); padding-bottom: 8px;">
+                <i class="fa fa-info-circle" style="color: #3b82f6;"></i> البيانات الأساسية والتعاقدية (Master Data)
+              </h4>
+              <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">الشخص المسؤول (اسم التاجر):</span>
+                  <strong>${v.contact_person || 'غير محدد'}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">رقم الهاتف المعتمد:</span>
+                  <strong dir="ltr"><a href="tel:${v.phone_number}" style="color: #3b82f6; text-decoration: none;">${v.phone_number || '-'}</a></strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">مدة توريد المواد:</span>
+                  <span><strong style="color: var(--accent-amber);">${v.supply_lead_time_days}</strong> أيام</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">توضيح نوع الصرف ومستند الدفع:</span>
+                  <span class="badge" style="background: rgba(139,92,246,0.15); color: #8b5cf6;">${v.payment_document_type}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">الرقم الضريبي:</span>
+                  <span>${v.tax_id || 'غير مسجل'}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">السجل التجاري:</span>
+                  <span>${v.commercial_reg_no || 'غير مسجل'}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">الحد الائتماني المسموح:</span>
+                  <span>${this.formatNumber(v.credit_limit)} ${currency}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">رقم المبلغ (الرصيد الافتتاحي):</span>
+                  <strong style="color: #3b82f6;">${this.formatNumber(v.balance || 0)} ${currency}</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- البيانات المصرفية المشفرة والمقنعة -->
+            <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color, #334155); padding-bottom: 8px; margin-bottom: 16px;">
+                <h4 style="margin: 0; font-size: 1rem; color: var(--text-primary);">
+                  <i class="fa fa-lock" style="color: #10b981;"></i> الحساب المصرفي والتحويلات (Vault)
+                </h4>
+                <span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; font-size: 0.75rem;">مشفر AES-256-GCM 🛡️</span>
+              </div>
+              <div id="vendorBankVaultCard_${v.id}">
+                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem;">
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-secondary);">اسم البنك:</span>
+                    <strong>${bank.bank_name || 'غير محدد'}</strong>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-secondary);">رقم الحساب (مقنّع):</span>
+                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: #38bdf8;">${bank.account_number_masked}</code>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-secondary);">رقم الآيبان IBAN (مقنّع):</span>
+                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: #38bdf8;">${bank.iban_masked}</code>
+                  </div>
+                </div>
+                <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border-color, #334155); text-align: center;">
+                  <button class="btn btn-secondary btn-sm" onclick="App.showFullVendorBankDetails(${v.id})" style="border: 1px solid #10b981; color: #10b981;">
+                    <i class="fa fa-key"></i> فك التشفير وعرض الحساب البنكي الكامل
+                  </button>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">متاح للصلاحيات المالية المعتمدة فقط مع تسجيل عملية تدقيق</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- المعاملات والفواتير المحملة مسبقاً (Eager-loaded Lists) -->
+          <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+              <h4 style="margin: 0; font-size: 1rem; color: var(--text-primary);">
+                <i class="fa fa-history" style="color: #f59e0b;"></i> أحدث فواتير المشتريات التاريخية (Eager-Loaded)
+              </h4>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">تم تحميلها في مسار استعلام متوازي دون تباطؤ</span>
+            </div>
+
+            <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+              <table class="custom-table" style="font-size: 0.85rem; width: 100%;">
+                <thead>
+                  <tr>
+                    <th>رقم الفاتورة</th>
+                    <th>التاريخ</th>
+                    <th>المبلغ الإجمالي</th>
+                    <th>المبلغ المسدد</th>
+                    <th>الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(v.recent_invoices && v.recent_invoices.length > 0)
+                    ? v.recent_invoices.map(inv => `
+                        <tr>
+                          <td><strong>${inv.invoice_no}</strong></td>
+                          <td>${inv.date || '-'}</td>
+                          <td style="font-weight: bold;">${this.formatNumber(inv.total_amount)} ${currency}</td>
+                          <td style="color: #10b981;">${this.formatNumber(inv.paid_amount || 0)} ${currency}</td>
+                          <td><span class="badge badge-active">${inv.status || 'معتمد'}</span></td>
+                        </tr>
+                      `).join('')
+                    : `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">لا توجد فواتير شراء مسجلة لهذا المورد</td></tr>`
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            ${(v.recent_payments && v.recent_payments.length > 0) ? `
+              <div style="margin-top: 20px;">
+                <h5 style="margin-bottom: 10px; font-size: 0.95rem; color: var(--text-primary);">
+                  <i class="fa fa-money" style="color: #10b981;"></i> سندات ومعاملات الصرف المنفذة (Cleared Payments)
+                </h5>
+                <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                  <table class="custom-table" style="font-size: 0.85rem; width: 100%;">
+                    <thead>
+                      <tr>
+                        <th>رقم السند</th>
+                        <th>التاريخ</th>
+                        <th>المبلغ المسدد</th>
+                        <th>طريقة الدفع</th>
+                        <th>الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${v.recent_payments.map(pay => `
+                        <tr>
+                          <td><strong>${pay.receipt_no || pay.id}</strong></td>
+                          <td>${pay.date || '-'}</td>
+                          <td style="font-weight: bold; color: #10b981;">${this.formatNumber(pay.amount)} ${currency}</td>
+                          <td>${pay.payment_method || 'تحويل بنكي / نقدي'}</td>
+                          <td><span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981;">${pay.status || 'مسوى (cleared)'}</span></td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ` : ''}
+
+          </div>
+
+          ${(() => {
+            let atts = [];
+            if (v.invoice_attachment) {
+              try {
+                atts = typeof v.invoice_attachment === 'string' ? JSON.parse(v.invoice_attachment) : v.invoice_attachment;
+                if (!Array.isArray(atts)) atts = [atts];
+              } catch (e) {
+                if (typeof v.invoice_attachment === 'string' && v.invoice_attachment.startsWith('data:')) {
+                  const isPdf = v.invoice_attachment.includes('application/pdf');
+                  atts = [{ name: isPdf ? 'فاتورة_مرفقة.pdf' : 'فاتورة_ممسوحة.jpg', type: isPdf ? 'application/pdf' : 'image/jpeg', data: v.invoice_attachment }];
+                }
+              }
+            }
+            if (!atts || atts.length === 0) return '';
+            if (typeof Accounting !== 'undefined') Accounting._supplierAttachments = atts;
+            window._activeVendorAttachments = atts;
+            if (typeof App !== 'undefined') App._supplierAttachments = atts;
+            return `
+              <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px; margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h4 style="margin: 0; font-size: 1rem; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa fa-paperclip"></i> المستندات والفواتير المرفقة (PDF / ماسح ضوئي 📄📸)
+                  </h4>
+                  <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; font-size: 0.75rem;">${atts.length} مستندات</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  ${atts.map((att, i) => {
+                    const isPdf = att.type === 'application/pdf' || (att.name && att.name.toLowerCase().endsWith('.pdf'));
+                    const sizeStr = att.size ? (att.size > 1024 * 1024 ? `${(att.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(att.size / 1024)} KB`) : '';
+                    return `
+                      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 8px; padding: 8px 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="Accounting.viewSupplierAttachment(${i})" title="انقر للمعاينة">
+                          <span style="font-size: 1.2rem; display: flex; align-items: center;">${isPdf ? '📄' : (att.data ? `<img src="${att.data}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid #334155;">` : '🖼️')}</span>
+                          <div>
+                            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary);">${att.name || 'مستند فاتورة'}</div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
+                              <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 0.68rem;">${isPdf ? 'مستند PDF' : 'صورة ممسوحة'}</span>
+                              ${sizeStr ? `&nbsp;•&nbsp; <span>${sizeStr}</span>` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                          <button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.viewSupplierAttachment(${i})" style="font-size: 0.78rem;">
+                            <i class="fa fa-eye"></i> معاينة
+                          </button>
+                          ${att.data ? `
+                            <a href="${att.data}" target="_blank" class="btn btn-secondary btn-sm" style="font-size: 0.78rem;" title="فتح في نافذة جديدة">
+                              <i class="fa fa-external-link"></i>
+                            </a>
+                          ` : ''}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          })()}
+
+          <!-- أزرار الإجراءات السفلية -->
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-secondary" onclick="App.closeModal('dynamicAppModal')">إغلاق</button>
+          </div>
+
+        </div>
+      `;
+
+      const titleEl = document.getElementById('dynamicAppModalTitle');
+      const bodyEl = document.getElementById('dynamicAppModalBody');
+      if (titleEl) titleEl.innerHTML = `<i class="fa fa-id-card-o" style="color: #3b82f6;"></i> ملف المورد: ${v.company_name}`;
+      if (bodyEl) bodyEl.innerHTML = content;
+
+    } catch (err) {
+      console.error('Error fetching vendor profile:', err);
+      const bodyEl = document.getElementById('dynamicAppModalBody');
+      if (bodyEl) {
+        bodyEl.innerHTML = `
+          <div class="alert alert-danger" style="margin: 20px;">
+            حدث خطأ أثناء تحميل ملف المورد: ${err.message}
+          </div>
+        `;
+      }
+    }
+  },
+
+  /**
+   * جلب البيانات المصرفية المفكوكة للمورد عند النقر والتأكيد للصلاحيات المالية
+   */
+  async showFullVendorBankDetails(vendorId) {
+    const card = document.getElementById(`vendorBankVaultCard_${vendorId}`);
+    if (!card) return;
+
+    card.innerHTML = `<div style="text-align: center; padding: 15px;"><i class="fa fa-spinner fa-spin"></i> جاري فك التشفير الآمن...</div>`;
+
+    try {
+      const res = await fetch(`/api/suppliers/${vendorId}/bank-details`);
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        throw new Error(json.message || 'غير مخول');
+      }
+
+      const d = json.data;
+      card.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem; background: rgba(16,185,129,0.06); padding: 14px; border-radius: 8px; border: 1px solid rgba(16,185,129,0.2);">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-secondary);">اسم البنك:</span>
+            <strong>${d.bank_name}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-secondary);">رقم الحساب الكامل:</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: #10b981; font-weight: bold;">${d.account_number}</code>
+              <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.account_number}'); App.showToast('تم نسخ رقم الحساب بنجاح', 'success');" title="نسخ">📋</button>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-secondary);">رقم الآيبان الكامل (IBAN):</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: #10b981; font-weight: bold;">${d.iban}</code>
+              <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.iban}'); App.showToast('تم نسخ رقم الآيبان بنجاح', 'success');" title="نسخ">📋</button>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-secondary);">اسم المستفيد / صاحب الحساب:</span>
+            <strong>${d.account_holder || d.company_name}</strong>
+          </div>
+        </div>
+        <div style="font-size: 0.72rem; color: var(--accent-green); margin-top: 8px; text-align: center;">
+          <i class="fa fa-check-circle"></i> تم فك التشفير بنجاح عبر مفتاح AES-256-GCM المؤسسي
+        </div>
+      `;
+    } catch (err) {
+      card.innerHTML = `
+        <div class="alert alert-danger" style="margin: 10px; font-size: 0.85rem;">
+          عذراً، فشل فك التشفير: ${err.message}. يرجى التأكد من امتلاك الصلاحيات المالية الكافية.
+        </div>
+      `;
+    }
   },
 
   async loadCashTable(typeFilter) {
@@ -1022,6 +1456,42 @@ const App = {
     if (anyOtherModal.length === 0) {
       document.body.style.overflow = '';
     }
+  },
+
+  viewSupplierAttachment(index) {
+    if (typeof Accounting !== 'undefined' && Accounting.viewSupplierAttachment) {
+      Accounting.viewSupplierAttachment(index);
+    }
+  },
+
+  showSupplierStatement(supplierId) {
+    if (typeof Reports !== 'undefined' && Reports.showSupplierStatement) {
+      Reports.showSupplierStatement(supplierId);
+    }
+  },
+
+  showDynamicModal(title, content) {
+    let modal = document.getElementById('dynamicAppModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'dynamicAppModal';
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-box modal-lg" style="max-width: 960px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 14px 20px;">
+            <h3 class="modal-title" id="dynamicAppModalTitle" style="margin: 0; font-size: 1.15rem;"></h3>
+            <button class="modal-close-btn" onclick="App.closeModal('dynamicAppModal')" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+          </div>
+          <div class="modal-body" id="dynamicAppModalBody" style="padding: 20px; overflow-y: auto; flex: 1;"></div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    const titleEl = document.getElementById('dynamicAppModalTitle');
+    const bodyEl = document.getElementById('dynamicAppModalBody');
+    if (titleEl) titleEl.textContent = title;
+    if (bodyEl) bodyEl.innerHTML = content;
+    this.openModal('dynamicAppModal');
   },
 
   // رسائل التنبيه العائمة الفاخرة متعددة الطبقات (Toast Suite)

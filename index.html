@@ -13,8 +13,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261003-5o5b">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261003-5o5b">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261004-vmtb">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261004-vmtb">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -605,6 +605,12 @@
                 <span>مركز إدارة ومستندات المشروع الشامل (20 قسم)</span>
               </a>
             </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('projectCloseout', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                <span>إغلاق المشروع والتقارير التحليلية (CQRS)</span>
+              </a>
+            </li>
           </ul>
         </li>
 
@@ -682,12 +688,12 @@
           </ul>
         </li>
 
-        <!-- 7. إدارة المخزون -->
+        <!-- 7. إدارة المخزون والمواد -->
         <li class="nav-group" id="groupInventory" data-perm="inventory:view">
           <div class="nav-group-header" onclick="App.toggleNavGroup('groupInventory')">
             <div class="nav-group-title">
               <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm2 4h12v2H6zm2 4h8v2H8z"/></svg>
-              <span>7. إدارة المخزون</span>
+              <span>7. إدارة المخزون والمواد</span>
             </div>
             <svg class="nav-group-chevron icon"><use href="#icon-chevron-left"></use></svg>
           </div>
@@ -699,15 +705,33 @@
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'purchases', this)">
-                <svg class="icon"><use href="#icon-income"></use></svg>
-                <span>فواتير مشتريات المواد</span>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'audits', this)">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+                <span>الجرد والتسويات الرقابية</span>
               </a>
             </li>
             <li>
-              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'movements', this)">
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'quarantine', this)">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                <span>حجر المواد التالفة والخردة</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'returns', this)">
                 <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-                <span>أذون الصرف المخزني للمشاريع</span>
+                <span>مرتجعات الموقع وفحص الجودة QC</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'transfers', this)">
+                <svg viewBox="0 0 24 24"><path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/></svg>
+                <span>التحويلات بين المشاريع</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigateDeep('inventory', 'events', this)">
+                <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                <span>سجل أحداث المجال المشفر</span>
               </a>
             </li>
           </ul>
@@ -2394,13 +2418,34 @@
         <div id="hubPane_risks-claims" class="hub-pane-view" style="display: none;"></div>
       </section>
 
-      <!-- ================== شاشة المخزون والمواد ================== -->
+      <!-- ================== شاشة إدارة المواد والمستودعات المتقدمة (DDD & Auditing) ================== -->
       <section id="inventoryView" class="app-view-section" style="display: none;">
         <div class="page-header-row">
-          <h2 class="page-title">المخزون ومواد البناء</h2>
-          <button class="btn btn-primary" onclick="Inventory.openNewItemModal()">إضافة مادة جديدة +</button>
+          <div>
+            <h2 class="page-title">إدارة المواد والمستودعات المتقدمة (DDD & Audit System)</h2>
+            <p style="color: var(--text-secondary); margin-top: 4px; font-size: 0.9rem;">
+              نظام متكامل للجرد الدوري والمفاجئ، معالجة الفروقات والتسويات الآلية، حجر التوالف، ومرتجعات الموقع وتحويلات المشاريع.
+            </p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="Inventory.openSpotAuditModal()">🔍 جرد مفاجئ فوري</button>
+            <button class="btn btn-secondary" onclick="Inventory.openPeriodicAuditModal()">📅 جرد دوري مجدول</button>
+            <button class="btn btn-primary" onclick="Inventory.openNewItemModal()">+ إضافة مادة جديدة</button>
+          </div>
         </div>
-        <div class="panel-card">
+
+        <!-- شريط التبويبات الرئيسي للوحدات -->
+        <div style="display: flex; gap: 10px; margin-bottom: 16px; border-bottom: 2px solid var(--border-color); padding-bottom: 8px; flex-wrap: wrap;">
+          <button id="tabBtn-items" class="btn btn-sm btn-primary" onclick="Inventory.switchTab('items')">📦 أرصدة المخزون والمواد</button>
+          <button id="tabBtn-audits" class="btn btn-sm btn-secondary" onclick="Inventory.switchTab('audits')">📋 الجرد والتسويات الرقابية</button>
+          <button id="tabBtn-quarantine" class="btn btn-sm btn-secondary" onclick="Inventory.switchTab('quarantine')">☣️ حجر المواد التالفة والخردة</button>
+          <button id="tabBtn-returns" class="btn btn-sm btn-secondary" onclick="Inventory.switchTab('returns')">🔄 مرتجعات الموقع وفحص الجودة (QC)</button>
+          <button id="tabBtn-transfers" class="btn btn-sm btn-secondary" onclick="Inventory.switchTab('transfers')">🔁 التحويلات بين المشاريع</button>
+          <button id="tabBtn-events" class="btn btn-sm btn-secondary" onclick="Inventory.switchTab('events')">🔐 سجل أحداث المجال المشفر</button>
+        </div>
+
+        <!-- 1. تبويب الأصناف والرصيد العام -->
+        <div id="tabContent-items" class="panel-card">
           <div class="table-responsive">
             <table class="custom-table">
               <thead>
@@ -2411,10 +2456,332 @@
                   <th>الوحدة</th>
                   <th>الرصيد الحالي</th>
                   <th>سعر الوحدة</th>
-                  <th>الإجراء</th>
+                  <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="inventoryTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 2. تبويب الجرد والتسويات -->
+        <div id="tabContent-audits" class="panel-card" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">سجل جلسات الجرد والمحاضر الرقابية</h3>
+            <button class="btn btn-secondary btn-sm" onclick="Inventory.loadAudits()">🔄 تحديث الجلسات</button>
+          </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم المحضر</th>
+                  <th>المستودع</th>
+                  <th>النوع</th>
+                  <th>الحالة</th>
+                  <th>الأصناف</th>
+                  <th>الفائض</th>
+                  <th>العجز</th>
+                  <th>صافي الانحراف</th>
+                  <th>الختم الرقمي</th>
+                  <th>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="auditsTableBody">
+                <tr><td colspan="10" style="text-align: center; padding: 16px;">جاري تحميل جلسات الجرد...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3. تبويب حجر المواد التالفة والخردة -->
+        <div id="tabContent-quarantine" class="panel-card" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">صندوق حجر المواد التالفة والمستبعدة</h3>
+              <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">المواد التالفة المعزولة محاسبياً لتفادي اختلاطها مع المخزون الصالح.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="Inventory.openQuarantineModal()">+ عزل مادة تالفة</button>
+          </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم السجل</th>
+                  <th>الصنف</th>
+                  <th>المستودع / الصندوق</th>
+                  <th>الكمية المعزولة</th>
+                  <th>قيمة الخسارة</th>
+                  <th>سبب التلف</th>
+                  <th>الحالة</th>
+                  <th>تاريخ العزل</th>
+                  <th>الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="quarantineTableBody">
+                <tr><td colspan="9" style="text-align: center; padding: 16px;">لا توجد مواد في حجر التوالف</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 4. تبويب مرتجعات الموقع وفحص الجودة -->
+        <div id="tabContent-returns" class="panel-card" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">إيصالات إرجاع المواد من المواقع (MRR)</h3>
+              <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">توثيق وفحص الجودة للمواد المرتجعة وتخفيض تكلفة المشروع آلياً.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="Inventory.openSiteReturnModal()">+ إيصال إرجاع وفحص QC</button>
+          </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم الإيصال</th>
+                  <th>المشروع المصدر</th>
+                  <th>الصنف</th>
+                  <th>الكمية</th>
+                  <th>تقييم الجودة (QC)</th>
+                  <th>مهندس الفحص</th>
+                  <th>القيمة المستردة</th>
+                  <th>تاريخ الإرجاع</th>
+                  <th>الحالة</th>
+                </tr>
+              </thead>
+              <tbody id="siteReturnsTableBody">
+                <tr><td colspan="9" style="text-align: center; padding: 16px;">لا توجد إيصالات إرجاع مسجلة</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 5. تبويب التحويلات بين المشاريع -->
+        <div id="tabContent-transfers" class="panel-card" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">طلبات تحويل المواد بين المشاريع</h3>
+              <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">إدارة مناقلة المواد وتوجيه التكلفة محاسبياً تحت مبدأ الرقابة الثنائية Maker-Checker.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="Inventory.openProjectTransferModal()">+ طلب تحويل بين المشاريع</button>
+          </div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم التحويل</th>
+                  <th>من مشروع</th>
+                  <th>إلى مشروع</th>
+                  <th>الصنف</th>
+                  <th>الكمية</th>
+                  <th>القيمة المالية</th>
+                  <th>الحالة</th>
+                  <th>مقدم الطلب</th>
+                  <th>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="projectTransfersTableBody">
+                <tr><td colspan="9" style="text-align: center; padding: 16px;">لا توجد تحويلات بين المشاريع</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 6. تبويب سجل أحداث المجال المشفر -->
+        <div id="tabContent-events" class="panel-card" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">سجل أحداث حركة المواد المشفر (Audit Hash-Chain)</h3>
+              <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">سلسلة أحداث غير قابلة للحذف أو التعديل تضمن الشفافية والمساءلة الكاملة.</p>
+            </div>
+            <button class="btn btn-success btn-sm" onclick="Inventory.verifyEventsChain()">🛡️ فحص سلامة السلسلة الهاشية</button>
+          </div>
+          <div id="chainVerificationAlert" style="margin-bottom: 12px; display: none;"></div>
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>معرف الحدث</th>
+                  <th>نوع الحدث</th>
+                  <th>الكيان المتأثر</th>
+                  <th>المستخدم</th>
+                  <th>الطابع الزمني</th>
+                  <th>الهاش السابق (Prev Hash)</th>
+                  <th>هاش الحدث المشفر (SHA-256)</th>
+                </tr>
+              </thead>
+              <tbody id="domainEventsTableBody">
+                <tr><td colspan="7" style="text-align: center; padding: 16px;">جاري تحميل سجل الأحداث...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================== شاشة إغلاق المشروع وتقارير التحليلات (CQRS Closeout & BoQ Analytics) ================== -->
+      <section id="projectCloseoutView" class="app-view-section" style="display: none;">
+        <div class="page-header-row" style="align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h2 class="page-title" style="margin: 0;">إغلاق المشروع والتحليلات الختامية (CQRS Closeout & BoQ Analytics)</h2>
+              <span id="closeoutStatusBadge" class="badge badge-warning">🟢 قيد المعاينة</span>
+            </div>
+            <p style="color: var(--text-secondary); margin-top: 4px; font-size: 0.9rem;">
+              تطبيق نمط CQRS لفصل مستخلص العميل الخارجي المحصن أمنياً عن مستخلص الرقابة والتدقيق الداخلي الشامل لدورة حياة المواد.
+            </p>
+          </div>
+          
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <!-- محدد المشروع -->
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">المشروع:</label>
+              <select id="closeoutProjectSelect" class="form-control" onchange="ProjectCloseout.onProjectChange(this.value)" style="min-width: 220px; padding: 6px 10px; border-radius: 6px;">
+                <option value="">جاري تحميل المشاريع...</option>
+              </select>
+            </div>
+
+            <!-- أزرار الإجراءات -->
+            <button class="btn btn-secondary btn-sm" onclick="ProjectCloseout.loadProjectCloseoutData(ProjectCloseout.selectedProjectId)">🔄 تحديث</button>
+            <button id="btnDoCloseProject" class="btn btn-primary btn-sm" onclick="ProjectCloseout.openCloseProjectModal()" style="background: #c0392b; border-color: #a93226;">🔒 إغلاق المشروع النهائي</button>
+            <button id="btnDoReopenProject" class="btn btn-warning btn-sm" onclick="ProjectCloseout.openReopenProjectModal()" style="display: none;">🔓 إعادة فتح المشروع</button>
+            <button class="btn btn-secondary btn-sm" onclick="ProjectCloseout.printCurrentView()">🖨️ طباعة المستخلص</button>
+          </div>
+        </div>
+
+        <div id="closeoutLoadingIndicator" style="display: none; text-align: center; padding: 14px; background: rgba(52, 152, 219, 0.1); border-radius: 6px; margin-bottom: 16px;">
+          ⏳ جاري معالجة وتجميع بيانات كشف الكميات والمخزون والمشتريات...
+        </div>
+
+        <!-- بطاقات المؤشرات التنفيذية (KPI Cards) -->
+        <div class="kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
+          <div class="kpi-card panel-card" style="padding: 12px;">
+            <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">قيمة العقد الإجمالية</span>
+            <div id="kpiCloseoutContractVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; margin-top: 4px;">-</div>
+          </div>
+          <div class="kpi-card panel-card" style="padding: 12px;">
+            <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">القيمة المنفذة للفوترة</span>
+            <div id="kpiCloseoutBilledVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; color: var(--accent-blue, #2980b9); margin-top: 4px;">-</div>
+          </div>
+          <div class="kpi-card panel-card" style="padding: 12px;">
+            <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">إجمالي التكلفة الفعلية</span>
+            <div id="kpiCloseoutActualCost" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; margin-top: 4px;">-</div>
+          </div>
+          <div class="kpi-card panel-card" style="padding: 12px;">
+            <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">مجمل الربح وهامش %</span>
+            <div id="kpiCloseoutGrossProfit" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; margin-top: 4px;">-</div>
+          </div>
+          <div class="kpi-card panel-card" style="padding: 12px;">
+            <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">رصيد مواد الموقع (فائض)</span>
+            <div id="kpiCloseoutSiteStockVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; color: #2980b9; margin-top: 4px;">-</div>
+          </div>
+          <div class="kpi-card panel-card" style="padding: 12px;">
+            <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">تكلفة الهدر والفاقد</span>
+            <div id="kpiCloseoutWastageVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; color: var(--accent-red, #c0392b); margin-top: 4px;">-</div>
+          </div>
+        </div>
+
+        <!-- شريط التبديل بين نموذجي القراءة (CQRS Read Models Tabs) -->
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; border-bottom: 2px solid var(--border-color); padding-bottom: 8px;">
+          <button id="tabBtn-auditBoq" class="btn btn-primary" onclick="ProjectCloseout.switchModelTab('internal')">
+            🛡️ 1. مستخلص الرقابة والتدقيق الداخلي (Internal Audit BoQ)
+          </button>
+          <button id="tabBtn-clientBoq" class="btn btn-secondary" onclick="ProjectCloseout.switchModelTab('client')">
+            📄 2. مستخلص العميل النهائي الخارجي (Client BoQ)
+          </button>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- 1. لوحة مستخلص الرقابة والتدقيق الداخلي (Internal Audit BoQ Pane) -->
+        <!-- ========================================================================= -->
+        <div id="pane-auditBoq" class="panel-card" style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: rgba(52, 152, 219, 0.05); padding: 12px; border-radius: 6px; border-right: 4px solid var(--accent-blue, #2980b9);">
+            <div>
+              <h3 style="margin: 0; font-size: 1.05rem; color: var(--text-primary);">مسار تجميع المؤشرات الشامل (Material Lifecycle & Cost Variance Pipeline)</h3>
+              <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">
+                يتتبع حركة المواد الدقيقة: المقدر في العقد (Baseline)، المشتريات، الاستلام، المنقول للموقع، الاستهلاك الفعلي، رصيد الموقع المتبقي، والتباين المالي.
+              </p>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm" onclick="ProjectCloseout.printInternalAuditBoQ()">🖨️ طباعة تقرير التدقيق الداخلي</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="custom-table" style="font-size: 0.85rem;">
+              <thead>
+                <tr style="background: var(--bg-surface-2, #f1f3f5);">
+                  <th rowspan="2" style="vertical-align: middle;">كود البند</th>
+                  <th rowspan="2" style="vertical-align: middle;">بيان الأعمال / المادة</th>
+                  <th rowspan="2" style="vertical-align: middle;">الوحدة</th>
+                  <th colspan="7" style="text-align: center; background: rgba(52, 152, 219, 0.15); color: #2980b9;">دورة حياة المواد الميدانية (الحقول السبعة الدقيقة)</th>
+                  <th rowspan="2" style="vertical-align: middle; text-align: center;">الهدر والتالف</th>
+                  <th rowspan="2" style="vertical-align: middle; text-align: right;">التكلفة الفعلية</th>
+                  <th rowspan="2" style="vertical-align: middle; text-align: right;">تباين التكلفة</th>
+                  <th rowspan="2" style="vertical-align: middle; text-align: right;">مجمل الربح (%الهامش)</th>
+                  <th rowspan="2" style="vertical-align: middle; text-align: center;">الحالة</th>
+                </tr>
+                <tr style="background: rgba(52, 152, 219, 0.08); font-size: 0.8rem;">
+                  <!-- الحقول السبعة الأساسية -->
+                  <th title="المخصص الأولي المقدر في كشف الكميات">1. المقدرة (Baseline)</th>
+                  <th title="الإجمالي المشتري من الموردين">2. المشتراة (Purchased)</th>
+                  <th title="المستلمة فعلياً بالمستودع أو الموقع">3. المستلمة (Received)</th>
+                  <th title="المنقولة والمصروفة من المخزون للموقع">4. المصروفة (Issued)</th>
+                  <th title="الكمية الفعلية المستخدمة في التنفيذ">5. المستهلكة (Consumed)</th>
+                  <th title="الرصيد المتبقي بموقع المشروع = Issued - Consumed" style="color: #2980b9;">6. رصيد الموقع (Site Balance)</th>
+                  <th title="المتبقي من الكمية الأساسية = Baseline - Consumed">7. متبقي الأساسي (Remaining)</th>
+                </tr>
+              </thead>
+              <tbody id="auditBoqTableBody">
+                <tr><td colspan="15" style="text-align: center; padding: 20px;">جاري تحميل بيانات الرقابة والتدقيق...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- 2. لوحة مستخلص العميل النهائي الخارجي (Client BoQ Pane) -->
+        <!-- ========================================================================= -->
+        <div id="pane-clientBoq" class="panel-card" style="display: none; margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: rgba(39, 174, 96, 0.06); padding: 12px; border-radius: 6px; border-right: 4px solid var(--accent-green, #27ae60);">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h3 style="margin: 0; font-size: 1.05rem; color: var(--text-primary);">المستخلص الختامي الرسمي للعميل (Client-Facing Billable BoQ)</h3>
+                <span class="badge badge-success">🔒 محصن ومعقم أمنياً</span>
+              </div>
+              <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">
+                كائن نقل بيانات محصن يقتصر فقط على الكميات المنفذة المعتمدة وأسعار العقد وحسابات الفوترة، مع حجب كامل للتكاليف الفعلية الداخلية وأسعار الشراء وهوامش الربح.
+              </p>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm" onclick="ProjectCloseout.printClientBoQ()">🖨️ طباعة المستخلص للعميل</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="custom-table" style="font-size: 0.9rem;">
+              <thead>
+                <tr>
+                  <th>رقم البند</th>
+                  <th>بيان الأعمال التعاقدية المعتمدة</th>
+                  <th>الوحدة</th>
+                  <th style="text-align: center;">الكمية التعاقدية</th>
+                  <th style="text-align: center; color: var(--accent-blue);">الكمية المنفذة المعتمدة</th>
+                  <th style="text-align: right;">فئة السعر التعاقدي</th>
+                  <th style="text-align: right;">إجمالي المستحق</th>
+                  <th style="text-align: right; color: var(--accent-red);">محتجز الضمان (5%)</th>
+                  <th style="text-align: right; color: var(--accent-green);">صافي المستحق للمقاول</th>
+                </tr>
+              </thead>
+              <tbody id="clientBoqTableBody">
+                <tr><td colspan="9" style="text-align: center; padding: 20px;">جاري تحميل مستخلص العميل...</td></tr>
+              </tbody>
+              <tfoot style="font-weight: 700; background: var(--bg-surface-2, #f8f9fa);">
+                <tr>
+                  <td colspan="6" style="text-align: left; font-size: 1rem;">الإجماليات العامة للمستخلص الختامي:</td>
+                  <td id="clientFooterTotalBilled" style="text-align: right; font-size: 1.05rem; color: var(--accent-blue);">-</td>
+                  <td id="clientFooterRetention" style="text-align: right; font-size: 1.05rem; color: var(--accent-red);">-</td>
+                  <td id="clientFooterNetPayable" style="text-align: right; font-size: 1.15rem; color: var(--accent-green);">-</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -2878,14 +3245,19 @@
         <!-- تبويب 5: كشف حساب مورد مفصل -->
         <div id="pane_supplier-statement" class="report-pane" style="display: none;">
           <div class="panel-card">
-            <div style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 14px;">
-              <div class="form-group" style="margin: 0; min-width: 250px;">
+            <div style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 14px; flex-wrap: wrap;">
+              <div class="form-group" style="margin: 0; min-width: 280px; flex: 1;">
                 <label>اختر المورد</label>
                 <select id="repSupplierSelect" class="form-control" onchange="Reports.fetchFullSupplierStatement()">
-                  <option value="">اختر المورد...</option>
+                  <option value="">-- اختر المورد لعرض كشف الحساب --</option>
                 </select>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="Reports.fetchFullSupplierStatement()">عرض الكشف</button>
+              <button class="btn btn-primary btn-sm" onclick="Reports.fetchFullSupplierStatement()" style="display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fa fa-search"></i> عرض الكشف
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="Reports.printSupplierStatement()" style="display: inline-flex; align-items: center; gap: 6px; border: 1px solid #3b82f6; color: #3b82f6;" title="طباعة كشف الحساب الحالي">
+                <i class="fa fa-print"></i> <span>طباعة كشف الحساب (PDF) 🖨️</span>
+              </button>
             </div>
 
             <div id="repSupplierInfo"></div>
@@ -2897,12 +3269,14 @@
                     <th>التاريخ</th>
                     <th>نوع الحركة</th>
                     <th>المرجع</th>
-                    <th>دائن (فاتورة مشتريات)</th>
-                    <th>مدين (سداد للمورد)</th>
+                    <th>دائن (مستحق له)</th>
+                    <th>مدين (مسدد له)</th>
+                    <th>الرصيد التراكمي</th>
                     <th>البيان والملاحظات</th>
                   </tr>
                 </thead>
                 <tbody id="repSupplierStatementTable"></tbody>
+                <tfoot id="repSupplierStatementFooter"></tfoot>
               </table>
             </div>
           </div>
@@ -3578,13 +3952,13 @@
             <table class="custom-table">
               <thead>
                 <tr>
-                  <th>اسم المورد</th>
-                  <th>التصنيف / النشاط</th>
-                  <th>الهاتف</th>
-                  <th>العنوان</th>
-                  <th>الرصيد المستحق له</th>
-                  <th>ملاحظات</th>
-                  <th style="text-align: center;">الإجراء</th>
+                  <th>اسم المورد / الشركة</th>
+                  <th>فئة النشاط (Industry)</th>
+                  <th>الهاتف وجهة الاتصال</th>
+                  <th style="text-align: center;">عدد الفواتير</th>
+                  <th>إجمالي المدفوع</th>
+                  <th>الرصيد المستحق (Real-time)</th>
+                  <th style="text-align: center;">إجراءات SRM</th>
                 </tr>
               </thead>
               <tbody id="fullSuppliersTableBody"></tbody>
@@ -4890,64 +5264,312 @@
   </div>
 
   <!-- نافذة إضافة مورد جديد -->
+  <!-- نافذة ملف المورد / إضافة وتعديل مورد (SRM Vendor Profile Modal) -->
   <div class="modal-overlay" id="newSupplierModal">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>إضافة مورد / مقاول جديد</h3>
+    <div class="modal-box modal-lg" style="max-width: 860px; width: 95%; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 14px 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.4rem;">🏢</span>
+          <div>
+            <h3 id="supplierModalTitle" style="margin: 0; font-size: 1.15rem; color: var(--text-primary);">ملف تعريف المورد (SRM Profile) / إضافة مورد جديد</h3>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">إدارة بيانات الموردين، الحسابات المصرفية، وعقود التوريد</span>
+          </div>
+        </div>
         <button class="modal-close-btn" onclick="App.closeModal('newSupplierModal')">&times;</button>
       </div>
-      <form id="newSupplierForm" onsubmit="Accounting.submitNewSupplier(event)">
-        <div class="form-group">
-          <label>اسم المورد / الشركة <span style="color: var(--accent-red);">*</span></label>
-          <input type="text" id="suppName" class="form-control" placeholder="مثال: مصنع عدن للأسمنت / شركة الحديد" required>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>النشاط / التصنيف</label>
-            <select id="suppCategory" class="form-control">
-              <option value="مواد بناء">مواد بناء</option>
-              <option value="حديد وتسليح">حديد وتسليح</option>
-              <option value="أسمنت وخرسانة">أسمنت وخرسانة</option>
-              <option value="تأجير معدات">تأجير معدات</option>
-              <option value="مقاول باطن">مقاول باطن</option>
-              <option value="أدوات صحية وكهرباء">أدوات صحية وكهرباء</option>
-              <option value="أخرى">أخرى</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>رقم الهاتف</label>
-            <input type="text" id="suppPhone" class="form-control" placeholder="777000111">
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label>العنوان</label>
-            <input type="text" id="suppAddress" class="form-control" placeholder="المنطقة الصناعية / الشيخ عثمان">
-          </div>
-          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
+
+      <form id="newSupplierForm" onsubmit="Accounting.submitNewSupplier(event)" style="padding: 16px 20px;">
+        <input type="hidden" id="suppEditId" value="">
+
+        <!-- القسم 1: البيانات الأساسية والتجارية (Master Data) -->
+        <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+          <h4 style="margin: 0 0 12px 0; font-size: 0.95rem; color: var(--accent-blue, #3b82f6); display: flex; align-items: center; gap: 6px;">
+            <i class="fa fa-building"></i> البيانات الأساسية وهوية المنشأة (Master Data)
+          </h4>
+          
+          <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label>رصيد مستحق سابق</label>
-              <input type="number" id="suppBalance" class="form-control" value="0" min="0">
+              <label>اسم الشركة / المنشأة <span style="color: var(--accent-red, #ef4444);">*</span></label>
+              <input type="text" id="suppName" class="form-control" placeholder="مثال: شركة التوريدات الكهربائية الحديثة" required>
             </div>
+            
             <div class="form-group">
-              <label>العملة</label>
-              <select id="suppCurrency" class="form-control">
-                <option value="ر.ي" selected>ريال يمني (ر.ي)</option>
-                <option value="ر.س">ريال سعودي (ر.س)</option>
-                <option value="$">دولار ($)</option>
+              <label>الشخص المسؤول (اسم التاجر / مدير الحساب) <span style="color: var(--accent-red, #ef4444);">*</span></label>
+              <input type="text" id="suppContactPerson" class="form-control" placeholder="مثال: أ/ محمد سالم باعبيد" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px;">
+            <div class="form-group">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label style="margin: 0;">فئة النشاط والتوريد <span style="color: var(--accent-red, #ef4444);">*</span></label>
+                <a href="javascript:void(0)" onclick="Accounting.toggleCustomCategoryInput(true)" style="font-size: 0.75rem; color: #3b82f6; text-decoration: underline;">+ إدخال نشاط مخصص ✍️</a>
+              </div>
+              <select id="suppCategory" class="form-control" onchange="Accounting.onCategorySelectChange(this)" required>
+                <option value="إلكترونيات وأنظمة أمان">إلكترونيات وأنظمة أمان ⚡</option>
+                <option value="صرف صحي وسباكة">صرف صحي وسباكة 🚰</option>
+                <option value="كهربائيات وإنارة">كهربائيات وإنارة 💡</option>
+                <option value="مواد بناء وأسمنت وحديد" selected>مواد بناء وأسمنت وحديد 🏗️</option>
+                <option value="دهانات وتشطيبات">دهانات وتشطيبات 🎨</option>
+                <option value="تكييف وتهوية">تكييف وتهوية ❄️</option>
+                <option value="معدات وآليات ثقيلة">معدات وآليات ثقيلة 🚜</option>
+                <option value="نجارة وأخشاب">نجارة وأخشاب 🪚</option>
+                <option value="مقاولات عامة وتوريدات">مقاولات عامة وتوريدات 📦</option>
+                <option value="أخرى">أخرى (كتابة نشاط مخصص ✍️)</option>
+              </select>
+
+              <!-- حقل كتابة النشاط المخصص عندما يختار المستخدم أخرى أو ينقر على الرابط -->
+              <div id="customCategoryWrapper" style="display: none; margin-top: 8px;">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <input type="text" id="suppCustomCategory" class="form-control" placeholder="اكتب فئة النشاط المخصصة (مثال: طاقة شمسية، زجاج وألمنيوم، مصاعد...)" style="border-color: #3b82f6;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.toggleCustomCategoryInput(false)" title="إلغاء والعودة للقائمة">
+                    ✕ إلغاء
+                  </button>
+                </div>
+                <small style="color: var(--text-muted); font-size: 0.72rem; margin-top: 3px; display: block;">
+                  <i class="fa fa-info-circle"></i> يمكنك إدخال أي نشاط تجاري جديد وسيتم حفظه واعتماده فورياً
+                </small>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>رقم الهاتف المعتمد <span style="color: var(--accent-red, #ef4444);">*</span></label>
+              <input type="text" id="suppPhone" class="form-control" placeholder="+967 771234567 أو 771234567" dir="ltr" required>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label>العنوان / موقع المعرض أو المستودع</label>
+            <input type="text" id="suppAddress" class="form-control" placeholder="عدن - المنطقة الصناعية / الشيخ عثمان...">
+          </div>
+        </div>
+
+        <!-- القسم 2: الحساب البنكي والعملة ونوع الصرف ومدة التوريد -->
+        <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h4 style="margin: 0; font-size: 0.95rem; color: #10b981; display: flex; align-items: center; gap: 6px;">
+              <i class="fa fa-university"></i> البيانات المصرفية والتعاقدية (Bank & Payment Policy)
+            </h4>
+            <span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; font-size: 0.72rem;">تشفير آمن AES-256 🛡️</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label>اسم البنك / المصرف</label>
+              <input type="text" id="suppBankName" class="form-control" placeholder="مثال: بنك التضامن / بنك الكريمي / بنك القطيبي">
+            </div>
+
+            <div class="form-group">
+              <label>العملة الافتراضية للتعامل <span style="color: var(--accent-red, #ef4444);">*</span></label>
+              <select id="suppCurrency" class="form-control" onchange="Accounting.onCurrencyChange(this)" required>
+                <option value="YER" selected>ريال يمني (YER - ر.ي)</option>
+                <option value="SAR">ريال سعودي (SAR - ر.س)</option>
+                <option value="USD">دولار أمريكي (USD - $)</option>
               </select>
             </div>
+
+            <div class="form-group">
+              <label>رقم المبلغ (الرصيد الافتتاحي) <span id="suppCurrencyBadgeHint" style="color: #3b82f6; font-size: 0.78rem; font-weight: 700;">(ر.ي)</span></label>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <input type="number" id="suppBalance" class="form-control" step="0.01" min="0" placeholder="0.00" value="0.00" style="font-weight: 700; color: #3b82f6;" oninput="Accounting.updateSupplierLiveBalancePreview()">
+                <span id="suppCurrencySymbolBadge" style="background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #3b82f6; padding: 7px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;">ر.ي</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px;">
+            <div class="form-group">
+              <label>رقم الحساب البنكي</label>
+              <input type="text" id="suppBankAccountNo" class="form-control" placeholder="رقم الحساب الجاري أو التوفير" dir="ltr">
+            </div>
+
+            <div class="form-group">
+              <label>رقم الآيبان الدولي (IBAN)</label>
+              <input type="text" id="suppBankIban" class="form-control" placeholder="YE..." dir="ltr">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-top: 10px;">
+            <div class="form-group">
+              <label>توضيح نوع الصرف ومستند الدفع <span style="color: var(--accent-red, #ef4444);">*</span></label>
+              <select id="suppPaymentDocType" class="form-control" required>
+                <option value="إيصال عادي" selected>إيصال عادي ومستندات صرف نقدي 🧾</option>
+                <option value="عقد توريد">عقد توريد رسمي مقيد بدفعات 📑</option>
+                <option value="اعتماد مستندي LC">اعتماد مستندي بنكي (LC) 🏛️</option>
+                <option value="سند لأمر">سند لأمر وشيكات آجلة 📜</option>
+                <option value="فاتورة مؤجلة">فاتورة مؤجلة (آجل / دفعات دورية) ⏱️</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>مدة توريد المواد (بالأيام) <span style="color: var(--accent-red, #ef4444);">*</span></label>
+              <input type="number" id="suppLeadTimeDays" class="form-control" value="3" min="0" max="365" placeholder="عدد الأيام القياسية لتنفيذ الطلب" required>
+            </div>
           </div>
         </div>
-        <div class="form-group">
-          <label>ملاحظات</label>
-          <textarea id="suppNotes" class="form-control" rows="2" placeholder="ملاحظات أو حساب المورد..."></textarea>
+
+        <!-- القسم 3: التجميعات المالية التلقائية (Real-time Live Aggregations) -->
+        <div id="suppFinancialsSummaryCard" style="background: rgba(15, 23, 42, 0.7); border: 1px dashed var(--border-color, #334155); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-weight: 700; font-size: 0.9rem; color: var(--accent-amber, #f59e0b);">
+              <i class="fa fa-calculator"></i> التجميعات المالية للمورد (تُحسب تلقائياً من واقع فواتير وسندات النظام):
+            </span>
+            <span class="badge" style="background: rgba(59,130,246,0.15); color: #3b82f6; font-size: 0.72rem;">تجميع لحظي 100% (Zero Static Drift)</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; text-align: center;">
+            <div style="background: var(--card-bg, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #334155); border-right: 3px solid #3b82f6;">
+              <div style="font-size: 0.75rem; color: var(--text-secondary);">إجمالي المشتريات منه من سابق</div>
+              <div id="dispSuppInvoicesCount" style="font-size: 1.25rem; font-weight: 700; color: #3b82f6; margin-top: 4px;">0 فاتورة</div>
+              <div id="dispSuppInvoicedAmount" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">إجمالي المفوتر: 0.00 ر.ي</div>
+            </div>
+
+            <div style="background: var(--card-bg, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #334155); border-right: 3px solid #10b981;">
+              <div style="font-size: 0.75rem; color: var(--text-secondary);">المبالغ المسددة من سابق (SUM Paid)</div>
+              <div id="dispSuppTotalPaid" style="font-size: 1.25rem; font-weight: 700; color: #10b981; margin-top: 4px;">0.00 ر.ي</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">سندات صرف ومسواة</div>
+            </div>
+
+            <div style="background: var(--card-bg, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #334155); border-right: 3px solid #f59e0b;">
+              <div style="font-size: 0.75rem; color: var(--text-secondary);">إجمالي الرصيد المستحق (المتبقي)</div>
+              <div id="dispSuppOutstanding" style="font-size: 1.25rem; font-weight: 700; color: #f59e0b; margin-top: 4px;">0.00 ر.ي</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">المفوتر - المسدد (تلقائياً)</div>
+            </div>
+          </div>
         </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">حفظ المورد</button>
+
+        <!-- القسم 4: إرفاق فواتير الشراء ومستندات المورد (PDF أو ماسح ضوئي) -->
+        <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h4 style="margin: 0; font-size: 0.95rem; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+              <i class="fa fa-file-invoice"></i> إرفاق فواتير الشراء والمستندات (PDF أو ماسح ضوئي 📄📸)
+            </h4>
+            <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; font-size: 0.72rem;">أرشفة فواتير معتمدة</span>
+          </div>
+
+          <!-- أزرار الإجراءات: رفع ملف PDF / صورة أو مسح ضوئي بالكاميرا -->
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+            <input type="file" id="suppInvoiceFileInput" accept="application/pdf,image/jpeg,image/png,image/webp" multiple style="display: none;" onchange="Accounting.handleSupplierInvoiceUpload(event)">
+            <input type="file" id="suppInvoiceCameraInput" accept="image/*,application/pdf" capture="environment" style="display: none;" onchange="Accounting.handleSupplierInvoiceUpload(event)">
+
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceFileInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.4); color: #60a5fa; cursor: pointer;">
+              <i class="fa fa-file-pdf"></i>
+              <span>📄 إرفاق فاتورة PDF / صورة</span>
+            </button>
+
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceCameraInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: #34d399; cursor: pointer;">
+              <i class="fa fa-camera"></i>
+              <span>📷 ماسح ضوئي بالكاميرا (Scanner)</span>
+            </button>
+
+            <button type="button" class="btn btn-secondary" onclick="Accounting.openLiveScannerModal()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: #fbbf24; cursor: pointer;" title="فتح نافذة المسح الضوئي المباشر بالفيديو">
+              <i class="fa fa-video"></i>
+              <span>🎥 مسح ضوئي مباشر (Live Scanner)</span>
+            </button>
+          </div>
+
+          <!-- منطقة السحب والإفلات أو عرض الملفات المرفقة -->
+          <div id="suppInvoiceDropzone" 
+               ondragover="Accounting.onInvoiceDragOver(event)" 
+               ondragleave="Accounting.onInvoiceDragLeave(event)" 
+               ondrop="Accounting.onInvoiceDrop(event)"
+               style="border: 2px dashed rgba(148, 163, 184, 0.25); border-radius: 8px; padding: 14px; text-align: center; background: rgba(15, 23, 42, 0.4); transition: all 0.2s;">
+            
+            <div id="suppInvoiceEmptyState" style="color: var(--text-muted); font-size: 0.82rem; padding: 6px 0;">
+              <i class="fa fa-cloud-upload-alt" style="font-size: 1.8rem; color: #64748b; margin-bottom: 6px; display: block;"></i>
+              <div>اسحب وأفلت فواتير <strong>PDF</strong> أو الصور هنا، أو اختر من الأزرار أعلاه</div>
+              <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">الصيغ المدعومة: PDF, JPG, PNG, WEBP (حجم أقصى 20MB للمستند)</div>
+            </div>
+
+            <!-- قائمة الفواتير والمستندات المرفقة -->
+            <div id="suppInvoicesList" style="display: none; flex-direction: column; gap: 8px; text-align: right; margin-top: 6px;"></div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>ملاحظات إضافية / شروط التوريد</label>
+          <textarea id="suppNotes" class="form-control" rows="2" placeholder="ملاحظات حول المورد، شروط الدفع، موقع التسليم..."></textarea>
+        </div>
+
+        <div class="modal-footer" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color, #334155); display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="submit" class="btn btn-primary" id="btnSaveSupplier">
+            <i class="fa fa-save"></i> حفظ بيانات المورد
+          </button>
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('newSupplierModal')">إلغاء</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- نافذة الماسح الضوئي المباشر بالكاميرا للموردين (Live Document Scanner Modal) -->
+  <div class="modal-overlay" id="supplierLiveScannerModal" style="display: none;">
+    <div class="modal-box" style="max-width: 620px; width: 95%;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 14px 20px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">📷</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">الماسح الضوئي المباشر للفواتير (Live Scanner)</h3>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">وجه الكاميرا نحو الفاتورة الورقية والتقط صورة واضحة</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="Accounting.closeLiveScannerModal()">&times;</button>
+      </div>
+
+      <div style="padding: 16px 20px;">
+        <!-- منطقة عرض الكاميرا أو المعاينة -->
+        <div style="position: relative; width: 100%; height: 350px; background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          <video id="scannerLiveVideo" autoplay playsinline style="width: 100%; height: 100%; object-fit: contain;"></video>
+          <canvas id="scannerLiveCanvas" style="display: none;"></canvas>
+          <img id="scannerLiveSnapshot" style="display: none; width: 100%; height: 100%; object-fit: contain;">
+
+          <!-- إطار إرشادي لتحديد أبعاد الفاتورة (A4 Scanner Frame) -->
+          <div id="scannerOverlayFrame" style="position: absolute; inset: 16px; border: 2px dashed rgba(56, 189, 248, 0.7); border-radius: 6px; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #38bdf8; background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 4px; align-self: flex-start;">
+              <span>ضع الفاتورة داخل هذا الإطار</span>
+            </div>
+            <div style="align-self: flex-end; font-size: 0.72rem; color: #10b981; background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 4px;">
+              <span>جاهز للمسح الضوئي</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- أزرار التحكم -->
+        <div style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnSwitchCamera" onclick="Accounting.switchScannerCamera()" style="display: none;">
+            <i class="fa fa-refresh"></i> تبديل الكاميرا
+          </button>
+
+          <div style="display: flex; gap: 8px; margin-right: auto;">
+            <button type="button" class="btn btn-secondary" onclick="Accounting.closeLiveScannerModal()">إلغاء</button>
+            <button type="button" class="btn btn-primary" id="btnCaptureScan" onclick="Accounting.captureLiveScan()" style="background: #10b981; border-color: #10b981;">
+              <i class="fa fa-camera"></i> 📸 التقاط الفاتورة
+            </button>
+            <button type="button" class="btn btn-warning" id="btnRetakeScan" onclick="Accounting.retakeLiveScan()" style="display: none;">
+              <i class="fa fa-undo"></i> إعادة الالتقاط
+            </button>
+            <button type="button" class="btn btn-success" id="btnConfirmScan" onclick="Accounting.confirmLiveScan()" style="display: none;">
+              <i class="fa fa-check"></i> ✅ اعتماد وإرفاق الفاتورة
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة معاينة الفاتورة المرفقة (PDF أو صورة) -->
+  <div class="modal-overlay" id="supplierAttachmentViewerModal" style="display: none; z-index: 100100;" onclick="if(event.target === this) Accounting.closeAttachmentViewerModal()">
+    <div class="modal-box modal-lg" style="max-width: 820px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 12px 18px;">
+        <h3 id="attachmentViewerTitle" style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">معاينة مستند الفاتورة</h3>
+        <button class="modal-close-btn" onclick="Accounting.closeAttachmentViewerModal()">&times;</button>
+      </div>
+      <div id="attachmentViewerBody" style="padding: 16px; flex: 1; overflow: auto; text-align: center; min-height: 400px; max-height: 75vh;"></div>
+      <div class="modal-footer" style="padding: 10px 18px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between;">
+        <a id="attachmentViewerDownloadBtn" href="javascript:void(0)" download class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+          <i class="fa fa-download"></i> تنزيل المستند
+        </a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.closeAttachmentViewerModal()">إغلاق</button>
+      </div>
     </div>
   </div>
 
@@ -8620,26 +9242,26 @@
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/auth.js?v=1.0.0.20261003-5o5b"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/auth.js?v=1.0.0.20261004-vmtb"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/projects.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/accounting.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/inventory.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/hr.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/settings.js?v=1.0.0.20261003-5o5b"></script>
-  <script src="js/app.js?v=1.0.0.20261003-5o5b"></script>
+  <script src="js/reports.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/projects.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/accounting.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/inventory.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/hr.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/settings.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/app.js?v=1.0.0.20261004-vmtb"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261003-5o5b')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261004-vmtb')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

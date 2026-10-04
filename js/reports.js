@@ -457,51 +457,179 @@ const Reports = {
   },
 
   // 5. كشف حساب مورد مفصل
-  initSupplierStatementDropdown() {
+  async initSupplierStatementDropdown(selectedId = null) {
     const select = document.getElementById('repSupplierSelect');
-    if (select && Accounting.suppliers.length > 0) {
-      select.innerHTML = `<option value="">اختر المورد...</option>` +
-        Accounting.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    if (!select) return;
+
+    if (!Accounting.suppliers || Accounting.suppliers.length === 0) {
+      try {
+        const res = await fetch('/api/suppliers');
+        const json = await res.json();
+        if (json.success && json.data) {
+          Accounting.suppliers = json.data;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch suppliers for statement dropdown:', e);
+      }
     }
+
+    const list = Accounting.suppliers || [];
+    select.innerHTML = `<option value="">-- اختر المورد لعرض كشف الحساب --</option>` +
+      list.map(s => {
+        const name = s.company_name || s.name || 'مورد';
+        const curr = s.default_currency || s.currency || 'YER';
+        return `<option value="${s.id}">${name} (${curr})</option>`;
+      }).join('');
+
+    if (selectedId) {
+      select.value = String(selectedId);
+      await this.fetchFullSupplierStatement();
+    } else if (select.value) {
+      await this.fetchFullSupplierStatement();
+    }
+  },
+
+  async showSupplierStatement(supplierId) {
+    if (typeof App !== 'undefined' && App.navigate) {
+      App.navigate('reports');
+    }
+    this.switchReportTab('supplier-statement');
+    await this.initSupplierStatementDropdown(supplierId);
   },
 
   async fetchFullSupplierStatement() {
     const supplierId = document.getElementById('repSupplierSelect')?.value;
-    if (!supplierId) return;
+    const infoEl = document.getElementById('repSupplierInfo');
+    const tbody = document.getElementById('repSupplierStatementTable');
+    const tfoot = document.getElementById('repSupplierStatementFooter');
+
+    if (!supplierId) {
+      if (infoEl) infoEl.innerHTML = '';
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);"><i class="fa fa-arrow-up" style="margin-left: 6px;"></i> يرجى اختيار مورد من القائمة المنسدلة أعلاه لعرض كشف الحساب</td></tr>`;
+      }
+      if (tfoot) tfoot.innerHTML = '';
+      return;
+    }
+
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-secondary);"><i class="fa fa-spinner fa-spin fa-lg" style="margin-left: 8px; color: var(--accent-blue);"></i> جاري جلب كشف الحساب المالي والتدقيق المحاسبي...</td></tr>`;
+    }
 
     try {
       const res = await fetch(`/api/reports/supplier-statement/${supplierId}`);
       const json = await res.json();
-      if (json.success) {
-        const { supplier, statement } = json.data;
-        const sCurr = supplier.currency || 'ر.ي';
-        document.getElementById('repSupplierInfo').innerHTML = `
-          <div style="background: rgba(56,189,248,0.06); border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-md); margin-bottom: 14px;">
-            <h4 style="color: var(--accent-blue);">${supplier.name} (${supplier.category || 'مورد'})</h4>
-            <div style="display: flex; gap: 24px; font-size: 0.85rem; margin-top: 8px;">
-              <span>الهاتف: <strong>${supplier.phone || '-'}</strong></span>
-              <span>الرصيد المستحق للمورد: <strong style="color: var(--accent-amber); font-size: 1rem;">${App.formatNumber(supplier.balance)} ${sCurr}</strong></span>
-            </div>
-          </div>
-        `;
+      if (json.success && json.data) {
+        const { supplier, statement, summary } = json.data;
+        const sCurr = supplier.currency || supplier.default_currency || 'ر.ي';
+        const suppName = supplier.company_name || supplier.name || 'مورد';
+        const contact = supplier.contact_person || 'غير محدد';
+        const phone = supplier.phone_number || supplier.phone || '-';
+        const category = supplier.industry_category || supplier.category || 'عام';
+        const docType = supplier.payment_document_type || 'إيصال عادي';
 
-        const tbody = document.getElementById('repSupplierStatementTable');
-        if (tbody) {
-          tbody.innerHTML = statement.map(s => `
-            <tr>
-              <td>${s.date}</td>
-              <td>${s.type}</td>
-              <td>${s.ref || '-'}</td>
-              <td style="color: var(--accent-amber); font-weight: bold;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
-              <td style="color: var(--accent-green); font-weight: bold;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
-              <td>${s.notes || '-'}</td>
-            </tr>
-          `).join('');
+        const totInvoiced = summary ? summary.total_invoiced : statement.reduce((sum, s) => sum + (s.credit || 0), 0);
+        const totPaid = summary ? summary.total_paid : statement.reduce((sum, s) => sum + (s.debit || 0), 0);
+        const outBal = summary ? summary.outstanding_balance : (totInvoiced - totPaid);
+
+        if (infoEl) {
+          infoEl.innerHTML = `
+            <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); padding: 18px 20px; border-radius: 12px; margin-bottom: 18px; border-right: 4px solid #3b82f6;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-color, #334155); padding-bottom: 12px; margin-bottom: 12px;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3 style="margin: 0; font-size: 1.25rem; color: var(--text-primary); font-weight: 700;">${suppName}</h3>
+                    <span class="badge" style="background: rgba(59,130,246,0.15); color: #3b82f6; font-size: 0.8rem;">${category}</span>
+                    <span class="badge" style="background: rgba(139,92,246,0.15); color: #8b5cf6; font-size: 0.8rem;">${docType}</span>
+                  </div>
+                  <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+                    الشخص المسؤول (التاجر): <strong>${contact}</strong> &nbsp;|&nbsp; الهاتف: <strong dir="ltr">${phone}</strong> &nbsp;|&nbsp; العملة: <strong>${sCurr}</strong>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="Reports.printSupplierStatement()" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-weight: 700;">
+                    <i class="fa fa-print"></i> طباعة كشف الحساب (PDF)
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="App.openVendorProfileModal(${supplier.id})" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fa fa-id-card"></i> ملف المورد (SRM)
+                  </button>
+                </div>
+              </div>
+
+              <!-- بطاقات مؤشرات الكشف المالي -->
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
+                  <div style="font-size: 0.76rem; color: var(--text-secondary);">إجمالي المشتريات / الاستحقاق (دائن)</div>
+                  <div style="font-size: 1.2rem; font-weight: 800; color: #3b82f6; margin-top: 2px;">${App.formatNumber(totInvoiced)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
+                </div>
+
+                <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
+                  <div style="font-size: 0.76rem; color: var(--text-secondary);">إجمالي المسدد للمورد (مدين)</div>
+                  <div style="font-size: 1.2rem; font-weight: 800; color: #10b981; margin-top: 2px;">${App.formatNumber(totPaid)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
+                </div>
+
+                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
+                  <div style="font-size: 0.76rem; color: var(--text-secondary);">صافي الرصيد المستحق (المتبقي له)</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: ${outBal > 0 ? '#f59e0b' : '#10b981'}; margin-top: 2px;">${App.formatNumber(outBal)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
+                </div>
+              </div>
+            </div>
+          `;
         }
+
+        if (tbody) {
+          if (!statement || statement.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-muted);"><i class="fa fa-info-circle"></i> لا توجد حركات مسجلة لهذا المورد حتى الآن</td></tr>`;
+            if (tfoot) tfoot.innerHTML = '';
+          } else {
+            tbody.innerHTML = statement.map(s => {
+              const runBalColor = (s.running_balance || 0) > 0 ? 'var(--accent-amber)' : 'var(--accent-green)';
+              return `
+                <tr>
+                  <td style="white-space: nowrap; font-family: monospace;">${s.date || '-'}</td>
+                  <td><span class="badge" style="background: rgba(59,130,246,0.12); color: #3b82f6; font-size: 0.78rem;">${s.type}</span></td>
+                  <td style="font-weight: 600; font-family: monospace;">${s.ref || '-'}</td>
+                  <td style="color: var(--accent-amber); font-weight: 700; text-align: right;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
+                  <td style="color: var(--accent-green); font-weight: 700; text-align: right;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
+                  <td style="font-weight: 800; text-align: right; color: ${runBalColor};">${App.formatNumber(s.running_balance ?? 0)}</td>
+                  <td style="font-size: 0.85rem; color: var(--text-secondary);">${s.notes || '-'}</td>
+                </tr>
+              `;
+            }).join('');
+
+            if (tfoot) {
+              tfoot.innerHTML = `
+                <tr style="background: var(--bg-secondary, #1e293b); font-weight: 800; border-top: 2px solid var(--border-color, #334155);">
+                  <td colspan="3" style="text-align: center; font-size: 0.95rem;">الإجمالي العام لكشف الحساب</td>
+                  <td style="color: var(--accent-amber); font-size: 1rem; text-align: right;">${App.formatNumber(totInvoiced)} <small>${sCurr}</small></td>
+                  <td style="color: var(--accent-green); font-size: 1rem; text-align: right;">${App.formatNumber(totPaid)} <small>${sCurr}</small></td>
+                  <td style="color: ${outBal > 0 ? 'var(--accent-amber)' : 'var(--accent-green)'}; font-size: 1.05rem; text-align: right;">${App.formatNumber(outBal)} <small>${sCurr}</small></td>
+                  <td style="font-size: 0.82rem; color: var(--text-muted);">${outBal === 0 ? 'الحساب مسوى بالكامل ✅' : 'متبقي مستحق للمورد ⏳'}</td>
+                </tr>
+              `;
+            }
+          }
+        }
+      } else {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--accent-red);">${json.message || 'تعذر تحميل بيانات المورد'}</td></tr>`;
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching supplier statement:', e);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--accent-red);">حدث خطأ أثناء جلب كشف الحساب: ${e.message}</td></tr>`;
     }
+  },
+
+  // طباعة كشف حساب المورد المحدد حصراً
+  printSupplierStatement() {
+    const select = document.getElementById('repSupplierSelect');
+    if (!select || !select.value) {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast('يرجى اختيار المورد أولاً لطباعة كشف الحساب', 'warning');
+      }
+      return;
+    }
+    this.activeReportTab = 'supplier-statement';
+    this.printActiveReport();
   },
 
   // طباعة أي تقرير نشط على الورقة الرسمية المعتمدة
@@ -624,19 +752,21 @@ const Reports = {
         </div>` : ''}
       `;
     } else if (tab === 'supplier-statement') {
-      reportTitle = 'كشف حساب مورد تفصيلي';
+      reportTitle = 'كشف حساب مورد تفصيلي ومعتمد';
       const select = document.getElementById('repSupplierSelect');
       const supplierName = select ? select.options[select.selectedIndex]?.text : 'مورد';
       const supplierInfo = document.getElementById('repSupplierInfo')?.innerHTML || '';
       const tableRows = document.getElementById('repSupplierStatementTable')?.innerHTML || '';
+      const tableFoot = document.getElementById('repSupplierStatementFooter')?.innerHTML || '';
 
       reportMeta = [
         { label: 'اسم المورد', val: supplierName },
-        { label: 'تاريخ الإصدار', val: todayDate }
+        { label: 'تاريخ الإصدار', val: todayDate },
+        { label: 'الحالة المحاسبية', val: 'مطابق ومسوى دفتریاً' }
       ];
 
       reportBodyHtml = `
-        <div style="margin-bottom: 12px;">
+        <div style="margin-bottom: 14px;">
           ${supplierInfo}
         </div>
         <table class="official-report-table">
@@ -644,16 +774,22 @@ const Reports = {
             <tr>
               <th>التاريخ</th>
               <th>نوع الحركة</th>
-              <th>رقم الفاتورة/السند</th>
-              <th>مستحق له (دائن)</th>
-              <th>المدفوع له (مدين)</th>
+              <th>المرجع</th>
+              <th>دائن (له)</th>
+              <th>مدين (عليه)</th>
+              <th>الرصيد التراكمي</th>
               <th>البيان والملاحظات</th>
             </tr>
           </thead>
           <tbody>
-            ${tableRows || '<tr><td colspan="6" style="text-align: center;">لا توجد حركات مسجلة</td></tr>'}
+            ${tableRows || '<tr><td colspan="7" style="text-align: center;">لا توجد حركات مسجلة</td></tr>'}
           </tbody>
+          ${tableFoot ? `<tfoot>${tableFoot}</tfoot>` : ''}
         </table>
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 10px 14px; font-size: 0.78rem; color: #475569; display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+          <span>مصادقة الحساب: يعتبر كشف الحساب المالي أعلاه معتمداً ومطابقاً لدفاتر الشركة المحاسبية حتى تاريخ صدوره.</span>
+          <span>توقيع وختم المورد: ..........................</span>
+        </div>
       `;
     } else if (tab === 'balance-sheet') {
       reportTitle = 'تقرير الميزانية العمومية والمركز المالي';

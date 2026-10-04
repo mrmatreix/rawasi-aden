@@ -383,6 +383,12 @@ function initSqlite() {
     if (!colNames.includes('allowed_branches')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_branches TEXT DEFAULT '*';");
     if (!colNames.includes('allowed_departments')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_departments TEXT DEFAULT '*';");
 
+    try {
+      const cmCols = sqliteDb.prepare("PRAGMA table_info(cash_movements)").all();
+      const cmNames = cmCols.map(c => c.name);
+      if (!cmNames.includes('project_id')) sqliteDb.exec("ALTER TABLE cash_movements ADD COLUMN project_id INTEGER;");
+    } catch {}
+
     // ترقية جداول الفروع والأقسام المؤسسية
     sqliteDb.exec(`
       CREATE TABLE IF NOT EXISTS branches (
@@ -1043,9 +1049,230 @@ function initSqlite() {
         expiry_date DATE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+
+      -- جناح إدارة المواد المتقدم، الجرد والتسويات، الحجر والتوالف، وتحويلات المشاريع (DDD Material Management)
+      CREATE TABLE IF NOT EXISTS inventory_audits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        audit_no TEXT UNIQUE NOT NULL,
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        audit_type TEXT NOT NULL,
+        status TEXT DEFAULT 'draft',
+        scheduled_at DATETIME,
+        executed_at DATETIME,
+        snapshot_taken_at DATETIME,
+        initiated_by INTEGER REFERENCES users(id),
+        auditor_id INTEGER REFERENCES users(id),
+        auditor_name TEXT NOT NULL,
+        witness_name TEXT,
+        category_filter TEXT,
+        total_items_audited INTEGER DEFAULT 0,
+        total_overage_qty REAL DEFAULT 0,
+        total_shortage_qty REAL DEFAULT 0,
+        total_overage_amount REAL DEFAULT 0,
+        total_shortage_amount REAL DEFAULT 0,
+        net_variance_amount REAL DEFAULT 0,
+        digital_signature TEXT,
+        hash_signature TEXT,
+        minutes_doc TEXT,
+        reconciled_at DATETIME,
+        reconciled_by INTEGER REFERENCES users(id),
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_audit_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        audit_id INTEGER NOT NULL REFERENCES inventory_audits(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        system_qty REAL NOT NULL,
+        physical_qty REAL DEFAULT 0,
+        diff_qty REAL DEFAULT 0,
+        unit_cost REAL NOT NULL,
+        diff_amount REAL DEFAULT 0,
+        discrepancy_type TEXT DEFAULT 'match',
+        condition_status TEXT DEFAULT 'good',
+        auditor_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS material_quarantine_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        quarantine_no TEXT UNIQUE NOT NULL,
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        project_id INTEGER REFERENCES projects(id),
+        quantity REAL NOT NULL,
+        unit_cost REAL NOT NULL,
+        total_loss_amount REAL NOT NULL,
+        reason TEXT NOT NULL,
+        inspection_notes TEXT,
+        bin_location TEXT DEFAULT 'QUARANTINE_BIN_01',
+        status TEXT DEFAULT 'quarantined',
+        quarantined_by INTEGER REFERENCES users(id),
+        quarantined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        resolution_date DATETIME,
+        resolution_notes TEXT,
+        resolved_by INTEGER REFERENCES users(id),
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS site_material_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_no TEXT UNIQUE NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        quantity REAL NOT NULL,
+        unit_price REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        condition_status TEXT NOT NULL,
+        qc_inspector_id INTEGER REFERENCES users(id),
+        qc_inspector_name TEXT NOT NULL,
+        qc_notes TEXT,
+        qc_passed INTEGER DEFAULT 1,
+        salvage_percentage REAL DEFAULT 100,
+        credited_amount REAL NOT NULL,
+        scrap_loss_amount REAL DEFAULT 0,
+        return_date DATE NOT NULL,
+        status TEXT DEFAULT 'inspected',
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        quarantine_id INTEGER REFERENCES material_quarantine_items(id),
+        created_by INTEGER REFERENCES users(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS inter_project_material_transfers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transfer_no TEXT UNIQUE NOT NULL,
+        from_project_id INTEGER NOT NULL REFERENCES projects(id),
+        to_project_id INTEGER NOT NULL REFERENCES projects(id),
+        from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        quantity REAL NOT NULL,
+        unit_cost REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        from_boq_item_id INTEGER REFERENCES project_boq(id),
+        to_boq_item_id INTEGER REFERENCES project_boq(id),
+        routing_rules_applied TEXT,
+        status TEXT DEFAULT 'requested',
+        requested_by INTEGER REFERENCES users(id),
+        requested_by_name TEXT,
+        approved_by INTEGER REFERENCES users(id),
+        approved_by_name TEXT,
+        received_by INTEGER REFERENCES users(id),
+        received_by_name TEXT,
+        rejection_reason TEXT,
+        transfer_date DATE NOT NULL,
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS material_domain_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT UNIQUE NOT NULL,
+        event_name TEXT NOT NULL,
+        aggregate_type TEXT NOT NULL,
+        aggregate_id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        user_id INTEGER,
+        user_name TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        prev_hash TEXT NOT NULL,
+        event_hash TEXT NOT NULL
+      );
+
+      -- 13. جداول إغلاق المشروع وتقارير التحليلات بنمط CQRS
+      CREATE TABLE IF NOT EXISTS project_closeouts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        closeout_no TEXT UNIQUE NOT NULL,
+        closeout_date DATE NOT NULL,
+        closed_by INTEGER REFERENCES users(id),
+        closed_by_name TEXT,
+        status TEXT DEFAULT 'closed',
+        total_contract_value REAL DEFAULT 0,
+        total_billed_amount REAL DEFAULT 0,
+        total_actual_cost REAL DEFAULT 0,
+        gross_profit REAL DEFAULT 0,
+        profit_margin_percent REAL DEFAULT 0,
+        total_wastage_cost REAL DEFAULT 0,
+        site_stock_value REAL DEFAULT 0,
+        retention_amount REAL DEFAULT 0,
+        net_client_payable REAL DEFAULT 0,
+        notes TEXT,
+        hash_signature TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- نموذج قراءة مستخلص العميل الخارجي (Client-Facing BoQ Read Model DTO)
+      CREATE TABLE IF NOT EXISTS project_closeout_client_boq (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        closeout_id INTEGER NOT NULL REFERENCES project_closeouts(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        item_no TEXT NOT NULL,
+        description TEXT NOT NULL,
+        category TEXT,
+        unit TEXT NOT NULL,
+        contract_qty REAL NOT NULL,
+        billed_qty REAL NOT NULL,
+        contract_unit_rate REAL NOT NULL,
+        billable_amount REAL NOT NULL,
+        previous_billed_amount REAL DEFAULT 0,
+        current_billed_amount REAL DEFAULT 0,
+        retention_percent REAL DEFAULT 5.0,
+        retention_amount REAL DEFAULT 0,
+        net_payable REAL NOT NULL,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- نموذج قراءة مستخلص الرقابة والتدقيق الداخلي (Internal Audit BoQ Read Model)
+      CREATE TABLE IF NOT EXISTS project_closeout_internal_audit_boq (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        closeout_id INTEGER NOT NULL REFERENCES project_closeouts(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        item_no TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        category TEXT,
+        unit TEXT NOT NULL,
+        baseline_qty REAL NOT NULL,
+        purchased_qty REAL DEFAULT 0,
+        received_qty REAL DEFAULT 0,
+        issued_qty REAL DEFAULT 0,
+        consumed_qty REAL DEFAULT 0,
+        site_stock_balance REAL DEFAULT 0,
+        remaining_baseline REAL DEFAULT 0,
+        returned_qty REAL DEFAULT 0,
+        damaged_qty REAL DEFAULT 0,
+        wastage_qty REAL DEFAULT 0,
+        wastage_percent REAL DEFAULT 0,
+        budgeted_unit_cost REAL DEFAULT 0,
+        budgeted_cost REAL DEFAULT 0,
+        actual_unit_cost REAL DEFAULT 0,
+        total_actual_cost REAL DEFAULT 0,
+        cost_variance REAL DEFAULT 0,
+        contract_unit_rate REAL DEFAULT 0,
+        contract_revenue REAL DEFAULT 0,
+        gross_profit REAL DEFAULT 0,
+        profit_margin_percent REAL DEFAULT 0,
+        variance_status TEXT DEFAULT 'NORMAL',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_closeouts_proj ON project_closeouts(project_id);
+      CREATE INDEX IF NOT EXISTS idx_client_boq_closeout ON project_closeout_client_boq(closeout_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_boq_closeout ON project_closeout_internal_audit_boq(closeout_id);
     `);
 
-    // 13. جداول الحسابات البنكية والتسويات ومحفظة الشيكات
+    // 14. جداول الحسابات البنكية والتسويات ومحفظة الشيكات
     sqliteDb.exec(`
       CREATE TABLE IF NOT EXISTS bank_accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1360,6 +1587,174 @@ function initSqlite() {
       if (!dailyCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN approved_at DATETIME;");
     } catch (e) {
       console.warn('Daily reports migration note (SQLite):', e.message);
+    }
+
+    // ترقية وتطوير وحدة علاقات الموردين (SRM / Vendor Profile Migration)
+    try {
+      // 1. جداول التعداد والجداول المرجعية (Lookup Tables)
+      sqliteDb.exec(`
+        CREATE TABLE IF NOT EXISTS vendor_industry_categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          name_ar TEXT NOT NULL,
+          name_en TEXT,
+          icon TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS vendor_payment_document_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          name_ar TEXT NOT NULL,
+          description TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // زرع البيانات المرجعية الأساسية إذا لم تكن موجودة
+      const catCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM vendor_industry_categories").get().c;
+      if (catCount === 0) {
+        const insertCat = sqliteDb.prepare("INSERT INTO vendor_industry_categories (code, name_ar, name_en, icon) VALUES (?, ?, ?, ?)");
+        insertCat.run('ELEC', 'كهرباء وإنارة', 'Electrical & Lighting', '⚡');
+        insertCat.run('PLUMB', 'سباكة وصحي', 'Plumbing & Sanitary', '🚰');
+        insertCat.run('BLD_MAT', 'مواد بناء وأسمنت وحديد', 'Building Materials & Steel', '🧱');
+        insertCat.run('ELECTRONICS', 'إلكترونيات وأنظمة أمان', 'Electronics & Security', '🔌');
+        insertCat.run('PAINT', 'دهانات وتشطيبات', 'Paints & Finishing', '🎨');
+        insertCat.run('HVAC', 'تكييف وتهوية', 'HVAC & Ventilation', '❄️');
+        insertCat.run('HEAVY_EQ', 'معدات وآليات ثقيلة', 'Heavy Equipment', '🚜');
+        insertCat.run('CARPENTRY', 'نجارة وأخشاب', 'Carpentry & Woodwork', '🪚');
+        insertCat.run('GENERAL', 'مقاولات عامة وتوريدات', 'General Contracting & Supplies', '🏢');
+        insertCat.run('OTHER', 'أخرى', 'Other Categories', '📦');
+      }
+
+      const docTypeCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM vendor_payment_document_types").get().c;
+      if (docTypeCount === 0) {
+        const insertDocType = sqliteDb.prepare("INSERT INTO vendor_payment_document_types (code, name_ar, description) VALUES (?, ?, ?)");
+        insertDocType.run('STANDARD_RECEIPT', 'إيصال عادي', 'سند صرف نقدي أو شيك بنكي مباشر');
+        insertDocType.run('SUPPLY_CONTRACT', 'عقد توريد', 'عقد توريد رسمي بدفعات مجدولة وربط عقدي');
+        insertDocType.run('LC', 'اعتماد مستندي LC', 'خطاب اعتماد بنكي مستندي للاستيراد الخارجي');
+        insertDocType.run('PROMISSORY_NOTE', 'سند لأمر', 'سند إذني معتمد ومضمون الدفع');
+        insertDocType.run('DEFERRED_INVOICE', 'فاتورة مؤجلة', 'شراء آجل مع فترة سماح محددة (Credit terms)');
+      }
+
+      // 2. تحديث وتوسيع جدول الموردين (Suppliers / Vendors Master Data)
+      const suppCols = sqliteDb.prepare("PRAGMA table_info(suppliers)").all().map(c => c.name);
+      if (!suppCols.includes('company_name')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN company_name TEXT;");
+      if (!suppCols.includes('industry_category')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN industry_category TEXT DEFAULT 'مواد بناء';");
+      if (!suppCols.includes('contact_person')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN contact_person TEXT;");
+      if (!suppCols.includes('phone_number')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN phone_number TEXT;");
+      if (!suppCols.includes('bank_name')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_name TEXT;");
+      if (!suppCols.includes('bank_account_no')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_account_no TEXT;");
+      if (!suppCols.includes('bank_iban')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_iban TEXT;");
+      if (!suppCols.includes('bank_details_encrypted')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_details_encrypted TEXT;");
+      if (!suppCols.includes('default_currency')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN default_currency TEXT DEFAULT 'YER';");
+      if (!suppCols.includes('supply_lead_time_days')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN supply_lead_time_days INTEGER DEFAULT 3;");
+      if (!suppCols.includes('payment_document_type')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN payment_document_type TEXT DEFAULT 'إيصال عادي';");
+      if (!suppCols.includes('status')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN status TEXT DEFAULT 'active';");
+      if (!suppCols.includes('tax_id')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN tax_id TEXT;");
+      if (!suppCols.includes('commercial_reg_no')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN commercial_reg_no TEXT;");
+      if (!suppCols.includes('credit_limit')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN credit_limit REAL DEFAULT 0;");
+      if (!suppCols.includes('invoice_attachment')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN invoice_attachment TEXT;");
+      if (!suppCols.includes('updated_at')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN updated_at DATETIME;");
+
+      // مزامنة البيانات السابقة
+      sqliteDb.exec(`
+        UPDATE suppliers SET company_name = name WHERE company_name IS NULL OR company_name = '';
+        UPDATE suppliers SET phone_number = phone WHERE (phone_number IS NULL OR phone_number = '') AND phone IS NOT NULL;
+        UPDATE suppliers SET industry_category = category WHERE (industry_category IS NULL OR industry_category = '') AND category IS NOT NULL;
+        UPDATE suppliers SET default_currency = CASE WHEN currency IS NOT NULL AND currency != '' THEN currency ELSE 'YER' END WHERE default_currency IS NULL OR default_currency = '';
+      `);
+
+      // 3. إنشاء فهارس الأداء (Performance Indexes for Real-Time Zero N+1)
+      sqliteDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_purchases_supplier_status ON purchases (supplier_id, status);
+        CREATE INDEX IF NOT EXISTS idx_payments_supplier_type_status ON payments (supplier_id, type, status);
+        CREATE INDEX IF NOT EXISTS idx_suppliers_industry_status ON suppliers (industry_category, status);
+      `);
+
+      // 4. بناء العرض المجمع في الوقت الفعلي (SQL Aggregation View)
+      sqliteDb.exec(`
+        DROP VIEW IF EXISTS view_vendor_financial_profiles;
+        CREATE VIEW view_vendor_financial_profiles AS
+        SELECT 
+            v.id AS id,
+            v.id AS vendor_id,
+            COALESCE(v.company_name, v.name) AS company_name,
+            COALESCE(v.industry_category, v.category, 'مواد بناء') AS industry_category,
+            v.contact_person,
+            COALESCE(v.phone_number, v.phone) AS phone_number,
+            v.email,
+            v.address,
+            v.bank_name,
+            v.bank_account_no,
+            v.bank_iban,
+            v.bank_details_encrypted,
+            COALESCE(v.default_currency, v.currency, 'YER') AS default_currency,
+            COALESCE(v.supply_lead_time_days, 3) AS supply_lead_time_days,
+            COALESCE(v.payment_document_type, 'إيصال عادي') AS payment_document_type,
+            COALESCE(v.status, 'active') AS status,
+            COALESCE(v.tax_id, v.tax_number) AS tax_id,
+            v.commercial_reg_no,
+            COALESCE(v.balance, 0.0) AS balance,
+            COALESCE(v.balance, 0.0) AS opening_balance,
+            v.invoice_attachment,
+            v.notes,
+            v.created_at,
+            v.updated_at,
+            
+            -- التجميعات المالية الديناميكية المحسوبة في الوقت الفعلي (غير مخزنة ثابتاً)
+            CASE 
+                WHEN COALESCE(inv.total_invoices_count, 0) > 0 THEN inv.total_invoices_count
+                WHEN v.invoice_attachment IS NOT NULL AND v.invoice_attachment != '' AND v.invoice_attachment != '[]' THEN 1
+                ELSE 0
+            END AS total_purchase_invoices_count,
+            ROUND(COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0), 2) AS total_invoiced_amount,
+            ROUND(COALESCE(pay.total_amount_paid, 0.0), 2) AS total_amount_paid,
+            ROUND((COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0)) - COALESCE(pay.total_amount_paid, 0.0), 2) AS outstanding_balance
+        FROM suppliers v
+        LEFT JOIN (
+            SELECT 
+                supplier_id,
+                COUNT(id) AS total_invoices_count,
+                SUM(COALESCE(total_amount, 0.0)) AS total_invoiced_amount
+            FROM purchases
+            WHERE status != 'cancelled' OR status IS NULL
+            GROUP BY supplier_id
+        ) inv ON inv.supplier_id = v.id
+        LEFT JOIN (
+            SELECT 
+                supplier_id,
+                SUM(amount) AS total_amount_paid
+            FROM (
+                -- 1. صروفات الموردين من جدول سندات الصرف
+                SELECT supplier_id, COALESCE(amount, 0.0) AS amount
+                FROM payments 
+                WHERE supplier_id IS NOT NULL 
+                  AND type = 'صرف' 
+                  AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
+                UNION ALL
+                -- 2. المدفوعات المسجلة مباشرة على الفاتورة عند إنشائها
+                SELECT supplier_id, COALESCE(paid_amount, 0.0) AS amount
+                FROM purchases
+                WHERE supplier_id IS NOT NULL 
+                  AND paid_amount > 0 
+                  AND (status != 'cancelled' OR status IS NULL)
+                UNION ALL
+                -- 3. المصروفات المباشرة غير المكررة في جدول payments
+                SELECT supplier_id, COALESCE(amount, 0.0) AS amount
+                FROM expenses
+                WHERE supplier_id IS NOT NULL
+                  AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
+                  AND (receipt_no IS NULL OR receipt_no NOT IN (SELECT receipt_no FROM payments WHERE receipt_no IS NOT NULL))
+            )
+            GROUP BY supplier_id
+        ) pay ON pay.supplier_id = v.id;
+      `);
+      console.log('✅ [Rawasi DB] SRM & Vendor Financial Profiles view & tables initialized');
+    } catch (e) {
+      console.warn('SRM vendor migration note (SQLite):', e.message);
     }
   } catch (err) {
     console.warn('Project control migration note (SQLite):', err.message);

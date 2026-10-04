@@ -225,14 +225,19 @@
         <!-- تبويب 5: كشف حساب مورد مفصل -->
         <div id="pane_supplier-statement" class="report-pane" style="display: none;">
           <div class="panel-card">
-            <div style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 14px;">
-              <div class="form-group" style="margin: 0; min-width: 250px;">
+            <div style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 14px; flex-wrap: wrap;">
+              <div class="form-group" style="margin: 0; min-width: 280px; flex: 1;">
                 <label>اختر المورد</label>
                 <select id="repSupplierSelect" class="form-control" onchange="Reports.fetchFullSupplierStatement()">
-                  <option value="">اختر المورد...</option>
+                  <option value="">-- اختر المورد لعرض كشف الحساب --</option>
                 </select>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="Reports.fetchFullSupplierStatement()">عرض الكشف</button>
+              <button class="btn btn-primary btn-sm" onclick="Reports.fetchFullSupplierStatement()" style="display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fa fa-search"></i> عرض الكشف
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="Reports.printSupplierStatement()" style="display: inline-flex; align-items: center; gap: 6px; border: 1px solid #3b82f6; color: #3b82f6;" title="طباعة كشف الحساب الحالي">
+                <i class="fa fa-print"></i> <span>طباعة كشف الحساب (PDF) 🖨️</span>
+              </button>
             </div>
 
             <div id="repSupplierInfo"></div>
@@ -244,12 +249,14 @@
                     <th>التاريخ</th>
                     <th>نوع الحركة</th>
                     <th>المرجع</th>
-                    <th>دائن (فاتورة مشتريات)</th>
-                    <th>مدين (سداد للمورد)</th>
+                    <th>دائن (مستحق له)</th>
+                    <th>مدين (مسدد له)</th>
+                    <th>الرصيد التراكمي</th>
                     <th>البيان والملاحظات</th>
                   </tr>
                 </thead>
                 <tbody id="repSupplierStatementTable"></tbody>
+                <tfoot id="repSupplierStatementFooter"></tfoot>
               </table>
             </div>
           </div>

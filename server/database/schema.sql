@@ -79,18 +79,127 @@ CREATE TABLE IF NOT EXISTS clients (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. جدول الموردين
+-- 4. جداول إدارة علاقات الموردين (SRM & Vendor Master Data)
+CREATE TABLE IF NOT EXISTS vendor_industry_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    name_ar TEXT NOT NULL,
+    name_en TEXT,
+    icon TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vendor_payment_document_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    name_ar TEXT NOT NULL,
+    description TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS suppliers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    category TEXT, -- مواد بناء، حديد، أسمنت، كهرباء، تأجير معدات
+    company_name TEXT NOT NULL,
+    industry_category TEXT NOT NULL DEFAULT 'مواد بناء',
+    contact_person TEXT,
     phone TEXT,
+    phone_number TEXT,
     email TEXT,
     address TEXT,
+    bank_name TEXT,
+    bank_account_no TEXT,
+    bank_iban TEXT,
+    bank_details_encrypted TEXT,
+    default_currency TEXT NOT NULL DEFAULT 'YER',
+    supply_lead_time_days INTEGER NOT NULL DEFAULT 3,
+    payment_document_type TEXT NOT NULL DEFAULT 'إيصال عادي',
+    status TEXT NOT NULL DEFAULT 'active',
+    tax_id TEXT,
+    commercial_reg_no TEXT,
+    credit_limit REAL DEFAULT 0,
     balance REAL DEFAULT 0,
+    category TEXT,
     notes TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- فهارس الأداء للموردين وتجميعات الـ SRM
+CREATE INDEX IF NOT EXISTS idx_suppliers_industry_status ON suppliers (industry_category, status);
+CREATE INDEX IF NOT EXISTS idx_purchases_supplier_status ON purchases (supplier_id, status);
+CREATE INDEX IF NOT EXISTS idx_payments_supplier_type_status ON payments (supplier_id, type, status);
+
+-- عرض التجميعات المالية الديناميكية للموردين في الوقت الفعلي (Zero N+1 Query Aggregation View)
+CREATE VIEW IF NOT EXISTS view_vendor_financial_profiles AS
+SELECT 
+    v.id AS id,
+    v.id AS vendor_id,
+    COALESCE(v.company_name, v.name) AS company_name,
+    COALESCE(v.industry_category, v.category, 'مواد بناء') AS industry_category,
+    v.contact_person,
+    COALESCE(v.phone_number, v.phone) AS phone_number,
+    v.email,
+    v.address,
+    v.bank_name,
+    v.bank_account_no,
+    v.bank_iban,
+    v.bank_details_encrypted,
+    COALESCE(v.default_currency, v.currency, 'YER') AS default_currency,
+    COALESCE(v.supply_lead_time_days, 3) AS supply_lead_time_days,
+    COALESCE(v.payment_document_type, 'إيصال عادي') AS payment_document_type,
+    COALESCE(v.status, 'active') AS status,
+    COALESCE(v.tax_id, v.tax_number) AS tax_id,
+    v.commercial_reg_no,
+    v.notes,
+    v.created_at,
+    v.updated_at,
+    
+    CASE 
+        WHEN COALESCE(inv.total_invoices_count, 0) > 0 THEN inv.total_invoices_count
+        WHEN v.invoice_attachment IS NOT NULL AND v.invoice_attachment != '' AND v.invoice_attachment != '[]' THEN 1
+        ELSE 0
+    END AS total_purchase_invoices_count,
+    ROUND(COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0), 2) AS total_invoiced_amount,
+    ROUND(COALESCE(pay.total_amount_paid, 0.0), 2) AS total_amount_paid,
+    ROUND((COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0)) - COALESCE(pay.total_amount_paid, 0.0), 2) AS outstanding_balance
+FROM suppliers v
+LEFT JOIN (
+    SELECT 
+        supplier_id,
+        COUNT(id) AS total_invoices_count,
+        SUM(COALESCE(total_amount, 0.0)) AS total_invoiced_amount
+    FROM purchases
+    WHERE status != 'cancelled' OR status IS NULL
+    GROUP BY supplier_id
+) inv ON inv.supplier_id = v.id
+LEFT JOIN (
+    SELECT 
+        supplier_id,
+        SUM(amount) AS total_amount_paid
+    FROM (
+        SELECT supplier_id, COALESCE(amount, 0.0) AS amount
+        FROM payments 
+        WHERE supplier_id IS NOT NULL 
+          AND type = 'صرف' 
+          AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
+        UNION ALL
+        SELECT supplier_id, COALESCE(paid_amount, 0.0) AS amount
+        FROM purchases
+        WHERE supplier_id IS NOT NULL 
+          AND paid_amount > 0 
+          AND (status != 'cancelled' OR status IS NULL)
+        UNION ALL
+        SELECT supplier_id, COALESCE(amount, 0.0) AS amount
+        FROM expenses
+        WHERE supplier_id IS NOT NULL
+          AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
+          AND (receipt_no IS NULL OR receipt_no NOT IN (SELECT receipt_no FROM payments WHERE receipt_no IS NOT NULL))
+    )
+    GROUP BY supplier_id
+) pay ON pay.supplier_id = v.id;
 
 -- 5. جدول المشاريع
 CREATE TABLE IF NOT EXISTS projects (
@@ -987,6 +1096,145 @@ CREATE TABLE IF NOT EXISTS inventory_valuation_layers (
 );
 
 -- ============================================================================
+-- جناح إدارة المواد المتقدم، الجرد والتسويات، الحجر والتوالف، وتحويلات المشاريع (DDD Material Management)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS inventory_audits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    audit_no TEXT UNIQUE NOT NULL,
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    audit_type TEXT NOT NULL,
+    status TEXT DEFAULT 'draft',
+    scheduled_at DATETIME,
+    executed_at DATETIME,
+    snapshot_taken_at DATETIME,
+    initiated_by INTEGER REFERENCES users(id),
+    auditor_id INTEGER REFERENCES users(id),
+    auditor_name TEXT NOT NULL,
+    witness_name TEXT,
+    category_filter TEXT,
+    total_items_audited INTEGER DEFAULT 0,
+    total_overage_qty REAL DEFAULT 0,
+    total_shortage_qty REAL DEFAULT 0,
+    total_overage_amount REAL DEFAULT 0,
+    total_shortage_amount REAL DEFAULT 0,
+    net_variance_amount REAL DEFAULT 0,
+    digital_signature TEXT,
+    hash_signature TEXT,
+    minutes_doc TEXT,
+    reconciled_at DATETIME,
+    reconciled_by INTEGER REFERENCES users(id),
+    journal_entry_id INTEGER REFERENCES journal_entries(id),
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS inventory_audit_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    audit_id INTEGER NOT NULL REFERENCES inventory_audits(id) ON DELETE CASCADE,
+    item_id INTEGER NOT NULL REFERENCES items(id),
+    system_qty REAL NOT NULL,
+    physical_qty REAL DEFAULT 0,
+    diff_qty REAL DEFAULT 0,
+    unit_cost REAL NOT NULL,
+    diff_amount REAL DEFAULT 0,
+    discrepancy_type TEXT DEFAULT 'match',
+    condition_status TEXT DEFAULT 'good',
+    auditor_notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS material_quarantine_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quarantine_no TEXT UNIQUE NOT NULL,
+    item_id INTEGER NOT NULL REFERENCES items(id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    project_id INTEGER REFERENCES projects(id),
+    quantity REAL NOT NULL,
+    unit_cost REAL NOT NULL,
+    total_loss_amount REAL NOT NULL,
+    reason TEXT NOT NULL,
+    inspection_notes TEXT,
+    bin_location TEXT DEFAULT 'QUARANTINE_BIN_01',
+    status TEXT DEFAULT 'quarantined',
+    quarantined_by INTEGER REFERENCES users(id),
+    quarantined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolution_date DATETIME,
+    resolution_notes TEXT,
+    resolved_by INTEGER REFERENCES users(id),
+    journal_entry_id INTEGER REFERENCES journal_entries(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS site_material_returns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    return_no TEXT UNIQUE NOT NULL,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    boq_item_id INTEGER REFERENCES project_boq(id),
+    item_id INTEGER NOT NULL REFERENCES items(id),
+    quantity REAL NOT NULL,
+    unit_price REAL NOT NULL,
+    total_amount REAL NOT NULL,
+    condition_status TEXT NOT NULL,
+    qc_inspector_id INTEGER REFERENCES users(id),
+    qc_inspector_name TEXT NOT NULL,
+    qc_notes TEXT,
+    qc_passed INTEGER DEFAULT 1,
+    salvage_percentage REAL DEFAULT 100,
+    credited_amount REAL NOT NULL,
+    scrap_loss_amount REAL DEFAULT 0,
+    return_date DATE NOT NULL,
+    status TEXT DEFAULT 'inspected',
+    journal_entry_id INTEGER REFERENCES journal_entries(id),
+    quarantine_id INTEGER REFERENCES material_quarantine_items(id),
+    created_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS inter_project_material_transfers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transfer_no TEXT UNIQUE NOT NULL,
+    from_project_id INTEGER NOT NULL REFERENCES projects(id),
+    to_project_id INTEGER NOT NULL REFERENCES projects(id),
+    from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    item_id INTEGER NOT NULL REFERENCES items(id),
+    quantity REAL NOT NULL,
+    unit_cost REAL NOT NULL,
+    total_amount REAL NOT NULL,
+    from_boq_item_id INTEGER REFERENCES project_boq(id),
+    to_boq_item_id INTEGER REFERENCES project_boq(id),
+    routing_rules_applied TEXT,
+    status TEXT DEFAULT 'requested',
+    requested_by INTEGER REFERENCES users(id),
+    requested_by_name TEXT,
+    approved_by INTEGER REFERENCES users(id),
+    approved_by_name TEXT,
+    received_by INTEGER REFERENCES users(id),
+    received_by_name TEXT,
+    rejection_reason TEXT,
+    transfer_date DATE NOT NULL,
+    journal_entry_id INTEGER REFERENCES journal_entries(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS material_domain_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT UNIQUE NOT NULL,
+    event_name TEXT NOT NULL,
+    aggregate_type TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    user_id INTEGER,
+    user_name TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    prev_hash TEXT NOT NULL,
+    event_hash TEXT NOT NULL
+);
+
+-- ============================================================================
 -- جناح التسويات البنكية ومحفظة الشيكات (Bank Reconciliation & Cheques)
 -- ============================================================================
 
@@ -1339,3 +1587,90 @@ CREATE TABLE IF NOT EXISTS project_wbs_resources (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================================
+-- جناح إغلاق المشروع والتقارير التحليلية بنمط CQRS (Command Query Segregation)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS project_closeouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    closeout_no TEXT UNIQUE NOT NULL,
+    closeout_date DATE NOT NULL,
+    closed_by INTEGER REFERENCES users(id),
+    closed_by_name TEXT,
+    status TEXT DEFAULT 'closed',
+    total_contract_value REAL DEFAULT 0,
+    total_billed_amount REAL DEFAULT 0,
+    total_actual_cost REAL DEFAULT 0,
+    gross_profit REAL DEFAULT 0,
+    profit_margin_percent REAL DEFAULT 0,
+    total_wastage_cost REAL DEFAULT 0,
+    site_stock_value REAL DEFAULT 0,
+    retention_amount REAL DEFAULT 0,
+    net_client_payable REAL DEFAULT 0,
+    notes TEXT,
+    hash_signature TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- نموذج قراءة مستخلص العميل الخارجي (Client-Facing BoQ Read Model DTO)
+CREATE TABLE IF NOT EXISTS project_closeout_client_boq (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    closeout_id INTEGER NOT NULL REFERENCES project_closeouts(id) ON DELETE CASCADE,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    boq_item_id INTEGER REFERENCES project_boq(id),
+    item_no TEXT NOT NULL,
+    description TEXT NOT NULL,
+    category TEXT,
+    unit TEXT NOT NULL,
+    contract_qty REAL NOT NULL,
+    billed_qty REAL NOT NULL,
+    contract_unit_rate REAL NOT NULL,
+    billable_amount REAL NOT NULL,
+    previous_billed_amount REAL DEFAULT 0,
+    current_billed_amount REAL DEFAULT 0,
+    retention_percent REAL DEFAULT 5.0,
+    retention_amount REAL DEFAULT 0,
+    net_payable REAL NOT NULL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- نموذج قراءة مستخلص الرقابة والتدقيق الداخلي (Internal Audit BoQ Read Model)
+CREATE TABLE IF NOT EXISTS project_closeout_internal_audit_boq (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    closeout_id INTEGER NOT NULL REFERENCES project_closeouts(id) ON DELETE CASCADE,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    boq_item_id INTEGER REFERENCES project_boq(id),
+    item_no TEXT NOT NULL,
+    item_name TEXT NOT NULL,
+    category TEXT,
+    unit TEXT NOT NULL,
+    baseline_qty REAL NOT NULL,
+    purchased_qty REAL DEFAULT 0,
+    received_qty REAL DEFAULT 0,
+    issued_qty REAL DEFAULT 0,
+    consumed_qty REAL DEFAULT 0,
+    site_stock_balance REAL DEFAULT 0,
+    remaining_baseline REAL DEFAULT 0,
+    returned_qty REAL DEFAULT 0,
+    damaged_qty REAL DEFAULT 0,
+    wastage_qty REAL DEFAULT 0,
+    wastage_percent REAL DEFAULT 0,
+    budgeted_unit_cost REAL DEFAULT 0,
+    budgeted_cost REAL DEFAULT 0,
+    actual_unit_cost REAL DEFAULT 0,
+    total_actual_cost REAL DEFAULT 0,
+    cost_variance REAL DEFAULT 0,
+    contract_unit_rate REAL DEFAULT 0,
+    contract_revenue REAL DEFAULT 0,
+    gross_profit REAL DEFAULT 0,
+    profit_margin_percent REAL DEFAULT 0,
+    variance_status TEXT DEFAULT 'NORMAL',
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_closeouts_proj ON project_closeouts(project_id);
+CREATE INDEX IF NOT EXISTS idx_client_boq_closeout ON project_closeout_client_boq(closeout_id);
+CREATE INDEX IF NOT EXISTS idx_audit_boq_closeout ON project_closeout_internal_audit_boq(closeout_id);

@@ -44,6 +44,7 @@ app.use('/api/accounting', requireAuth, require('./routes/accounting'));
 app.use('/api/reports', requireAuth, require('./routes/reports'));
 app.use('/api/clients', requireAuth, require('./routes/clients'));
 app.use('/api/suppliers', requireAuth, require('./routes/suppliers'));
+app.use('/api/vendors', requireAuth, require('./routes/suppliers'));
 app.use('/api/settings', requireAuth, require('./routes/settings'));
 app.use('/api/hr', requireAuth, require('./routes/hr'));
 app.use('/api/project-hub', requireAuth, require('./routes/project_management'));
@@ -52,6 +53,8 @@ app.use('/api/procurement', requireAuth, require('./routes/procurement'));
 app.use('/api/bank-reconciliation', requireAuth, require('./routes/bank_reconciliation'));
 app.use('/api/taxes-guarantees', requireAuth, require('./routes/taxes_guarantees'));
 app.use('/api/project-control', requireAuth, require('./routes/project_control'));
+app.use('/api/material-management', requireAuth, require('./routes/material_management'));
+app.use('/api/project-closeout', requireAuth, require('./routes/project_closeout'));
 
 
 // مسار توثيق الـ API التفاعلي ومواصفة OpenAPI 3.0
@@ -128,6 +131,14 @@ if (require.main === module) {
       });
     } catch (e) {
       console.error('⚠️ [BackupScheduler] Failed to load backupSchedulerService:', e.message);
+    }
+
+    // بدء خدمة مراقبة وجدولة الجرد الدوري التلقائي للمستودعات
+    try {
+      const materialAuditScheduler = require('./services/materialAuditScheduler');
+      materialAuditScheduler.init();
+    } catch (e) {
+      console.error('⚠️ [MaterialAuditScheduler] Failed to load materialAuditScheduler:', e.message);
     }
   });
 
