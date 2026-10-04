@@ -3,6 +3,7 @@ const router = express.Router();
 const XLSX = require('xlsx');
 const { query, get, run, transaction } = require('../database/db');
 const { tafqeet } = require('../services/tafqeetService');
+const clientChainService = require('../services/clientChainService');
 const { requirePermission, requireScope } = require('../middleware/security');
 
 // فرض نطاق المشروع الإلزامي وحماية العمليات على كافة مسارات إدارة المشاريع
@@ -137,11 +138,15 @@ router.post('/:projectId/contract', async (req, res) => {
       status, notes
     } = req.body;
 
+    const proj = await get('SELECT client_id FROM projects WHERE id = ?', [projectId]);
+    const finalClientId = req.body.client_id || (proj ? proj.client_id : null);
+
     const existing = await get('SELECT id FROM project_contracts WHERE project_id = ?', [projectId]);
 
     if (existing) {
       await run(`
         UPDATE project_contracts SET
+          client_id = COALESCE(?, client_id),
           contract_no = ?, title = ?, first_party = ?, second_party = ?,
           contract_date = ?, start_date = ?, end_date = ?, duration_days = ?,
           contract_value = ?, currency = ?, advance_payment_pct = ?, advance_payment_amount = ?,
@@ -149,6 +154,7 @@ router.post('/:projectId/contract', async (req, res) => {
           payment_terms = ?, scope_of_work = ?, status = ?, notes = ?
         WHERE project_id = ?
       `, [
+        finalClientId,
         contract_no, title, first_party, second_party,
         contract_date, start_date, end_date, duration_days || 0,
         Number(contract_value) || 0, currency || 'ر.ي',
@@ -159,14 +165,14 @@ router.post('/:projectId/contract', async (req, res) => {
     } else {
       await run(`
         INSERT INTO project_contracts (
-          project_id, contract_no, title, first_party, second_party,
+          project_id, client_id, contract_no, title, first_party, second_party,
           contract_date, start_date, end_date, duration_days,
           contract_value, currency, advance_payment_pct, advance_payment_amount,
           retention_pct, penalty_per_day, max_penalty_pct,
           payment_terms, scope_of_work, status, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        projectId, contract_no || `CNT-${projectId}`, title, first_party, second_party,
+        projectId, finalClientId, contract_no || `CNT-${projectId}`, title, first_party, second_party,
         contract_date, start_date, end_date, duration_days || 0,
         Number(contract_value) || 0, currency || 'ر.ي',
         Number(advance_payment_pct) || 0, Number(advance_payment_amount) || 0,
@@ -1347,14 +1353,29 @@ router.post('/:projectId/invoices', async (req, res) => {
       }
     }
 
-    // مزامنة مع جدول bills العام
+    // جلب العقد والعميل المرتبط بالمشروع إذا لم يحددوا بدقة
+    const contract = await get('SELECT * FROM project_contracts WHERE project_id = ? LIMIT 1', [projectId]);
+    const effectiveClientId = client_id ? Number(client_id) : (contract?.client_id || (await get('SELECT client_id FROM projects WHERE id = ?', [projectId]))?.client_id || null);
+    const effectiveContractId = contract?.id || null;
+
+    // مزامنة مع جدول bills العام وربط السلسلة الهرمية
     await run(`
-      INSERT INTO bills (bill_no, bill_type, project_id, client_id, amount, deduction, net_amount, status, date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO bills (
+        bill_no, bill_type, project_id, contract_id, client_id,
+        amount, gross_amount, advance_deduction, retention_deduction, deduction,
+        net_amount, paid_amount, remaining_amount, payment_status,
+        status, date, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'unpaid', ?, ?, ?)
     `, [
-      autoNo, `${invoice_type} (${autoNo})`, projectId, client_id ? Number(client_id) : null,
-      gross, deductions, calculatedNet, status, date || new Date().toISOString().split('T')[0], notes
+      autoNo, `${invoice_type} (${autoNo})`, projectId, effectiveContractId, effectiveClientId,
+      calculatedNet, gross, Number(advance_deduction) || 0, Number(retention_deduction) || 0, deductions,
+      calculatedNet, calculatedNet, status, date || new Date().toISOString().split('T')[0], notes
     ]);
+
+    // التأثير التلقائي اللحظي في حساب ورصيد العميل
+    if (effectiveClientId) {
+      await clientChainService.syncClientBalances(effectiveClientId);
+    }
 
     const created = await get('SELECT * FROM project_invoices WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم إصدار واعتماد شهادة المستخلص بنجاح 📑', data: created });

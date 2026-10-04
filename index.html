@@ -3906,19 +3906,59 @@
           </div>
         </div>
 
+        <!-- بطاقات ملخص السلسلة المالية الشاملة للعملاء -->
+        <div class="kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px;">
+          <div class="kpi-card" style="border-right: 4px solid var(--accent-blue);">
+            <div class="kpi-label">قيمة العقود النشطة</div>
+            <div class="kpi-value" id="kpiClientsTotalContracts" style="color: #38bdf8;">0 ر.ي</div>
+            <div class="kpi-sub" id="kpiClientsContractsCount">0 عقود معتمدة</div>
+          </div>
+          <div class="kpi-card" style="border-right: 4px solid var(--gold-light);">
+            <div class="kpi-label">إجمالي المطالبات المفوترة</div>
+            <div class="kpi-value" id="kpiClientsTotalInvoiced" style="color: var(--gold-light);">0 ر.ي</div>
+            <div class="kpi-sub" id="kpiClientsBillsCount">0 مستخلص ومطالبة</div>
+          </div>
+          <div class="kpi-card" style="border-right: 4px solid var(--accent-green);">
+            <div class="kpi-label">إجمالي المبالغ المحصلة</div>
+            <div class="kpi-value" id="kpiClientsTotalCollected" style="color: var(--accent-green);">0 ر.ي</div>
+            <div class="kpi-sub">دفعات مقدمة + تحصيلات</div>
+          </div>
+          <div class="kpi-card" style="border-right: 4px solid #f59e0b;">
+            <div class="kpi-label">محتجزات الضمان المعلقة</div>
+            <div class="kpi-value" id="kpiClientsTotalRetention" style="color: #f59e0b;">0 ر.ي</div>
+            <div class="kpi-sub">محتجز لدى العميل</div>
+          </div>
+          <div class="kpi-card" style="border-right: 4px solid var(--accent-red);">
+            <div class="kpi-label">صافي الرصيد المستحق القائم</div>
+            <div class="kpi-value" id="kpiClientsOutstandingDue" style="color: var(--accent-red);">0 ر.ي</div>
+            <div class="kpi-sub">تحديث لحظي بدون انحراف</div>
+          </div>
+        </div>
+
         <div class="panel-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+            <div style="font-weight: 700; color: var(--gold-light); display: flex; align-items: center; gap: 8px;">
+              <span>سلسلة دورة حياة العميل المالية:</span>
+              <span class="badge" style="background: rgba(212,175,55,0.12); color: var(--gold-light); font-weight: 600;">
+                عميل ➔ عقد ➔ مشاريع ➔ مستخلصات ➔ دفعات ➔ محتجزات ➔ رصيد مستحق
+              </span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="clientSearchInput" class="form-control" placeholder="بحث باسم العميل أو الشركة أو الهاتف..." style="max-width: 280px; padding: 6px 12px; font-size: 0.85rem;" oninput="App.filterClientsTable(this.value)">
+            </div>
+          </div>
           <div class="table-responsive">
             <table class="custom-table">
               <thead>
                 <tr>
-                  <th>اسم العميل</th>
-                  <th>الشركة / الجهة</th>
-                  <th>الهاتف</th>
-                  <th>العنوان</th>
-                  <th>إجمالي المدفوعات</th>
-                  <th>إجمالي المستحقات</th>
-                  <th>الرصيد الحالي</th>
-                  <th style="text-align: center;">الإجراء</th>
+                  <th>اسم العميل / الشركة</th>
+                  <th>الهاتف / العنوان</th>
+                  <th style="text-align: center;">العقود والمشاريع</th>
+                  <th>إجمالي المطالبات</th>
+                  <th>إجمالي المحصل</th>
+                  <th>محتجز الضمان</th>
+                  <th>الرصيد المستحق (Real-time)</th>
+                  <th style="text-align: center; min-width: 170px;">السلسلة والإجراءات</th>
                 </tr>
               </thead>
               <tbody id="fullClientsTableBody"></tbody>
@@ -5263,6 +5303,306 @@
     </div>
   </div>
 
+  <!-- نافذة السلسلة المالية الشاملة للعميل (Client Lifecycle & Financial Chain Modal) -->
+  <div class="modal-overlay" id="clientChainModal">
+    <div class="modal-box modal-lg" style="max-width: 1050px; width: 96%; max-height: 92vh; overflow-y: auto;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 14px 20px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 1.6rem;">🏢</span>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 id="chainClientName" style="margin: 0; font-size: 1.25rem; color: #fff;">-</h3>
+              <span id="chainClientCompanyBadge" class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">-</span>
+            </div>
+            <span style="font-size: 0.78rem; color: var(--text-secondary);">سلسلة دورة حياة العميل المالية والربط الآلي: عقد ➔ مشاريع ➔ مستخلصات ➔ دفعات ➔ رصيد</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn btn-secondary btn-sm" onclick="App.syncCurrentClientChain()" title="مزامنة فورية وتدقيق للأرصدة">
+            <svg class="icon" width="14" height="14"><use href="#icon-refresh"></use></svg>
+            <span>مزامنة الأرصدة</span>
+          </button>
+          <button class="modal-close-btn" onclick="App.closeModal('clientChainModal')">&times;</button>
+        </div>
+      </div>
+
+      <div style="padding: 18px 20px;">
+        <!-- شريط التدفق التفاعلي المرئي لسلسلة دورة حياة العميل -->
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px;">
+          <div style="font-size: 0.8rem; font-weight: 700; color: var(--gold-light); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+            <span>⚡ تسلسل الأثر المالي الآلي في حساب العميل</span>
+            <span style="font-size: 0.72rem; color: var(--accent-green); font-weight: normal;">● نظام آلي متكامل بدون انحراف (Zero Drift)</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 0.78rem;">
+            <div style="background: rgba(212, 175, 55, 0.15); border: 1px solid var(--gold-light); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
+              <div style="font-size: 0.7rem; color: var(--gold-light);">1. العميل</div>
+              <strong id="pipeClientName" style="color: #fff; font-size: 0.78rem;">-</strong>
+            </div>
+            <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
+            <div style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
+              <div style="font-size: 0.7rem; color: #38bdf8;">2. العقود</div>
+              <strong id="pipeContractsCount" style="color: #fff; font-size: 0.78rem;">0 عقد</strong>
+            </div>
+            <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
+            <div style="background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
+              <div style="font-size: 0.7rem; color: #a78bfa;">3. المشاريع</div>
+              <strong id="pipeProjectsCount" style="color: #fff; font-size: 0.78rem;">0 مشروع</strong>
+            </div>
+            <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
+            <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
+              <div style="font-size: 0.7rem; color: #facc15;">4. المستخلصات</div>
+              <strong id="pipeBillsCount" style="color: #fff; font-size: 0.78rem;">0 مستخلص</strong>
+            </div>
+            <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
+            <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
+              <div style="font-size: 0.7rem; color: var(--accent-green);">5. الدفعات والمحصل</div>
+              <strong id="pipeCollectionsTotal" style="color: #fff; font-size: 0.78rem;">0</strong>
+            </div>
+            <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
+            <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
+              <div style="font-size: 0.7rem; color: #f59e0b;">6. محتجزات الضمان</div>
+              <strong id="pipeRetentionActive" style="color: #fff; font-size: 0.78rem;">0</strong>
+            </div>
+            <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
+            <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1.2; min-width: 110px;">
+              <div style="font-size: 0.7rem; color: var(--accent-red); font-weight: 700;">7. الرصيد المستحق</div>
+              <strong id="pipeOutstandingDue" style="color: var(--accent-red); font-size: 0.85rem;">0 ر.ي</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- بطاقات المؤشرات المالية التفصيلية -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px;">
+          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #38bdf8;">
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي مبالغ العقود</div>
+            <div id="chainSummaryContracts" style="font-size: 1.1rem; font-weight: 700; color: #38bdf8; margin: 4px 0;">0</div>
+            <div id="chainSummaryContractsSub" style="font-size: 0.68rem; color: var(--text-secondary);">0 عقود مسجلة</div>
+          </div>
+          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--gold-light);">
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي الأعمال المنجزة (Gross)</div>
+            <div id="chainSummaryGross" style="font-size: 1.1rem; font-weight: 700; color: var(--gold-light); margin: 4px 0;">0</div>
+            <div id="chainSummaryGrossSub" style="font-size: 0.68rem; color: var(--text-secondary);">قبل الاستقطاعات التعاقدية</div>
+          </div>
+          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #eab308;">
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">صافي المطالبات المفوترة</div>
+            <div id="chainSummaryInvoiced" style="font-size: 1.1rem; font-weight: 700; color: #facc15; margin: 4px 0;">0</div>
+            <div id="chainSummaryInvoicedSub" style="font-size: 0.68rem; color: var(--text-secondary);">المستخلصات المعتمدة</div>
+          </div>
+          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--accent-green);">
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي المبالغ المحصلة</div>
+            <div id="chainSummaryCollected" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-green); margin: 4px 0;">0</div>
+            <div id="chainSummaryCollectedSub" style="font-size: 0.68rem; color: var(--text-secondary);">دفعات مقدمة + تحصيلات</div>
+          </div>
+          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #f59e0b;">
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">محتجز الضمان القائم</div>
+            <div id="chainSummaryRetention" style="font-size: 1.1rem; font-weight: 700; color: #f59e0b; margin: 4px 0;">0</div>
+            <div id="chainSummaryRetentionSub" style="font-size: 0.68rem; color: var(--text-secondary);">محتجز للصيانة والضمان</div>
+          </div>
+          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--accent-red); background: rgba(239, 68, 68, 0.05);">
+            <div style="font-size: 0.72rem; color: var(--accent-red); font-weight: 700;">الرصيد المستحق الفعلي</div>
+            <div id="chainSummaryDue" style="font-size: 1.15rem; font-weight: 800; color: var(--accent-red); margin: 4px 0;">0</div>
+            <div id="chainSummaryDueSub" style="font-size: 0.68rem; color: var(--accent-red);">صافي المطالبة اللحظية</div>
+          </div>
+        </div>
+
+        <!-- شريط الإجراءات السريعة داخل النافذة -->
+        <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
+          <button class="btn btn-primary btn-sm" onclick="App.openNewClientBillFromChain()">
+            <span>➕ إصدار مستخلص جديد مرتبط</span>
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="App.openReceiptForClientFromChain()" style="border-color: var(--accent-green); color: var(--accent-green);">
+            <span>💵 قبض دفعة / سداد مستخلص</span>
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="App.openClientStatementFromChain()">
+            <span>📄 كشف حساب العميل</span>
+          </button>
+        </div>
+
+        <!-- تبويبات تفصيلية داخل نافذة السلسلة -->
+        <div class="settings-tabs" style="margin-bottom: 14px; border-bottom: 1px solid var(--border-color); display: flex; gap: 8px;">
+          <button class="tab-btn active" id="chainTabBtnHierarchy" onclick="App.switchChainTab('hierarchy')">🌳 الشجرة الهرمية للعميل</button>
+          <button class="tab-btn" id="chainTabBtnBills" onclick="App.switchChainTab('bills')">📑 المستخلصات والمطالبات (<span id="chainTabBillsCount">0</span>)</button>
+          <button class="tab-btn" id="chainTabBtnReceipts" onclick="App.switchChainTab('receipts')">💰 سندات القبض والتحصيلات (<span id="chainTabReceiptsCount">0</span>)</button>
+          <button class="tab-btn" id="chainTabBtnRetention" onclick="App.switchChainTab('retention')">🛡️ سجل محتجزات الضمان</button>
+        </div>
+
+        <!-- محتوى التبويبات -->
+        <!-- تبويب 1: الشجرة الهرمية -->
+        <div id="chainTabContentHierarchy">
+          <div id="chainHierarchyTreeContainer" style="display: flex; flex-direction: column; gap: 12px;"></div>
+        </div>
+
+        <!-- تبويب 2: المستخلصات والمطالبات -->
+        <div id="chainTabContentBills" style="display: none;">
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم المستخلص</th>
+                  <th>المشروع / العقد</th>
+                  <th>التاريخ</th>
+                  <th>إجمالي الأعمال</th>
+                  <th>استقطاع دفعة</th>
+                  <th>محتجز ضمان</th>
+                  <th>صافي المستخلص</th>
+                  <th>المسدد</th>
+                  <th>المتبقي</th>
+                  <th>الحالة</th>
+                  <th style="text-align: center;">إجراء</th>
+                </tr>
+              </thead>
+              <tbody id="chainBillsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- تبويب 3: سندات القبض والدفعات -->
+        <div id="chainTabContentReceipts" style="display: none;">
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>رقم السند</th>
+                  <th>التاريخ</th>
+                  <th>فئة القبض</th>
+                  <th>المشروع / العقد</th>
+                  <th>المستخلص المرتبط</th>
+                  <th>المبلغ</th>
+                  <th>طريقة الدفع</th>
+                  <th>البيان</th>
+                </tr>
+              </thead>
+              <tbody id="chainReceiptsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- تبويب 4: محتجزات الضمان -->
+        <div id="chainTabContentRetention" style="display: none;">
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>المستخلص / العملية</th>
+                  <th>المشروع</th>
+                  <th>التاريخ</th>
+                  <th>محتجز الضمان المستقطع</th>
+                  <th>المفرج عنه</th>
+                  <th>الرصيد المحتجز القائم</th>
+                  <th>الحالة</th>
+                </tr>
+              </thead>
+              <tbody id="chainRetentionTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.78rem; color: var(--text-secondary);">تحديث دورة حياة العميل يتم بصورة ذرية وتلقائية مع كل سند أو مستخلص.</span>
+        <button type="button" class="btn btn-secondary" onclick="App.closeModal('clientChainModal')">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة إصدار مستخلص أعمال مرتبط بالسلسلة الهرمية (New Client Bill Modal) -->
+  <div class="modal-overlay" id="newClientBillModal">
+    <div class="modal-box" style="max-width: 720px; width: 95%; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">📑</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem;">إصدار مستخلص أعمال ومطالبة للعميل</h3>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">ربط المستخلص بالمشروع والعقد آلياً واستقطاع النسب التعاقدية</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="App.closeModal('newClientBillModal')">&times;</button>
+      </div>
+
+      <form id="newClientBillForm" onsubmit="App.submitNewClientBill(event)">
+        <div style="background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); border-radius: 8px; padding: 10px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم المستخلص المولد:</span>
+            <strong id="newBillAutoNo" style="font-family: monospace; font-size: 1.05rem; color: var(--gold-light);">BILL-XXXX</strong>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>العميل <span style="color: var(--accent-red);">*</span></label>
+            <select id="modalBillClientSelect" class="form-control" required onchange="App.onBillClientChange(this.value)">
+              <option value="">اختر العميل...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>المشروع المرتبط <span style="color: var(--accent-red);">*</span></label>
+            <select id="modalBillProjectSelect" class="form-control" required onchange="App.onBillProjectChange(this.value)">
+              <option value="">اختر المشروع...</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>العقد المرتبط (تلقائي)</label>
+            <select id="modalBillContractSelect" class="form-control" onchange="App.onBillContractChange(this.value)">
+              <option value="">بدون عقد محدد...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>تاريخ المستخلص <span style="color: var(--accent-red);">*</span></label>
+            <input type="date" id="modalBillDate" class="form-control" required>
+          </div>
+        </div>
+
+        <!-- قسم الحسابات التعاقدية والاستقطاعات الآلية -->
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
+            🧮 الاحتساب التعاقدي للمستخلص (تلقائي وفق نسب العقد)
+          </div>
+
+          <div class="form-group">
+            <label>إجمالي الأعمال المنجزة (Gross Work Amount) <span style="color: var(--accent-red);">*</span></label>
+            <input type="number" id="modalBillGrossAmount" class="form-control" placeholder="مثال: 500000" min="1" step="any" required oninput="App.calcNewBillValues()">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label style="font-size: 0.78rem;">استقطاع دفعة مقدمة (<span id="modalBillAdvPctLabel">10</span>%)</label>
+              <input type="number" id="modalBillAdvanceDeduction" class="form-control" value="0" step="any" oninput="App.calcNewBillValues(true)">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.78rem;">محتجز ضمان أعمال (<span id="modalBillRetPctLabel">10</span>%)</label>
+              <input type="number" id="modalBillRetentionDeduction" class="form-control" value="0" step="any" oninput="App.calcNewBillValues(true)">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
+            <div class="form-group">
+              <label style="font-size: 0.78rem;">استقطاعات وخصومات أخرى</label>
+              <input type="number" id="modalBillOtherDeduction" class="form-control" value="0" step="any" oninput="App.calcNewBillValues(true)">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.82rem; color: var(--gold-light); font-weight: 700;">صافي المستخلص والمطالبة (Net Due)</label>
+              <input type="number" id="modalBillNetAmount" class="form-control" value="0" readonly style="font-weight: 800; color: var(--gold-light); background: rgba(212, 175, 55, 0.1);">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>البيان / ملاحظات المستخلص</label>
+          <textarea id="modalBillNotes" class="form-control" rows="2" placeholder="مستخلص جاري رقم ... عن أعمال الفترة من ... إلى ..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">إصدار المستخلص وتحديث رصيد العميل</button>
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('newClientBillModal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- نافذة إضافة مورد جديد -->
   <!-- نافذة ملف المورد / إضافة وتعديل مورد (SRM Vendor Profile Modal) -->
   <div class="modal-overlay" id="newSupplierModal">
@@ -5616,9 +5956,41 @@
             <label style="margin-bottom: 0;">المشروع المرتبط (اختياري - غير إلزامي)</label>
             <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة مشروع جديد</a>
           </div>
-          <select id="modalRcProjectSelect" class="form-control">
+          <select id="modalRcProjectSelect" class="form-control" onchange="Accounting.onReceiptProjectChange(this.value)">
             <option value="">عام / بدون مشروع محدد...</option>
           </select>
+        </div>
+
+        <!-- ربط السلسلة الهرمية المالية (عقد ➔ مستخلص ➔ دفعة ➔ رصيد العميل) -->
+        <div style="background: rgba(212, 175, 55, 0.06); border: 1px solid rgba(212, 175, 55, 0.25); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+          <div style="font-weight: 700; color: var(--gold-light); font-size: 0.82rem; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <span>🔗 ربط السلسلة المالية (عقد ➔ مستخلص ➔ دفعة)</span>
+            <span style="font-size: 0.72rem; color: var(--text-secondary);">يتأثر رصيد العميل آلياً</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+            <div>
+              <label style="font-size: 0.78rem;">تصنيف السند / الغرض</label>
+              <select id="modalRcCategory" class="form-control" style="font-size: 0.82rem;" onchange="Accounting.onReceiptCategoryChange(this.value)">
+                <option value="bill_collection">سداد مستخلص أعمال (Bill Collection)</option>
+                <option value="advance_payment">دفعة مقدمة على العقد (Advance Payment)</option>
+                <option value="retention_release">إفراج عن محتجز ضمان (Retention Release)</option>
+                <option value="general">قبض إيراد عام / أخرى</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 0.78rem;">العقد المرتبط (اختياري)</label>
+              <select id="modalRcContractSelect" class="form-control" style="font-size: 0.82rem;" onchange="Accounting.onReceiptContractChange(this.value)">
+                <option value="">بدون عقد محدد...</option>
+              </select>
+            </div>
+          </div>
+          <div id="modalRcBillRow">
+            <label style="font-size: 0.78rem;">المستخلص المرتبط للتحصيل الآلي</label>
+            <select id="modalRcBillSelect" class="form-control" style="font-size: 0.82rem; font-weight: 600;" onchange="Accounting.onReceiptBillChange(this.value)">
+              <option value="">اختر المستخلص لسداده وتحديث رصيد العميل آلياً...</option>
+            </select>
+            <div id="modalRcBillRemainingHint" style="font-size: 0.75rem; color: var(--gold-light); margin-top: 4px; display: none;"></div>
+          </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div class="form-group">

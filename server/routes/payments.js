@@ -143,11 +143,28 @@ router.post('/', (req, res, next) => {
       receipt_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
     }
 
-    const cId = client_id && client_id !== '' ? Number(client_id) : null;
+    let bId = req.body.bill_id && req.body.bill_id !== '' ? Number(req.body.bill_id) : null;
+    let cntId = req.body.contract_id && req.body.contract_id !== '' ? Number(req.body.contract_id) : null;
+    let cId = client_id && client_id !== '' ? Number(client_id) : null;
+    let pId = project_id && project_id !== '' ? Number(project_id) : null;
+
+    // استنتاج وربط العميل والمشروع والعقد آلياً من المستخلص المختار
+    if (bId) {
+      const linkedBill = await get('SELECT id, project_id, client_id, contract_id, net_amount, paid_amount FROM bills WHERE id = ?', [bId]);
+      if (linkedBill) {
+        if (!cId && linkedBill.client_id) cId = linkedBill.client_id;
+        if (!pId && linkedBill.project_id) pId = linkedBill.project_id;
+        if (!cntId && linkedBill.contract_id) cntId = linkedBill.contract_id;
+      }
+    }
+    if (!cntId && pId) {
+      const activeContract = await get("SELECT id FROM project_contracts WHERE project_id = ? AND (status != 'ملغي' OR status IS NULL) ORDER BY id DESC LIMIT 1", [pId]);
+      if (activeContract) cntId = activeContract.id;
+    }
+
     const directClientName = req.body.client_name ? String(req.body.client_name).trim() : null;
     const sId = supplier_id && supplier_id !== '' ? Number(supplier_id) : null;
     const directSupplierName = req.body.supplier_name ? String(req.body.supplier_name).trim() : null;
-    const pId = project_id && project_id !== '' ? Number(project_id) : null;
     const accId = account_id && account_id !== '' ? Number(account_id) : null;
     let finalCcId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
 
@@ -168,13 +185,15 @@ router.post('/', (req, res, next) => {
       const result = await tx.run(`
         INSERT INTO payments (
           receipt_no, type, client_id, client_name, supplier_id, project_id, 
+          contract_id, bill_id,
           account_id, cost_center_id, amount, currency, payment_method, 
           check_no, bank_name, date, notes, receipt_category,
           exchange_rate, local_amount,
           status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         receipt_no, type, cId, directClientName, sId, pId,
+        cntId, bId,
         accId, finalCcId, parsedAmount, selectedCurrency, payment_method,
         cleanCheckNo, cleanBankName, date, notes || '', cleanReceiptCategory,
         finalExchangeRate, finalLocalAmount,
@@ -188,14 +207,15 @@ router.post('/', (req, res, next) => {
 
       // 2. إذا كانت مسودة، لا يتم التأثير المالي حتى الاعتماد والترحيل
       if (finalStatus === 'posted') {
-        // التأثير المحاسبي على العميل أو المورد
-        if (type === 'قبض' && cId) {
-          await tx.run(`
-            UPDATE clients SET 
-              total_paid = total_paid + ?,
-              current_balance = GREATEST(0, current_balance - ?)
-            WHERE id = ?
-          `, [finalLocalAmount, finalLocalAmount, cId]);
+        // التأثير المحاسبي وتحديث رصيد العميل الذري والمستخلص
+        const clientChainService = require('../services/clientChainService');
+        if (type === 'قبض') {
+          if (bId) {
+            await clientChainService.applyPaymentToBill(bId, finalLocalAmount, tx);
+          }
+          if (cId) {
+            await clientChainService.syncClientBalances(cId, tx);
+          }
         } else if (type === 'صرف' && sId) {
           await tx.run(`
             UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?

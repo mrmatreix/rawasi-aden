@@ -121,15 +121,151 @@ const Accounting = {
     el.innerHTML = defaultOption + items.map(item => `<option value="${item.id}">${formatFn(item)}</option>`).join('');
   },
 
-  onClientInputChange(val) {
+  async onClientInputChange(val) {
+    const hid = document.getElementById('modalRcClientSelect');
     if (!val) {
-      const hid = document.getElementById('modalRcClientSelect');
       if (hid) hid.value = '';
+      this.populateReceiptContractsAndBills([]);
       return;
     }
     const match = (this.clients || []).find(c => c.name === val || String(c.id) === val);
-    const hid = document.getElementById('modalRcClientSelect');
-    if (hid) hid.value = match ? match.id : '';
+    const clientId = match ? match.id : null;
+    if (hid) hid.value = clientId || '';
+
+    if (clientId) {
+      await this.loadClientHierarchyForReceipt(clientId);
+    } else {
+      this.populateReceiptContractsAndBills([]);
+    }
+  },
+
+  async loadClientHierarchyForReceipt(clientId) {
+    try {
+      const [contractsRes, billsRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}/contracts`),
+        fetch(`/api/billing?client_id=${clientId}`)
+      ]);
+      const contractsJson = await contractsRes.json();
+      const billsJson = await billsRes.json();
+
+      this.receiptClientContracts = contractsJson.data || [];
+      // تصفية المستخلصات المستحقة (غير المسددة بالكامل)
+      const allBills = billsJson.data || [];
+      this.receiptClientBills = allBills.filter(b => {
+        const net = Number(b.net_amount || b.amount || 0);
+        const paid = Number(b.paid_amount || 0);
+        const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : (net - paid));
+        return b.status !== 'ملغي' && (b.payment_status !== 'paid' || rem > 0);
+      });
+
+      this.populateReceiptContractsAndBills(this.receiptClientContracts, this.receiptClientBills);
+    } catch (err) {
+      console.error('Error loading client hierarchy for receipt:', err);
+    }
+  },
+
+  populateReceiptContractsAndBills(contracts = [], bills = []) {
+    const cSelect = document.getElementById('modalRcContractSelect');
+    if (cSelect) {
+      cSelect.innerHTML = '<option value="">بدون عقد محدد...</option>' + 
+        contracts.map(c => `<option value="${c.id}">عقد ${c.contract_no || c.id} (قيمة: ${App.formatNumber(c.contract_value)})</option>`).join('');
+    }
+
+    const bSelect = document.getElementById('modalRcBillSelect');
+    const hint = document.getElementById('modalRcBillRemainingHint');
+    if (bSelect) {
+      if (bills.length === 0) {
+        bSelect.innerHTML = '<option value="">لا توجد مستخلصات غير مسددة لهذا العميل</option>';
+        if (hint) hint.style.display = 'none';
+      } else {
+        bSelect.innerHTML = '<option value="">اختر المستخلص لسداده وتحديث رصيد العميل آلياً...</option>' +
+          bills.map(b => {
+            const net = Number(b.net_amount || b.amount || 0);
+            const paid = Number(b.paid_amount || 0);
+            const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : Math.max(0, net - paid));
+            return `<option value="${b.id}" data-project="${b.project_id || ''}" data-contract="${b.contract_id || ''}" data-rem="${rem}" data-billno="${b.bill_no}">مستخلص ${b.bill_no} - متبقي: ${App.formatNumber(rem)} ر.ي (${b.project_name || 'مشروع'})</option>`;
+          }).join('');
+        if (hint) {
+          hint.innerText = `💡 يوجد ${bills.length} مستخلصات مستحقة للتحصيل على هذا العميل`;
+          hint.style.display = 'block';
+        }
+      }
+    }
+  },
+
+  onReceiptCategoryChange(category) {
+    const billRow = document.getElementById('modalRcBillRow');
+    const notes = document.getElementById('modalRcNotes');
+    if (category === 'advance_payment') {
+      if (billRow) billRow.style.display = 'none';
+      if (notes && !notes.value) notes.value = 'دفعة مقدمة على العقد المتفق عليه';
+    } else if (category === 'retention_release') {
+      if (billRow) billRow.style.display = 'none';
+      if (notes && !notes.value) notes.value = 'إفراج عن محتجز ضمان أعمال';
+    } else {
+      if (billRow) billRow.style.display = 'block';
+    }
+  },
+
+  onReceiptProjectChange(projectId) {
+    if (!projectId) return;
+    // تصفية المستخلصات التابعة للمشروع المختار
+    if (this.receiptClientBills && this.receiptClientBills.length > 0) {
+      const filteredBills = this.receiptClientBills.filter(b => b.project_id == projectId);
+      if (filteredBills.length > 0) {
+        this.populateReceiptContractsAndBills(this.receiptClientContracts || [], filteredBills);
+      }
+    }
+  },
+
+  onReceiptContractChange(contractId) {
+    if (!contractId) return;
+    const contract = (this.receiptClientContracts || []).find(c => c.id == contractId);
+    if (contract && contract.project_id) {
+      const prjSelect = document.getElementById('modalRcProjectSelect');
+      if (prjSelect) prjSelect.value = contract.project_id;
+    }
+  },
+
+  onReceiptBillChange(billId) {
+    if (!billId) return;
+    const bill = (this.receiptClientBills || []).find(b => b.id == billId);
+    if (!bill) return;
+
+    // ضبط المشروع المرتبط تلقائياً
+    if (bill.project_id) {
+      const prjSelect = document.getElementById('modalRcProjectSelect');
+      if (prjSelect) prjSelect.value = bill.project_id;
+    }
+
+    // ضبط العقد المرتبط تلقائياً
+    if (bill.contract_id) {
+      const cSelect = document.getElementById('modalRcContractSelect');
+      if (cSelect) cSelect.value = bill.contract_id;
+    }
+
+    // اقتراح المبلغ المتبقي من المستخلص
+    const net = Number(bill.net_amount || bill.amount || 0);
+    const paid = Number(bill.paid_amount || 0);
+    const rem = Number(bill.remaining_amount !== undefined ? bill.remaining_amount : Math.max(0, net - paid));
+
+    const amtInput = document.getElementById('modalRcAmount');
+    if (amtInput && (!amtInput.value || Number(amtInput.value) <= 0)) {
+      amtInput.value = rem;
+      this.calcReceiptLocalAmount();
+    }
+
+    // كتابة البيان التلقائي
+    const notes = document.getElementById('modalRcNotes');
+    if (notes && (!notes.value || notes.value.startsWith('سداد مستخلص'))) {
+      notes.value = `سداد مستخلص أعمال رقم ${bill.bill_no} لمشروع ${bill.project_name || ''}`;
+    }
+
+    const hint = document.getElementById('modalRcBillRemainingHint');
+    if (hint) {
+      hint.innerHTML = `<span style="color: var(--gold-light); font-weight: bold;">المتبقي من هذا المستخلص: ${App.formatNumber(rem)} ر.ي</span> (إجمالي المستخلص: ${App.formatNumber(net)} ر.ي)`;
+      hint.style.display = 'block';
+    }
   },
 
   onSupplierInputChange(val) {
@@ -541,6 +677,9 @@ const Accounting = {
     }
 
     const project_id = document.getElementById('modalRcProjectSelect')?.value || null;
+    const contract_id = document.getElementById('modalRcContractSelect')?.value || null;
+    const bill_id = document.getElementById('modalRcBillSelect')?.value || null;
+    const receipt_category = document.getElementById('modalRcCategory')?.value || 'bill_collection';
     const account_id = document.getElementById('modalRcAccountSelect')?.value || null;
     const cost_center_id = document.getElementById('modalRcCostCenterSelect')?.value || null;
     const date = document.getElementById('modalRcDate').value;
@@ -576,6 +715,9 @@ const Accounting = {
           client_id: client_id || null,
           client_name: client_name || client_input,
           project_id: project_id || null,
+          contract_id: contract_id ? Number(contract_id) : null,
+          bill_id: bill_id ? Number(bill_id) : null,
+          receipt_category,
           account_id,
           cost_center_id,
           date,
@@ -591,13 +733,23 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
-        App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no})`, 'success');
+        App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no}) وتحديث رصيد العميل آلياً ✅`, 'success');
         App.closeModal('newReceiptModal');
         const form = document.getElementById('modalReceiptForm');
         if (form) form.reset();
         
         // تحديث جميع الجداول والشاشات فوراً
         App.loadRevenuesTable();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
+        this.loadCashMovement();
+
+        // تحديث شاشة العملاء ومودال السلسلة إن كان مفتوحاً
+        if (typeof App !== 'undefined') {
+          if (App.loadClientsTable) App.loadClientsTable();
+          if (App.currentChainClientId == client_id && App.openClientChainModal) {
+            App.openClientChainModal(client_id);
+          }
+        }
         if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         this.loadCashMovement();
         

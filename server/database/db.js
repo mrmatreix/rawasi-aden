@@ -354,6 +354,39 @@ async function initMysql() {
  */
 function initSqlite() {
   initSqliteInstance();
+
+  // فحص استباقي للأعمدة المحدثة في الجداول الموجودة قبل تطبيق مخطط schema.sql
+  try {
+    const tableList = sqliteDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
+    
+    if (tableList.includes('project_contracts')) {
+      const pcCols = sqliteDb.prepare("PRAGMA table_info(project_contracts)").all().map(c => c.name);
+      if (!pcCols.includes('client_id')) sqliteDb.exec("ALTER TABLE project_contracts ADD COLUMN client_id INTEGER;");
+    }
+
+    if (tableList.includes('bills')) {
+      const bCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
+      if (!bCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN contract_id INTEGER;");
+      if (!bCols.includes('paid_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN paid_amount REAL DEFAULT 0;");
+      if (!bCols.includes('remaining_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN remaining_amount REAL DEFAULT 0;");
+      if (!bCols.includes('payment_status')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN payment_status TEXT DEFAULT 'unpaid';");
+      if (!bCols.includes('gross_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN gross_amount REAL DEFAULT 0;");
+      if (!bCols.includes('advance_deduction')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN advance_deduction REAL DEFAULT 0;");
+      if (!bCols.includes('retention_deduction')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN retention_deduction REAL DEFAULT 0;");
+    }
+
+    if (tableList.includes('payments')) {
+      const pCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
+      if (!pCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN contract_id INTEGER;");
+      if (!pCols.includes('bill_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bill_id INTEGER;");
+      if (!pCols.includes('receipt_category')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN receipt_category TEXT DEFAULT 'general';");
+      if (!pCols.includes('exchange_rate')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN exchange_rate REAL DEFAULT 1.0;");
+      if (!pCols.includes('local_amount')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN local_amount REAL DEFAULT 0;");
+    }
+  } catch (e) {
+    console.warn('Pre-schema check note:', e.message);
+  }
+
   const schemaPath = path.join(__dirname, 'schema.sql');
   if (fs.existsSync(schemaPath)) {
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
@@ -1755,6 +1788,132 @@ function initSqlite() {
       console.log('✅ [Rawasi DB] SRM & Vendor Financial Profiles view & tables initialized');
     } catch (e) {
       console.warn('SRM vendor migration note (SQLite):', e.message);
+    }
+
+    // ترقية وتطوير دورة حياة العميل والربط الهرمي التلقائي (Client Lifecycle & Hierarchy Migration)
+    try {
+      // 1. أعمدة العقود
+      const contractCols = sqliteDb.prepare("PRAGMA table_info(project_contracts)").all().map(c => c.name);
+      if (!contractCols.includes('client_id')) sqliteDb.exec("ALTER TABLE project_contracts ADD COLUMN client_id INTEGER REFERENCES clients(id);");
+
+      // تحديث العقود القديمة لربطها بالعميل من المشروع
+      sqliteDb.exec(`
+        UPDATE project_contracts 
+        SET client_id = (SELECT client_id FROM projects WHERE projects.id = project_contracts.project_id) 
+        WHERE client_id IS NULL;
+      `);
+
+      // 2. أعمدة المستخلصات
+      const billCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
+      if (!billCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN contract_id INTEGER REFERENCES project_contracts(id);");
+      if (!billCols.includes('paid_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN paid_amount REAL DEFAULT 0;");
+      if (!billCols.includes('remaining_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN remaining_amount REAL DEFAULT 0;");
+      if (!billCols.includes('payment_status')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN payment_status TEXT DEFAULT 'unpaid';");
+
+      // تحديث المستخلصات القديمة لربطها بالعقد وتعيين المتبقي
+      sqliteDb.exec(`
+        UPDATE bills 
+        SET contract_id = (SELECT id FROM project_contracts WHERE project_contracts.project_id = bills.project_id LIMIT 1) 
+        WHERE contract_id IS NULL;
+
+        UPDATE bills 
+        SET remaining_amount = MAX(0, net_amount - COALESCE(paid_amount, 0))
+        WHERE remaining_amount IS NULL OR remaining_amount = 0;
+      `);
+
+      // 3. أعمدة السندات والمدفوعات
+      const payCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
+      if (!payCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN contract_id INTEGER REFERENCES project_contracts(id);");
+      if (!payCols.includes('bill_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bill_id INTEGER REFERENCES bills(id);");
+      if (!payCols.includes('receipt_category')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN receipt_category TEXT DEFAULT 'general';");
+
+      // 4. إنشاء فهارس الأداء للسلسلة الهرمية
+      sqliteDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_project_contracts_client ON project_contracts (client_id);
+        CREATE INDEX IF NOT EXISTS idx_bills_client_project_status ON bills (client_id, project_id, status);
+        CREATE INDEX IF NOT EXISTS idx_bills_contract_status ON bills (contract_id, status);
+        CREATE INDEX IF NOT EXISTS idx_payments_client_bill_type ON payments (client_id, bill_id, type, status);
+        CREATE INDEX IF NOT EXISTS idx_payments_contract_type ON payments (contract_id, type, status);
+      `);
+
+      // 5. بناء العرض المجمع في الوقت الفعلي للعملاء (Real-Time Zero N+1 View)
+      sqliteDb.exec(`
+        DROP VIEW IF EXISTS view_client_financial_profiles;
+        CREATE VIEW view_client_financial_profiles AS
+        SELECT
+            c.id,
+            c.id AS client_id,
+            c.name,
+            c.company,
+            c.phone,
+            c.email,
+            c.address,
+            COALESCE(c.currency, 'ر.ي') AS currency,
+            COALESCE(c.previous_balance, 0.0) AS previous_balance,
+            COALESCE(cnt.total_contracts_count, 0) AS total_contracts_count,
+            ROUND(COALESCE(cnt.total_contracts_value, 0.0), 2) AS total_contracts_value,
+            COALESCE(prj.total_projects_count, 0) AS total_projects_count,
+            COALESCE(b.total_bills_count, 0) AS total_bills_count,
+            ROUND(COALESCE(b.total_gross_billed, 0.0), 2) AS total_gross_billed,
+            ROUND(COALESCE(b.total_net_billed, 0.0), 2) AS total_net_billed,
+            ROUND(COALESCE(b.total_advance_deductions, 0.0), 2) AS total_advance_deductions,
+            ROUND(COALESCE(b.total_retention_deductions, 0.0), 2) AS total_retention_deductions,
+            ROUND(COALESCE(pay_adv.total_advance_received, 0.0), 2) AS total_advance_received,
+            ROUND(MAX(0.0, COALESCE(pay_adv.total_advance_received, 0.0) - COALESCE(b.total_advance_deductions, 0.0)), 2) AS remaining_advance_balance,
+            ROUND(COALESCE(pay_ret.total_retention_released, 0.0), 2) AS total_retention_released,
+            ROUND(MAX(0.0, COALESCE(b.total_retention_deductions, 0.0) - COALESCE(pay_ret.total_retention_released, 0.0)), 2) AS active_retention_balance,
+            ROUND(COALESCE(pay.total_collected, 0.0), 2) AS total_collected,
+            ROUND((COALESCE(c.previous_balance, 0.0) + COALESCE(b.total_net_billed, 0.0)) - COALESCE(pay.total_collected, 0.0), 2) AS outstanding_balance
+        FROM clients c
+        LEFT JOIN (
+            SELECT client_id, COUNT(id) AS total_projects_count
+            FROM projects
+            GROUP BY client_id
+        ) prj ON prj.client_id = c.id
+        LEFT JOIN (
+            SELECT 
+                COALESCE(pc.client_id, p.client_id) AS client_id,
+                COUNT(pc.id) AS total_contracts_count,
+                SUM(COALESCE(pc.contract_value, 0.0)) AS total_contracts_value
+            FROM project_contracts pc
+            LEFT JOIN projects p ON pc.project_id = p.id
+            WHERE pc.status != 'ملغي'
+            GROUP BY COALESCE(pc.client_id, p.client_id)
+        ) cnt ON cnt.client_id = c.id
+        LEFT JOIN (
+            SELECT 
+                client_id,
+                COUNT(id) AS total_bills_count,
+                SUM(COALESCE(gross_amount, amount, 0.0)) AS total_gross_billed,
+                SUM(COALESCE(net_amount, amount, 0.0)) AS total_net_billed,
+                SUM(COALESCE(advance_deduction, 0.0)) AS total_advance_deductions,
+                SUM(COALESCE(retention_deduction, 0.0)) AS total_retention_deductions
+            FROM bills
+            WHERE status NOT IN ('draft', 'reversed', 'cancelled')
+            GROUP BY client_id
+        ) b ON b.client_id = c.id
+        LEFT JOIN (
+            SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_collected
+            FROM payments
+            WHERE type = 'قبض' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+            GROUP BY client_id
+        ) pay ON pay.client_id = c.id
+        LEFT JOIN (
+            SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_advance_received
+            FROM payments
+            WHERE type = 'قبض' AND receipt_category = 'advance_payment' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+            GROUP BY client_id
+        ) pay_adv ON pay_adv.client_id = c.id
+        LEFT JOIN (
+            SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_retention_released
+            FROM payments
+            WHERE type = 'قبض' AND receipt_category = 'retention_release' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+            GROUP BY client_id
+        ) pay_ret ON pay_ret.client_id = c.id;
+      `);
+      console.log('✅ [Rawasi DB] Client Lifecycle & Financial Hierarchy view & tables initialized');
+    } catch (e) {
+      console.warn('Client hierarchy migration note (SQLite):', e.message);
     }
   } catch (err) {
     console.warn('Project control migration note (SQLite):', err.message);

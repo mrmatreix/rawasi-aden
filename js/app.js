@@ -850,28 +850,107 @@ const App = {
       const json = await res.json();
       if (tbody && json.success) {
         const list = json.data || [];
+        this.clientsFullList = list;
+
+        // احتساب وعرض بطاقات المؤشرات المالية التراكمية للعملاء
+        let totalContractVal = 0;
+        let totalContractsCount = 0;
+        let totalInvoiced = 0;
+        let totalBillsCount = 0;
+        let totalCollected = 0;
+        let totalRetention = 0;
+        let totalDue = 0;
+
+        list.forEach(c => {
+          totalContractVal += Number(c.total_contract_value || 0);
+          totalContractsCount += Number(c.contract_count || 0);
+          totalInvoiced += Number(c.net_invoiced_claims !== undefined ? c.net_invoiced_claims : (c.total_due || 0));
+          totalBillsCount += Number(c.bills_count || 0);
+          totalCollected += Number(c.total_collections !== undefined ? c.total_collections : (c.total_paid || 0));
+          totalRetention += Number(c.active_retention_balance || 0);
+          totalDue += Number(c.outstanding_due_balance !== undefined ? c.outstanding_due_balance : (c.current_balance || 0));
+        });
+
+        const setTxt = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.innerText = val;
+        };
+
+        setTxt('kpiClientsTotalContracts', `${this.formatNumber(totalContractVal)} ر.ي`);
+        setTxt('kpiClientsContractsCount', `${totalContractsCount} عقد معتمد`);
+        setTxt('kpiClientsTotalInvoiced', `${this.formatNumber(totalInvoiced)} ر.ي`);
+        setTxt('kpiClientsBillsCount', `${totalBillsCount} مستخلص ومطالبة`);
+        setTxt('kpiClientsTotalCollected', `${this.formatNumber(totalCollected)} ر.ي`);
+        setTxt('kpiClientsTotalRetention', `${this.formatNumber(totalRetention)} ر.ي`);
+        setTxt('kpiClientsOutstandingDue', `${this.formatNumber(totalDue)} ر.ي`);
+
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا يوجد عملاء مسجلين</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا يوجد عملاء مسجلين حتى الآن</td></tr>`;
           const pag = document.getElementById('clientsPagination');
           if (pag) pag.innerHTML = '';
         } else {
           const renderRows = (pageList) => {
-            tbody.innerHTML = pageList.map(c => `
-              <tr>
-                <td><strong>${c.name}</strong></td>
-                <td>${c.company || '-'}</td>
-                <td>${c.phone || '-'}</td>
-                <td>${c.address || '-'}</td>
-                <td>${this.formatNumber(c.total_paid)} ${c.currency || 'ر.ي'}</td>
-                <td>${this.formatNumber(c.total_due)} ${c.currency || 'ر.ي'}</td>
-                <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(c.current_balance)} ${c.currency || 'ر.ي'}</td>
-                <td>
-                  <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${c.id}; Reports.fetchFullClientStatement();">
-                    كشف الحساب
-                  </button>
-                </td>
-              </tr>
-            `).join('');
+            tbody.innerHTML = pageList.map(c => {
+              const contractCount = Number(c.contract_count || 0);
+              const projectCount = Number(c.project_count || 0);
+              const billsCount = Number(c.bills_count || 0);
+              const invoicedAmt = Number(c.net_invoiced_claims !== undefined ? c.net_invoiced_claims : (c.total_due || 0));
+              const collectedAmt = Number(c.total_collections !== undefined ? c.total_collections : (c.total_paid || 0));
+              const retentionAmt = Number(c.active_retention_balance || 0);
+              const dueBalance = Number(c.outstanding_due_balance !== undefined ? c.outstanding_due_balance : (c.current_balance || 0));
+              const curr = c.currency || 'ر.ي';
+
+              const dueColor = dueBalance > 0 ? 'var(--accent-red)' : (dueBalance < 0 ? 'var(--accent-green)' : 'var(--text-secondary)');
+
+              return `
+                <tr>
+                  <td>
+                    <div style="font-weight: 700; color: #fff;">${c.name}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">${c.company || 'عميل فردي'}</div>
+                  </td>
+                  <td>
+                    <div>${c.phone || '-'}</div>
+                    <div style="font-size: 0.72rem; color: var(--text-secondary);">${c.address || '-'}</div>
+                  </td>
+                  <td style="text-align: center;">
+                    <div style="display: flex; justify-content: center; gap: 4px; flex-wrap: wrap;">
+                      <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;" title="عدد العقود المعتمدة">${contractCount} عقود</span>
+                      <span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa;" title="المشاريع المرتبطة">${projectCount} مشاريع</span>
+                      <span class="badge" style="background: rgba(234, 179, 8, 0.15); color: #facc15;" title="المستخلصات والمطالبات">${billsCount} مستخلص</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div style="font-weight: 600; color: var(--gold-light);">${this.formatNumber(invoicedAmt)} ${curr}</div>
+                    ${c.gross_work_completed ? `<div style="font-size: 0.7rem; color: var(--text-secondary);">إجمالي الإنجاز: ${this.formatNumber(c.gross_work_completed)}</div>` : ''}
+                  </td>
+                  <td>
+                    <div style="font-weight: 600; color: var(--accent-green);">${this.formatNumber(collectedAmt)} ${curr}</div>
+                    ${c.total_advance_received ? `<div style="font-size: 0.7rem; color: var(--text-secondary);">مقدم مقبوض: ${this.formatNumber(c.total_advance_received)}</div>` : ''}
+                  </td>
+                  <td>
+                    <div style="font-weight: 600; color: #f59e0b;">${this.formatNumber(retentionAmt)} ${curr}</div>
+                    ${c.total_retention_held ? `<div style="font-size: 0.7rem; color: var(--text-secondary);">إجمالي المحتجز: ${this.formatNumber(c.total_retention_held)}</div>` : ''}
+                  </td>
+                  <td>
+                    <div style="font-weight: 800; font-size: 1rem; color: ${dueColor};">${this.formatNumber(dueBalance)} ${curr}</div>
+                    <div style="font-size: 0.68rem; color: var(--text-secondary);">رصيد لحظي مدقق</div>
+                  </td>
+                  <td style="text-align: center;">
+                    <div style="display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                      <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${c.id})" title="استعراض دورة حياة وسلسلة العميل المالية التفاعلية" style="padding: 4px 8px; font-size: 0.75rem;">
+                        <span>🔗 السلسلة الشاملة</span>
+                      </button>
+                      <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${c.id}; Reports.fetchFullClientStatement();" title="كشف الحساب التفصيلي" style="padding: 4px 8px; font-size: 0.75rem;">
+                        <span>كشف الحساب</span>
+                      </button>
+                      <button class="btn btn-secondary btn-sm" onclick="App.syncClientBalance(${c.id})" title="مزامنة وتدقيق رصيد العميل لحظياً" style="padding: 4px 6px;">
+                        <span>🔄</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('');
           };
 
           if (window.UI && UI.Pagination && document.getElementById('clientsPagination')) {
@@ -886,7 +965,46 @@ const App = {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error loading clients table:', e);
+    }
+  },
+
+  filterClientsTable(searchTerm) {
+    if (!this.clientsFullList) return;
+    const term = (searchTerm || '').trim().toLowerCase();
+    const tbody = document.getElementById('fullClientsTableBody');
+    if (!tbody) return;
+
+    if (!term) {
+      this.loadClientsTable();
+      return;
+    }
+
+    const filtered = this.clientsFullList.filter(c => {
+      return (c.name && c.name.toLowerCase().includes(term)) ||
+             (c.company && c.company.toLowerCase().includes(term)) ||
+             (c.phone && c.phone.includes(term)) ||
+             (c.address && c.address.toLowerCase().includes(term));
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد نتائج مطابقة لبحثك</td></tr>`;
+      return;
+    }
+
+    // إعادة رسم الصفوف المفلترة
+    if (window.UI && UI.Pagination && document.getElementById('clientsPagination')) {
+      UI.Pagination.create({
+        containerId: 'clientsPagination',
+        data: filtered,
+        pageSize: 15,
+        onPageChange: (pageData) => {
+          // نفس منطق العرض
+          this.loadClientsTable();
+        }
+      });
+    }
   },
 
   async loadSuppliersTable() {
@@ -1948,6 +2066,668 @@ const App = {
         Settings.switchTab('backup');
       }
     }, 250);
+  },
+
+  // ============================================================================
+  // دوال سلسلة دورة حياة العميل المالية (Client Lifecycle & Financial Chain)
+  // تسلسل الأثر المالي الآلي: عميل ➔ عقد ➔ مشاريع ➔ مستخلصات ➔ دفعات ➔ محتجزات ➔ رصيد
+  // ============================================================================
+
+  async openClientChainModal(clientId) {
+    this.currentChainClientId = clientId;
+    this.openModal('clientChainModal');
+    this.switchChainTab('hierarchy');
+
+    const treeContainer = document.getElementById('chainHierarchyTreeContainer');
+    if (treeContainer) {
+      treeContainer.innerHTML = '<div style="text-align: center; padding: 30px; color: var(--text-secondary);">جاري استدعاء شجرة دورة حياة العميل والتدقيق المالي... ⏳</div>';
+    }
+
+    try {
+      const res = await fetch(`/api/clients/${clientId}/chain`);
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        this.showToast('تعذر جلب بيانات سلسلة العميل', 'error');
+        return;
+      }
+
+      const chain = json.data;
+      this.currentChainData = chain;
+
+      const client = chain.client || {};
+      const fin = chain.financial_summary || {};
+      const curr = client.currency || 'ر.ي';
+
+      // 1. ترويسة النافذة
+      const nameEl = document.getElementById('chainClientName');
+      if (nameEl) nameEl.innerText = client.name || 'العميل';
+      const compEl = document.getElementById('chainClientCompanyBadge');
+      if (compEl) compEl.innerText = client.company ? `شركة: ${client.company}` : 'عميل مباشر';
+
+      // 2. شريط التدفق التفاعلي Pipeline
+      const setTxt = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+      };
+
+      setTxt('pipeClientName', client.name || '-');
+      setTxt('pipeContractsCount', `${fin.total_contracts_count || 0} عقد`);
+      setTxt('pipeProjectsCount', `${fin.total_projects_count || 0} مشروع`);
+      setTxt('pipeBillsCount', `${fin.total_bills_count || 0} مستخلص`);
+      setTxt('pipeCollectionsTotal', `${this.formatNumber(fin.total_collections || 0)} ${curr}`);
+      setTxt('pipeRetentionActive', `${this.formatNumber(fin.active_retention_balance || 0)} ${curr}`);
+      setTxt('pipeOutstandingDue', `${this.formatNumber(fin.outstanding_due_balance || 0)} ${curr}`);
+
+      // 3. بطاقات المؤشرات المالية التفصيلية
+      setTxt('chainSummaryContracts', `${this.formatNumber(fin.total_contract_value || 0)} ${curr}`);
+      setTxt('chainSummaryContractsSub', `${fin.total_contracts_count || 0} عقود معتمدة`);
+
+      setTxt('chainSummaryGross', `${this.formatNumber(fin.gross_work_completed || 0)} ${curr}`);
+      setTxt('chainSummaryGrossSub', `إجمالي الأعمال المنجزة`);
+
+      setTxt('chainSummaryInvoiced', `${this.formatNumber(fin.net_invoiced_claims || 0)} ${curr}`);
+      setTxt('chainSummaryInvoicedSub', `${fin.total_bills_count || 0} مستخلصات معتمدة`);
+
+      setTxt('chainSummaryCollected', `${this.formatNumber(fin.total_collections || 0)} ${curr}`);
+      setTxt('chainSummaryCollectedSub', `مقدم: ${this.formatNumber(fin.total_advance_received || 0)} + تحصيل: ${this.formatNumber(fin.total_bill_collections || 0)}`);
+
+      setTxt('chainSummaryRetention', `${this.formatNumber(fin.active_retention_balance || 0)} ${curr}`);
+      setTxt('chainSummaryRetentionSub', `محسوم: ${this.formatNumber(fin.total_retention_held || 0)} | مفرج: ${this.formatNumber(fin.total_retention_released || 0)}`);
+
+      setTxt('chainSummaryDue', `${this.formatNumber(fin.outstanding_due_balance || 0)} ${curr}`);
+      setTxt('chainSummaryDueSub', `تحديث لحظي بدون انحراف (Zero Drift)`);
+
+      // أعداد التبويبات
+      setTxt('chainTabBillsCount', (chain.bills || []).length);
+      setTxt('chainTabReceiptsCount', (chain.payments || []).length);
+
+      // 4. بناء الشجرة الهرمية
+      this.renderChainHierarchyTree(chain);
+
+      // 5. تعبئة تبويب المستخلصات
+      this.renderChainBillsTable(chain.bills || [], curr, client.id);
+
+      // 6. تعبئة تبويب سندات القبض
+      this.renderChainReceiptsTable(chain.payments || [], curr);
+
+      // 7. تعبئة تبويب محتجزات الضمان
+      this.renderChainRetentionTable(chain, curr);
+
+    } catch (err) {
+      console.error('Error fetching client chain:', err);
+      this.showToast('خطأ في استدعاء سلسلة العميل المالية', 'error');
+    }
+  },
+
+  renderChainHierarchyTree(chain) {
+    const container = document.getElementById('chainHierarchyTreeContainer');
+    if (!container) return;
+
+    const contracts = chain.contracts || [];
+    const projects = chain.projects || [];
+    const bills = chain.bills || [];
+    const payments = chain.payments || [];
+    const curr = chain.client?.currency || 'ر.ي';
+
+    if (contracts.length === 0 && projects.length === 0 && bills.length === 0) {
+      container.innerHTML = `
+        <div style="background: rgba(15,23,42,0.4); border: 1px dashed var(--border-color); border-radius: 8px; padding: 25px; text-align: center; color: var(--text-secondary);">
+          <div style="font-size: 1.8rem; margin-bottom: 8px;">📂</div>
+          <p>لا توجد عقود أو مشاريع مرتبطة بهذا العميل حتى الآن.</p>
+          <button class="btn btn-primary btn-sm" onclick="App.openNewClientBillFromChain()" style="margin-top: 8px;">+ إصدار أول مستخلص / ربط مشروع</button>
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+
+    // عرض كل عقد وما يتبعه
+    contracts.forEach(contract => {
+      const cProjects = projects.filter(p => p.id === contract.project_id);
+      const cBills = bills.filter(b => b.contract_id === contract.id);
+      const cPayments = payments.filter(p => p.contract_id === contract.id);
+
+      html += `
+        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; margin-bottom: 10px;">
+          <!-- رأس العقد -->
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.3rem;">📜</span>
+              <div>
+                <strong style="font-size: 1rem; color: #38bdf8;">عقد: ${contract.contract_no || 'بدون رقم'}</strong>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); margin-right: 8px;">تاريخ التوقيع: ${contract.signing_date || contract.created_at?.split('T')[0] || '-'}</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.85rem;">قيمة العقد: ${this.formatNumber(contract.contract_value || 0)} ${curr}</span>
+              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light);">دفعة مقدمة: ${contract.advance_payment_pct || 10}%</span>
+              <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">محتجز ضمان: ${contract.retention_pct || 10}%</span>
+            </div>
+          </div>
+
+          <!-- المشاريع التابعة للعقد -->
+          <div style="margin-right: 18px; border-right: 2px solid rgba(56, 189, 248, 0.3); padding-right: 14px; margin-bottom: 12px;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #a78bfa; margin-bottom: 8px;">🏗️ المشاريع التنفيذية المرتبطة:</div>
+            ${cProjects.length > 0 ? cProjects.map(p => `
+              <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <strong style="color: #fff; font-size: 0.85rem;">${p.name}</strong>
+                  <span style="font-size: 0.72rem; color: var(--text-secondary); margin-right: 8px;">الحالة: ${p.status || 'نشط'}</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${chain.client?.id}, ${contract.id}, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px;">
+                    + مستخلص للمشروع
+                  </button>
+                </div>
+              </div>
+            `).join('') : '<div style="font-size: 0.75rem; color: var(--text-secondary);">لا توجد مشاريع مخصصة مباشرة لهذا العقد.</div>'}
+          </div>
+
+          <!-- المستخلصات التابعة للعقد -->
+          <div style="margin-right: 18px; border-right: 2px solid rgba(234, 179, 8, 0.3); padding-right: 14px; margin-bottom: 12px;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #facc15; margin-bottom: 8px;">📑 المستخلصات والمطالبات المالية:</div>
+            ${cBills.length > 0 ? `
+              <div class="table-responsive" style="margin-bottom: 6px;">
+                <table class="custom-table" style="font-size: 0.78rem;">
+                  <thead>
+                    <tr>
+                      <th>رقم المستخلص</th>
+                      <th>إجمالي الأعمال</th>
+                      <th>استقطاع دفعة (${contract.advance_payment_pct || 10}%)</th>
+                      <th>محتجز ضمان (${contract.retention_pct || 10}%)</th>
+                      <th>صافي المطالبة</th>
+                      <th>المحصل</th>
+                      <th>المتبقي</th>
+                      <th>الحالة</th>
+                      <th style="text-align: center;">إجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${cBills.map(b => {
+                      const net = Number(b.net_amount || b.amount || 0);
+                      const paid = Number(b.paid_amount || 0);
+                      const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : Math.max(0, net - paid));
+                      const isFullyPaid = (b.payment_status === 'paid' || rem <= 0);
+                      const statusColor = isFullyPaid ? 'var(--accent-green)' : (paid > 0 ? '#38bdf8' : 'var(--accent-red)');
+
+                      return `
+                        <tr>
+                          <td><strong>${b.bill_no}</strong></td>
+                          <td>${App.formatNumber(b.gross_amount || net)} ${curr}</td>
+                          <td style="color: #38bdf8;">-${App.formatNumber(b.advance_deduction || 0)}</td>
+                          <td style="color: #f59e0b;">-${App.formatNumber(b.retention_deduction || 0)}</td>
+                          <td style="font-weight: 700; color: var(--gold-light);">${App.formatNumber(net)} ${curr}</td>
+                          <td style="color: var(--accent-green);">${App.formatNumber(paid)}</td>
+                          <td style="font-weight: 700; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${App.formatNumber(rem)}</td>
+                          <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor};">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
+                          <td style="text-align: center;">
+                            ${!isFullyPaid ? `
+                              <button class="btn btn-primary btn-sm" onclick="App.quickCollectForBill(${b.id}, ${chain.client?.id}, ${b.project_id}, ${rem}, '${b.bill_no}')" style="padding: 2px 8px; font-size: 0.72rem;">
+                                قبض دفعة
+                              </button>
+                            ` : '<span style="color: var(--accent-green); font-size: 0.75rem;">✓ تم السداد</span>'}
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : '<div style="font-size: 0.75rem; color: var(--text-secondary);">لا توجد مستخلصات مسجلة على هذا العقد حتى الآن.</div>'}
+          </div>
+
+          <!-- التحصيلات والدفعات التابعة للعقد -->
+          <div style="margin-right: 18px; border-right: 2px solid rgba(16, 185, 129, 0.3); padding-right: 14px;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-green); margin-bottom: 8px;">💰 المقبوضات والتحصيلات المسجلة:</div>
+            ${cPayments.length > 0 ? `
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                ${cPayments.map(p => {
+                  let catBadge = '';
+                  if (p.receipt_category === 'advance_payment') {
+                    catBadge = '<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">دفعة مقدمة</span>';
+                  } else if (p.receipt_category === 'retention_release') {
+                    catBadge = '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">إفراج ضمان</span>';
+                  } else {
+                    catBadge = '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);">تحصيل مستخلص</span>';
+                  }
+
+                  return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 6px; padding: 6px 10px; font-size: 0.75rem;">
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <strong>${p.receipt_no || ('RC-' + p.id)}</strong>
+                        ${catBadge}
+                        <span style="color: var(--text-secondary);">${p.date || '-'}</span>
+                        <span style="color: #94a3b8;">(${p.payment_method || 'نقدي'})</span>
+                      </div>
+                      <strong style="color: var(--accent-green); font-size: 0.85rem;">+${App.formatNumber(p.amount)} ${curr}</strong>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : '<div style="font-size: 0.75rem; color: var(--text-secondary);">لا توجد سندات قبض مسجلة لهذا العقد بعد.</div>'}
+          </div>
+        </div>
+      `;
+    });
+
+    // مشاريع خارج العقود إن وجدت
+    const orphanedProjects = projects.filter(p => !contracts.some(c => c.project_id === p.id));
+    if (orphanedProjects.length > 0) {
+      html += `
+        <div style="background: rgba(15, 23, 42, 0.5); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; margin-top: 10px;">
+          <div style="font-weight: 700; color: #a78bfa; font-size: 0.82rem; margin-bottom: 6px;">مشاريع إضافية للعميل:</div>
+          ${orphanedProjects.map(p => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <span>${p.name}</span>
+              <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${chain.client?.id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px;">+ مستخلص</button>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+  },
+
+  renderChainBillsTable(bills, curr, clientId) {
+    const tbody = document.getElementById('chainBillsTableBody');
+    if (!tbody) return;
+
+    if (bills.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مستخلصات مسجلة لهذا العميل حتى الآن</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = bills.map(b => {
+      const net = Number(b.net_amount || b.amount || 0);
+      const paid = Number(b.paid_amount || 0);
+      const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : Math.max(0, net - paid));
+      const isFullyPaid = (b.payment_status === 'paid' || rem <= 0);
+      const statusColor = isFullyPaid ? 'var(--accent-green)' : (paid > 0 ? '#38bdf8' : 'var(--accent-red)');
+
+      return `
+        <tr>
+          <td><strong style="color: #fff;">${b.bill_no}</strong></td>
+          <td>${b.project_name || '-'}</td>
+          <td>${b.date || '-'}</td>
+          <td>${this.formatNumber(b.gross_amount || net)} ${curr}</td>
+          <td style="color: #38bdf8;">-${this.formatNumber(b.advance_deduction || 0)}</td>
+          <td style="color: #f59e0b;">-${this.formatNumber(b.retention_deduction || 0)}</td>
+          <td style="font-weight: 700; color: var(--gold-light);">${this.formatNumber(net)} ${curr}</td>
+          <td style="color: var(--accent-green);">${this.formatNumber(paid)}</td>
+          <td style="font-weight: 800; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${this.formatNumber(rem)}</td>
+          <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor};">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
+          <td style="text-align: center;">
+            ${!isFullyPaid ? `
+              <button class="btn btn-primary btn-sm" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${b.project_id}, ${rem}, '${b.bill_no}')" style="padding: 3px 8px; font-size: 0.75rem;">
+                قبض دفعة
+              </button>
+            ` : '<span style="color: var(--accent-green); font-size: 0.78rem;">✓ تم التحصيل</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  renderChainReceiptsTable(payments, curr) {
+    const tbody = document.getElementById('chainReceiptsTableBody');
+    if (!tbody) return;
+
+    if (payments.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد سندات قبض مسجلة لهذا العميل حتى الآن</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = payments.map(p => {
+      let catText = 'تحصيل مستخلص';
+      let catColor = 'var(--accent-green)';
+      if (p.receipt_category === 'advance_payment') {
+        catText = 'دفعة مقدمة على العقد';
+        catColor = '#38bdf8';
+      } else if (p.receipt_category === 'retention_release') {
+        catText = 'إفراج محتجز ضمان';
+        catColor = '#f59e0b';
+      } else if (p.receipt_category === 'general') {
+        catText = 'إيراد عام / أخرى';
+        catColor = 'var(--text-secondary)';
+      }
+
+      return `
+        <tr>
+          <td><strong style="color: #fff; font-family: monospace;">${p.receipt_no || ('RC-' + p.id)}</strong></td>
+          <td>${p.date || '-'}</td>
+          <td><span class="badge" style="background: rgba(255,255,255,0.05); color: ${catColor}; border: 1px solid ${catColor};">${catText}</span></td>
+          <td>${p.project_name || '-'}</td>
+          <td>${p.bill_no ? `<span class="badge" style="background: rgba(234, 179, 8, 0.15); color: #facc15;">${p.bill_no}</span>` : '-'}</td>
+          <td style="font-weight: 700; color: var(--accent-green);">+${this.formatNumber(p.amount)} ${curr}</td>
+          <td>${p.payment_method || 'نقدي'}</td>
+          <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 200px;">${p.notes || '-'}</td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  renderChainRetentionTable(chain, curr) {
+    const tbody = document.getElementById('chainRetentionTableBody');
+    if (!tbody) return;
+
+    const billsWithRetention = (chain.bills || []).filter(b => Number(b.retention_deduction) > 0);
+
+    if (billsWithRetention.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد محتجزات ضمان مستقطعة مسجلة لهذا العميل</td></tr>`;
+      return;
+    }
+
+    const totalReleased = Number(chain.financial_summary?.total_retention_released || 0);
+
+    tbody.innerHTML = billsWithRetention.map(b => {
+      const held = Number(b.retention_deduction || 0);
+
+      return `
+        <tr>
+          <td><strong>مستخلص ${b.bill_no}</strong></td>
+          <td>${b.project_name || '-'}</td>
+          <td>${b.date || '-'}</td>
+          <td style="color: #f59e0b; font-weight: 700;">${this.formatNumber(held)} ${curr}</td>
+          <td style="color: var(--accent-green);">${this.formatNumber(0)} ${curr}</td>
+          <td style="font-weight: 800; color: #f59e0b;">${this.formatNumber(held)} ${curr}</td>
+          <td><span class="badge" style="background: rgba(245,158,11,0.15); color: #f59e0b;">قيد الاحتجاز والضمان</span></td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  switchChainTab(tabName) {
+    const tabs = ['hierarchy', 'bills', 'receipts', 'retention'];
+    tabs.forEach(t => {
+      const btn = document.getElementById(`chainTabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+      const content = document.getElementById(`chainTabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+      if (btn) btn.classList.toggle('active', t === tabName);
+      if (content) content.style.display = (t === tabName) ? 'block' : 'none';
+    });
+  },
+
+  async syncClientBalance(clientId) {
+    try {
+      this.showToast('جاري تدقيق ومزامنة حساب العميل لحظياً... ⏳', 'info');
+      const res = await fetch(`/api/clients/${clientId}/sync-balance`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        this.showToast('تمت مطابقة وتحديث رصيد العميل بنجاح (Zero Drift) ✅', 'success');
+        this.loadClientsTable();
+      } else {
+        this.showToast('فشل في مزامنة الرصيد', 'error');
+      }
+    } catch (e) {
+      this.showToast('خطأ في الاتصال بالخادم', 'error');
+    }
+  },
+
+  async syncCurrentClientChain() {
+    if (!this.currentChainClientId) return;
+    await this.syncClientBalance(this.currentChainClientId);
+    await this.openClientChainModal(this.currentChainClientId);
+  },
+
+  openNewClientBillFromChain() {
+    if (!this.currentChainClientId) return;
+    this.openNewClientBillModal(this.currentChainClientId);
+  },
+
+  openReceiptForClientFromChain() {
+    if (!this.currentChainClientId) return;
+    this.closeModal('clientChainModal');
+    if (typeof Accounting !== 'undefined' && Accounting.openReceiptModal) {
+      Accounting.openReceiptModal();
+      setTimeout(() => {
+        const clientInput = document.getElementById('modalRcClientInput');
+        const clientHidden = document.getElementById('modalRcClientSelect');
+        if (clientInput && this.currentChainData?.client) {
+          clientInput.value = this.currentChainData.client.name;
+          if (clientHidden) clientHidden.value = this.currentChainClientId;
+          Accounting.onClientInputChange(this.currentChainData.client.name);
+        }
+      }, 200);
+    }
+  },
+
+  openClientStatementFromChain() {
+    if (!this.currentChainClientId) return;
+    this.closeModal('clientChainModal');
+    this.navigate('reports');
+    if (typeof Reports !== 'undefined') {
+      Reports.switchReportTab('client-statement');
+      const select = document.getElementById('repClientSelect');
+      if (select) select.value = this.currentChainClientId;
+      Reports.fetchFullClientStatement();
+    }
+  },
+
+  quickCollectForBill(billId, clientId, projectId, remainingAmount, billNo) {
+    this.closeModal('clientChainModal');
+    if (typeof Accounting !== 'undefined' && Accounting.openReceiptModal) {
+      Accounting.openReceiptModal();
+      setTimeout(async () => {
+        // تعبئة العميل
+        const client = (this.clientsFullList || []).find(c => c.id == clientId) || this.currentChainData?.client;
+        if (client) {
+          const clientInput = document.getElementById('modalRcClientInput');
+          const clientHidden = document.getElementById('modalRcClientSelect');
+          if (clientInput) clientInput.value = client.name;
+          if (clientHidden) clientHidden.value = client.id;
+          await Accounting.onClientInputChange(client.name);
+        }
+
+        // اختيار المشروع
+        const prjSelect = document.getElementById('modalRcProjectSelect');
+        if (prjSelect && projectId) {
+          prjSelect.value = projectId;
+        }
+
+        // اختيار المستخلص وفئة التحصيل والمبلغ المتبقي
+        const catSelect = document.getElementById('modalRcCategory');
+        if (catSelect) catSelect.value = 'bill_collection';
+
+        const billSelect = document.getElementById('modalRcBillSelect');
+        if (billSelect) {
+          billSelect.value = billId;
+          Accounting.onReceiptBillChange(billId);
+        }
+
+        const amtInput = document.getElementById('modalRcAmount');
+        if (amtInput && remainingAmount > 0) {
+          amtInput.value = remainingAmount;
+          Accounting.calcReceiptLocalAmount();
+        }
+
+        const notes = document.getElementById('modalRcNotes');
+        if (notes) {
+          notes.value = `تحصيل دفعة من مستخلص أعمال رقم ${billNo || billId}`;
+        }
+      }, 300);
+    }
+  },
+
+  // ============================================================================
+  // نافذة إصدار مستخلص جديد مرتبط بالسلسلة
+  // ============================================================================
+
+  async openNewClientBillModal(clientId, contractId, projectId) {
+    this.openModal('newClientBillModal');
+
+    // رقم تلقائي
+    const autoNo = `BILL-${Date.now().toString().slice(-4)}`;
+    const autoNoEl = document.getElementById('newBillAutoNo');
+    if (autoNoEl) autoNoEl.innerText = autoNo;
+
+    const dateInput = document.getElementById('modalBillDate');
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+    // تعبئة قائمة العملاء
+    const clientSelect = document.getElementById('modalBillClientSelect');
+    if (clientSelect) {
+      clientSelect.innerHTML = '<option value="">اختر العميل...</option>' + 
+        (this.clientsFullList || []).map(c => `<option value="${c.id}" ${c.id == clientId ? 'selected' : ''}>${c.name} (${c.company || 'فردي'})</option>`).join('');
+    }
+
+    await this.onBillClientChange(clientId || clientSelect?.value);
+
+    if (projectId) {
+      const prjSelect = document.getElementById('modalBillProjectSelect');
+      if (prjSelect) prjSelect.value = projectId;
+      await this.onBillProjectChange(projectId);
+    }
+
+    if (contractId) {
+      const cSelect = document.getElementById('modalBillContractSelect');
+      if (cSelect) cSelect.value = contractId;
+      this.onBillContractChange(contractId);
+    }
+
+    this.calcNewBillValues();
+  },
+
+  async onBillClientChange(clientId) {
+    if (!clientId) return;
+    try {
+      // جلب عقود ومشاريع هذا العميل
+      const [contractsRes, projectsRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}/contracts`),
+        fetch(`/api/projects`)
+      ]);
+      const contractsJson = await contractsRes.json();
+      const projectsJson = await projectsRes.json();
+
+      this.billModalContracts = contractsJson.data || [];
+      const allProjects = projectsJson.data || [];
+      // المشاريع المرتبطة بالعميل
+      this.billModalProjects = allProjects.filter(p => p.client_id == clientId || this.billModalContracts.some(c => c.project_id == p.id));
+
+      const prjSelect = document.getElementById('modalBillProjectSelect');
+      if (prjSelect) {
+        prjSelect.innerHTML = '<option value="">اختر المشروع...</option>' + 
+          this.billModalProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      }
+
+      const cSelect = document.getElementById('modalBillContractSelect');
+      if (cSelect) {
+        cSelect.innerHTML = '<option value="">بدون عقد محدد...</option>' + 
+          this.billModalContracts.map(c => `<option value="${c.id}">عقد: ${c.contract_no || c.id} (قيمة: ${this.formatNumber(c.contract_value)})</option>`).join('');
+      }
+    } catch (e) {
+      console.error('Error on bill client change:', e);
+    }
+  },
+
+  async onBillProjectChange(projectId) {
+    if (!projectId) return;
+    // مطابقة العقد تلقائياً إذا كان للمشروع عقد
+    const matchedContract = (this.billModalContracts || []).find(c => c.project_id == projectId);
+    const cSelect = document.getElementById('modalBillContractSelect');
+    if (cSelect && matchedContract) {
+      cSelect.value = matchedContract.id;
+      this.onBillContractChange(matchedContract.id);
+    }
+  },
+
+  onBillContractChange(contractId) {
+    const contract = (this.billModalContracts || []).find(c => c.id == contractId);
+    const advPct = contract?.advance_payment_pct !== undefined ? contract.advance_payment_pct : 10;
+    const retPct = contract?.retention_pct !== undefined ? contract.retention_pct : 10;
+
+    const advLabel = document.getElementById('modalBillAdvPctLabel');
+    if (advLabel) advLabel.innerText = advPct;
+    const retLabel = document.getElementById('modalBillRetPctLabel');
+    if (retLabel) retLabel.innerText = retPct;
+
+    this.calcNewBillValues();
+  },
+
+  calcNewBillValues(manual = false) {
+    const gross = Number(document.getElementById('modalBillGrossAmount')?.value) || 0;
+    const contractId = document.getElementById('modalBillContractSelect')?.value;
+    const contract = (this.billModalContracts || []).find(c => c.id == contractId);
+
+    const advPct = contract?.advance_payment_pct !== undefined ? Number(contract.advance_payment_pct) : 10;
+    const retPct = contract?.retention_pct !== undefined ? Number(contract.retention_pct) : 10;
+
+    let advDed = Number(document.getElementById('modalBillAdvanceDeduction')?.value) || 0;
+    let retDed = Number(document.getElementById('modalBillRetentionDeduction')?.value) || 0;
+    const otherDed = Number(document.getElementById('modalBillOtherDeduction')?.value) || 0;
+
+    if (!manual && gross > 0) {
+      advDed = Math.round((gross * advPct) / 100);
+      retDed = Math.round((gross * retPct) / 100);
+      const advInput = document.getElementById('modalBillAdvanceDeduction');
+      if (advInput) advInput.value = advDed;
+      const retInput = document.getElementById('modalBillRetentionDeduction');
+      if (retInput) retInput.value = retDed;
+    }
+
+    const net = Math.max(0, gross - advDed - retDed - otherDed);
+    const netInput = document.getElementById('modalBillNetAmount');
+    if (netInput) netInput.value = net;
+  },
+
+  async submitNewClientBill(e) {
+    e.preventDefault();
+    const autoNo = document.getElementById('newBillAutoNo')?.innerText || `BILL-${Date.now().toString().slice(-4)}`;
+    const clientId = document.getElementById('modalBillClientSelect')?.value;
+    const projectId = document.getElementById('modalBillProjectSelect')?.value;
+    const contractId = document.getElementById('modalBillContractSelect')?.value;
+    const date = document.getElementById('modalBillDate')?.value;
+    const gross = Number(document.getElementById('modalBillGrossAmount')?.value) || 0;
+    const advDed = Number(document.getElementById('modalBillAdvanceDeduction')?.value) || 0;
+    const retDed = Number(document.getElementById('modalBillRetentionDeduction')?.value) || 0;
+    const otherDed = Number(document.getElementById('modalBillOtherDeduction')?.value) || 0;
+    const net = Number(document.getElementById('modalBillNetAmount')?.value) || (gross - advDed - retDed - otherDed);
+    const notes = document.getElementById('modalBillNotes')?.value;
+
+    if (!clientId || !projectId || gross <= 0) {
+      this.showToast('يرجى اختيار العميل والمشروع وإدخال إجمالي الأعمال', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/billing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bill_no: autoNo,
+          bill_type: 'مستخلص أعمال جاري',
+          client_id: Number(clientId),
+          project_id: Number(projectId),
+          contract_id: contractId ? Number(contractId) : null,
+          gross_amount: gross,
+          advance_deduction: advDed,
+          retention_deduction: retDed,
+          deduction: advDed + retDed + otherDed,
+          net_amount: net,
+          amount: gross,
+          date,
+          status: 'معتمد',
+          notes
+        })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        this.showToast(`تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل آلياً 📑`, 'success');
+        this.closeModal('newClientBillModal');
+        this.loadClientsTable();
+
+        // إذا كانت نافذة السلسلة مفتوحة، نقوم بتحديثها فوراً
+        if (this.currentChainClientId == clientId) {
+          this.openClientChainModal(clientId);
+        }
+      } else {
+        this.showToast(json.message || 'فشل في حفظ المستخلص', 'error');
+      }
+    } catch (err) {
+      console.error('Error creating client bill:', err);
+      this.showToast('خطأ في الاتصال بالخادم أثناء حفظ المستخلص', 'error');
+    }
   }
 };
 

@@ -61,6 +61,7 @@ router.get('/', requirePermission('billing:view,revenues:view'), async (req, res
 const FinancialControlService = {
   ...require('../services/financialControlService')
 };
+const clientChainService = require('../services/clientChainService');
 
 // إنشاء مستخلص أو فاتورة أعمال جديدة مع التحقق من الصلاحيات والنطاق
 router.post('/', requirePermission('billing:create'), async (req, res) => {
@@ -69,6 +70,7 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
       bill_type = 'مستخلص جاري',
       project_id,
       client_id,
+      contract_id,
       amount,
       deduction = 0,
       advance_deduction = 0,
@@ -88,21 +90,26 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المشروع والمبلغ الإجمالي' });
     }
 
-    const parsedGrossAmount = Number(amount);
-    const parsedAdvDed = Number(advance_deduction) || 0;
-    const parsedRetDed = Number(retention_deduction) || 0;
+    // ربط واستنتاج العقد والعميل والاستقطاعات آلياً من دورة حياة المشروع
+    const resolution = await clientChainService.resolveBillContractAndClient({
+      project_id,
+      client_id,
+      contract_id,
+      amount,
+      advance_deduction,
+      retention_deduction
+    });
+
+    const finalClientId = resolution.client_id;
+    const finalContractId = resolution.contract_id;
+    const parsedGrossAmount = resolution.gross_amount;
+    const parsedAdvDed = resolution.advance_deduction;
+    const parsedRetDed = resolution.retention_deduction;
     const totalDeductions = parsedAdvDed > 0 || parsedRetDed > 0 
-      ? (parsedAdvDed + parsedRetDed)
+      ? (parsedAdvDed + parsedRetDed) 
       : (Number(deduction) || 0);
 
     const net_amount = Math.max(0, parsedGrossAmount - totalDeductions);
-
-    // جلب معرف العميل إن لم يكن محدد
-    let finalClientId = client_id;
-    if (!finalClientId) {
-      const proj = await get('SELECT client_id FROM projects WHERE id = ?', [project_id]);
-      if (proj) finalClientId = proj.client_id;
-    }
 
     // توليد رقم المستخلص
     const countRes = await get('SELECT COUNT(*) as cnt FROM bills');
@@ -120,15 +127,17 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
     const txResult = await transaction(async (tx) => {
       const result = await tx.run(`
         INSERT INTO bills (
-          bill_no, bill_type, project_id, client_id, 
+          bill_no, bill_type, project_id, client_id, contract_id,
           amount, deduction, net_amount, status, date, notes,
           gross_amount, advance_deduction, retention_deduction,
+          paid_amount, remaining_amount, payment_status,
           created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'unpaid', ?, ?, ?, ?, ?)
       `, [
-        bill_no, bill_type, project_id, finalClientId || null,
+        bill_no, bill_type, project_id, finalClientId || null, finalContractId || null,
         parsedGrossAmount, totalDeductions, net_amount, finalStatus, date, notes || '',
         parsedGrossAmount, parsedAdvDed, parsedRetDed,
+        net_amount,
         creatorId, creatorName,
         isPosted ? creatorId : null,
         isPosted ? creatorName : null,
@@ -137,15 +146,10 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
 
       const billId = result.lastInsertRowid || result.insertId;
 
-      // التأثير المحاسبي وقيد استحقاق المستخلص فقط عند الترحيل/الاعتماد
+      // التأثير المحاسبي وتحديث رصيد العميل الذري التلقائي
       if (isPosted) {
         if (finalClientId) {
-          await tx.run(`
-            UPDATE clients SET 
-              total_due = total_due + ?,
-              current_balance = current_balance + ?
-            WHERE id = ?
-          `, [net_amount, net_amount, finalClientId]);
+          await clientChainService.syncClientBalances(finalClientId, tx);
         }
 
         const jeCountRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
@@ -408,9 +412,14 @@ router.post('/:id/post', requirePermission('billing:post,accounting:post'), asyn
 
       await tx.run(`
         UPDATE bills 
-        SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP, journal_entry_id = ?
+        SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP, journal_entry_id = ?,
+            remaining_amount = COALESCE(remaining_amount, net_amount)
         WHERE id = ?
       `, [posterId, posterName, jeId, bill.id]);
+
+      if (bill.client_id) {
+        await clientChainService.syncClientBalances(bill.client_id, tx);
+      }
     });
 
     await logAudit(req, {

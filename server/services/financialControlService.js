@@ -338,6 +338,15 @@ const FinancialControlService = {
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
           VALUES (?, 3, ?, ?, 0, ?, ?)
         `, [reversingJeId, finalCcId, pay.project_id, amount, `تخفيض الصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
+
+        // عكس تأثير السداد على المستخلص ورصيد العميل آلياً
+        const clientChainService = require('./clientChainService');
+        if (pay.bill_id) {
+          await clientChainService.reversePaymentFromBill(pay.bill_id, amount, tx);
+        }
+        if (pay.client_id) {
+          await clientChainService.syncClientBalances(pay.client_id, tx);
+        }
       } else {
         // كان الأصلي: مدين (موردين 7) ودائن (صندوق 3)
         // العكسي: مدين (صندوق 3) ودائن (موردين 7 أو accId)
@@ -533,14 +542,10 @@ const FinancialControlService = {
     let reversingEntryNo = null;
 
     await transaction(async (tx) => {
-      // 1. عكس رصيد العميل إن وجد
-      if (bill.client_id && netAmount > 0) {
-        await tx.run(`
-          UPDATE clients SET 
-            total_due = GREATEST(0, total_due - ?),
-            current_balance = GREATEST(0, current_balance - ?)
-          WHERE id = ?
-        `, [netAmount, netAmount, bill.client_id]);
+      // 1. عكس وتحديث رصيد العميل الذري
+      if (bill.client_id) {
+        const clientChainService = require('./clientChainService');
+        await clientChainService.syncClientBalances(bill.client_id, tx);
       }
 
       // 2. إنشاء قيد يومي عكسي متزن بالكامل

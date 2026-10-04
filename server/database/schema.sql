@@ -311,10 +311,17 @@ CREATE TABLE IF NOT EXISTS bills (
     bill_type TEXT DEFAULT 'مستخلص', -- مستخلص جاري، مستخلص ختامي، فاتورة أعمال
     project_id INTEGER REFERENCES projects(id),
     client_id INTEGER REFERENCES clients(id),
+    contract_id INTEGER REFERENCES project_contracts(id),
     amount REAL NOT NULL,           -- قيمة المستخلص الإجمالية
-    deduction REAL DEFAULT 0,       -- استقطاعات (دفعة مقدمة / ضمان)
+    gross_amount REAL DEFAULT 0,
+    deduction REAL DEFAULT 0,       -- إجمالي الاستقطاعات
+    advance_deduction REAL DEFAULT 0,
+    retention_deduction REAL DEFAULT 0,
     net_amount REAL NOT NULL,       -- صافي المستخلص المستحق
-    status TEXT DEFAULT 'معتمد',     -- مسودة، معتمد، محصل جزئي، محصل كامل
+    paid_amount REAL DEFAULT 0,     -- إجمالي المسدد من هذا المستخلص
+    remaining_amount REAL DEFAULT 0,-- المتبقي غير المسدد
+    payment_status TEXT DEFAULT 'unpaid', -- unpaid, partially_paid, paid
+    status TEXT DEFAULT 'معتمد',     -- مسودة، معتمد، محصل جزئي، محصل كامل، reversed
     date DATE NOT NULL,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -328,14 +335,19 @@ CREATE TABLE IF NOT EXISTS payments (
     client_id INTEGER REFERENCES clients(id),
     supplier_id INTEGER REFERENCES suppliers(id),
     project_id INTEGER REFERENCES projects(id),
+    contract_id INTEGER REFERENCES project_contracts(id),
+    bill_id INTEGER REFERENCES bills(id),
     account_id INTEGER REFERENCES accounts(id),
     cost_center_id INTEGER REFERENCES cost_centers(id),
     amount REAL NOT NULL,
     currency TEXT DEFAULT 'ر.ي',
+    exchange_rate REAL DEFAULT 1.0,
+    local_amount REAL DEFAULT 0,
     payment_method TEXT DEFAULT 'نقدي', -- نقدي، تحويل بنكي، شيك
     check_no TEXT,                      -- رقم الشيك (إلزامي عند القبض أو الصرف بشيك)
     bank_name TEXT,                     -- اسم البنك
     date DATE NOT NULL,
+    receipt_category TEXT DEFAULT 'general', -- general, advance_payment, bill_collection, retention_release
     status TEXT DEFAULT 'posted',       -- draft, under_review, approved, posted, closed, reversed, cancelled
     created_by INTEGER REFERENCES users(id),
     created_by_name TEXT,
@@ -516,6 +528,7 @@ CREATE TABLE IF NOT EXISTS payroll (
 CREATE TABLE IF NOT EXISTS project_contracts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    client_id INTEGER REFERENCES clients(id),
     contract_no TEXT,
     title TEXT,
     first_party TEXT,       -- المالك / العميل
@@ -537,6 +550,86 @@ CREATE TABLE IF NOT EXISTS project_contracts (
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- فهارس الأداء للمستخلصات والعقود ودورة حياة العميل
+CREATE INDEX IF NOT EXISTS idx_project_contracts_client ON project_contracts (client_id);
+CREATE INDEX IF NOT EXISTS idx_bills_client_project_status ON bills (client_id, project_id, status);
+CREATE INDEX IF NOT EXISTS idx_bills_contract_status ON bills (contract_id, status);
+CREATE INDEX IF NOT EXISTS idx_payments_client_bill_type ON payments (client_id, bill_id, type, status);
+CREATE INDEX IF NOT EXISTS idx_payments_contract_type ON payments (contract_id, type, status);
+
+-- عرض التجميعات المالية الديناميكية للعملاء في الوقت الفعلي (Zero N+1 Client Financial Profile View)
+CREATE VIEW IF NOT EXISTS view_client_financial_profiles AS
+SELECT
+    c.id,
+    c.id AS client_id,
+    c.name,
+    c.company,
+    c.phone,
+    c.email,
+    c.address,
+    COALESCE(c.currency, 'ر.ي') AS currency,
+    COALESCE(c.previous_balance, 0.0) AS previous_balance,
+    COALESCE(cnt.total_contracts_count, 0) AS total_contracts_count,
+    ROUND(COALESCE(cnt.total_contracts_value, 0.0), 2) AS total_contracts_value,
+    COALESCE(prj.total_projects_count, 0) AS total_projects_count,
+    COALESCE(b.total_bills_count, 0) AS total_bills_count,
+    ROUND(COALESCE(b.total_gross_billed, 0.0), 2) AS total_gross_billed,
+    ROUND(COALESCE(b.total_net_billed, 0.0), 2) AS total_net_billed,
+    ROUND(COALESCE(b.total_advance_deductions, 0.0), 2) AS total_advance_deductions,
+    ROUND(COALESCE(b.total_retention_deductions, 0.0), 2) AS total_retention_deductions,
+    ROUND(COALESCE(pay_adv.total_advance_received, 0.0), 2) AS total_advance_received,
+    ROUND(MAX(0.0, COALESCE(pay_adv.total_advance_received, 0.0) - COALESCE(b.total_advance_deductions, 0.0)), 2) AS remaining_advance_balance,
+    ROUND(COALESCE(pay_ret.total_retention_released, 0.0), 2) AS total_retention_released,
+    ROUND(MAX(0.0, COALESCE(b.total_retention_deductions, 0.0) - COALESCE(pay_ret.total_retention_released, 0.0)), 2) AS active_retention_balance,
+    ROUND(COALESCE(pay.total_collected, 0.0), 2) AS total_collected,
+    ROUND((COALESCE(c.previous_balance, 0.0) + COALESCE(b.total_net_billed, 0.0)) - COALESCE(pay.total_collected, 0.0), 2) AS outstanding_balance
+FROM clients c
+LEFT JOIN (
+    SELECT client_id, COUNT(id) AS total_projects_count
+    FROM projects
+    GROUP BY client_id
+) prj ON prj.client_id = c.id
+LEFT JOIN (
+    SELECT 
+        COALESCE(pc.client_id, p.client_id) AS client_id,
+        COUNT(pc.id) AS total_contracts_count,
+        SUM(COALESCE(pc.contract_value, 0.0)) AS total_contracts_value
+    FROM project_contracts pc
+    LEFT JOIN projects p ON pc.project_id = p.id
+    WHERE pc.status != 'ملغي'
+    GROUP BY COALESCE(pc.client_id, p.client_id)
+) cnt ON cnt.client_id = c.id
+LEFT JOIN (
+    SELECT 
+        client_id,
+        COUNT(id) AS total_bills_count,
+        SUM(COALESCE(gross_amount, amount, 0.0)) AS total_gross_billed,
+        SUM(COALESCE(net_amount, amount, 0.0)) AS total_net_billed,
+        SUM(COALESCE(advance_deduction, 0.0)) AS total_advance_deductions,
+        SUM(COALESCE(retention_deduction, 0.0)) AS total_retention_deductions
+    FROM bills
+    WHERE status NOT IN ('draft', 'reversed', 'cancelled')
+    GROUP BY client_id
+) b ON b.client_id = c.id
+LEFT JOIN (
+    SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_collected
+    FROM payments
+    WHERE type = 'قبض' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+    GROUP BY client_id
+) pay ON pay.client_id = c.id
+LEFT JOIN (
+    SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_advance_received
+    FROM payments
+    WHERE type = 'قبض' AND receipt_category = 'advance_payment' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+    GROUP BY client_id
+) pay_adv ON pay_adv.client_id = c.id
+LEFT JOIN (
+    SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_retention_released
+    FROM payments
+    WHERE type = 'قبض' AND receipt_category = 'retention_release' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+    GROUP BY client_id
+) pay_ret ON pay_ret.client_id = c.id;
 
 -- 2. المخططات الهندسية (Engineering Drawings & Schematics)
 CREATE TABLE IF NOT EXISTS project_drawings (
