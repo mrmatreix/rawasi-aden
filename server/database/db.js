@@ -1910,6 +1910,35 @@ function initSqlite() {
             WHERE type = 'قبض' AND receipt_category = 'retention_release' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
             GROUP BY client_id
         ) pay_ret ON pay_ret.client_id = c.id;
+
+        CREATE TABLE IF NOT EXISTS project_variations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          contract_id INTEGER,
+          vo_no TEXT NOT NULL,
+          title TEXT NOT NULL,
+          type TEXT DEFAULT 'addition',
+          amount REAL NOT NULL DEFAULT 0,
+          time_extension_days INTEGER DEFAULT 0,
+          reason TEXT,
+          approved_by TEXT,
+          status TEXT DEFAULT 'approved',
+          date DATE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS project_progress_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          previous_percentage REAL NOT NULL DEFAULT 0,
+          new_percentage REAL NOT NULL DEFAULT 0,
+          notes TEXT,
+          recorded_by TEXT,
+          date DATE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+        );
       `);
       console.log('✅ [Rawasi DB] Client Lifecycle & Financial Hierarchy view & tables initialized');
     } catch (e) {

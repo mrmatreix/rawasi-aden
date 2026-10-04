@@ -2110,45 +2110,50 @@ const App = {
         if (el) el.innerText = val;
       };
 
+      const contractsCount = fin.total_contracts_count ?? chain.chain?.contracts_count ?? (chain.contracts || []).length;
+      const projectsCount = fin.total_projects_count ?? chain.chain?.projects_count ?? (chain.projects || []).length;
+      const billsCount = fin.total_bills_count ?? chain.chain?.bills_count ?? (chain.bills || []).length;
+      const paymentsCount = fin.total_payments_count ?? chain.chain?.payments_count ?? (chain.payments || []).length;
+
       setTxt('pipeClientName', client.name || '-');
-      setTxt('pipeContractsCount', `${fin.total_contracts_count || 0} عقد`);
-      setTxt('pipeProjectsCount', `${fin.total_projects_count || 0} مشروع`);
-      setTxt('pipeBillsCount', `${fin.total_bills_count || 0} مستخلص`);
-      setTxt('pipeCollectionsTotal', `${this.formatNumber(fin.total_collections || 0)} ${curr}`);
+      setTxt('pipeContractsCount', `${contractsCount} عقد`);
+      setTxt('pipeProjectsCount', `${projectsCount} مشروع`);
+      setTxt('pipeBillsCount', `${billsCount} مستخلص`);
+      setTxt('pipeCollectionsTotal', `${this.formatNumber(fin.total_collected ?? fin.total_collections ?? 0)} ${curr}`);
       setTxt('pipeRetentionActive', `${this.formatNumber(fin.active_retention_balance || 0)} ${curr}`);
       setTxt('pipeOutstandingDue', `${this.formatNumber(fin.outstanding_due_balance || 0)} ${curr}`);
 
       // 3. بطاقات المؤشرات المالية التفصيلية
-      setTxt('chainSummaryContracts', `${this.formatNumber(fin.total_contract_value || 0)} ${curr}`);
-      setTxt('chainSummaryContractsSub', `${fin.total_contracts_count || 0} عقود معتمدة`);
+      setTxt('chainSummaryContracts', `${this.formatNumber(fin.total_contracts_value ?? fin.total_contract_value ?? 0)} ${curr}`);
+      setTxt('chainSummaryContractsSub', `${contractsCount} عقود ومشاريع معتمدة`);
 
-      setTxt('chainSummaryGross', `${this.formatNumber(fin.gross_work_completed || 0)} ${curr}`);
+      setTxt('chainSummaryGross', `${this.formatNumber(fin.total_gross_billed ?? fin.gross_work_completed ?? 0)} ${curr}`);
       setTxt('chainSummaryGrossSub', `إجمالي الأعمال المنجزة`);
 
-      setTxt('chainSummaryInvoiced', `${this.formatNumber(fin.net_invoiced_claims || 0)} ${curr}`);
-      setTxt('chainSummaryInvoicedSub', `${fin.total_bills_count || 0} مستخلصات معتمدة`);
+      setTxt('chainSummaryInvoiced', `${this.formatNumber(fin.total_net_billed ?? fin.net_invoiced_claims ?? 0)} ${curr}`);
+      setTxt('chainSummaryInvoicedSub', `${billsCount} مستخلصات معتمدة`);
 
-      setTxt('chainSummaryCollected', `${this.formatNumber(fin.total_collections || 0)} ${curr}`);
-      setTxt('chainSummaryCollectedSub', `مقدم: ${this.formatNumber(fin.total_advance_received || 0)} + تحصيل: ${this.formatNumber(fin.total_bill_collections || 0)}`);
+      setTxt('chainSummaryCollected', `${this.formatNumber(fin.total_collected ?? fin.total_collections ?? 0)} ${curr}`);
+      setTxt('chainSummaryCollectedSub', `مقدم: ${this.formatNumber(fin.total_advance_received || 0)} + تحصيل: ${this.formatNumber((fin.total_collected || 0) - (fin.total_advance_received || 0))}`);
 
       setTxt('chainSummaryRetention', `${this.formatNumber(fin.active_retention_balance || 0)} ${curr}`);
-      setTxt('chainSummaryRetentionSub', `محسوم: ${this.formatNumber(fin.total_retention_held || 0)} | مفرج: ${this.formatNumber(fin.total_retention_released || 0)}`);
+      setTxt('chainSummaryRetentionSub', `محسوم: ${this.formatNumber(fin.total_retention_deductions ?? fin.total_retention_held ?? 0)} | مفرج: ${this.formatNumber(fin.total_retention_released || 0)}`);
 
       setTxt('chainSummaryDue', `${this.formatNumber(fin.outstanding_due_balance || 0)} ${curr}`);
       setTxt('chainSummaryDueSub', `تحديث لحظي بدون انحراف (Zero Drift)`);
 
       // أعداد التبويبات
-      setTxt('chainTabBillsCount', (chain.bills || []).length);
-      setTxt('chainTabReceiptsCount', (chain.payments || []).length);
+      setTxt('chainTabBillsCount', billsCount);
+      setTxt('chainTabReceiptsCount', paymentsCount);
 
       // 4. بناء الشجرة الهرمية
       this.renderChainHierarchyTree(chain);
 
       // 5. تعبئة تبويب المستخلصات
-      this.renderChainBillsTable(chain.bills || [], curr, client.id);
+      this.renderChainBillsTable(chain.bills || chain.chain?.bills || [], curr, client.id);
 
       // 6. تعبئة تبويب سندات القبض
-      this.renderChainReceiptsTable(chain.payments || [], curr);
+      this.renderChainReceiptsTable(chain.payments || chain.chain?.payments || [], curr);
 
       // 7. تعبئة تبويب محتجزات الضمان
       this.renderChainRetentionTable(chain, curr);
@@ -2163,18 +2168,22 @@ const App = {
     const container = document.getElementById('chainHierarchyTreeContainer');
     if (!container) return;
 
-    const contracts = chain.contracts || [];
-    const projects = chain.projects || [];
-    const bills = chain.bills || [];
-    const payments = chain.payments || [];
+    const rawContracts = chain.contracts || chain.chain?.contracts || [];
+    const allProjects = chain.projects || chain.chain?.projects || [];
+    const allBills = chain.bills || chain.chain?.bills || [];
+    const allPayments = chain.payments || chain.chain?.payments || [];
     const curr = chain.client?.currency || 'ر.ي';
+    const clientId = chain.client?.id || this.currentChainClientId;
 
-    if (contracts.length === 0 && projects.length === 0 && bills.length === 0) {
+    if (rawContracts.length === 0 && allProjects.length === 0 && allBills.length === 0) {
       container.innerHTML = `
         <div style="background: rgba(15,23,42,0.4); border: 1px dashed var(--border-color); border-radius: 8px; padding: 25px; text-align: center; color: var(--text-secondary);">
           <div style="font-size: 1.8rem; margin-bottom: 8px;">📂</div>
           <p>لا توجد عقود أو مشاريع مرتبطة بهذا العميل حتى الآن.</p>
-          <button class="btn btn-primary btn-sm" onclick="App.openNewClientBillFromChain()" style="margin-top: 8px;">+ إصدار أول مستخلص / ربط مشروع</button>
+          <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
+            <button class="btn btn-primary btn-sm" onclick="App.openNewProjectForClientFromChain()">+ إضافة مشروع جديد للعميل</button>
+            <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillFromChain()">+ إصدار مستخلص جديد</button>
+          </div>
         </div>
       `;
       return;
@@ -2182,147 +2191,179 @@ const App = {
 
     let html = '';
 
-    // عرض كل عقد وما يتبعه
-    contracts.forEach(contract => {
-      const cProjects = projects.filter(p => p.id === contract.project_id);
-      const cBills = bills.filter(b => b.contract_id === contract.id);
-      const cPayments = payments.filter(p => p.contract_id === contract.id);
+    // التحقق مما إذا كانت rawContracts عبارة عن مجموعات عقود ومشاريع (Grouped Contract Objects)
+    const isGrouped = rawContracts.length > 0 && ('contract' in rawContracts[0]);
 
-      html += `
-        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; margin-bottom: 10px;">
-          <!-- رأس العقد -->
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 1.3rem;">📜</span>
-              <div>
-                <strong style="font-size: 1rem; color: #38bdf8;">عقد: ${contract.contract_no || 'بدون رقم'}</strong>
-                <span style="font-size: 0.75rem; color: var(--text-secondary); margin-right: 8px;">تاريخ التوقيع: ${contract.signing_date || contract.created_at?.split('T')[0] || '-'}</span>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.85rem;">قيمة العقد: ${this.formatNumber(contract.contract_value || 0)} ${curr}</span>
-              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light);">دفعة مقدمة: ${contract.advance_payment_pct || 10}%</span>
-              <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">محتجز ضمان: ${contract.retention_pct || 10}%</span>
-            </div>
-          </div>
+    if (isGrouped) {
+      rawContracts.forEach(group => {
+        const contract = group.contract || {};
+        const isOfficial = contract.id && contract.id > 0;
+        const gProjects = group.projects || [];
+        const gSummary = group.summary || {};
 
-          <!-- المشاريع التابعة للعقد -->
-          <div style="margin-right: 18px; border-right: 2px solid rgba(56, 189, 248, 0.3); padding-right: 14px; margin-bottom: 12px;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: #a78bfa; margin-bottom: 8px;">🏗️ المشاريع التنفيذية المرتبطة:</div>
-            ${cProjects.length > 0 ? cProjects.map(p => `
-              <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+        html += `
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid ${isOfficial ? 'rgba(56, 189, 248, 0.3)' : 'rgba(167, 139, 250, 0.3)'}; border-radius: 10px; padding: 16px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+            <!-- ترويسة العقد أو تصنيف المشاريع -->
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.12); padding-bottom: 12px; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.4rem;">${isOfficial ? '📜' : '🏗️'}</span>
                 <div>
-                  <strong style="color: #fff; font-size: 0.85rem;">${p.name}</strong>
-                  <span style="font-size: 0.72rem; color: var(--text-secondary); margin-right: 8px;">الحالة: ${p.status || 'نشط'}</span>
+                  <div style="font-size: 1rem; font-weight: 700; color: ${isOfficial ? '#38bdf8' : '#a78bfa'};">
+                    ${isOfficial ? `عقد رسمي: ${contract.contract_no || ''} ${contract.title ? '- ' + contract.title : ''}` : 'مشاريع وأعمال مباشرة للعميل (أوامر تكليف)'}
+                  </div>
+                  <div style="font-size: 0.74rem; color: var(--text-secondary); margin-top: 2px;">
+                    ${isOfficial ? `تاريخ التوقيع: ${contract.signing_date || contract.created_at?.split('T')[0] || '-'} | الحالة: ${contract.status || 'ساري'}` : `${gProjects.length} مشاريع مرتبطة بحساب العميل مباشرة`}
+                  </div>
                 </div>
-                <div style="display: flex; gap: 8px;">
-                  <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${chain.client?.id}, ${contract.id}, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px;">
-                    + مستخلص للمشروع
-                  </button>
-                </div>
               </div>
-            `).join('') : '<div style="font-size: 0.75rem; color: var(--text-secondary);">لا توجد مشاريع مخصصة مباشرة لهذا العقد.</div>'}
-          </div>
-
-          <!-- المستخلصات التابعة للعقد -->
-          <div style="margin-right: 18px; border-right: 2px solid rgba(234, 179, 8, 0.3); padding-right: 14px; margin-bottom: 12px;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: #facc15; margin-bottom: 8px;">📑 المستخلصات والمطالبات المالية:</div>
-            ${cBills.length > 0 ? `
-              <div class="table-responsive" style="margin-bottom: 6px;">
-                <table class="custom-table" style="font-size: 0.78rem;">
-                  <thead>
-                    <tr>
-                      <th>رقم المستخلص</th>
-                      <th>إجمالي الأعمال</th>
-                      <th>استقطاع دفعة (${contract.advance_payment_pct || 10}%)</th>
-                      <th>محتجز ضمان (${contract.retention_pct || 10}%)</th>
-                      <th>صافي المطالبة</th>
-                      <th>المحصل</th>
-                      <th>المتبقي</th>
-                      <th>الحالة</th>
-                      <th style="text-align: center;">إجراء</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${cBills.map(b => {
-                      const net = Number(b.net_amount || b.amount || 0);
-                      const paid = Number(b.paid_amount || 0);
-                      const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : Math.max(0, net - paid));
-                      const isFullyPaid = (b.payment_status === 'paid' || rem <= 0);
-                      const statusColor = isFullyPaid ? 'var(--accent-green)' : (paid > 0 ? '#38bdf8' : 'var(--accent-red)');
-
-                      return `
-                        <tr>
-                          <td><strong>${b.bill_no}</strong></td>
-                          <td>${App.formatNumber(b.gross_amount || net)} ${curr}</td>
-                          <td style="color: #38bdf8;">-${App.formatNumber(b.advance_deduction || 0)}</td>
-                          <td style="color: #f59e0b;">-${App.formatNumber(b.retention_deduction || 0)}</td>
-                          <td style="font-weight: 700; color: var(--gold-light);">${App.formatNumber(net)} ${curr}</td>
-                          <td style="color: var(--accent-green);">${App.formatNumber(paid)}</td>
-                          <td style="font-weight: 700; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${App.formatNumber(rem)}</td>
-                          <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor};">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
-                          <td style="text-align: center;">
-                            ${!isFullyPaid ? `
-                              <button class="btn btn-primary btn-sm" onclick="App.quickCollectForBill(${b.id}, ${chain.client?.id}, ${b.project_id}, ${rem}, '${b.bill_no}')" style="padding: 2px 8px; font-size: 0.72rem;">
-                                قبض دفعة
-                              </button>
-                            ` : '<span style="color: var(--accent-green); font-size: 0.75rem;">✓ تم السداد</span>'}
-                          </td>
-                        </tr>
-                      `;
-                    }).join('')}
-                  </tbody>
-                </table>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.85rem; padding: 4px 10px;">
+                  قيمة العقد/الأعمال: ${this.formatNumber(contract.contract_value || gSummary.contract_value || 0)} ${curr}
+                </span>
+                ${isOfficial ? `
+                  <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); font-size: 0.8rem;">دفعة مقدمة: ${contract.advance_payment_pct || 10}%</span>
+                  <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-size: 0.8rem;">محتجز ضمان: ${contract.retention_pct || 10}%</span>
+                ` : ''}
               </div>
-            ` : '<div style="font-size: 0.75rem; color: var(--text-secondary);">لا توجد مستخلصات مسجلة على هذا العقد حتى الآن.</div>'}
-          </div>
-
-          <!-- التحصيلات والدفعات التابعة للعقد -->
-          <div style="margin-right: 18px; border-right: 2px solid rgba(16, 185, 129, 0.3); padding-right: 14px;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-green); margin-bottom: 8px;">💰 المقبوضات والتحصيلات المسجلة:</div>
-            ${cPayments.length > 0 ? `
-              <div style="display: flex; flex-direction: column; gap: 4px;">
-                ${cPayments.map(p => {
-                  let catBadge = '';
-                  if (p.receipt_category === 'advance_payment') {
-                    catBadge = '<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">دفعة مقدمة</span>';
-                  } else if (p.receipt_category === 'retention_release') {
-                    catBadge = '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">إفراج ضمان</span>';
-                  } else {
-                    catBadge = '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);">تحصيل مستخلص</span>';
-                  }
-
-                  return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 6px; padding: 6px 10px; font-size: 0.75rem;">
-                      <div style="display: flex; align-items: center; gap: 8px;">
-                        <strong>${p.receipt_no || ('RC-' + p.id)}</strong>
-                        ${catBadge}
-                        <span style="color: var(--text-secondary);">${p.date || '-'}</span>
-                        <span style="color: #94a3b8;">(${p.payment_method || 'نقدي'})</span>
-                      </div>
-                      <strong style="color: var(--accent-green); font-size: 0.85rem;">+${App.formatNumber(p.amount)} ${curr}</strong>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            ` : '<div style="font-size: 0.75rem; color: var(--text-secondary);">لا توجد سندات قبض مسجلة لهذا العقد بعد.</div>'}
-          </div>
-        </div>
-      `;
-    });
-
-    // مشاريع خارج العقود إن وجدت
-    const orphanedProjects = projects.filter(p => !contracts.some(c => c.project_id === p.id));
-    if (orphanedProjects.length > 0) {
-      html += `
-        <div style="background: rgba(15, 23, 42, 0.5); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; margin-top: 10px;">
-          <div style="font-weight: 700; color: #a78bfa; font-size: 0.82rem; margin-bottom: 6px;">مشاريع إضافية للعميل:</div>
-          ${orphanedProjects.map(p => `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-              <span>${p.name}</span>
-              <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${chain.client?.id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px;">+ مستخلص</button>
             </div>
-          `).join('')}
+
+            <!-- قائمة المشاريع التابعة -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              ${gProjects.map(pWrap => {
+                const p = pWrap.project || pWrap;
+                const pBills = pWrap.bills || [];
+                const fin = pWrap.financials || {};
+
+                return `
+                  <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px;">
+                    <!-- رأس بطاقة المشروع -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.1rem; color: #a78bfa;">🏗️</span>
+                        <strong style="color: #fff; font-size: 0.95rem;">${p.name}</strong>
+                        <span class="badge" style="background: rgba(255,255,255,0.06); color: #94a3b8; font-size: 0.72rem;">${p.code || ('PRJ-' + p.id)}</span>
+                        <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green); font-size: 0.72rem;">${p.status || 'نشط'}</span>
+                      </div>
+                      <div style="display: flex; gap: 6px;">
+                        <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${clientId}, ${isOfficial ? contract.id : 'null'}, ${p.id})" style="font-size: 0.72rem; padding: 3px 8px;">
+                          + مستخلص للمشروع
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="Accounting.openNewReceiptModal({ client_id: ${clientId}, project_id: ${p.id}, contract_id: ${isOfficial ? contract.id : 'null'} })" style="font-size: 0.72rem; padding: 3px 8px; background: var(--accent-green); border-color: var(--accent-green);">
+                          💵 قبض دفعة
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- شبكة المؤشرات المالية المصغرة للمشروع -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin-bottom: 10px; font-size: 0.72rem; text-align: center;">
+                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-secondary);">قيمة المشروع:</span>
+                        <div style="font-weight: 700; color: #38bdf8;">${this.formatNumber(fin.contract_value || p.contract_value || 0)}</div>
+                      </div>
+                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-secondary);">المنجز (Gross):</span>
+                        <div style="font-weight: 700; color: #fff;">${this.formatNumber(fin.gross_billed || 0)}</div>
+                      </div>
+                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-secondary);">صافي المطالبات:</span>
+                        <div style="font-weight: 700; color: var(--gold-light);">${this.formatNumber(fin.net_billed || 0)}</div>
+                      </div>
+                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-secondary);">المحصل:</span>
+                        <div style="font-weight: 700; color: var(--accent-green);">${this.formatNumber(fin.total_collected || 0)}</div>
+                      </div>
+                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-secondary);">محتجز الضمان:</span>
+                        <div style="font-weight: 700; color: #f59e0b;">${this.formatNumber(fin.active_retention || 0)}</div>
+                      </div>
+                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                        <span style="color: var(--accent-red); font-weight: 700;">المتبقي المستحق:</span>
+                        <div style="font-weight: 800; color: var(--accent-red);">${this.formatNumber(fin.outstanding_due || 0)}</div>
+                      </div>
+                    </div>
+
+                    <!-- مستخلصات المشروع -->
+                    ${pBills.length > 0 ? `
+                      <div style="margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 8px;">
+                        <div style="font-size: 0.75rem; font-weight: 700; color: #facc15; margin-bottom: 6px;">📑 المستخلصات المعتمدة للمشروع (${pBills.length}):</div>
+                        <div class="table-responsive">
+                          <table class="custom-table" style="font-size: 0.74rem;">
+                            <thead>
+                              <tr>
+                                <th>رقم المستخلص</th>
+                                <th>التاريخ</th>
+                                <th>إجمالي الأعمال</th>
+                                <th>استقطاع مقدم</th>
+                                <th>محتجز ضمان</th>
+                                <th>الصافي</th>
+                                <th>المحصل</th>
+                                <th>المتبقي</th>
+                                <th>الحالة</th>
+                                <th style="text-align: center;">إجراء</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              ${pBills.map(b => {
+                                const net = Number(b.net_amount || b.amount || 0);
+                                const paid = Number(b.paid_amount || 0);
+                                const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : Math.max(0, net - paid));
+                                const isFullyPaid = (b.payment_status === 'paid' || rem <= 0);
+                                const statusColor = isFullyPaid ? 'var(--accent-green)' : (paid > 0 ? '#38bdf8' : 'var(--accent-red)');
+
+                                return `
+                                  <tr>
+                                    <td><strong>${b.bill_no}</strong></td>
+                                    <td>${b.date || '-'}</td>
+                                    <td>${this.formatNumber(b.gross_amount || net)} ${curr}</td>
+                                    <td style="color: #38bdf8;">-${this.formatNumber(b.advance_deduction || 0)}</td>
+                                    <td style="color: #f59e0b;">-${this.formatNumber(b.retention_deduction || 0)}</td>
+                                    <td style="font-weight: 700; color: var(--gold-light);">${this.formatNumber(net)} ${curr}</td>
+                                    <td style="color: var(--accent-green);">${this.formatNumber(paid)}</td>
+                                    <td style="font-weight: 700; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${this.formatNumber(rem)}</td>
+                                    <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor}; font-size: 0.7rem;">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
+                                    <td style="text-align: center;">
+                                      ${!isFullyPaid ? `
+                                        <button class="btn btn-primary btn-sm" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${p.id}, ${rem}, '${b.bill_no}')" style="padding: 2px 7px; font-size: 0.7rem; background: var(--accent-green); border-color: var(--accent-green);">
+                                          قبض دفعة
+                                        </button>
+                                      ` : '<span style="color: var(--accent-green); font-size: 0.72rem;">✓ تم السداد</span>'}
+                                    </td>
+                                  </tr>
+                                `;
+                              }).join('')}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ` : '<div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 4px;">لا توجد مستخلصات مسجلة لهذا المشروع بعد.</div>'}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      });
+    } else {
+      // تنسيق مباشر من مصفوفة المشاريع والعقود المسطحة
+      html = `
+        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 1rem; font-weight: 700; color: #a78bfa; margin-bottom: 12px;">🏗️ المشاريع المرتبطة بالعميل (${allProjects.length}):</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            ${allProjects.map(p => `
+              <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <strong style="color: #fff; font-size: 0.95rem;">${p.name}</strong>
+                  <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                    رمز: ${p.code || ('PRJ-' + p.id)} | قيمة العقد: ${this.formatNumber(p.contract_value || 0)} ${curr} | الحالة: ${p.status || 'نشط'}
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                  <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${clientId}, null, ${p.id})" style="font-size: 0.72rem; padding: 3px 8px;">+ مستخلص</button>
+                  <button class="btn btn-primary btn-sm" onclick="Accounting.openNewReceiptModal({ client_id: ${clientId}, project_id: ${p.id} })" style="font-size: 0.72rem; padding: 3px 8px; background: var(--accent-green); border-color: var(--accent-green);">💵 قبض دفعة</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
         </div>
       `;
     }
@@ -2487,77 +2528,57 @@ const App = {
     this.openNewClientBillModal(this.currentChainClientId);
   },
 
-  openReceiptForClientFromChain() {
+  async openReceiptForClientFromChain() {
     if (!this.currentChainClientId) return;
+    const clientId = this.currentChainClientId;
+    const client = this.currentChainData?.client;
     this.closeModal('clientChainModal');
-    if (typeof Accounting !== 'undefined' && Accounting.openReceiptModal) {
-      Accounting.openReceiptModal();
-      setTimeout(() => {
-        const clientInput = document.getElementById('modalRcClientInput');
-        const clientHidden = document.getElementById('modalRcClientSelect');
-        if (clientInput && this.currentChainData?.client) {
-          clientInput.value = this.currentChainData.client.name;
-          if (clientHidden) clientHidden.value = this.currentChainClientId;
-          Accounting.onClientInputChange(this.currentChainData.client.name);
+    if (typeof Accounting !== 'undefined') {
+      const openFn = Accounting.openNewReceiptModal || Accounting.openReceiptModal;
+      if (openFn) {
+        await openFn.call(Accounting, {
+          client_id: clientId,
+          client_name: client?.name,
+          category: 'bill_collection'
+        });
+      }
+    }
+  },
+
+  async openClientStatementFromChain() {
+    if (!this.currentChainClientId) return;
+    const clientId = this.currentChainClientId;
+    this.closeModal('clientChainModal');
+    if (typeof Reports !== 'undefined' && Reports.showClientStatement) {
+      await Reports.showClientStatement(clientId);
+    } else {
+      await this.navigate('reports');
+      if (typeof Reports !== 'undefined') {
+        Reports.switchReportTab('client-statement');
+        if (Reports.initClientStatementDropdown) {
+          await Reports.initClientStatementDropdown(clientId);
         }
-      }, 200);
+        await Reports.fetchFullClientStatement(clientId);
+      }
     }
   },
 
-  openClientStatementFromChain() {
-    if (!this.currentChainClientId) return;
+  async quickCollectForBill(billId, clientId, projectId, remainingAmount, billNo) {
     this.closeModal('clientChainModal');
-    this.navigate('reports');
-    if (typeof Reports !== 'undefined') {
-      Reports.switchReportTab('client-statement');
-      const select = document.getElementById('repClientSelect');
-      if (select) select.value = this.currentChainClientId;
-      Reports.fetchFullClientStatement();
-    }
-  },
-
-  quickCollectForBill(billId, clientId, projectId, remainingAmount, billNo) {
-    this.closeModal('clientChainModal');
-    if (typeof Accounting !== 'undefined' && Accounting.openReceiptModal) {
-      Accounting.openReceiptModal();
-      setTimeout(async () => {
-        // تعبئة العميل
+    if (typeof Accounting !== 'undefined') {
+      const openFn = Accounting.openNewReceiptModal || Accounting.openReceiptModal;
+      if (openFn) {
         const client = (this.clientsFullList || []).find(c => c.id == clientId) || this.currentChainData?.client;
-        if (client) {
-          const clientInput = document.getElementById('modalRcClientInput');
-          const clientHidden = document.getElementById('modalRcClientSelect');
-          if (clientInput) clientInput.value = client.name;
-          if (clientHidden) clientHidden.value = client.id;
-          await Accounting.onClientInputChange(client.name);
-        }
-
-        // اختيار المشروع
-        const prjSelect = document.getElementById('modalRcProjectSelect');
-        if (prjSelect && projectId) {
-          prjSelect.value = projectId;
-        }
-
-        // اختيار المستخلص وفئة التحصيل والمبلغ المتبقي
-        const catSelect = document.getElementById('modalRcCategory');
-        if (catSelect) catSelect.value = 'bill_collection';
-
-        const billSelect = document.getElementById('modalRcBillSelect');
-        if (billSelect) {
-          billSelect.value = billId;
-          Accounting.onReceiptBillChange(billId);
-        }
-
-        const amtInput = document.getElementById('modalRcAmount');
-        if (amtInput && remainingAmount > 0) {
-          amtInput.value = remainingAmount;
-          Accounting.calcReceiptLocalAmount();
-        }
-
-        const notes = document.getElementById('modalRcNotes');
-        if (notes) {
-          notes.value = `تحصيل دفعة من مستخلص أعمال رقم ${billNo || billId}`;
-        }
-      }, 300);
+        await openFn.call(Accounting, {
+          client_id: clientId,
+          client_name: client?.name,
+          project_id: projectId,
+          category: 'bill_collection',
+          bill_id: billId,
+          amount: (remainingAmount > 0 ? remainingAmount : null),
+          notes: `تحصيل دفعة من مستخلص أعمال رقم ${billNo || billId}`
+        });
+      }
     }
   },
 
@@ -2633,13 +2654,89 @@ const App = {
   },
 
   async onBillProjectChange(projectId) {
-    if (!projectId) return;
+    if (!projectId) {
+      this.currentBillProjectMetrics = null;
+      return;
+    }
     // مطابقة العقد تلقائياً إذا كان للمشروع عقد
     const matchedContract = (this.billModalContracts || []).find(c => c.project_id == projectId);
     const cSelect = document.getElementById('modalBillContractSelect');
     if (cSelect && matchedContract) {
       cSelect.value = matchedContract.id;
       this.onBillContractChange(matchedContract.id);
+    }
+
+    // جلب مقاييس المشروع وحاسبة الإنجاز التفاعلية
+    try {
+      const res = await fetch(`/api/projects/${projectId}/control-metrics`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.currentBillProjectMetrics = json.data;
+        const financials = json.data.financials || {};
+        const p = json.data.project || {};
+        const contractVal = Number(financials.contract_value) || Number(p.contract_value) || 0;
+        const curr = p.currency || 'ر.ي';
+        const prevProg = Number(p.progress_percentage) || 0;
+        const totalGrossBilled = Number(financials.total_gross_billed) || 0;
+
+        const valBadge = document.getElementById('modalBillContractValBadge');
+        if (valBadge) valBadge.innerText = `قيمة العقد: ${this.formatNumber(contractVal)} ${curr}`;
+
+        const prevProgEl = document.getElementById('modalBillPrevProgressPct');
+        if (prevProgEl) prevProgEl.innerText = `${prevProg}%`;
+
+        const prevBilledEl = document.getElementById('modalBillPrevBilledAmt');
+        if (prevBilledEl) prevBilledEl.innerText = `(إجمالي سابق: ${this.formatNumber(totalGrossBilled)})`;
+
+        const slider = document.getElementById('modalBillProgressSlider');
+        const input = document.getElementById('modalBillProgressInput');
+        const targetLabel = document.getElementById('modalBillTargetProgressLabel');
+        if (slider) slider.value = prevProg;
+        if (input) input.value = prevProg;
+        if (targetLabel) targetLabel.innerText = `${prevProg}%`;
+
+        const calcWorkEl = document.getElementById('modalBillCalculatedWorkAmt');
+        if (calcWorkEl) calcWorkEl.innerText = '0';
+      }
+    } catch (err) {
+      console.warn('Error fetching project control metrics for bill:', err);
+    }
+  },
+
+  onBillProgressSliderChange(val) {
+    const input = document.getElementById('modalBillProgressInput');
+    if (input) input.value = val;
+    this.updateBillFromProgress(parseFloat(val) || 0);
+  },
+
+  onBillProgressInputChange(val) {
+    const slider = document.getElementById('modalBillProgressSlider');
+    if (slider) slider.value = val;
+    this.updateBillFromProgress(parseFloat(val) || 0);
+  },
+
+  updateBillFromProgress(newProg) {
+    const targetLabel = document.getElementById('modalBillTargetProgressLabel');
+    if (targetLabel) targetLabel.innerText = `${newProg}%`;
+
+    const metrics = this.currentBillProjectMetrics;
+    const contractVal = metrics ? (Number(metrics.financials?.contract_value) || Number(metrics.project?.contract_value) || 0) : 0;
+    const prevGrossBilled = metrics ? (Number(metrics.financials?.total_gross_billed) || 0) : 0;
+
+    let workAmount = 0;
+    if (contractVal > 0) {
+      // احتساب القيمة المكتسبة التراكمية وطرح المفوتر سابقاً للحصول على أعمال الفترة
+      const cumulativeValue = Math.round((contractVal * (newProg / 100)) * 100) / 100;
+      workAmount = Math.max(0, Math.round(cumulativeValue - prevGrossBilled));
+    }
+
+    const calcWorkEl = document.getElementById('modalBillCalculatedWorkAmt');
+    if (calcWorkEl) calcWorkEl.innerText = `${this.formatNumber(workAmount)}`;
+
+    const grossInput = document.getElementById('modalBillGrossAmount');
+    if (grossInput && workAmount > 0) {
+      grossInput.value = workAmount;
+      this.calcNewBillValues();
     }
   },
 
@@ -2696,6 +2793,9 @@ const App = {
     const net = Number(document.getElementById('modalBillNetAmount')?.value) || (gross - advDed - retDed - otherDed);
     const notes = document.getElementById('modalBillNotes')?.value;
 
+    const autoProgress = document.getElementById('modalBillAutoUpdateProjectProgress')?.checked;
+    const progressPct = parseFloat(document.getElementById('modalBillProgressInput')?.value) || 0;
+
     if (!clientId || !projectId || gross <= 0) {
       this.showToast('يرجى اختيار العميل والمشروع وإدخال إجمالي الأعمال', 'warning');
       return;
@@ -2719,15 +2819,21 @@ const App = {
           amount: gross,
           date,
           status: 'معتمد',
-          notes
+          notes,
+          progress_percentage: autoProgress ? progressPct : undefined
         })
       });
 
       const json = await res.json();
       if (json.success) {
-        this.showToast(`تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل آلياً 📑`, 'success');
+        this.showToast(`تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل ونسبة الإنجاز آلياً 📑`, 'success');
         this.closeModal('newClientBillModal');
         this.loadClientsTable();
+
+        // تحديث جدول المشاريع فورياً
+        if (typeof Projects !== 'undefined' && Projects.loadProjects) {
+          Projects.loadProjects();
+        }
 
         // إذا كانت نافذة السلسلة مفتوحة، نقوم بتحديثها فوراً
         if (this.currentChainClientId == clientId) {

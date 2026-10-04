@@ -436,7 +436,17 @@ class ClientChainService {
         claims_count: rawClaims.length,
         payments_count: rawPayments.length
       },
+      contracts: contractsList,
+      raw_contracts: rawContracts,
+      projects: rawProjects,
+      bills: rawBills,
+      payments: rawPayments,
+      claims: rawClaims,
       financial_summary: {
+        total_contracts_count: rawContracts.length,
+        total_projects_count: rawProjects.length,
+        total_bills_count: rawBills.length,
+        total_payments_count: rawPayments.length,
         total_contracts_value: totalContractsValue,
         total_gross_billed: totalGrossBilled,
         total_advance_deductions: totalAdvanceDeductions,

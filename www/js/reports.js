@@ -403,17 +403,67 @@ const Reports = {
   },
 
   // 4. كشف حساب عميل مفصل
-  initClientStatementDropdown() {
+  async initClientStatementDropdown(selectedId = null) {
     const select = document.getElementById('repClientSelect');
-    if (select && Accounting.clients.length > 0) {
+    if (!select) return;
+
+    let clients = (typeof Accounting !== 'undefined' && Accounting.clients && Accounting.clients.length > 0)
+      ? Accounting.clients
+      : (typeof App !== 'undefined' && App.clientsFullList && App.clientsFullList.length > 0)
+        ? App.clientsFullList
+        : [];
+
+    if (clients.length === 0) {
+      try {
+        const res = await fetch('/api/clients');
+        const json = await res.json();
+        if (json.success && json.data) {
+          clients = json.data;
+          if (typeof Accounting !== 'undefined') Accounting.clients = clients;
+        }
+      } catch (e) {
+        console.error('Error fetching clients for statement dropdown:', e);
+      }
+    }
+
+    if (clients.length > 0) {
       select.innerHTML = `<option value="">اختر العميل...</option>` +
-        Accounting.clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        clients.map(c => `<option value="${c.id}">${c.name}${c.company ? ' (' + c.company + ')' : ''}</option>`).join('');
+    }
+
+    if (selectedId) {
+      select.value = selectedId;
     }
   },
 
-  async fetchFullClientStatement() {
-    const clientId = document.getElementById('repClientSelect')?.value;
+  // فتح كشف حساب العميل مباشرة من أي شاشة أو من نافذة السلسلة المالية
+  async showClientStatement(clientId) {
     if (!clientId) return;
+    if (typeof App !== 'undefined' && App.navigate) {
+      await App.navigate('reports');
+    }
+    this.switchReportTab('client-statement');
+    await this.initClientStatementDropdown(clientId);
+    const select = document.getElementById('repClientSelect');
+    if (select) {
+      select.value = clientId;
+    }
+    await this.fetchFullClientStatement(clientId);
+    // التمرير السلس إلى بطاقة كشف الحساب
+    const pane = document.getElementById('pane_client-statement');
+    if (pane) {
+      pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  },
+
+  async fetchFullClientStatement(explicitClientId = null) {
+    const clientId = explicitClientId || document.getElementById('repClientSelect')?.value;
+    if (!clientId) return;
+
+    const select = document.getElementById('repClientSelect');
+    if (select && String(select.value) !== String(clientId)) {
+      select.value = clientId;
+    }
 
     try {
       const res = await fetch(`/api/reports/client-statement/${clientId}`);

@@ -146,6 +146,20 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
 
       const billId = result.lastInsertRowid || result.insertId;
 
+      // تحديث نسبة إنجاز المشروع تلقائياً وتوثيقها في السجل التاريخي مع صدور المستخلص
+      if (req.body.progress_percentage !== undefined && req.body.progress_percentage !== null && project_id) {
+        const newProg = Math.min(100, Math.max(0, parseFloat(req.body.progress_percentage) || 0));
+        const oldP = await tx.get('SELECT progress_percentage FROM projects WHERE id = ?', [project_id]);
+        const oldProg = oldP ? (Number(oldP.progress_percentage) || 0) : 0;
+        if (newProg !== oldProg && newProg > 0) {
+          await tx.run('UPDATE projects SET progress_percentage = ? WHERE id = ?', [newProg, project_id]);
+          await tx.run(`
+            INSERT INTO project_progress_history (project_id, previous_percentage, new_percentage, notes, recorded_by, date)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [project_id, oldProg, newProg, `تحديث نسبة الإنجاز تلقائياً مع إصدار ${bill_type} رقم ${bill_no}`, creatorName, date]);
+        }
+      }
+
       // التأثير المحاسبي وتحديث رصيد العميل الذري التلقائي
       if (isPosted) {
         if (finalClientId) {

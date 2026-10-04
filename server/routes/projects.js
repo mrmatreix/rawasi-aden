@@ -231,4 +231,193 @@ router.delete('/:id', requirePermission('projects:cancel', { projectParam: 'id' 
   }
 });
 
+// تحديث نسبة إنجاز المشروع مع توثيق السجل وحساب القيمة المكتسبة (Earned Value)
+router.post('/:id/progress', requirePermission('projects:edit', { projectParam: 'id' }), async (req, res) => {
+  try {
+    const { progress_percentage, notes = '', date = new Date().toISOString().split('T')[0] } = req.body;
+    const projectId = req.params.id;
+
+    if (progress_percentage === undefined || progress_percentage === null) {
+      return res.status(400).json({ success: false, message: 'نسبة الإنجاز مطلوبة' });
+    }
+
+    const newProg = Math.min(100, Math.max(0, parseFloat(progress_percentage) || 0));
+    const project = await get('SELECT * FROM projects WHERE id = ?', [projectId]);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
+    }
+
+    const oldProg = Number(project.progress_percentage) || 0;
+    const recordedBy = req.user?.username || req.user?.full_name || 'مهندس المشروع';
+
+    // تحديث النسبة في جدول المشاريع وحالة الإنجاز
+    const newStatus = newProg >= 100 ? 'completed' : (project.status === 'under_study' ? 'active' : project.status);
+    await run(`
+      UPDATE projects 
+      SET progress_percentage = ?, status = ?
+      WHERE id = ?
+    `, [newProg, newStatus, projectId]);
+
+    // توثيق الحركة في سجل التتبع
+    await run(`
+      INSERT INTO project_progress_history (project_id, previous_percentage, new_percentage, notes, recorded_by, date)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [projectId, oldProg, newProg, notes || `تحديث نسبة الإنجاز من ${oldProg}% إلى ${newProg}%`, recordedBy, date]);
+
+    // حساب مقاييس القيمة المكتسبة والسلامة المالية
+    const contractValue = Number(project.contract_value) || 0;
+    const earnedValue = Math.round((contractValue * (newProg / 100)) * 100) / 100;
+    const actualCost = Number(project.actual_cost) || 0;
+    const costVariance = earnedValue - actualCost;
+
+    res.json({
+      success: true,
+      message: `تم تحديث نسبة إنجاز المشروع إلى ${newProg}% بنجاح`,
+      data: {
+        projectId,
+        previous_percentage: oldProg,
+        new_percentage: newProg,
+        earned_value: earnedValue,
+        actual_cost: actualCost,
+        cost_variance: costVariance,
+        status: newStatus
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء تحديث نسبة الإنجاز: ' + err.message });
+  }
+});
+
+// إضافة أمر تغييري (Variation Order) وتحديث قيمة العقد والسلسلة المالية
+router.post('/:id/variation-order', requirePermission('projects:edit', { projectParam: 'id' }), async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const {
+      title,
+      type = 'addition', // addition | reduction | scope_change
+      amount = 0,
+      time_extension_days = 0,
+      reason = '',
+      date = new Date().toISOString().split('T')[0]
+    } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ success: false, message: 'عنوان الأمر التغييري مطلوب' });
+    }
+
+    const project = await get('SELECT * FROM projects WHERE id = ?', [projectId]);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
+    }
+
+    const voAmount = parseFloat(amount) || 0;
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_variations WHERE project_id = ?', [projectId]);
+    const voNo = `VO-${project.code || ('PRJ-' + projectId)}-${String((countRes?.cnt || 0) + 1).padStart(2, '0')}`;
+    const approvedBy = req.user?.username || req.user?.full_name || 'إدارة المشاريع';
+
+    // العقد المرتبط
+    const contract = await get("SELECT * FROM project_contracts WHERE project_id = ? ORDER BY id DESC LIMIT 1", [projectId]);
+    const contractId = contract ? contract.id : null;
+
+    await run(`
+      INSERT INTO project_variations (
+        project_id, contract_id, vo_no, title, type, amount, time_extension_days, reason, approved_by, status, date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?)
+    `, [projectId, contractId, voNo, title, type, voAmount, Number(time_extension_days) || 0, reason, approvedBy, date]);
+
+    // احتساب وتعديل قيمة العقد الجديدة للمشروع
+    const oldContractValue = Number(project.contract_value) || 0;
+    const diff = (type === 'reduction') ? -Math.abs(voAmount) : Math.abs(voAmount);
+    const newContractValue = Math.max(0, Math.round((oldContractValue + diff) * 100) / 100);
+
+    await run('UPDATE projects SET contract_value = ? WHERE id = ?', [newContractValue, projectId]);
+    if (contractId) {
+      await run('UPDATE project_contracts SET contract_value = ? WHERE id = ?', [newContractValue, contractId]);
+    }
+
+    // مزامنة الأثر المالي في حساب العميل
+    if (project.client_id) {
+      await clientChainService.syncClientBalances(project.client_id);
+    }
+
+    res.json({
+      success: true,
+      message: `تم اعتماد وتوثيق الأمر التغييري (${voNo}) وتحديث قيمة العقد إلى ${newContractValue.toLocaleString()} بنجاح`,
+      data: {
+        vo_no: voNo,
+        previous_contract_value: oldContractValue,
+        new_contract_value: newContractValue,
+        diff
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء تسجيل الأمر التغييري: ' + err.message });
+  }
+});
+
+// استدعاء مقاييس التحكم المالي وسجل الأوامر التغييرية وتاريخ الإنجاز
+router.get('/:id/control-metrics', requirePermission('projects:view', { projectParam: 'id' }), async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const project = await get(`
+      SELECT p.*, c.name as client_name 
+      FROM projects p 
+      LEFT JOIN clients c ON p.client_id = c.id 
+      WHERE p.id = ?
+    `, [projectId]);
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
+    }
+
+    const variations = await query('SELECT * FROM project_variations WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const history = await query('SELECT * FROM project_progress_history WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const bills = await query("SELECT * FROM bills WHERE project_id = ? AND status NOT IN ('reversed', 'cancelled') ORDER BY date DESC", [projectId]);
+    const payments = await query("SELECT * FROM payments WHERE project_id = ? AND type = 'قبض' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL) ORDER BY date DESC", [projectId]);
+
+    const contractValue = Number(project.contract_value) || 0;
+    const progress = Number(project.progress_percentage) || 0;
+    const earnedValue = Math.round((contractValue * (progress / 100)) * 100) / 100;
+    const actualCost = Number(project.actual_cost) || 0;
+    const estimatedCost = Number(project.estimated_cost) || 0;
+
+    const totalGrossBilled = bills.reduce((s, b) => s + (Number(b.gross_amount) || Number(b.amount) || 0), 0);
+    const totalNetBilled = bills.reduce((s, b) => s + (Number(b.net_amount) || Number(b.amount) || 0), 0);
+    const totalCollected = payments.reduce((s, p) => s + (Number(p.local_amount) || Number(p.amount) || 0), 0);
+    const activeRetention = bills.reduce((s, b) => s + (Number(b.retention_deduction) || 0), 0) -
+      payments.filter(p => p.receipt_category === 'retention_release').reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+    const costVariance = earnedValue - actualCost; // موجب = وفر، سالب = تجاوز
+    const cpi = actualCost > 0 ? (earnedValue / actualCost) : 1.0;
+
+    res.json({
+      success: true,
+      data: {
+        project,
+        financials: {
+          contract_value: contractValue,
+          progress_percentage: progress,
+          earned_value: earnedValue,
+          estimated_cost: estimatedCost,
+          actual_cost: actualCost,
+          cost_variance: costVariance,
+          cpi: Math.round(cpi * 100) / 100,
+          is_over_budget: (actualCost > earnedValue && actualCost > 0),
+          total_gross_billed: totalGrossBilled,
+          total_net_billed: totalNetBilled,
+          total_collected: totalCollected,
+          active_retention: Math.max(0, activeRetention),
+          outstanding_due: Math.max(0, Math.round((totalNetBilled - totalCollected) * 100) / 100)
+        },
+        variations,
+        progress_history: history,
+        bills_count: bills.length,
+        payments_count: payments.length
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب مقاييس المشروع: ' + err.message });
+  }
+});
+
 module.exports = router;

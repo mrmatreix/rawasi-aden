@@ -121,15 +121,151 @@ const Accounting = {
     el.innerHTML = defaultOption + items.map(item => `<option value="${item.id}">${formatFn(item)}</option>`).join('');
   },
 
-  onClientInputChange(val) {
+  async onClientInputChange(val) {
+    const hid = document.getElementById('modalRcClientSelect');
     if (!val) {
-      const hid = document.getElementById('modalRcClientSelect');
       if (hid) hid.value = '';
+      this.populateReceiptContractsAndBills([]);
       return;
     }
     const match = (this.clients || []).find(c => c.name === val || String(c.id) === val);
-    const hid = document.getElementById('modalRcClientSelect');
-    if (hid) hid.value = match ? match.id : '';
+    const clientId = match ? match.id : null;
+    if (hid) hid.value = clientId || '';
+
+    if (clientId) {
+      await this.loadClientHierarchyForReceipt(clientId);
+    } else {
+      this.populateReceiptContractsAndBills([]);
+    }
+  },
+
+  async loadClientHierarchyForReceipt(clientId) {
+    try {
+      const [contractsRes, billsRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}/contracts`),
+        fetch(`/api/billing?client_id=${clientId}`)
+      ]);
+      const contractsJson = await contractsRes.json();
+      const billsJson = await billsRes.json();
+
+      this.receiptClientContracts = contractsJson.data || [];
+      // تصفية المستخلصات المستحقة (غير المسددة بالكامل)
+      const allBills = billsJson.data || [];
+      this.receiptClientBills = allBills.filter(b => {
+        const net = Number(b.net_amount || b.amount || 0);
+        const paid = Number(b.paid_amount || 0);
+        const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : (net - paid));
+        return b.status !== 'ملغي' && (b.payment_status !== 'paid' || rem > 0);
+      });
+
+      this.populateReceiptContractsAndBills(this.receiptClientContracts, this.receiptClientBills);
+    } catch (err) {
+      console.error('Error loading client hierarchy for receipt:', err);
+    }
+  },
+
+  populateReceiptContractsAndBills(contracts = [], bills = []) {
+    const cSelect = document.getElementById('modalRcContractSelect');
+    if (cSelect) {
+      cSelect.innerHTML = '<option value="">بدون عقد محدد...</option>' + 
+        contracts.map(c => `<option value="${c.id}">عقد ${c.contract_no || c.id} (قيمة: ${App.formatNumber(c.contract_value)})</option>`).join('');
+    }
+
+    const bSelect = document.getElementById('modalRcBillSelect');
+    const hint = document.getElementById('modalRcBillRemainingHint');
+    if (bSelect) {
+      if (bills.length === 0) {
+        bSelect.innerHTML = '<option value="">لا توجد مستخلصات غير مسددة لهذا العميل</option>';
+        if (hint) hint.style.display = 'none';
+      } else {
+        bSelect.innerHTML = '<option value="">اختر المستخلص لسداده وتحديث رصيد العميل آلياً...</option>' +
+          bills.map(b => {
+            const net = Number(b.net_amount || b.amount || 0);
+            const paid = Number(b.paid_amount || 0);
+            const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : Math.max(0, net - paid));
+            return `<option value="${b.id}" data-project="${b.project_id || ''}" data-contract="${b.contract_id || ''}" data-rem="${rem}" data-billno="${b.bill_no}">مستخلص ${b.bill_no} - متبقي: ${App.formatNumber(rem)} ر.ي (${b.project_name || 'مشروع'})</option>`;
+          }).join('');
+        if (hint) {
+          hint.innerText = `💡 يوجد ${bills.length} مستخلصات مستحقة للتحصيل على هذا العميل`;
+          hint.style.display = 'block';
+        }
+      }
+    }
+  },
+
+  onReceiptCategoryChange(category) {
+    const billRow = document.getElementById('modalRcBillRow');
+    const notes = document.getElementById('modalRcNotes');
+    if (category === 'advance_payment') {
+      if (billRow) billRow.style.display = 'none';
+      if (notes && !notes.value) notes.value = 'دفعة مقدمة على العقد المتفق عليه';
+    } else if (category === 'retention_release') {
+      if (billRow) billRow.style.display = 'none';
+      if (notes && !notes.value) notes.value = 'إفراج عن محتجز ضمان أعمال';
+    } else {
+      if (billRow) billRow.style.display = 'block';
+    }
+  },
+
+  onReceiptProjectChange(projectId) {
+    if (!projectId) return;
+    // تصفية المستخلصات التابعة للمشروع المختار
+    if (this.receiptClientBills && this.receiptClientBills.length > 0) {
+      const filteredBills = this.receiptClientBills.filter(b => b.project_id == projectId);
+      if (filteredBills.length > 0) {
+        this.populateReceiptContractsAndBills(this.receiptClientContracts || [], filteredBills);
+      }
+    }
+  },
+
+  onReceiptContractChange(contractId) {
+    if (!contractId) return;
+    const contract = (this.receiptClientContracts || []).find(c => c.id == contractId);
+    if (contract && contract.project_id) {
+      const prjSelect = document.getElementById('modalRcProjectSelect');
+      if (prjSelect) prjSelect.value = contract.project_id;
+    }
+  },
+
+  onReceiptBillChange(billId) {
+    if (!billId) return;
+    const bill = (this.receiptClientBills || []).find(b => b.id == billId);
+    if (!bill) return;
+
+    // ضبط المشروع المرتبط تلقائياً
+    if (bill.project_id) {
+      const prjSelect = document.getElementById('modalRcProjectSelect');
+      if (prjSelect) prjSelect.value = bill.project_id;
+    }
+
+    // ضبط العقد المرتبط تلقائياً
+    if (bill.contract_id) {
+      const cSelect = document.getElementById('modalRcContractSelect');
+      if (cSelect) cSelect.value = bill.contract_id;
+    }
+
+    // اقتراح المبلغ المتبقي من المستخلص
+    const net = Number(bill.net_amount || bill.amount || 0);
+    const paid = Number(bill.paid_amount || 0);
+    const rem = Number(bill.remaining_amount !== undefined ? bill.remaining_amount : Math.max(0, net - paid));
+
+    const amtInput = document.getElementById('modalRcAmount');
+    if (amtInput && (!amtInput.value || Number(amtInput.value) <= 0)) {
+      amtInput.value = rem;
+      this.calcReceiptLocalAmount();
+    }
+
+    // كتابة البيان التلقائي
+    const notes = document.getElementById('modalRcNotes');
+    if (notes && (!notes.value || notes.value.startsWith('سداد مستخلص'))) {
+      notes.value = `سداد مستخلص أعمال رقم ${bill.bill_no} لمشروع ${bill.project_name || ''}`;
+    }
+
+    const hint = document.getElementById('modalRcBillRemainingHint');
+    if (hint) {
+      hint.innerHTML = `<span style="color: var(--gold-light); font-weight: bold;">المتبقي من هذا المستخلص: ${App.formatNumber(rem)} ر.ي</span> (إجمالي المستخلص: ${App.formatNumber(net)} ر.ي)`;
+      hint.style.display = 'block';
+    }
   },
 
   onSupplierInputChange(val) {
@@ -509,7 +645,7 @@ const Accounting = {
   },
 
   // فتح نافذة منبثقة لتسجيل سند قبض جديد مع إظهار رقم السند داخل نفس الشاشة
-  async openNewReceiptModal() {
+  async openNewReceiptModal(prefill = null) {
     await this.loadDropdowns();
     await this.fetchNextNumbers();
     const dateInput = document.getElementById('modalRcDate');
@@ -522,7 +658,57 @@ const Accounting = {
     if (convRow) convRow.style.display = 'none';
     const tafqeetEl = document.getElementById('modalRcLocalTafqeet');
     if (tafqeetEl) tafqeetEl.innerHTML = '';
+
+    if (prefill) {
+      if (prefill.client_id || prefill.client_name) {
+        const clientInput = document.getElementById('modalRcClientInput');
+        const clientHidden = document.getElementById('modalRcClientSelect');
+        const cName = prefill.client_name || (this.clients || []).find(c => c.id == prefill.client_id)?.name || '';
+        if (clientInput) clientInput.value = cName;
+        if (clientHidden) clientHidden.value = prefill.client_id || '';
+        if (cName) await this.onClientInputChange(cName);
+      }
+      if (prefill.project_id) {
+        const prjSelect = document.getElementById('modalRcProjectSelect');
+        if (prjSelect) prjSelect.value = prefill.project_id;
+      }
+      if (prefill.contract_id) {
+        const cntSelect = document.getElementById('modalRcContractSelect');
+        if (cntSelect) cntSelect.value = prefill.contract_id;
+      }
+      if (prefill.category) {
+        const catSelect = document.getElementById('modalRcCategory');
+        if (catSelect) {
+          catSelect.value = prefill.category;
+          this.onReceiptCategoryChange(prefill.category);
+        }
+      }
+      if (prefill.bill_id) {
+        const bSelect = document.getElementById('modalRcBillSelect');
+        if (bSelect) {
+          bSelect.value = prefill.bill_id;
+          this.onReceiptBillChange(prefill.bill_id);
+        }
+      }
+      if (prefill.amount) {
+        const amtInput = document.getElementById('modalRcAmount');
+        if (amtInput) {
+          amtInput.value = prefill.amount;
+          this.calcReceiptLocalAmount();
+        }
+      }
+      if (prefill.notes) {
+        const notesInput = document.getElementById('modalRcNotes');
+        if (notesInput) notesInput.value = prefill.notes;
+      }
+    }
+
     App.openModal('newReceiptModal');
+  },
+
+  // كنية متوافقة لاستدعاء نافذة سند القبض
+  async openReceiptModal(prefill = null) {
+    return this.openNewReceiptModal(prefill);
   },
 
   // حفظ سند قبض من النافذة المنبثقة
@@ -541,6 +727,9 @@ const Accounting = {
     }
 
     const project_id = document.getElementById('modalRcProjectSelect')?.value || null;
+    const contract_id = document.getElementById('modalRcContractSelect')?.value || null;
+    const bill_id = document.getElementById('modalRcBillSelect')?.value || null;
+    const receipt_category = document.getElementById('modalRcCategory')?.value || 'bill_collection';
     const account_id = document.getElementById('modalRcAccountSelect')?.value || null;
     const cost_center_id = document.getElementById('modalRcCostCenterSelect')?.value || null;
     const date = document.getElementById('modalRcDate').value;
@@ -576,6 +765,9 @@ const Accounting = {
           client_id: client_id || null,
           client_name: client_name || client_input,
           project_id: project_id || null,
+          contract_id: contract_id ? Number(contract_id) : null,
+          bill_id: bill_id ? Number(bill_id) : null,
+          receipt_category,
           account_id,
           cost_center_id,
           date,
@@ -591,13 +783,23 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
-        App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no})`, 'success');
+        App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no}) وتحديث رصيد العميل آلياً ✅`, 'success');
         App.closeModal('newReceiptModal');
         const form = document.getElementById('modalReceiptForm');
         if (form) form.reset();
         
         // تحديث جميع الجداول والشاشات فوراً
         App.loadRevenuesTable();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
+        this.loadCashMovement();
+
+        // تحديث شاشة العملاء ومودال السلسلة إن كان مفتوحاً
+        if (typeof App !== 'undefined') {
+          if (App.loadClientsTable) App.loadClientsTable();
+          if (App.currentChainClientId == client_id && App.openClientChainModal) {
+            App.openClientChainModal(client_id);
+          }
+        }
         if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         this.loadCashMovement();
         
@@ -1690,77 +1892,778 @@ const Accounting = {
     }
   },
 
-  // ================== إدارة الموردين ==================
+  // ================== إدارة الموردين (SRM / Vendor Management) ==================
+  toggleCustomCategoryInput(show) {
+    const wrapper = document.getElementById('customCategoryWrapper');
+    const customInput = document.getElementById('suppCustomCategory');
+    const catSelect = document.getElementById('suppCategory');
+    if (!wrapper) return;
+
+    if (show) {
+      wrapper.style.display = 'block';
+      if (customInput) customInput.focus();
+      if (catSelect) {
+        for (let opt of catSelect.options) {
+          if (opt.value.includes('أخرى') || opt.value === 'أخرى') {
+            catSelect.value = opt.value;
+            break;
+          }
+        }
+      }
+    } else {
+      wrapper.style.display = 'none';
+      if (customInput) customInput.value = '';
+      if (catSelect && (catSelect.value.includes('أخرى') || catSelect.value === 'أخرى')) {
+        catSelect.value = 'مواد بناء وأسمنت وحديد';
+      }
+    }
+  },
+
+  onCategorySelectChange(selectEl) {
+    if (!selectEl) return;
+    const val = selectEl.value;
+    if (val.includes('أخرى') || val === 'أخرى') {
+      this.toggleCustomCategoryInput(true);
+    } else {
+      const wrapper = document.getElementById('customCategoryWrapper');
+      if (wrapper && wrapper.style.display !== 'none') {
+        const customInput = document.getElementById('suppCustomCategory');
+        if (!customInput || !customInput.value.trim()) {
+          this.toggleCustomCategoryInput(false);
+        }
+      }
+    }
+  },
+
+  // ================== إدارة ملفات ومرفقات الموردين والماسح الضوئي ==================
+  _supplierAttachments: [],
+  _scannerStream: null,
+  _scannerCapturedData: null,
+  _scannerFacingMode: 'environment',
+
+  onCurrencyChange(selectEl) {
+    const curr = selectEl?.value || 'YER';
+    const symMap = {
+      'YER': 'ر.ي',
+      'SAR': 'ر.س',
+      'USD': '$'
+    };
+    const sym = symMap[curr] || curr;
+    const badge = document.getElementById('suppCurrencySymbolBadge');
+    if (badge) badge.textContent = sym;
+    const hint = document.getElementById('suppCurrencyBadgeHint');
+    if (hint) hint.textContent = `(${sym})`;
+
+    // تحديث مؤشرات التجميع المالي بنفس العملة إن لم تكن هناك قيم مفوترة مخصصة
+    const invEl = document.getElementById('dispSuppInvoicedAmount');
+    if (invEl && invEl.textContent.includes('إجمالي المفوتر')) {
+      const match = invEl.textContent.match(/[\d,.]+/);
+      const amount = match ? match[0] : '0.00';
+      invEl.textContent = `إجمالي المفوتر: ${amount} ${sym}`;
+    }
+    const paidEl = document.getElementById('dispSuppTotalPaid');
+    if (paidEl) {
+      const match = paidEl.textContent.match(/[\d,.]+/);
+      const amount = match ? match[0] : '0.00';
+      paidEl.textContent = `${amount} ${sym}`;
+    }
+    const outEl = document.getElementById('dispSuppOutstanding');
+    if (outEl) {
+      const match = outEl.textContent.match(/[\d,.]+/);
+      const amount = match ? match[0] : '0.00';
+      outEl.textContent = `${amount} ${sym}`;
+    }
+  },
+
+  async handleSupplierInvoiceUpload(event) {
+    const files = event.target?.files;
+    if (!files || files.length === 0) return;
+    if (!this._supplierAttachments) this._supplierAttachments = [];
+
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+    for (let file of Array.from(files)) {
+      if (!allowed.includes(file.type) && !file.name.toLowerCase().endsWith('.pdf')) {
+        App.showToast(`الملف (${file.name}) غير مدعوم. الصيغ المدعومة: PDF أو صور JPG/PNG/WEBP`, 'error');
+        continue;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        App.showToast(`حجم الملف (${file.name}) يتجاوز الحد الأقصى المسموح (20MB)`, 'error');
+        continue;
+      }
+
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        this._supplierAttachments.push({
+          id: 'att_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+          name: file.name,
+          type: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+          size: file.size,
+          data: dataUrl,
+          date: new Date().toLocaleString('ar-YE')
+        });
+
+        App.showToast(`تم إرفاق المستند (${file.name}) بنجاح 📄`, 'success');
+      } catch (err) {
+        console.error('Error reading invoice file:', err);
+        App.showToast(`تعذر قراءة الملف: ${file.name}`, 'error');
+      }
+    }
+
+    if (event.target) event.target.value = '';
+    this.renderSupplierAttachments();
+  },
+
+  onInvoiceDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById('suppInvoiceDropzone');
+    if (dropzone) {
+      dropzone.style.borderColor = '#38bdf8';
+      dropzone.style.background = 'rgba(56, 189, 248, 0.12)';
+    }
+  },
+
+  onInvoiceDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById('suppInvoiceDropzone');
+    if (dropzone) {
+      dropzone.style.borderColor = 'rgba(148, 163, 184, 0.25)';
+      dropzone.style.background = 'rgba(15, 23, 42, 0.4)';
+    }
+  },
+
+  onInvoiceDrop(e) {
+    this.onInvoiceDragLeave(e);
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length > 0) {
+      this.handleSupplierInvoiceUpload({ target: { files: dt.files } });
+    }
+  },
+
+  renderSupplierAttachments() {
+    const listEl = document.getElementById('suppInvoicesList');
+    const emptyEl = document.getElementById('suppInvoiceEmptyState');
+    if (!listEl) return;
+
+    const list = this._supplierAttachments || [];
+    if (list.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      listEl.style.display = 'none';
+      listEl.innerHTML = '';
+      return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+    listEl.style.display = 'flex';
+
+    listEl.innerHTML = list.map((item, idx) => {
+      const isPdf = item.type === 'application/pdf' || (item.name && item.name.toLowerCase().endsWith('.pdf'));
+      const sizeStr = item.size ? (item.size > 1024 * 1024 ? `${(item.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(item.size / 1024)} KB`) : '';
+      
+      const iconOrThumb = isPdf
+        ? `<div style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 6px 10px; font-weight: 700; font-size: 0.82rem; display: flex; align-items: center; gap: 4px;">
+             <i class="fa fa-file-pdf"></i> PDF
+           </div>`
+        : `<img src="${item.data}" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #334155;">`;
+
+      return `
+        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 8px; padding: 8px 12px; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
+            ${iconOrThumb}
+            <div style="overflow: hidden; text-align: right;">
+              <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 320px;" title="${item.name}">
+                ${item.name}
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
+                <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 0.68rem;">${isPdf ? 'مستند PDF' : 'صورة ممسوحة'}</span>
+                ${sizeStr ? `&nbsp;•&nbsp; <span>${sizeStr}</span>` : ''}
+                ${item.date ? `&nbsp;•&nbsp; <span>${item.date}</span>` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.viewSupplierAttachment(${idx})" style="padding: 4px 8px; font-size: 0.78rem;" title="معاينة المستند">
+              <i class="fa fa-eye"></i> معاينة
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="Accounting.removeSupplierInvoiceAttachment(${idx})" style="padding: 4px 8px; font-size: 0.78rem; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #ef4444;" title="حذف الفاتورة">
+              <i class="fa fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    this.updateSupplierLiveBalancePreview();
+  },
+
+  removeSupplierInvoiceAttachment(index) {
+    if (!this._supplierAttachments || !this._supplierAttachments[index]) return;
+    const item = this._supplierAttachments[index];
+    this._supplierAttachments.splice(index, 1);
+    this.renderSupplierAttachments();
+    this.updateSupplierLiveBalancePreview();
+    App.showToast(`تم حذف المرفق (${item.name || ''})`, 'info');
+  },
+
+  viewSupplierAttachment(index) {
+    const list = this._supplierAttachments || window._activeVendorAttachments || (window.App && App._supplierAttachments) || [];
+    if (!list || !list[index]) {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast('لم يتم العثور على مستند المرفق المطلوب للمعاينة', 'warning');
+      }
+      return;
+    }
+    const item = list[index];
+    const isPdf = item.type === 'application/pdf' || (item.name && item.name.toLowerCase().endsWith('.pdf'));
+
+    const titleEl = document.getElementById('attachmentViewerTitle');
+    const bodyEl = document.getElementById('attachmentViewerBody');
+    const dlBtn = document.getElementById('attachmentViewerDownloadBtn');
+
+    if (titleEl) titleEl.textContent = `معاينة: ${item.name || 'مستند الفاتورة'}`;
+    if (dlBtn) {
+      dlBtn.href = item.data;
+      dlBtn.download = item.name || 'invoice_document';
+    }
+
+    if (bodyEl) {
+      if (isPdf) {
+        bodyEl.innerHTML = `
+          <div style="margin-bottom: 12px; display: flex; justify-content: flex-end; gap: 8px;">
+            <a href="${item.data}" target="_blank" class="btn btn-primary btn-sm" style="font-size: 0.78rem;">
+              <i class="fa fa-external-link"></i> فتح في نافذة مستقلة ↗️
+            </a>
+          </div>
+          <iframe src="${item.data}" style="width: 100%; height: 70vh; border: 1px solid var(--border-color); border-radius: 8px; background: #fff;"></iframe>
+        `;
+      } else {
+        bodyEl.innerHTML = `
+          <div style="margin-bottom: 10px; display: flex; justify-content: flex-end; gap: 8px;">
+            <a href="${item.data}" target="_blank" class="btn btn-primary btn-sm" style="font-size: 0.78rem;">
+              <i class="fa fa-external-link"></i> فتح الصورة بالحجم الكامل ↗️
+            </a>
+          </div>
+          <div style="display: flex; justify-content: center; align-items: center; min-height: 400px; max-height: 72vh; overflow: auto; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 12px;">
+            <img src="${item.data}" alt="${item.name || 'مستند'}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.6); object-fit: contain; cursor: zoom-in;" onclick="window.open('${item.data}', '_blank')">
+          </div>
+        `;
+      }
+    }
+
+    const modal = document.getElementById('supplierAttachmentViewerModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.style.zIndex = '100100';
+      modal.classList.add('active');
+    }
+  },
+
+  closeAttachmentViewerModal() {
+    const modal = document.getElementById('supplierAttachmentViewerModal');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.classList.remove('active');
+    }
+    const bodyEl = document.getElementById('attachmentViewerBody');
+    if (bodyEl) bodyEl.innerHTML = '';
+  },
+
+  updateSupplierLiveBalancePreview() {
+    const balInput = document.getElementById('suppBalance');
+    const currSelect = document.getElementById('suppCurrency');
+    const curr = currSelect ? currSelect.value : 'YER';
+    const bal = Number(balInput ? balInput.value : 0) || 0;
+    const attCount = this._supplierAttachments ? this._supplierAttachments.length : 0;
+
+    const cntEl = document.getElementById('dispSuppInvoicesCount');
+    const invEl = document.getElementById('dispSuppInvoicedAmount');
+    const outEl = document.getElementById('dispSuppOutstanding');
+
+    if (cntEl) {
+      cntEl.textContent = attCount > 0 ? `${attCount} ${attCount === 1 ? 'فاتورة' : 'فواتير'}` : '0 فاتورة';
+    }
+    if (invEl) {
+      invEl.textContent = `إجمالي المفوتر: ${App.formatNumber(bal)} ${curr}`;
+    }
+    if (outEl) {
+      outEl.textContent = `${App.formatNumber(bal)} ${curr}`;
+    }
+  },
+
+  // ================== مسح ضوئي مباشر بالكاميرا (Live Document Scanner) ==================
+  async openLiveScannerModal() {
+    const modal = document.getElementById('supplierLiveScannerModal');
+    if (modal) modal.style.display = 'flex';
+
+    this._scannerCapturedData = null;
+    const video = document.getElementById('scannerLiveVideo');
+    const snapshot = document.getElementById('scannerLiveSnapshot');
+    const overlay = document.getElementById('scannerOverlayFrame');
+    const btnCapture = document.getElementById('btnCaptureScan');
+    const btnRetake = document.getElementById('btnRetakeScan');
+    const btnConfirm = document.getElementById('btnConfirmScan');
+    const btnSwitch = document.getElementById('btnSwitchCamera');
+
+    if (video) video.style.display = 'block';
+    if (snapshot) snapshot.style.display = 'none';
+    if (overlay) overlay.style.display = 'flex';
+    if (btnCapture) btnCapture.style.display = 'inline-flex';
+    if (btnRetake) btnRetake.style.display = 'none';
+    if (btnConfirm) btnConfirm.style.display = 'none';
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('المتصفح لا يدعم الوصول المباشر لكاميرا الماسح الضوئي');
+      }
+
+      this._scannerStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: this._scannerFacingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      });
+
+      if (video) {
+        video.srcObject = this._scannerStream;
+        await video.play().catch(() => {});
+      }
+
+      // إظهار زر التبديل إذا كانت هناك كاميرات متعددة
+      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+      const videoDevices = devices.filter(d => d.kind === 'videoinput');
+      if (btnSwitch) {
+        btnSwitch.style.display = videoDevices.length > 1 ? 'inline-flex' : 'none';
+      }
+    } catch (err) {
+      console.warn('Live scanner camera access note:', err);
+      App.showToast('تعذر فتح الكاميرا المباشرة، جاري تشغيل لاقط الكاميرا الافتراضي...', 'info');
+      this.closeLiveScannerModal();
+      const fallbackInput = document.getElementById('suppInvoiceCameraInput');
+      if (fallbackInput) fallbackInput.click();
+    }
+  },
+
+  async switchScannerCamera() {
+    this._scannerFacingMode = this._scannerFacingMode === 'environment' ? 'user' : 'environment';
+    if (this._scannerStream) {
+      this._scannerStream.getTracks().forEach(t => t.stop());
+    }
+    await this.openLiveScannerModal();
+  },
+
+  captureLiveScan() {
+    const video = document.getElementById('scannerLiveVideo');
+    const canvas = document.getElementById('scannerLiveCanvas');
+    const snapshot = document.getElementById('scannerLiveSnapshot');
+    const overlay = document.getElementById('scannerOverlayFrame');
+    const btnCapture = document.getElementById('btnCaptureScan');
+    const btnRetake = document.getElementById('btnRetakeScan');
+    const btnConfirm = document.getElementById('btnConfirmScan');
+
+    if (!video || !canvas || !snapshot) return;
+
+    const w = video.videoWidth || 1280;
+    const h = video.videoHeight || 720;
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    this._scannerCapturedData = dataUrl;
+
+    snapshot.src = dataUrl;
+    snapshot.style.display = 'block';
+    video.style.display = 'none';
+    if (overlay) overlay.style.display = 'none';
+
+    if (btnCapture) btnCapture.style.display = 'none';
+    if (btnRetake) btnRetake.style.display = 'inline-flex';
+    if (btnConfirm) btnConfirm.style.display = 'inline-flex';
+  },
+
+  retakeLiveScan() {
+    const video = document.getElementById('scannerLiveVideo');
+    const snapshot = document.getElementById('scannerLiveSnapshot');
+    const overlay = document.getElementById('scannerOverlayFrame');
+    const btnCapture = document.getElementById('btnCaptureScan');
+    const btnRetake = document.getElementById('btnRetakeScan');
+    const btnConfirm = document.getElementById('btnConfirmScan');
+
+    this._scannerCapturedData = null;
+    if (snapshot) snapshot.style.display = 'none';
+    if (video) video.style.display = 'block';
+    if (overlay) overlay.style.display = 'flex';
+
+    if (btnCapture) btnCapture.style.display = 'inline-flex';
+    if (btnRetake) btnRetake.style.display = 'none';
+    if (btnConfirm) btnConfirm.style.display = 'none';
+  },
+
+  confirmLiveScan() {
+    if (!this._scannerCapturedData) return;
+    if (!this._supplierAttachments) this._supplierAttachments = [];
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const fileName = `فاتورة_ممسوحة_${dateStr}_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.jpg`;
+
+    this._supplierAttachments.push({
+      id: 'scan_' + Date.now(),
+      name: fileName,
+      type: 'image/jpeg',
+      size: Math.round(this._scannerCapturedData.length * 0.75),
+      data: this._scannerCapturedData,
+      date: now.toLocaleString('ar-YE')
+    });
+
+    this.closeLiveScannerModal();
+    this.renderSupplierAttachments();
+    App.showToast('تم مسح الفاتورة ضوئياً وإرفاقها بنجاح 📸', 'success');
+  },
+
+  closeLiveScannerModal() {
+    if (this._scannerStream) {
+      try {
+        this._scannerStream.getTracks().forEach(t => t.stop());
+      } catch (e) {}
+      this._scannerStream = null;
+    }
+    const modal = document.getElementById('supplierLiveScannerModal');
+    if (modal) modal.style.display = 'none';
+  },
+
   openNewSupplierModal(targetSelectId = null) {
     this._targetSupplierSelectId = targetSelectId;
     const form = document.getElementById('newSupplierForm');
     if (form) form.reset();
+    
+    const editIdInput = document.getElementById('suppEditId');
+    if (editIdInput) editIdInput.value = '';
+
+    const titleEl = document.getElementById('supplierModalTitle');
+    if (titleEl) titleEl.textContent = 'ملف تعريف المورد (SRM Profile) / إضافة مورد جديد';
+
+    const saveBtn = document.getElementById('btnSaveSupplier');
+    if (saveBtn) saveBtn.innerHTML = '<i class="fa fa-save"></i> حفظ بيانات المورد';
+
+    this.toggleCustomCategoryInput(false);
+
+    // تصفير الرصيد والمرفقات
+    const balInput = document.getElementById('suppBalance');
+    if (balInput) balInput.value = '0.00';
+
+    this._supplierAttachments = [];
+    this.renderSupplierAttachments();
+
+    // تحديث رمز العملة
+    const currSelect = document.getElementById('suppCurrency');
+    if (currSelect) {
+      currSelect.value = 'YER';
+      this.onCurrencyChange(currSelect);
+    }
+
+    // إعادة ضبط المؤشرات التلقائية إلى صفر مع توضيح أنها تُحسب تلقائياً
+    const cntEl = document.getElementById('dispSuppInvoicesCount');
+    const invEl = document.getElementById('dispSuppInvoicedAmount');
+    const paidEl = document.getElementById('dispSuppTotalPaid');
+    const outEl = document.getElementById('dispSuppOutstanding');
+    if (cntEl) cntEl.textContent = '0 فاتورة';
+    if (invEl) invEl.textContent = 'إجمالي المفوتر: 0.00 ر.ي';
+    if (paidEl) paidEl.textContent = '0.00 ر.ي';
+    if (outEl) outEl.textContent = '0.00 ر.ي';
+
     App.openModal('newSupplierModal');
+  },
+
+  async openEditSupplierModal(supplierId) {
+    if (!supplierId) return;
+    const form = document.getElementById('newSupplierForm');
+    if (form) form.reset();
+
+    const editIdInput = document.getElementById('suppEditId');
+    if (editIdInput) editIdInput.value = String(supplierId);
+
+    const titleEl = document.getElementById('supplierModalTitle');
+    if (titleEl) titleEl.textContent = 'تعديل ملف المورد (SRM Profile) - جاري التحميل...';
+
+    const saveBtn = document.getElementById('btnSaveSupplier');
+    if (saveBtn) saveBtn.innerHTML = '<i class="fa fa-save"></i> حفظ التعديلات';
+
+    this.toggleCustomCategoryInput(false);
+
+    App.openModal('newSupplierModal');
+
+    try {
+      const res = await fetch(`/api/suppliers/${supplierId}/profile?include_recent=false`);
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        throw new Error(json.message || 'المورد غير موجود');
+      }
+
+      const v = json.data;
+      const fin = v.financial_summary || {};
+      const bank = v.bank_details || {};
+
+      if (titleEl) titleEl.textContent = `تعديل ملف المورد: ${v.company_name}`;
+      
+      const nameInput = document.getElementById('suppName');
+      if (nameInput) nameInput.value = v.company_name || v.name || '';
+
+      const contactInput = document.getElementById('suppContactPerson');
+      if (contactInput) contactInput.value = v.contact_person || '';
+
+      // معالجة فئة النشاط: هل هي من الخيارات القياسية أم مخصصة أدخلها المستخدم؟
+      const catInput = document.getElementById('suppCategory');
+      const customWrapper = document.getElementById('customCategoryWrapper');
+      const customInput = document.getElementById('suppCustomCategory');
+      const targetCat = v.industry_category || 'مواد بناء وأسمنت وحديد';
+
+      let matchedOption = false;
+      if (catInput) {
+        for (let opt of catInput.options) {
+          if (opt.value === targetCat) {
+            catInput.value = targetCat;
+            matchedOption = true;
+            break;
+          }
+        }
+      }
+
+      if (!matchedOption) {
+        // فئة نشاط مخصصة أدخلها المستخدم سابقاً
+        if (catInput) {
+          const newOpt = document.createElement('option');
+          newOpt.value = targetCat;
+          newOpt.textContent = `${targetCat} (مخصص) 🏷️`;
+          newOpt.selected = true;
+          catInput.insertBefore(newOpt, catInput.options[catInput.options.length - 1]);
+        }
+        if (customWrapper) customWrapper.style.display = 'block';
+        if (customInput) customInput.value = targetCat;
+      } else {
+        if (customWrapper) customWrapper.style.display = 'none';
+        if (customInput) customInput.value = '';
+      }
+
+      const phoneInput = document.getElementById('suppPhone');
+      if (phoneInput) phoneInput.value = v.phone_number || '';
+
+      const addrInput = document.getElementById('suppAddress');
+      if (addrInput) addrInput.value = v.address || '';
+
+      const bankNameInput = document.getElementById('suppBankName');
+      if (bankNameInput) bankNameInput.value = bank.bank_name && bank.bank_name !== 'غير محدد' ? bank.bank_name : (v.bank_name || '');
+
+      const bankAccInput = document.getElementById('suppBankAccountNo');
+      if (bankAccInput) bankAccInput.value = v.bank_account_no || '';
+
+      const bankIbanInput = document.getElementById('suppBankIban');
+      if (bankIbanInput) bankIbanInput.value = v.bank_iban || '';
+
+      const currInput = document.getElementById('suppCurrency');
+      if (currInput) {
+        currInput.value = v.default_currency || 'YER';
+        this.onCurrencyChange(currInput);
+      }
+
+      // رقم المبلغ (الرصيد / المستحق)
+      const balInput = document.getElementById('suppBalance');
+      if (balInput) balInput.value = v.balance !== undefined ? v.balance : '0.00';
+
+      const docTypeInput = document.getElementById('suppPaymentDocType');
+      if (docTypeInput) docTypeInput.value = v.payment_document_type || 'إيصال عادي';
+
+      const leadTimeInput = document.getElementById('suppLeadTimeDays');
+      if (leadTimeInput) leadTimeInput.value = v.supply_lead_time_days !== undefined ? v.supply_lead_time_days : 3;
+
+      const notesInput = document.getElementById('suppNotes');
+      if (notesInput) notesInput.value = v.notes || '';
+
+      // تحميل وإظهار فواتير ومستندات المورد المرفقة
+      this._supplierAttachments = [];
+      if (v.invoice_attachment) {
+        try {
+          const parsed = typeof v.invoice_attachment === 'string' ? JSON.parse(v.invoice_attachment) : v.invoice_attachment;
+          if (Array.isArray(parsed)) {
+            this._supplierAttachments = parsed;
+          } else if (typeof parsed === 'object') {
+            this._supplierAttachments = [parsed];
+          }
+        } catch (e) {
+          if (typeof v.invoice_attachment === 'string' && v.invoice_attachment.startsWith('data:')) {
+            const isPdf = v.invoice_attachment.includes('application/pdf');
+            this._supplierAttachments = [{
+              id: 'att_' + Date.now(),
+              name: isPdf ? 'فاتورة_المورد.pdf' : 'فاتورة_ممسوحة.jpg',
+              type: isPdf ? 'application/pdf' : 'image/jpeg',
+              size: Math.round(v.invoice_attachment.length * 0.75),
+              data: v.invoice_attachment,
+              date: ''
+            }];
+          }
+        }
+      }
+      this.renderSupplierAttachments();
+
+      // ملء المؤشرات المالية المحسوبة تلقائياً في الوقت الفعلي
+      const curr = v.default_currency || 'YER';
+      const cntEl = document.getElementById('dispSuppInvoicesCount');
+      const invEl = document.getElementById('dispSuppInvoicedAmount');
+      const paidEl = document.getElementById('dispSuppTotalPaid');
+      const outEl = document.getElementById('dispSuppOutstanding');
+      if (cntEl) cntEl.textContent = `${fin.total_purchase_invoices_count || 0} فاتورة`;
+      if (invEl) invEl.textContent = `إجمالي المفوتر: ${App.formatNumber(fin.total_invoiced_amount || 0)} ${curr}`;
+      if (paidEl) paidEl.textContent = `${App.formatNumber(fin.total_amount_paid || 0)} ${curr}`;
+      if (outEl) outEl.textContent = `${App.formatNumber(fin.outstanding_balance || 0)} ${curr}`;
+
+    } catch (err) {
+      console.error('Error fetching supplier for edit:', err);
+      App.showToast('تعذر تحميل بيانات المورد: ' + err.message, 'error');
+    }
   },
 
   async submitNewSupplier(e) {
     if (e) e.preventDefault();
+    const editId = document.getElementById('suppEditId')?.value;
     const nameInput = document.getElementById('suppName');
-    const name = nameInput ? nameInput.value.trim() : '';
-    const category = document.getElementById('suppCategory') ? document.getElementById('suppCategory').value : 'مواد بناء';
-    const phone = document.getElementById('suppPhone') ? document.getElementById('suppPhone').value.trim() : '';
-    const address = document.getElementById('suppAddress') ? document.getElementById('suppAddress').value.trim() : '';
-    const balance = document.getElementById('suppBalance') ? document.getElementById('suppBalance').value : 0;
-    const currency = document.getElementById('suppCurrency')?.value || 'ر.ي';
-    const notes = document.getElementById('suppNotes') ? document.getElementById('suppNotes').value.trim() : '';
+    const company_name = nameInput ? nameInput.value.trim() : '';
+    const contact_person = document.getElementById('suppContactPerson')?.value.trim() || '';
+    
+    // فئة النشاط: إما من القائمة المنسدلة أو المدخلة يدوياً
+    const selectCat = document.getElementById('suppCategory')?.value || 'مواد بناء وأسمنت وحديد';
+    const customCat = document.getElementById('suppCustomCategory')?.value.trim() || '';
+    let industry_category = selectCat;
 
-    if (!name) {
-      App.showToast('يرجى إدخال اسم المورد', 'error');
+    if (selectCat.includes('أخرى') || selectCat === 'أخرى' || customCat) {
+      if (customCat) {
+        industry_category = customCat;
+      } else if (selectCat.includes('أخرى') || selectCat === 'أخرى') {
+        App.showToast('يرجى كتابة فئة النشاط المخصصة في حقل الإدخال', 'error');
+        this.toggleCustomCategoryInput(true);
+        const ci = document.getElementById('suppCustomCategory');
+        if (ci) ci.focus();
+        return;
+      }
+    }
+
+    const phone_number = document.getElementById('suppPhone')?.value.trim() || '';
+    const address = document.getElementById('suppAddress')?.value.trim() || '';
+    const bank_name = document.getElementById('suppBankName')?.value.trim() || '';
+    const bank_account_no = document.getElementById('suppBankAccountNo')?.value.trim() || '';
+    const bank_iban = document.getElementById('suppBankIban')?.value.trim() || '';
+    const default_currency = document.getElementById('suppCurrency')?.value || 'YER';
+    const balance = Number(document.getElementById('suppBalance')?.value) || 0;
+    const payment_document_type = document.getElementById('suppPaymentDocType')?.value || 'إيصال عادي';
+    const supply_lead_time_days = Number(document.getElementById('suppLeadTimeDays')?.value) || 0;
+    const notes = document.getElementById('suppNotes')?.value.trim() || '';
+    const invoice_attachment = this._supplierAttachments && this._supplierAttachments.length > 0 
+      ? JSON.stringify(this._supplierAttachments) 
+      : null;
+
+    if (!company_name) {
+      App.showToast('يرجى إدخال اسم الشركة / المورد', 'error');
       if (nameInput) nameInput.focus();
       return;
     }
 
+    if (!contact_person) {
+      App.showToast('يرجى إدخال اسم الشخص المسؤول (اسم التاجر)', 'error');
+      const cp = document.getElementById('suppContactPerson');
+      if (cp) cp.focus();
+      return;
+    }
+
+    if (!phone_number) {
+      App.showToast('يرجى إدخال رقم الهاتف المعتمد', 'error');
+      const ph = document.getElementById('suppPhone');
+      if (ph) ph.focus();
+      return;
+    }
+
     const form = document.getElementById('newSupplierForm');
-    const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
-    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : 'حفظ المورد';
+    const submitBtn = document.getElementById('btnSaveSupplier') || (form ? form.querySelector('button[type="submit"]') : null);
+    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : 'حفظ بيانات المورد';
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>⏳</span> جاري الحفظ والتحقق من قاعدة البيانات...';
+      submitBtn.innerHTML = '<span>⏳</span> جاري الحفظ والتشفير المصرفي...';
     }
 
     try {
-      const res = await fetch('/api/suppliers', {
-        method: 'POST',
+      const isEdit = Boolean(editId);
+      const url = isEdit ? `/api/suppliers/${editId}` : '/api/suppliers';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const payload = {
+        name: company_name,
+        company_name,
+        contact_person,
+        industry_category,
+        category: industry_category,
+        phone: phone_number,
+        phone_number,
+        address,
+        bank_name,
+        bank_account_no,
+        bank_iban,
+        currency: default_currency,
+        default_currency,
+        balance,
+        payment_document_type,
+        supply_lead_time_days,
+        invoice_attachment,
+        notes
+      };
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name, category, phone, address, balance, currency, notes
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
 
-      if (res.ok && data.success && data.id) {
-        const successMsg = data.message || `تم حفظ المورد (${name}) بنجاح وتأكيده في قاعدة البيانات`;
+      if (res.ok && data.success) {
+        const successMsg = data.message || (isEdit ? `تم تحديث ملف المورد (${company_name}) بنجاح` : `تم حفظ المورد (${company_name}) بنجاح وتفعيل ملف الـ SRM`);
         App.showToast(successMsg, 'success');
         App.closeModal('newSupplierModal');
         if (form) form.reset();
 
-        // تحديث القوائم المنسدلة وسجل الموردين
+        // تحديث القوائم المنسدلة وجدول الموردين
         await this.loadDropdowns();
         if (typeof App !== 'undefined' && App.loadSuppliersTable) {
           App.loadSuppliersTable();
         }
 
         // تحديد المورد المضاف تلقائياً في القائمة الهدف إن وجدت
-        if (this._targetSupplierSelectId) {
+        if (this._targetSupplierSelectId && (data.id || data.data?.id)) {
           const targetEl = document.getElementById(this._targetSupplierSelectId);
-          if (targetEl && data.id) {
-            targetEl.value = String(data.id);
+          if (targetEl) {
+            targetEl.value = String(data.id || data.data.id);
           }
           this._targetSupplierSelectId = null;
         }
       } else {
-        App.showToast(data.message || 'فشل في حفظ المورد في قاعدة البيانات', 'error');
+        App.showToast(data.message || 'فشل في حفظ بيانات المورد', 'error');
       }
     } catch (e) {
-      console.error('Error adding supplier:', e);
-      App.showToast('فشل الاتصال بالخادم أو حفظ المورد في قاعدة البيانات', 'error');
+      console.error('Error saving supplier:', e);
+      App.showToast('فشل الاتصال بالخادم أثناء حفظ بيانات المورد', 'error');
     } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnHtml;
+      }
     }
   },
 

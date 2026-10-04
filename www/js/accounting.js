@@ -645,7 +645,7 @@ const Accounting = {
   },
 
   // فتح نافذة منبثقة لتسجيل سند قبض جديد مع إظهار رقم السند داخل نفس الشاشة
-  async openNewReceiptModal() {
+  async openNewReceiptModal(prefill = null) {
     await this.loadDropdowns();
     await this.fetchNextNumbers();
     const dateInput = document.getElementById('modalRcDate');
@@ -658,7 +658,57 @@ const Accounting = {
     if (convRow) convRow.style.display = 'none';
     const tafqeetEl = document.getElementById('modalRcLocalTafqeet');
     if (tafqeetEl) tafqeetEl.innerHTML = '';
+
+    if (prefill) {
+      if (prefill.client_id || prefill.client_name) {
+        const clientInput = document.getElementById('modalRcClientInput');
+        const clientHidden = document.getElementById('modalRcClientSelect');
+        const cName = prefill.client_name || (this.clients || []).find(c => c.id == prefill.client_id)?.name || '';
+        if (clientInput) clientInput.value = cName;
+        if (clientHidden) clientHidden.value = prefill.client_id || '';
+        if (cName) await this.onClientInputChange(cName);
+      }
+      if (prefill.project_id) {
+        const prjSelect = document.getElementById('modalRcProjectSelect');
+        if (prjSelect) prjSelect.value = prefill.project_id;
+      }
+      if (prefill.contract_id) {
+        const cntSelect = document.getElementById('modalRcContractSelect');
+        if (cntSelect) cntSelect.value = prefill.contract_id;
+      }
+      if (prefill.category) {
+        const catSelect = document.getElementById('modalRcCategory');
+        if (catSelect) {
+          catSelect.value = prefill.category;
+          this.onReceiptCategoryChange(prefill.category);
+        }
+      }
+      if (prefill.bill_id) {
+        const bSelect = document.getElementById('modalRcBillSelect');
+        if (bSelect) {
+          bSelect.value = prefill.bill_id;
+          this.onReceiptBillChange(prefill.bill_id);
+        }
+      }
+      if (prefill.amount) {
+        const amtInput = document.getElementById('modalRcAmount');
+        if (amtInput) {
+          amtInput.value = prefill.amount;
+          this.calcReceiptLocalAmount();
+        }
+      }
+      if (prefill.notes) {
+        const notesInput = document.getElementById('modalRcNotes');
+        if (notesInput) notesInput.value = prefill.notes;
+      }
+    }
+
     App.openModal('newReceiptModal');
+  },
+
+  // كنية متوافقة لاستدعاء نافذة سند القبض
+  async openReceiptModal(prefill = null) {
+    return this.openNewReceiptModal(prefill);
   },
 
   // حفظ سند قبض من النافذة المنبثقة

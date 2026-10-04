@@ -308,6 +308,12 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: #38bdf8; border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
+                  📈 إنجاز
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--gold-light); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
+                  📋 VO
+                </button>
                 <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
                   📁 16 قسم
                 </button>
@@ -363,6 +369,12 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: #38bdf8; border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
+                  📈 إنجاز
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--gold-light); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
+                  📋 VO
+                </button>
                 <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
                   📁 16 قسم
                 </button>
@@ -502,19 +514,25 @@ const Projects = {
                 <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
                   العميل: <strong style="color: #fff;">${p.client_name || 'غير محدد'}</strong> ${p.client_phone ? `| هاتف: ${p.client_phone}` : ''}
                 </p>
-                ${p.client_id ? `
-                  <div style="display: flex; gap: 6px;">
-                    <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${p.client_id})" style="font-size: 0.72rem; padding: 2px 8px;">
-                      <span>🔗 سلسلة العميل المالية</span>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: #38bdf8; border-color: #38bdf8;">
+                      <span>📈 تحديث الإنجاز</span>
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${p.client_id}; Reports.fetchFullClientStatement();" style="font-size: 0.72rem; padding: 2px 8px;">
-                      <span>كشف الحساب</span>
+                    <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: var(--gold-light); border-color: var(--gold-light);">
+                      <span>📋 أمر تغييري (VO)</span>
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px; border-color: var(--gold-light); color: var(--gold-light);">
-                      <span>+ مستخلص</span>
-                    </button>
+                    ${p.client_id ? `
+                      <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${p.client_id})" style="font-size: 0.72rem; padding: 2px 8px;">
+                        <span>🔗 سلسلة العميل المالية</span>
+                      </button>
+                      <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${p.client_id}; Reports.fetchFullClientStatement();" style="font-size: 0.72rem; padding: 2px 8px;">
+                        <span>كشف الحساب</span>
+                      </button>
+                      <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px; border-color: var(--gold-light); color: var(--gold-light);">
+                        <span>+ مستخلص</span>
+                      </button>
+                    ` : ''}
                   </div>
-                ` : ''}
               </div>
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px;">
                 <div><span style="font-size:0.75rem; color:var(--text-secondary)">قيمة العقد:</span> <strong style="color:var(--gold-light)">${App.formatNumber(p.contract_value)} ${p.currency || 'ر.ي'}</strong></div>
@@ -940,6 +958,262 @@ const Projects = {
         App.showToast('خطأ أثناء الحذف', 'error');
         await this.loadProjects();
       }
+    }
+  },
+
+  // ============================================================================
+  // نافذة تحديث نسبة الإنجاز والتحكم المالي الذكي (EV & Progress Modal)
+  // ============================================================================
+  currentProgressProjectMetrics: null,
+
+  async openProgressModal(projectId) {
+    if (!projectId) return;
+    const projIdInput = document.getElementById('projProgProjectId');
+    if (projIdInput) projIdInput.value = projectId;
+
+    // تصفير الواجهة مبدئياً
+    const titleEl = document.getElementById('projProgModalTitle');
+    const contractEl = document.getElementById('projProgContractVal');
+    const earnedEl = document.getElementById('projProgEarnedVal');
+    const actualEl = document.getElementById('projProgActualCost');
+    const slider = document.getElementById('projProgSlider');
+    const input = document.getElementById('projProgInput');
+    const label = document.getElementById('projProgSliderValLabel');
+    const notes = document.getElementById('projProgNotes');
+
+    if (notes) notes.value = '';
+
+    App.openModal('projectProgressModal');
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/control-metrics`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.currentProgressProjectMetrics = json.data;
+        const p = json.data.project || {};
+        const f = json.data.financials || {};
+        const curr = p.currency || 'ر.ي';
+
+        if (titleEl) titleEl.innerText = `تحديث نسبة إنجاز: ${p.name}`;
+        if (contractEl) contractEl.innerText = `${App.formatNumber(f.contract_value)} ${curr}`;
+        if (earnedEl) earnedEl.innerText = `${App.formatNumber(f.earned_value)} ${curr}`;
+        if (actualEl) actualEl.innerText = `${App.formatNumber(f.actual_cost)} ${curr}`;
+
+        const prog = Number(f.progress_percentage) || 0;
+        if (slider) slider.value = prog;
+        if (input) input.value = prog;
+        if (label) label.innerText = `${prog}%`;
+
+        this.updateProgressHealthAlert(f.earned_value, f.actual_cost);
+      }
+    } catch (e) {
+      console.error('Error fetching project progress control metrics:', e);
+    }
+  },
+
+  onProgressModalSliderChange(val) {
+    const input = document.getElementById('projProgInput');
+    if (input) input.value = val;
+    this.recalcProgressModalMetrics(parseFloat(val) || 0);
+  },
+
+  onProgressModalInputChange(val) {
+    const slider = document.getElementById('projProgSlider');
+    if (slider) slider.value = val;
+    this.recalcProgressModalMetrics(parseFloat(val) || 0);
+  },
+
+  recalcProgressModalMetrics(newProg) {
+    const label = document.getElementById('projProgSliderValLabel');
+    if (label) label.innerText = `${newProg}%`;
+
+    const metrics = this.currentProgressProjectMetrics;
+    if (!metrics) return;
+
+    const contractVal = Number(metrics.financials?.contract_value) || 0;
+    const actualCost = Number(metrics.financials?.actual_cost) || 0;
+    const curr = metrics.project?.currency || 'ر.ي';
+
+    const newEarnedVal = Math.round((contractVal * (newProg / 100)) * 100) / 100;
+    const earnedEl = document.getElementById('projProgEarnedVal');
+    if (earnedEl) earnedEl.innerText = `${App.formatNumber(newEarnedVal)} ${curr}`;
+
+    this.updateProgressHealthAlert(newEarnedVal, actualCost);
+  },
+
+  updateProgressHealthAlert(earnedVal, actualCost) {
+    const alertBox = document.getElementById('projProgHealthAlert');
+    const alertIcon = document.getElementById('projProgHealthIcon');
+    const alertText = document.getElementById('projProgHealthText');
+    if (!alertBox || !alertText) return;
+
+    if (actualCost > earnedVal && actualCost > 0) {
+      const diff = actualCost - earnedVal;
+      const cpi = earnedVal > 0 ? (earnedVal / actualCost).toFixed(2) : '0.00';
+      alertBox.style.background = 'rgba(239, 68, 68, 0.12)';
+      alertBox.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+      if (alertIcon) alertIcon.innerText = '⚠️';
+      alertText.innerHTML = `<strong style="color: var(--accent-red)">مؤشر خطر تجاوز التكلفة:</strong> التكلفة الفعلية المنصرفة تتجاوز القيمة المكتسبة بفارق <strong>${App.formatNumber(diff)}</strong> (مؤشر الأداء CPI = ${cpi}).`;
+    } else {
+      const diff = earnedVal - actualCost;
+      const cpi = actualCost > 0 ? (earnedVal / actualCost).toFixed(2) : '1.00';
+      alertBox.style.background = 'rgba(16, 185, 129, 0.12)';
+      alertBox.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+      if (alertIcon) alertIcon.innerText = '✅';
+      alertText.innerHTML = `<strong style="color: var(--accent-green)">أداء مالي متزن:</strong> القيمة المكتسبة تغطي التكاليف بوفر قدره <strong>${App.formatNumber(diff)}</strong> (مؤشر الأداء CPI = ${cpi}).`;
+    }
+  },
+
+  async submitProgressUpdate(e) {
+    e.preventDefault();
+    const projectId = document.getElementById('projProgProjectId')?.value;
+    const newProg = parseFloat(document.getElementById('projProgInput')?.value) || 0;
+    const notes = document.getElementById('projProgNotes')?.value || '';
+
+    if (!projectId) {
+      App.showToast('تعذر تحديد المشروع المطلوب تحديثه', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          progress_percentage: newProg,
+          notes
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم تحديث نسبة الإنجاز والاعتماد المالي بنجاح 📈', 'success');
+        App.closeModal('projectProgressModal');
+        await this.loadProjects();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) {
+          Reports.loadDashboardKPIs();
+        }
+      } else {
+        App.showToast(json.message || 'فشل في تحديث نسبة الإنجاز', 'error');
+      }
+    } catch (err) {
+      console.error('Error submitting progress update:', err);
+      App.showToast('خطأ أثناء حفظ نسبة الإنجاز', 'error');
+    }
+  },
+
+  // ============================================================================
+  // نافذة تسجيل أمر تغييري للعقد (Variation Order - VO)
+  // ============================================================================
+  currentVoProject: null,
+
+  async openVariationModal(projectId) {
+    if (!projectId) return;
+    const project = (this.allProjects || []).find(p => p.id == projectId);
+    this.currentVoProject = project;
+
+    const idInput = document.getElementById('projVoProjectId');
+    if (idInput) idInput.value = projectId;
+
+    const titleEl = document.getElementById('projVoModalTitle');
+    if (titleEl) titleEl.innerText = `تسجيل أمر تغييري (V.O) - ${project ? project.name : ''}`;
+
+    const prevContractEl = document.getElementById('projVoPrevContractVal');
+    const newContractEl = document.getElementById('projVoNewContractVal');
+    const contractVal = project ? (Number(project.contract_value) || 0) : 0;
+    const curr = project?.currency || 'ر.ي';
+
+    if (prevContractEl) prevContractEl.innerText = `${App.formatNumber(contractVal)} ${curr}`;
+    if (newContractEl) newContractEl.innerText = `${App.formatNumber(contractVal)} ${curr}`;
+
+    const titleInput = document.getElementById('projVoTitle');
+    if (titleInput) titleInput.value = '';
+
+    const typeSelect = document.getElementById('projVoType');
+    if (typeSelect) typeSelect.value = 'addition';
+
+    const amtInput = document.getElementById('projVoAmount');
+    if (amtInput) amtInput.value = '';
+
+    const daysInput = document.getElementById('projVoDays');
+    if (daysInput) daysInput.value = '0';
+
+    const dateInput = document.getElementById('projVoDate');
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+    const reasonInput = document.getElementById('projVoReason');
+    if (reasonInput) reasonInput.value = '';
+
+    App.openModal('projectVariationModal');
+  },
+
+  calcVariationImpact() {
+    const project = this.currentVoProject;
+    const contractVal = project ? (Number(project.contract_value) || 0) : 0;
+    const type = document.getElementById('projVoType')?.value || 'addition';
+    const amount = parseFloat(document.getElementById('projVoAmount')?.value) || 0;
+    const curr = project?.currency || 'ر.ي';
+
+    let newVal = contractVal;
+    if (type === 'addition') {
+      newVal = contractVal + amount;
+    } else if (type === 'reduction') {
+      newVal = Math.max(0, contractVal - amount);
+    }
+
+    const newContractEl = document.getElementById('projVoNewContractVal');
+    if (newContractEl) {
+      newContractEl.innerText = `${App.formatNumber(newVal)} ${curr}`;
+    }
+  },
+
+  async submitVariationOrder(e) {
+    e.preventDefault();
+    const projectId = document.getElementById('projVoProjectId')?.value;
+    const title = document.getElementById('projVoTitle')?.value?.trim();
+    const type = document.getElementById('projVoType')?.value || 'addition';
+    const amount = parseFloat(document.getElementById('projVoAmount')?.value) || 0;
+    const time_extension_days = parseInt(document.getElementById('projVoDays')?.value) || 0;
+    const date = document.getElementById('projVoDate')?.value;
+    const reason = document.getElementById('projVoReason')?.value?.trim();
+
+    if (!projectId || !title) {
+      App.showToast('يرجى تحديد المشروع وعنوان الأمر التغييري', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/variation-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          type,
+          amount,
+          time_extension_days,
+          date,
+          reason
+        })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم اعتماد وتوثيق الأمر التغييري بنجاح 📋', 'success');
+        App.closeModal('projectVariationModal');
+        await this.loadProjects();
+
+        // تحديث سلسلة العميل إذا كانت مفتوحة
+        if (typeof App !== 'undefined' && App.currentChainClientId) {
+          App.openClientChainModal(App.currentChainClientId);
+        }
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) {
+          Reports.loadDashboardKPIs();
+        }
+      } else {
+        App.showToast(json.message || 'فشل في حفظ الأمر التغييري', 'error');
+      }
+    } catch (err) {
+      console.error('Error submitting variation order:', err);
+      App.showToast('خطأ أثناء حفظ الأمر التغييري', 'error');
     }
   }
 };

@@ -5563,10 +5563,52 @@
           </div>
         </div>
 
-        <!-- قسم الحسابات التعاقدية والاستقطاعات الآلية -->
+        <!-- قسم الحسابات التعاقدية وحاسبة نسبة الإنجاز الآلية -->
         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
           <div style="font-size: 0.82rem; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
-            🧮 الاحتساب التعاقدي للمستخلص (تلقائي وفق نسب العقد)
+            🧮 الاحتساب التعاقدي للمستخلص وربط نسبة الإنجاز
+          </div>
+
+          <!-- شريط حاسبة قفزة نسبة الإنجاز والربط المالي التلقائي -->
+          <div id="modalBillProgressSection" style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+                <span>📈 حاسبة نسبة الإنجاز الفعلي للمشروع:</span>
+              </div>
+              <span id="modalBillContractValBadge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">قيمة العقد: 0</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+              <div style="background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 6px; font-size: 0.75rem;">
+                <span style="color: var(--text-secondary);">الإنجاز التراكمي السابق:</span>
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 2px;">
+                  <strong id="modalBillPrevProgressPct" style="color: #94a3b8; font-size: 0.95rem;">0%</strong>
+                  <span id="modalBillPrevBilledAmt" style="color: var(--text-secondary); font-size: 0.72rem;">(0)</span>
+                </div>
+              </div>
+              <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); padding: 6px 10px; border-radius: 6px; font-size: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: var(--accent-green); font-weight: 700;">نسبة الإنجاز الجديدة:</span>
+                  <strong id="modalBillTargetProgressLabel" style="color: var(--accent-green); font-size: 1rem;">0%</strong>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                  <input type="range" id="modalBillProgressSlider" min="0" max="100" value="0" step="0.5" style="flex: 1; accent-color: var(--accent-green); cursor: pointer;" oninput="App.onBillProgressSliderChange(this.value)">
+                  <input type="number" id="modalBillProgressInput" min="0" max="100" value="0" step="0.1" style="width: 55px; padding: 1px 4px; font-size: 0.78rem; text-align: center; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: #fff;" oninput="App.onBillProgressInputChange(this.value)">
+                  <span style="color: #fff; font-size: 0.75rem;">%</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.74rem; background: rgba(255,255,255,0.02); padding: 5px 8px; border-radius: 5px;">
+              <span style="color: var(--text-secondary);">قيمة أعمال الفترة الناتجة عن فرق الإنجاز:</span>
+              <strong id="modalBillCalculatedWorkAmt" style="color: var(--gold-light); font-size: 0.88rem;">0</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;">
+              <input type="checkbox" id="modalBillAutoUpdateProjectProgress" checked style="cursor: pointer;">
+              <label for="modalBillAutoUpdateProjectProgress" style="font-size: 0.72rem; color: #94a3b8; cursor: pointer; margin-bottom: 0;">
+                تحديث نسبة إنجاز المشروع في النظام تلقائياً إلى هذه النسبة فور اعتماد المستخلص
+              </label>
+            </div>
           </div>
 
           <div class="form-group">
@@ -5605,6 +5647,143 @@
         <div class="modal-footer">
           <button type="submit" class="btn btn-primary">إصدار المستخلص وتحديث رصيد العميل</button>
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('newClientBillModal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تحديث نسبة إنجاز المشروع والتحكم المالي (Project Progress & Financial Control Modal) -->
+  <div class="modal-overlay" id="projectProgressModal">
+    <div class="modal-box" style="max-width: 620px; width: 95%;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">📈</span>
+          <div>
+            <h3 id="projProgModalTitle" style="margin: 0; font-size: 1.15rem;">تحديث نسبة إنجاز المشروع</h3>
+            <span id="projProgModalSubtitle" style="font-size: 0.75rem; color: var(--text-secondary);">متابعة القيمة المكتسبة ومؤشرات السلامة المالية</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="App.closeModal('projectProgressModal')">&times;</button>
+      </div>
+
+      <form id="projectProgressForm" onsubmit="Projects.submitProgressUpdate(event)">
+        <input type="hidden" id="projProgProjectId" value="">
+
+        <!-- شبكة المؤشرات المالية والتحكم اللحظي -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; text-align: center;">
+          <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 8px; border-radius: 8px;">
+            <div style="font-size: 0.7rem; color: var(--text-secondary);">قيمة العقد</div>
+            <strong id="projProgContractVal" style="font-size: 0.9rem; color: #38bdf8;">0</strong>
+          </div>
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); padding: 8px; border-radius: 8px;">
+            <div style="font-size: 0.7rem; color: var(--text-secondary);">القيمة المكتسبة (EV)</div>
+            <strong id="projProgEarnedVal" style="font-size: 0.9rem; color: var(--accent-green);">0</strong>
+          </div>
+          <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); padding: 8px; border-radius: 8px;">
+            <div style="font-size: 0.7rem; color: var(--text-secondary);">التكلفة الفعلية المنصرفة</div>
+            <strong id="projProgActualCost" style="font-size: 0.9rem; color: var(--accent-red);">0</strong>
+          </div>
+        </div>
+
+        <!-- بطاقة تنبيه السلامة المالية الذكي -->
+        <div id="projProgHealthAlert" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.78rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
+          <span id="projProgHealthIcon" style="font-size: 1.2rem;">✅</span>
+          <span id="projProgHealthText">الأداء المالي متزن وفي نطاق الميزانية التقديرية للمشروع.</span>
+        </div>
+
+        <!-- شريط تحديد نسبة الإنجاز الجديد -->
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label style="font-weight: 700; color: #fff; margin-bottom: 0; font-size: 0.85rem;">نسبة الإنجاز الفعلي المعتمدة (%):</label>
+            <strong id="projProgSliderValLabel" style="font-size: 1.15rem; color: var(--accent-green);">0%</strong>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="range" id="projProgSlider" min="0" max="100" value="0" step="1" style="flex: 1; accent-color: var(--accent-green); cursor: pointer;" oninput="Projects.onProgressModalSliderChange(this.value)">
+            <input type="number" id="projProgInput" min="0" max="100" value="0" step="0.5" class="form-control" style="width: 75px; text-align: center; font-weight: 700;" oninput="Projects.onProgressModalInputChange(this.value)">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>ملاحظات محضر المعاينة / توثيق الإنجاز</label>
+          <textarea id="projProgNotes" class="form-control" rows="2" placeholder="أعمال صب الخرسانة / استلام حديد التسليح / إتمام مرحلة التشطيبات..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">تحديث نسبة الإنجاز والاعتماد</button>
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('projectProgressModal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تسجيل أمر تغييري جديد (Variation Order Modal) -->
+  <div class="modal-overlay" id="projectVariationModal">
+    <div class="modal-box" style="max-width: 600px; width: 95%;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">📋</span>
+          <div>
+            <h3 id="projVoModalTitle" style="margin: 0; font-size: 1.15rem;">تسجيل أمر تغييري للعقد (V.O)</h3>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">تعديل إعدادات وقيمة العقد وتوثيق الأثر المالي</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="App.closeModal('projectVariationModal')">&times;</button>
+      </div>
+
+      <form id="projectVariationForm" onsubmit="Projects.submitVariationOrder(event)">
+        <input type="hidden" id="projVoProjectId" value="">
+
+        <div class="form-group">
+          <label>عنوان الأمر التغييري / البند <span style="color: var(--accent-red);">*</span></label>
+          <input type="text" id="projVoTitle" class="form-control" placeholder="أمر تغييري رقم ... - إضافة أعمال حفريات / تعديل مواصفات..." required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>نوع التعديل</label>
+            <select id="projVoType" class="form-control" onchange="Projects.calcVariationImpact()">
+              <option value="addition">أمر تغييري بالزيادة (+)</option>
+              <option value="reduction">أمر تغييري بالتخفيض (-)</option>
+              <option value="scope_change">تعديل مواصفات بدون تغيير مالي</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>مبلغ الأمر التغييري <span style="color: var(--accent-red);">*</span></label>
+            <input type="number" id="projVoAmount" class="form-control" placeholder="50000" min="0" step="any" required oninput="Projects.calcVariationImpact()">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>تمديد زمني (أيام إضافية إن وجد)</label>
+            <input type="number" id="projVoDays" class="form-control" value="0" min="0" placeholder="مثال: 15 يوم">
+          </div>
+          <div class="form-group">
+            <label>تاريخ الاعتماد</label>
+            <input type="date" id="projVoDate" class="form-control" required>
+          </div>
+        </div>
+
+        <!-- معاينة الأثر المالي قبل الحفظ -->
+        <div style="background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); border-radius: 8px; padding: 10px; margin-bottom: 14px; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span>قيمة العقد السابقة:</span>
+            <strong id="projVoPrevContractVal">0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span>قيمة العقد المعدلة بعد الأمر التغييري:</span>
+            <strong id="projVoNewContractVal" style="color: var(--gold-light); font-size: 0.95rem;">0</strong>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>مبررات وتفاصيل الأمر التغييري</label>
+          <textarea id="projVoReason" class="form-control" rows="2" placeholder="بناءً على طلب المالك / تعديل المخططات الإنشائية رقم ..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">اعتماد الأمر التغييري وتحديث العقد</button>
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal('projectVariationModal')">إلغاء</button>
         </div>
       </form>
     </div>
