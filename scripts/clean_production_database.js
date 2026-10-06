@@ -79,6 +79,13 @@ const operationalTables = [
   'project_rfi',
   'project_engineer_certifications',
   'contract_revenue_recognitions',
+  'contract_lifecycle',
+  'contract_alerts',
+  'cash_flow_projections',
+  'project_labor',
+  'project_closeouts',
+  'material_movements',
+  'material_audit_logs',
   'projects',
 
   // ب. العمليات المالية والمحاسبية
