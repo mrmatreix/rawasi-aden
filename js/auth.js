@@ -1081,6 +1081,8 @@ const Auth = {
       'clients': 'clients:view',
       'suppliers': 'suppliers:view',
       'cash': 'cash:view',
+      'contractLifecycle': 'projects:view',
+      'cashFlow': 'accounting:view,reports:view',
       'settings': 'settings:users,settings:company,settings:backup'
     };
 
