@@ -341,6 +341,98 @@ async function initMysql() {
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    // جداول بوابة وتطبيق العملاء في MySQL
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id INT NOT NULL,
+        email VARCHAR(191) NOT NULL UNIQUE,
+        phone VARCHAR(50) NULL,
+        password_hash TEXT NOT NULL,
+        full_name VARCHAR(150) NOT NULL,
+        role VARCHAR(30) DEFAULT 'viewer',
+        permissions TEXT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        two_factor_enabled TINYINT(1) DEFAULT 1,
+        two_factor_pin VARCHAR(20) DEFAULT '123456',
+        otp_code VARCHAR(10) NULL,
+        otp_expires_at DATETIME NULL,
+        last_login_at DATETIME NULL,
+        last_login_ip VARCHAR(50) NULL,
+        device_token TEXT NULL,
+        device_platform VARCHAR(20) NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_project_access (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_user_id INT NOT NULL,
+        project_id INT NOT NULL,
+        can_view_progress TINYINT(1) DEFAULT 1,
+        can_view_invoices TINYINT(1) DEFAULT 1,
+        can_view_payments TINYINT(1) DEFAULT 1,
+        can_view_reports TINYINT(1) DEFAULT 1,
+        can_view_drawings TINYINT(1) DEFAULT 1,
+        can_view_correspondence TINYINT(1) DEFAULT 1,
+        can_approve_invoices TINYINT(1) DEFAULT 0,
+        can_send_messages TINYINT(1) DEFAULT 1,
+        granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        granted_by INT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_client_proj (client_user_id, project_id),
+        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_user_id INT NOT NULL,
+        project_id INT NULL,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        body TEXT NOT NULL,
+        reference_type VARCHAR(50) NULL,
+        reference_id INT NULL,
+        is_read TINYINT(1) DEFAULT 0,
+        sent_via_push TINYINT(1) DEFAULT 0,
+        sent_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_user_id INT NOT NULL,
+        project_id INT NULL,
+        direction VARCHAR(20) DEFAULT 'outgoing',
+        subject VARCHAR(200) NOT NULL,
+        body TEXT NOT NULL,
+        attachment_url TEXT NULL,
+        priority VARCHAR(20) DEFAULT 'normal',
+        status VARCHAR(20) DEFAULT 'open',
+        replied_by INT NULL,
+        reply_body TEXT NULL,
+        replied_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await checkAndAddCol('bills', 'client_approval_status', "VARCHAR(30) DEFAULT 'pending'");
+    await checkAndAddCol('bills', 'client_approved_at', 'DATETIME NULL');
+    await checkAndAddCol('bills', 'client_approval_notes', 'TEXT NULL');
+    await checkAndAddCol('bills', 'client_approved_by_id', 'INT NULL');
   } catch (err) {
     console.warn('Accounting migration note (MySQL):', err.message);
   }
@@ -1939,8 +2031,110 @@ function initSqlite() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (project_id) REFERENCES projects(id)
         );
+
+        -- جداول بوابة وتطبيق العملاء المخصص (Client Portal & Mobile App)
+        CREATE TABLE IF NOT EXISTS client_users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id INTEGER NOT NULL,
+          email VARCHAR(191) NOT NULL UNIQUE,
+          phone VARCHAR(50),
+          password_hash TEXT NOT NULL,
+          full_name VARCHAR(150) NOT NULL,
+          role VARCHAR(30) DEFAULT 'viewer',
+          permissions TEXT DEFAULT '{"view_projects":true,"view_invoices":true,"view_payments":true,"approve_invoices":false,"send_messages":true}',
+          status VARCHAR(20) DEFAULT 'active',
+          two_factor_enabled INTEGER DEFAULT 1,
+          two_factor_pin VARCHAR(20) DEFAULT '123456',
+          otp_code VARCHAR(10),
+          otp_expires_at DATETIME,
+          last_login_at DATETIME,
+          last_login_ip VARCHAR(50),
+          device_token TEXT,
+          device_platform VARCHAR(20),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS client_project_access (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_user_id INTEGER NOT NULL,
+          project_id INTEGER NOT NULL,
+          can_view_progress INTEGER DEFAULT 1,
+          can_view_invoices INTEGER DEFAULT 1,
+          can_view_payments INTEGER DEFAULT 1,
+          can_view_reports INTEGER DEFAULT 1,
+          can_view_drawings INTEGER DEFAULT 1,
+          can_view_correspondence INTEGER DEFAULT 1,
+          can_approve_invoices INTEGER DEFAULT 0,
+          can_send_messages INTEGER DEFAULT 1,
+          granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          granted_by INTEGER,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(client_user_id, project_id),
+          FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS client_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_user_id INTEGER NOT NULL,
+          project_id INTEGER,
+          type VARCHAR(50) NOT NULL,
+          title VARCHAR(200) NOT NULL,
+          body TEXT NOT NULL,
+          reference_type VARCHAR(50),
+          reference_id INTEGER,
+          is_read INTEGER DEFAULT 0,
+          sent_via_push INTEGER DEFAULT 0,
+          sent_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS client_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_user_id INTEGER NOT NULL,
+          project_id INTEGER,
+          direction VARCHAR(20) DEFAULT 'outgoing',
+          subject VARCHAR(200) NOT NULL,
+          body TEXT NOT NULL,
+          attachment_url TEXT,
+          priority VARCHAR(20) DEFAULT 'normal',
+          status VARCHAR(20) DEFAULT 'open',
+          replied_by INTEGER,
+          reply_body TEXT,
+          replied_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_cu_client_id ON client_users(client_id);
+        CREATE INDEX IF NOT EXISTS idx_cu_email ON client_users(email);
+        CREATE INDEX IF NOT EXISTS idx_cpa_user_proj ON client_project_access(client_user_id, project_id);
+        CREATE INDEX IF NOT EXISTS idx_cn_user_read ON client_notifications(client_user_id, is_read);
+        CREATE INDEX IF NOT EXISTS idx_cm_user ON client_messages(client_user_id);
       `);
-      console.log('✅ [Rawasi DB] Client Lifecycle & Financial Hierarchy view & tables initialized');
+
+      // إضافة أعمدة اعتماد المستخلصات في جدول bills إذا لم تكن موجودة
+      try {
+        const billsInfo = sqliteDb.prepare("PRAGMA table_info(bills)").all();
+        const hasApprovalStatus = billsInfo.some(c => c.name === 'client_approval_status');
+        if (!hasApprovalStatus) {
+          sqliteDb.exec(`
+            ALTER TABLE bills ADD COLUMN client_approval_status VARCHAR(30) DEFAULT 'pending';
+            ALTER TABLE bills ADD COLUMN client_approved_at DATETIME;
+            ALTER TABLE bills ADD COLUMN client_approval_notes TEXT;
+            ALTER TABLE bills ADD COLUMN client_approved_by_id INTEGER;
+          `);
+        }
+      } catch (colErr) {
+        // أعمدة موجودة مسبقاً
+      }
+
+      console.log('✅ [Rawasi DB] Client Lifecycle & Portal tables initialized');
     } catch (e) {
       console.warn('Client hierarchy migration note (SQLite):', e.message);
     }

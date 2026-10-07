@@ -60,6 +60,8 @@ app.use('/api/profitability', requireAuth, require('./routes/profitability'));
 app.use('/api/cash-flow', requireAuth, require('./routes/cash_flow'));
 app.use('/api/contracts', requireAuth, require('./routes/contract_lifecycle'));
 app.use('/api/contracts', requireAuth, require('./routes/contract_alerts'));
+app.use('/api/client-portal', require('./routes/client_portal'));
+app.use('/api/admin/client-users', requireAuth, require('./routes/admin_client_users'));
 
 
 // مسار توثيق الـ API التفاعلي ومواصفة OpenAPI 3.0

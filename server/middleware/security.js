@@ -129,7 +129,8 @@ const verifyCsrfToken = (req, res, next) => {
     '/api/auth/csrf-token',
     '/api/auth/verify-2fa',
     '/api/auth/unlock',
-    '/api/health'
+    '/api/health',
+    '/api/client-portal'
   ];
   if (exemptPaths.some(p => urlPath.startsWith(p))) {
     return next();
