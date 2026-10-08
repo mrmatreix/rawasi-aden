@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: rawasi-aden
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_JWT_SECRET
+        generateValue: true

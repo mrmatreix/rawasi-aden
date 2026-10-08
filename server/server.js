@@ -26,7 +26,8 @@ const { verifyCsrfToken, requireAuth } = require('./middleware/security');
 
 // خدمة الملفات الثابتة للواجهة الأمامية (HTML, CSS, JS, Images)
 const publicDir = path.join(__dirname, '..');
-app.use(express.static(publicDir));
+['css', 'js', 'images', 'assets'].forEach(dir => app.use('/' + dir, express.static(path.join(publicDir, dir))));
+['manifest.json', 'sw.js'].forEach(f => app.get('/' + f, (req, res) => res.sendFile(path.join(publicDir, f))));
 
 // حماية مسارات الـ API بـ CSRF Token
 app.use('/api', verifyCsrfToken);
