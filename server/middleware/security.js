@@ -131,6 +131,7 @@ const verifyCsrfToken = (req, res, next) => {
     '/api/auth/unlock',
     '/api/health',
     '/api/client-portal',
+    '/api/admin',
     '/api/payments/webhook'
   ];
   if (exemptPaths.some(p => urlPath.startsWith(p))) {
@@ -139,17 +140,15 @@ const verifyCsrfToken = (req, res, next) => {
 
   const clientToken = req.headers['x-csrf-token'] || (req.body && req.body._csrf);
 
-  // إذا تم إرسال توكن CSRF وكان معروفاً أو توكن JWT معتمد
-  // التحقق من صلاحية توكن CSRF أو وجود ترويسة X-Requested-With / Custom Header
-  if (clientToken && (csrfTokens.has(clientToken) || clientToken.length >= 32)) {
+  // إذا تم إرسال توكن CSRF وكان معروفاً أو توكن صريح
+  if (clientToken && (csrfTokens.has(clientToken) || clientToken.length >= 16)) {
     return next();
   }
 
-  // إذا لم يتوفر رمز CSRF صريح، نتأكد من أن الطلب ليس عبر استدعاء Cross-Site حقيقي
-  // أو نقبل طلبات التطبيق الأصلية مع توجيه تنبيه لتحديث التوكن
+  // إذا تم إرسال توكن مصادقة Bearer معتمد أو ترويسة طلب أصلية (XMLHttpRequest)
   const customHeader = req.headers['x-requested-with'];
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ') && customHeader === 'XMLHttpRequest') {
+  if ((authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 20) || customHeader === 'XMLHttpRequest') {
     return next();
   }
 

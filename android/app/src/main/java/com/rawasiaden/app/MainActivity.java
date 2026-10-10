@@ -11,8 +11,8 @@ import android.widget.Toast;
 
 public class MainActivity extends Activity {
     private WebView webView;
-    // يمكنك تعديل هذا الرابط ليكون رابط السيرفر السحابي أو المحلي
-    private static final String SERVER_URL = "http://10.0.2.2:5500/"; 
+    // أفضل ممارسة: قراءة الملفات محلياً ليشتغل التطبيق بسرعة، أو وضع رابط موقعك المرفوع على الإنترنت.
+    private static final String SERVER_URL = "file:///android_asset/public/index.html"; 
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -27,6 +27,8 @@ public class MainActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         settings.setSupportZoom(false);

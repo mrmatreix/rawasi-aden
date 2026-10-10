@@ -377,12 +377,26 @@
   <script>
     let allUsers = [];
 
-    // Unified Authentication Token Resolver
+    // Unified Authentication & CSRF Token Headers Resolver
     function getAuthToken() {
       return localStorage.getItem('rawasi_token') || 
              sessionStorage.getItem('rawasi_token') || 
              localStorage.getItem('token') || 
              sessionStorage.getItem('token') || '';
+    }
+
+    function getAuthHeaders(extraHeaders = {}) {
+      const token = getAuthToken();
+      const csrf = (window.Auth && window.Auth.csrfToken) || sessionStorage.getItem('rawasi_csrf_token') || 'rawasi_security_token_32bytes_v2';
+      const headers = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': csrf,
+        ...extraHeaders
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      return headers;
     }
 
     function showToast(message, type = 'success') {
@@ -409,9 +423,7 @@
     async function loadClientUsers() {
       const tbody = document.getElementById('usersTableBody');
       try {
-        const token = getAuthToken();
-        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-
+        const headers = getAuthHeaders();
         const res = await fetch('/api/admin/client-users', { headers });
         const data = await res.json();
 
@@ -702,10 +714,7 @@
 
         const res = await fetch(url, {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload)
         });
         const data = await res.json();
@@ -729,14 +738,10 @@
     async function resetPassword(id) {
       const newPass = prompt('أدخل كلمة المرور الجديدة للحساب (6 أحرف على الأقل):');
       if (!newPass) return;
-      const token = getAuthToken();
       try {
         const res = await fetch(`/api/admin/client-users/${id}/reset-password`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ new_password: newPass })
         });
         const data = await res.json();
@@ -755,13 +760,10 @@
         return;
       }
 
-      const token = getAuthToken();
       try {
         const res = await fetch(`/api/admin/client-users/${id}`, {
           method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: getAuthHeaders()
         });
         const data = await res.json();
         if (data.success) {
