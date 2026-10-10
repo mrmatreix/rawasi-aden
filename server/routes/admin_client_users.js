@@ -291,4 +291,28 @@ router.post('/:id/projects', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/admin/client-users/:id
+ * حذف حساب مستخدم العميل نهائياً
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const user = await db.get(`SELECT id, full_name FROM client_users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
+    }
+
+    // حذف الصلاحيات والمشاريع المرتبطة أولاً
+    await db.run(`DELETE FROM client_project_access WHERE client_user_id = ?`, [userId]);
+    // حذف حساب العميل
+    await db.run(`DELETE FROM client_users WHERE id = ?`, [userId]);
+
+    res.json({ success: true, message: `تم حذف حساب العميل (${user.full_name}) بنجاح` });
+  } catch (err) {
+    console.error('Delete Client User Error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء حذف حساب العميل' });
+  }
+});
+
 module.exports = router;

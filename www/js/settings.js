@@ -80,7 +80,8 @@ const Settings = {
           <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
           <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? '#34d399' : '#f87171'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
           <td>
-            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: #34d399; border-color: #10b981;">إدارة التفاصيل والصلاحيات ↗</a>
+            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: #34d399; border-color: #10b981;">إدارة التفاصيل ↗</a>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.deleteClientUser(${u.id}, '${(u.full_name || '').replace(/'/g, "\\'")}')" style="padding: 3px 8px; font-size: 0.8rem; color: #f87171; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); margin-right: 4px;" title="حذف حساب العميل">🗑️ حذف</button>
           </td>
         `;
         tbody.appendChild(tr);
@@ -92,6 +93,33 @@ const Settings = {
 
   openClientUserModal() {
     window.open('/views/client_users.html', '_blank');
+  },
+
+  async deleteClientUser(id, fullName) {
+    if (!confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('rawasi_token') || sessionStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
+      const res = await fetch(`/api/admin/client-users/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (typeof App !== 'undefined' && App.showNotification) {
+          App.showNotification('نجاح', data.message || 'تم حذف حساب العميل بنجاح', 'success');
+        } else {
+          alert(data.message || 'تم حذف حساب العميل بنجاح');
+        }
+        this.loadClientUsersForSettings();
+      } else {
+        alert(data.message || 'خطأ في حذف حساب العميل');
+      }
+    } catch (e) {
+      console.error('Error deleting client user:', e);
+    }
   },
 
   // ================== إعدادات الشركة ==================
