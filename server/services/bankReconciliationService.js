@@ -186,12 +186,7 @@ const BankReconciliationService = {
 
       // 1. توليد قيد اليومية: من حـ/ عمولات ومصاريف بنكية (5210) إلى حـ/ البنك
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -318,12 +313,7 @@ const BankReconciliationService = {
     return await transaction(async (tx) => {
       // 1. توليد قيد عكسي للشيك المرتجع
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -447,12 +437,7 @@ const BankReconciliationService = {
     const isBalanced = Math.abs(variance) < 0.01;
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM bank_reconciliations');
-    let brsSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-    let reconciliation_no = `BRS-${new Date().getFullYear()}-${String(brsSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM bank_reconciliations WHERE reconciliation_no = ?', [reconciliation_no])) {
-      brsSeq += 1;
-      reconciliation_no = `BRS-${new Date().getFullYear()}-${String(brsSeq).padStart(4, '0')}`;
-    }
+    const reconciliation_no = `BRS-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
     const userId = user ? await resolveValidUserId(user?.id) : null;
 

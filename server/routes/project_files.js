@@ -348,7 +348,7 @@ router.get('/download', async (req, res) => {
 
 
 // 4. حفظ تقرير داخل مجلد المشروع المخصص
-router.post('/:projectId/save-report', express.json({ limit: '40mb' }), async (req, res) => {
+router.post('/:projectId/save-report', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const { reportType, reportName, content, format = 'html', targetSubfolder } = req.body;
@@ -415,7 +415,7 @@ router.post('/:projectId/save-report', express.json({ limit: '40mb' }), async (r
 });
 
 // أرشفة تقرير تم الحصول عليه من ماسح ضوئي: PDF أو صورة، داخل مجلد المشروع فقط.
-router.post('/:projectId/scan-archive', express.json({ limit: '40mb' }), async (req, res) => {
+router.post('/:projectId/scan-archive', async (req, res) => {
   try {
     const { fileName, mimeType, contentBase64, reportTitle, category = 'تقرير ممسوح' } = req.body || {};
     if (!contentBase64 || !fileName) return res.status(400).json({ success: false, message: 'اختر ملف التقرير الممسوح أولاً' });

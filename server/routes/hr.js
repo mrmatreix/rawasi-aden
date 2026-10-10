@@ -4,9 +4,6 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const PayrollService = require('../services/payrollService');
-const AccountingService = require('../services/accountingService');
-const FinancialControlService = require('../services/financialControlService');
-const CashBoxService = require('../services/cashBoxService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -56,16 +53,8 @@ router.post('/employees', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_no, full_name, national_id, phone, job_title, department, project_id, employment_type, hire_date, basic_salary, currency, status, bank_name, bank_account, notes } = req.body;
     if (!full_name?.trim()) return res.status(400).json({ success: false, message: 'اسم الموظف مطلوب' });
-    let code = employee_no?.trim() || null;
-    if (!code) {
-      const count = await get('SELECT COUNT(*) AS count FROM employees');
-      let empSeq = number(count?.count) + 1;
-      code = `EMP-${String(empSeq).padStart(4, '0')}`;
-      while (await get('SELECT id FROM employees WHERE employee_no = ?', [code])) {
-        empSeq += 1;
-        code = `EMP-${String(empSeq).padStart(4, '0')}`;
-      }
-    }
+    const count = await get('SELECT COUNT(*) AS count FROM employees');
+    const code = employee_no?.trim() || `EMP-${String(number(count?.count) + 1).padStart(4, '0')}`;
     const result = await run(`INSERT INTO employees (employee_no, full_name, national_id, phone, job_title, department, project_id, employment_type, hire_date, basic_salary, currency, status, bank_name, bank_account, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [code, full_name.trim(), national_id || '', phone || '', job_title || '', department || '', project_id || null, employment_type || 'دوام كامل', hire_date || today(), number(basic_salary), currency || 'ر.ي', status || 'active', bank_name || '', bank_account || '', notes || '']);
     res.json({ success: true, id: result.lastInsertRowid || result.insertId, message: 'تمت إضافة الموظف بنجاح' });
@@ -160,91 +149,16 @@ router.get('/advances', requirePermission('hr:view'), async (_req, res) => {
 
 router.post('/advances', requirePermission('hr:create'), async (req, res) => {
   try {
-    // SUGGESTION-4: أعمدة صحيحة (date/notes) + قيد من 114 إلى 111 + حركة صندوق — ذرياً
     const { employee_id, amount, request_date = today(), installment_amount, reason } = req.body;
-    const parsedAmount = number(amount);
-    if (!employee_id) {
-      return res.status(400).json({ success: false, message: 'الموظف مطلوب لتسجيل السلفة' });
-    }
-    if (parsedAmount <= 0) {
-      return res.status(400).json({ success: false, message: 'مبلغ السلفة يجب أن يكون أكبر من الصفر' });
-    }
-    const emp = await get('SELECT id, full_name FROM employees WHERE id = ?', [employee_id]);
-    if (!emp) {
-      return res.status(404).json({ success: false, message: 'الموظف المحدد غير موجود' });
-    }
-    const periodCheck = await checkPeriodOpen(request_date);
-    if (!periodCheck.isOpen) {
-      return res.status(403).json({ success: false, message: periodCheck.message });
-    }
-
-    await AccountingService.ensureCustodyJournalLinks();
-    const advAcc = await get("SELECT id FROM accounts WHERE code = '114' LIMIT 1");
-    const cashAcc = await get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
-    if (!advAcc || !cashAcc) {
-      return res.status(500).json({ success: false, message: 'الحسابات المحاسبية للسلف (114/111) غير موجودة في الدليل' });
-    }
-    const creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-    const creatorName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
-    const currentYear = new Date().getFullYear();
-
-    const txResult = await transaction(async (tx) => {
-      const result = await tx.run(`
-        INSERT INTO employee_advances (employee_id, amount, recovered_amount, installment_amount, date, status, notes)
-        VALUES (?, ?, 0, ?, ?, 'active', ?)
-      `, [employee_id, parsedAmount, number(installment_amount), request_date, reason || '']);
-      const advanceId = result.lastInsertRowid || result.insertId;
-
-      // قيد الصرف: من حـ/ سلف وعهد الموظفين (114) إلى حـ/ الصندوق (111)
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entryNo = `JE-ADV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-        jeSeq++;
-        entryNo = `JE-ADV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
-      }
-      const jeRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id,
-          total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        )
-        VALUES (?, ?, ?, 'سلفة موظف', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entryNo, request_date,
-        `سلفة موظف للسيد/ة ${emp.full_name} — قسط شهري ${number(installment_amount)}`,
-        advanceId, parsedAmount, parsedAmount,
-        creatorId, creatorName, creatorId, creatorName
-      ]);
-      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [jeId, advAcc.id, parsedAmount, `سلفة ${emp.full_name}`]);
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, 0, ?, ?)
-      `, [jeId, cashAcc.id, parsedAmount, `الصندوق — سلفة ${emp.full_name}`]);
-      await tx.run('UPDATE employee_advances SET journal_entry_id = ? WHERE id = ?', [jeId, advanceId]);
-
-      // حركة الصندوق الرئيسي (السلف غير مرتبطة بمشروع)
-      await CashBoxService.appendMovement(tx, {
-        cashOut: parsedAmount,
-        date: request_date, notes: `سلفة موظف: ${emp.full_name}`
-      });
-
-      return { advanceId, jeId, entryNo };
-    });
-
+    await run('INSERT INTO employee_advances (employee_id,amount,request_date,installment_amount,reason) VALUES (?,?,?,?,?)',
+      [employee_id, number(amount), request_date, number(installment_amount), reason]);
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'advance',
       entity_id: employee_id,
-      details: { amount: parsedAmount, installment_amount, reason, journal_entry_no: txResult.entryNo }
+      details: { amount, installment_amount, reason }
     });
-    res.json({
-      success: true, message: 'تم تسجيل السلفة وترحيل قيدها',
-      id: txResult.advanceId, journal_entry_id: txResult.jeId, entry_no: txResult.entryNo
-    });
+    res.json({ success: true, message: 'تم تسجيل السلفة' });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
@@ -680,44 +594,10 @@ router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accoun
 
       // تحديث حالة مسيرات الرواتب إلى مرحلة ومسددة
       await tx.run(`
-        UPDATE payroll
+        UPDATE payroll 
         SET status = 'paid', paid_date = ?, journal_entry_id = ?
         WHERE payroll_month = ?
       `, [today(), jeId, month]);
-
-      // SUGGESTION-4: تطبيق الاستقطاعات على السلف فعلياً (FIFO لكل موظف — يمنع الاسترداد المكرر)
-      // (فقط السلف ذات القسط > 0 — نفس قاعدة التوليد — حتى لا تمتص سلف راكدة الاسترداد)
-      const unposted = records.filter(r => !r.journal_entry_id);
-      const dedByEmp = {};
-      unposted.forEach(r => {
-        dedByEmp[r.employee_id] = (dedByEmp[r.employee_id] || 0) + number(r.deductions);
-      });
-      for (const [empId, totalDed] of Object.entries(dedByEmp)) {
-        let left = Math.round(totalDed * 100) / 100;
-        if (left <= 0) continue;
-        const advs = await tx.query(
-          "SELECT id, amount, recovered_amount FROM employee_advances WHERE employee_id = ? AND status = 'active' AND installment_amount > 0 ORDER BY id ASC",
-          [empId]
-        );
-        for (const a of advs) {
-          if (left <= 0.005) break;
-          const avail = Math.round(((Number(a.amount) || 0) - (Number(a.recovered_amount) || 0)) * 100) / 100;
-          const apply = Math.min(left, Math.max(0, avail));
-          if (apply <= 0) continue;
-          const newRec = Math.round(((Number(a.recovered_amount) || 0) + apply) * 100) / 100;
-          const newStatus = newRec >= (Number(a.amount) || 0) - 0.005 ? 'recovered' : 'active';
-          await tx.run('UPDATE employee_advances SET recovered_amount = ?, status = ? WHERE id = ?', [newRec, newStatus, a.id]);
-          left = Math.round((left - apply) * 100) / 100;
-        }
-      }
-
-      // SUGGESTION-4: حركة الصندوق بصافي الرواتب المسددة (الصندوق الرئيسي)
-      if (totalNet > 0) {
-        await CashBoxService.appendMovement(tx, {
-          cashOut: totalNet, date: postDate,
-          notes: `صافي رواتب شهر ${month} (${entry_no})`
-        });
-      }
 
       return { jeId, entry_no };
     });

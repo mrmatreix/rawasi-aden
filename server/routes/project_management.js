@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const XLSX = require('xlsx');
 const { query, get, run, transaction } = require('../database/db');
 const { tafqeet } = require('../services/tafqeetService');
+const clientChainService = require('../services/clientChainService');
 const { requirePermission, requireScope } = require('../middleware/security');
-const ProjectCostService = require('../services/projectCostService');
-const FinancialControlService = require('../services/financialControlService');
-const CashBoxService = require('../services/cashBoxService');
-const { checkPeriodOpen } = require('../services/periodService');
 
 // فرض نطاق المشروع الإلزامي وحماية العمليات على كافة مسارات إدارة المشاريع
 router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
@@ -49,7 +47,18 @@ router.get('/:projectId/overview', async (req, res) => {
     const purchases = await query('SELECT * FROM project_purchases WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
     const labor = await query('SELECT * FROM project_labor_expenses WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
     const invoices = await query('SELECT * FROM project_invoices WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
-    const dailyReports = await query('SELECT * FROM project_daily_reports WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const rawDailyReports = await query('SELECT * FROM project_daily_reports WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
+    const dailyReports = rawDailyReports.map(r => {
+      let photos = [];
+      let manpower_details = [];
+      let equipment_details = [];
+      let materials_details = [];
+      try { photos = typeof r.photos === 'string' ? JSON.parse(r.photos) : (r.photos || []); } catch {}
+      try { manpower_details = typeof r.manpower_details === 'string' ? JSON.parse(r.manpower_details) : (r.manpower_details || []); } catch {}
+      try { equipment_details = typeof r.equipment_details === 'string' ? JSON.parse(r.equipment_details) : (r.equipment_details || []); } catch {}
+      try { materials_details = typeof r.materials_details === 'string' ? JSON.parse(r.materials_details) : (r.materials_details || []); } catch {}
+      return { ...r, photos, manpower_details, equipment_details, materials_details };
+    });
     const weeklyReports = await query('SELECT * FROM project_weekly_reports WHERE project_id = ? ORDER BY date_to DESC, id DESC', [projectId]);
     const handovers = await query('SELECT * FROM project_handover_minutes WHERE project_id = ? ORDER BY inspection_date DESC, id DESC', [projectId]);
     const correspondence = await query('SELECT * FROM project_correspondence WHERE project_id = ? ORDER BY date DESC, id DESC', [projectId]);
@@ -129,11 +138,15 @@ router.post('/:projectId/contract', async (req, res) => {
       status, notes
     } = req.body;
 
+    const proj = await get('SELECT client_id FROM projects WHERE id = ?', [projectId]);
+    const finalClientId = req.body.client_id || (proj ? proj.client_id : null);
+
     const existing = await get('SELECT id FROM project_contracts WHERE project_id = ?', [projectId]);
 
     if (existing) {
       await run(`
         UPDATE project_contracts SET
+          client_id = COALESCE(?, client_id),
           contract_no = ?, title = ?, first_party = ?, second_party = ?,
           contract_date = ?, start_date = ?, end_date = ?, duration_days = ?,
           contract_value = ?, currency = ?, advance_payment_pct = ?, advance_payment_amount = ?,
@@ -141,6 +154,7 @@ router.post('/:projectId/contract', async (req, res) => {
           payment_terms = ?, scope_of_work = ?, status = ?, notes = ?
         WHERE project_id = ?
       `, [
+        finalClientId,
         contract_no, title, first_party, second_party,
         contract_date, start_date, end_date, duration_days || 0,
         Number(contract_value) || 0, currency || 'ر.ي',
@@ -151,14 +165,14 @@ router.post('/:projectId/contract', async (req, res) => {
     } else {
       await run(`
         INSERT INTO project_contracts (
-          project_id, contract_no, title, first_party, second_party,
+          project_id, client_id, contract_no, title, first_party, second_party,
           contract_date, start_date, end_date, duration_days,
           contract_value, currency, advance_payment_pct, advance_payment_amount,
           retention_pct, penalty_per_day, max_penalty_pct,
           payment_terms, scope_of_work, status, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        projectId, contract_no || `CNT-${projectId}`, title, first_party, second_party,
+        projectId, finalClientId, contract_no || `CNT-${projectId}`, title, first_party, second_party,
         contract_date, start_date, end_date, duration_days || 0,
         Number(contract_value) || 0, currency || 'ر.ي',
         Number(advance_payment_pct) || 0, Number(advance_payment_amount) || 0,
@@ -269,12 +283,68 @@ router.delete('/:projectId/drawings/:id', async (req, res) => {
 });
 
 // ============================================================================
-// 3. جدول الكميات BOQ (Bill of Quantities)
+// 3. جدول الكميات BOQ (Bill of Quantities) - Advanced Engine & Excel Sync
 // ============================================================================
 router.get('/:projectId/boq', async (req, res) => {
   try {
-    const boq = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [req.params.projectId]);
-    res.json({ success: true, data: boq });
+    const projectId = req.params.projectId;
+    const boq = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
+    
+    let totalContractValue = 0;
+    let totalExecutedValue = 0;
+    let overbilledCount = 0;
+    const categoryTotals = {};
+
+    const enriched = boq.map(b => {
+      const cQty = Number(b.contract_qty) || 0;
+      const eQty = Number(b.executed_qty) || 0;
+      const rate = Number(b.unit_rate) || 0;
+      const totalAmount = Number(b.total_amount) || (cQty * rate);
+      const executedAmount = eQty * rate;
+      const remainingQty = Math.max(0, cQty - eQty);
+      const isOverbilled = eQty > cQty;
+      const overbilledQty = isOverbilled ? (eQty - cQty) : 0;
+      const progressPct = cQty > 0 ? Math.min(200, Math.round((eQty / cQty) * 100)) : (eQty > 0 ? 100 : 0);
+
+      totalContractValue += totalAmount;
+      totalExecutedValue += executedAmount;
+      if (isOverbilled) overbilledCount++;
+
+      const cat = b.category || 'أعمال عامة';
+      if (!categoryTotals[cat]) categoryTotals[cat] = { count: 0, totalAmount: 0, executedAmount: 0 };
+      categoryTotals[cat].count++;
+      categoryTotals[cat].totalAmount += totalAmount;
+      categoryTotals[cat].executedAmount += executedAmount;
+
+      return {
+        ...b,
+        contract_qty: cQty,
+        executed_qty: eQty,
+        unit_rate: rate,
+        total_amount: totalAmount,
+        executed_amount: executedAmount,
+        remaining_qty: remainingQty,
+        is_overbilled: isOverbilled,
+        overbilled_qty: overbilledQty,
+        progress_pct: progressPct
+      };
+    });
+
+    const overallProgress = totalContractValue > 0 ? Math.round((totalExecutedValue / totalContractValue) * 100) : 0;
+
+    res.json({
+      success: true,
+      data: enriched,
+      stats: {
+        totalItems: enriched.length,
+        totalContractValue,
+        totalExecutedValue,
+        remainingValue: Math.max(0, totalContractValue - totalExecutedValue),
+        overallProgress,
+        overbilledCount,
+        categories: categoryTotals
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -282,7 +352,25 @@ router.get('/:projectId/boq', async (req, res) => {
 
 router.post('/:projectId/boq', async (req, res) => {
   try {
-    const projectId = req.params.projectId;
+    let projectId = parseInt(req.params.projectId, 10);
+    if (!projectId || isNaN(projectId)) {
+      projectId = parseInt(req.body.projectId || req.body.project_id, 10);
+    }
+
+    if (!projectId || isNaN(projectId) || projectId <= 0) {
+      const fallbackProject = await get('SELECT id FROM projects ORDER BY id ASC LIMIT 1');
+      if (fallbackProject) {
+        projectId = fallbackProject.id;
+      } else {
+        return res.status(400).json({ success: false, message: 'معرف المشروع غير صالح أو غير محدد' });
+      }
+    }
+
+    const projectExists = await get('SELECT id FROM projects WHERE id = ?', [projectId]);
+    if (!projectExists) {
+      return res.status(404).json({ success: false, message: `المشروع برقم (${projectId}) غير موجود في النظام` });
+    }
+
     const {
       item_no, description, category = 'أعمال خرسانية', unit = 'م3',
       contract_qty = 0, executed_qty = 0, unit_rate = 0, status = 'جاري التنفيذ', notes
@@ -310,6 +398,295 @@ router.post('/:projectId/boq', async (req, res) => {
     res.json({ success: true, message: 'تمت إضافة بند جدول الكميات بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء إضافة بند BOQ', error: err.message });
+  }
+});
+
+// استيراد دفعة بنود كميات من Excel (Batch Import) بموثوقية عالية ومعاملات ذرية
+router.post('/:projectId/boq/batch-import', async (req, res) => {
+  try {
+    let projectId = parseInt(req.params.projectId, 10);
+    if (!projectId || isNaN(projectId)) {
+      projectId = parseInt(req.body.projectId || req.body.project_id, 10);
+    }
+
+    if (!projectId || isNaN(projectId) || projectId <= 0) {
+      // محاولة استرداد أول مشروع مسجل في النظام كخيار إنقاذ ذكي
+      const fallbackProject = await get('SELECT id, name FROM projects ORDER BY id ASC LIMIT 1');
+      if (fallbackProject) {
+        projectId = fallbackProject.id;
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'معرف المشروع غير صحيح أو غير محدد. يرجى اختيار مشروع معتمد أولاً.'
+        });
+      }
+    }
+
+    // التحقق الصارم من وجود المشروع في قاعدة البيانات
+    const project = await get('SELECT id, name, currency FROM projects WHERE id = ?', [projectId]);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: `المشروع برقم (${projectId}) غير موجود في قاعدة البيانات.`
+      });
+    }
+
+    const { items, mode = 'merge', updateContract = false } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'لم يتم توفير بنود للاستيراد' });
+    }
+
+    let insertedCount = 0;
+    let updatedCount = 0;
+
+    await transaction(async (tx) => {
+      if (mode === 'replace') {
+        // حماية المفاتيح الأجنبية (FK Protection): فك ارتباط طلبات الشراء والمرتجعات المرتبطة ببنود المشروع قبل الحذف
+        await tx.run(`
+          UPDATE purchase_requisitions 
+          SET boq_item_id = NULL 
+          WHERE boq_item_id IN (SELECT id FROM project_boq WHERE project_id = ?)
+        `, [projectId]).catch(() => {});
+
+        await tx.run(`
+          UPDATE inventory_returns 
+          SET boq_item_id = NULL 
+          WHERE boq_item_id IN (SELECT id FROM project_boq WHERE project_id = ?)
+        `, [projectId]).catch(() => {});
+
+        await tx.run('DELETE FROM project_boq WHERE project_id = ?', [projectId]);
+      }
+
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const itemNo = String(it.item_no || it.code || `BOQ-${String(i + 1).padStart(3, '0')}`).trim();
+        const desc = String(it.description || it.desc || it.name || 'بند أعمال').trim();
+        const cat = String(it.category || it.wbs || 'أعمال إنشائية').trim();
+        const unit = String(it.unit || 'م3').trim();
+        const cQty = Math.max(0, Number(it.contract_qty ?? it.quantity ?? it.qty) || 0);
+        const eQty = Math.max(0, Number(it.executed_qty ?? 0));
+        const rate = Math.max(0, Number(it.unit_rate ?? it.price ?? it.rate) || 0);
+        const total = Number(it.total_amount) || (cQty * rate);
+        const notes = it.notes ? String(it.notes) : null;
+        const status = eQty >= cQty && cQty > 0 ? 'مكتمل' : (eQty > 0 ? 'جاري التنفيذ' : 'لم يبدأ');
+
+        if (mode === 'merge') {
+          const existing = await tx.get('SELECT id FROM project_boq WHERE project_id = ? AND item_no = ?', [projectId, itemNo]);
+          if (existing) {
+            await tx.run(`
+              UPDATE project_boq SET
+                description = ?, category = ?, unit = ?, contract_qty = ?,
+                executed_qty = ?, unit_rate = ?, total_amount = ?, status = ?, notes = ?
+              WHERE id = ? AND project_id = ?
+            `, [desc, cat, unit, cQty, eQty, rate, total, status, notes, existing.id, projectId]);
+            updatedCount++;
+            continue;
+          }
+        }
+
+        await tx.run(`
+          INSERT INTO project_boq (
+            project_id, item_no, description, category, unit,
+            contract_qty, executed_qty, unit_rate, total_amount, status, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [projectId, itemNo, desc, cat, unit, cQty, eQty, rate, total, status, notes]);
+        insertedCount++;
+      }
+
+      // تحديث قيمة العقد تلقائياً إذا طُلب ذلك
+      const totalRow = await tx.get('SELECT SUM(total_amount) as total FROM project_boq WHERE project_id = ?', [projectId]);
+      const totalVal = Number(totalRow?.total) || 0;
+
+      if (updateContract && totalVal > 0) {
+        await tx.run('UPDATE projects SET contract_value = ? WHERE id = ?', [totalVal, projectId]);
+        const contractExists = await tx.get('SELECT id FROM project_contracts WHERE project_id = ?', [projectId]);
+        if (contractExists) {
+          await tx.run('UPDATE project_contracts SET contract_value = ? WHERE project_id = ?', [totalVal, projectId]);
+        }
+      }
+    });
+
+    const totalRow = await get('SELECT SUM(total_amount) as total FROM project_boq WHERE project_id = ?', [projectId]);
+    const totalVal = Number(totalRow?.total) || 0;
+
+    res.json({
+      success: true,
+      message: `تم استيراد ومعالجة بنود الكميات بنجاح لمشروع "${project.name}" (إدراج ${insertedCount} بند، وتحديث ${updatedCount} بند)`,
+      projectId,
+      projectName: project.name,
+      insertedCount,
+      updatedCount,
+      totalCount: insertedCount + updatedCount,
+      totalContractValue: totalVal
+    });
+  } catch (err) {
+    console.error('Error in BOQ batch-import:', err);
+    res.status(500).json({ success: false, message: 'فشل في استيراد جدول الكميات: ' + err.message });
+  }
+});
+
+// تحديث الإنجاز السريع لبند في جدول الكميات
+router.post('/:projectId/boq/quick-progress/:id', async (req, res) => {
+  try {
+    const { id, projectId } = req.params;
+    const { executed_qty } = req.body;
+
+    const existing = await get('SELECT * FROM project_boq WHERE id = ? AND project_id = ?', [id, projectId]);
+    if (!existing) return res.status(404).json({ success: false, message: 'البند غير موجود' });
+
+    const newExecuted = Math.max(0, Number(executed_qty) || 0);
+    const status = newExecuted >= existing.contract_qty && existing.contract_qty > 0 ? 'مكتمل' : (newExecuted > 0 ? 'جاري التنفيذ' : 'لم يبدأ');
+
+    await run('UPDATE project_boq SET executed_qty = ?, status = ? WHERE id = ? AND project_id = ?', [newExecuted, status, id, projectId]);
+
+    const updated = await get('SELECT * FROM project_boq WHERE id = ?', [id]);
+    res.json({ success: true, message: 'تم تحديث كمية الإنجاز المنفذة بنجاح', data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// تصدير جدول الكميات إلى ملف Excel رسمي (.xlsx)
+router.get('/:projectId/boq/export-excel', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const project = await get('SELECT name, code FROM projects WHERE id = ?', [projectId]) || { name: 'المشروع' };
+    const boq = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
+
+    const rows = [
+      ['شركة رواسي عدن للهندسة والمقاولات'],
+      [`جدول الكميات والمواصفات التعاقدية (BOQ) - مشروع: ${project.name}`],
+      [`تاريخ التصدير: ${new Date().toISOString().split('T')[0]}`],
+      [], // سطر فارغ
+      ['م', 'رقم البند', 'التصنيف الإنشائي (WBS)', 'بيان الأعمال والمواصفات', 'الوحدة', 'الكمية التعاقدية', 'الكمية المنفذة', 'الكمية المتبقية', 'فئة السعر', 'الإجمالي التعاقدي', 'القيمة المنفذة', 'نسبة الإنجاز', 'الحالة', 'ملاحظات']
+    ];
+
+    let totalContract = 0;
+    let totalExecuted = 0;
+
+    boq.forEach((b, idx) => {
+      const cQty = Number(b.contract_qty) || 0;
+      const eQty = Number(b.executed_qty) || 0;
+      const rate = Number(b.unit_rate) || 0;
+      const cTotal = Number(b.total_amount) || (cQty * rate);
+      const eTotal = eQty * rate;
+      const rem = Math.max(0, cQty - eQty);
+      const pct = cQty > 0 ? Math.round((eQty / cQty) * 100) + '%' : '0%';
+
+      totalContract += cTotal;
+      totalExecuted += eTotal;
+
+      rows.push([
+        idx + 1,
+        b.item_no,
+        b.category || 'عام',
+        b.description,
+        b.unit,
+        cQty,
+        eQty,
+        rem,
+        rate,
+        cTotal,
+        eTotal,
+        pct,
+        b.status || 'جاري التنفيذ',
+        b.notes || ''
+      ]);
+    });
+
+    // سطر المجموع النهائي
+    rows.push([
+      'المجموع', '', '', 'إجمالي قيمة جدول الكميات التعاقدي', '', '', '', '', '',
+      totalContract,
+      totalExecuted,
+      totalContract > 0 ? Math.round((totalExecuted / totalContract) * 100) + '%' : '0%',
+      '', ''
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // تفعيل اتجاه RTL من اليمين لليسار
+    if (!ws['!views']) ws['!views'] = [];
+    ws['!views'].push({ RTL: true });
+
+    // تحديد عروض الأعمدة
+    ws['!cols'] = [
+      { wch: 5 },  // م
+      { wch: 12 }, // رقم البند
+      { wch: 20 }, // التصنيف
+      { wch: 45 }, // البيان
+      { wch: 8 },  // الوحدة
+      { wch: 14 }, // الكمية التعاقدية
+      { wch: 14 }, // الكمية المنفذة
+      { wch: 14 }, // المتبقي
+      { wch: 14 }, // فئة السعر
+      { wch: 18 }, // الإجمالي التعاقدي
+      { wch: 18 }, // القيمة المنفذة
+      { wch: 12 }, // نسبة الإنجاز
+      { wch: 14 }, // الحالة
+      { wch: 25 }  // ملاحظات
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'جدول الكميات BOQ');
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const filename = `BOQ_${(project.name || 'Project').replace(/[^\w\u0621-\u064A]/g, '_')}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('Error exporting BOQ to Excel:', err);
+    res.status(500).json({ success: false, message: 'فشل في تصدير ملف Excel: ' + err.message });
+  }
+});
+
+// تنزيل نموذج وقالب Excel فارغ ومجهز لجدول الكميات (Sample BOQ Template)
+router.get('/:projectId/boq/sample-template', async (req, res) => {
+  try {
+    const templateRows = [
+      ['رقم البند', 'التصنيف الإنشائي', 'بيان ووصف بند العمل والمواصفات', 'الوحدة', 'الكمية', 'فئة السعر الإفرادي', 'ملاحظات'],
+      ['1.01', 'أعمال الحفريات والردم', 'حفر في تربة صخرية ومتوسطة لتأسيس القواعد حتى المنسوب المعتمد شاملاً نقل المخلفات', 'م3', 450, 3500, 'يشمل النقل لمقالب عمومية'],
+      ['1.02', 'أعمال الحفريات والردم', 'ردم حول القواعد والميدات برمل نظيف على طبقات 25 سم مع الرش والدمك بنسبة 95%', 'م3', 280, 1800, 'اختبار بروكتور مطلوب'],
+      ['2.01', 'أعمال خرسانية', 'خرسانة عادية نظافة أسفل القواعد سمك 10 سم مقاومة 200 كجم/سم2', 'م3', 45, 18500, 'إسمنت مقاوم للكبريتات SRC'],
+      ['2.02', 'أعمال خرسانية', 'خرسانة مسلحة للقواعد والرقاب مقاومة 350 كجم/سم2 مع المواد وحديد التسليح', 'م3', 120, 48000, 'حديد سابك رتبة 60'],
+      ['2.03', 'أعمال خرسانية', 'خرسانة مسلحة للأعمدة والحوائط الخرسانية مقاومة 350 كجم/سم2', 'م3', 65, 52000, 'صب بالمضخة وتثبيت كانات'],
+      ['2.04', 'أعمال خرسانية', 'خرسانة مسلحة للأسقف والكمرات الهوردي شاملاً القوالب والبلوك الهوردي والحديد', 'م3', 160, 54000, 'معالجة بالمياه 7 أيام'],
+      ['3.01', 'أعمال مباني وعزل', 'مباني طابوق أسمنتي مصمت للميدات سمك 20 سم بمونة إسمنتية 1:3', 'م2', 320, 2400, 'طابوق آلي عالي الكثافة'],
+      ['3.02', 'أعمال مباني وعزل', 'مباني طابوق أسمنتي مفرغ للقواطع الداخلية والخارجية سمك 20 سم', 'م2', 850, 1950, 'ربط بشبك مجلفن كل مدماكين'],
+      ['3.03', 'أعمال مباني وعزل', 'عزل مائي للقواعد ورقاب الأعمدة بطبقتين من البيتومين المطاطي على البارد', 'م2', 540, 650, 'دهان متعامد'],
+      ['4.01', 'أعمال تشطيبات', 'بياض ولياسة إسمنتية داخلية للأسقف والحوائط مع الطرطشة والشبك المعدني', 'م2', 1800, 1200, 'استواء تام ووزن قامة'],
+      ['4.02', 'أعمال تشطيبات', 'دهانات بلاستيكية داخلية 3 أوجه مقاومة للبكتيريا شاملاً المعجون والأساس', 'م2', 1800, 950, 'نوع جوتن أو ما يماثله'],
+      ['5.01', 'أعمال كهروميكانيكية', 'توريد وتمديد مواسير PVC وأسلاك النحاس للإنارة والمخارج لكل نقطة كاملة', 'نقطة', 240, 3200, 'أسلاك الرياض أو كابلات بحرة'],
+      ['5.02', 'أعمال كهروميكانيكية', 'تمديد خطوط الصرف الصحي ومواسير التغذية PPR الحرارية لكل حمام ومطبخ', 'مقطوع', 8, 45000, 'مواسير ألمانية معتمدة']
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(templateRows);
+    if (!ws['!views']) ws['!views'] = [];
+    ws['!views'].push({ RTL: true });
+
+    ws['!cols'] = [
+      { wch: 12 }, // رقم البند
+      { wch: 22 }, // التصنيف
+      { wch: 55 }, // البيان
+      { wch: 10 }, // الوحدة
+      { wch: 14 }, // الكمية
+      { wch: 18 }, // فئة السعر
+      { wch: 30 }  // ملاحظات
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'قالب جدول كميات نموذجي');
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="BOQ_Template_Rawasi_Aden.xlsx"');
+    res.send(buffer);
+  } catch (err) {
+    console.error('Error sending BOQ template:', err);
+    res.status(500).json({ success: false, message: 'فشل في إنشاء قالب Excel: ' + err.message });
   }
 });
 
@@ -388,16 +765,8 @@ router.post('/:projectId/quotations', async (req, res) => {
       currency = 'ر.ي', payment_terms, delivery_period, status = 'مسودة', notes
     } = req.body;
 
-    let autoNo = (quotation_no || '').trim() || null;
-    if (!autoNo) {
-      const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
-      let qSeq = (countRes.cnt || 0) + 1;
-      autoNo = `QUO-${new Date().getFullYear()}-${String(qSeq).padStart(3, '0')}`;
-      while (await get('SELECT id FROM project_quotations WHERE quotation_no = ?', [autoNo])) {
-        qSeq += 1;
-        autoNo = `QUO-${new Date().getFullYear()}-${String(qSeq).padStart(3, '0')}`;
-      }
-    }
+    const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
+    const autoNo = quotation_no || `QUO-2024-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
     const result = await run(`
       INSERT INTO project_quotations (
@@ -641,215 +1010,33 @@ router.post('/:projectId/purchases', async (req, res) => {
 
     if (!item_description) return res.status(400).json({ success: false, message: 'وصف المواد المشتراة مطلوب' });
 
-    await ProjectCostService.ensureSchema();
-
     const qty = Number(quantity) || 1;
     const price = Number(unit_price) || 0;
     const total = total_amount ? Number(total_amount) : (qty * price);
-    const paid = Number(paid_amount) || 0;
-    const recDate = date || new Date().toISOString().split('T')[0];
-    const willMirror = paid > 0;
-    const remaining = total - paid;
 
-    if (!(total > 0)) return res.status(400).json({ success: false, message: 'إجمالي الفاتورة يجب أن يكون أكبر من الصفر' });
-    if (!(paid >= 0)) return res.status(400).json({ success: false, message: 'المبلغ المدفوع لا يمكن أن يكون سالباً' });
-    if (paid - total > 0.005) return res.status(400).json({ success: false, message: 'المبلغ المدفوع يتجاوز إجمالي الفاتورة' });
+    const result = await run(`
+      INSERT INTO project_purchases (
+        project_id, invoice_no, supplier_id, supplier_name, item_description,
+        quantity, unit, unit_price, total_amount, paid_amount,
+        payment_status, payment_method, date, receipt_no, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      projectId, invoice_no, supplier_id ? Number(supplier_id) : null, supplier_name, item_description,
+      qty, unit, price, total, Number(paid_amount) || 0,
+      payment_status, payment_method, date || new Date().toISOString().split('T')[0], receipt_no, notes
+    ]);
 
-    // SUGGESTION-6: الآجل يتطلب مورداً مسجلاً — لا التزام بلا دائن
-    let resolvedSupplierId = supplier_id ? Number(supplier_id) : null;
-    let resolvedSupplierName = supplier_name ? String(supplier_name).trim() || null : null;
-    if (remaining > 0.005) {
-      if (resolvedSupplierId) {
-        const s = await get('SELECT id, name FROM suppliers WHERE id = ?', [resolvedSupplierId]);
-        if (!s) return res.status(400).json({ success: false, message: 'المورد المحدد غير مسجل في سجل الموردين' });
-        resolvedSupplierName = s.name;
-      } else if (resolvedSupplierName) {
-        const s = await get('SELECT id, name FROM suppliers WHERE name = ? LIMIT 1', [resolvedSupplierName]);
-        if (!s) return res.status(400).json({ success: false, message: 'المشتريات الآجلة تتطلب مورداً مسجلاً — أنشئ المورد في سجل الموردين أولاً ثم أعد إدخال الفاتورة' });
-        resolvedSupplierId = s.id;
-        resolvedSupplierName = s.name;
-      } else {
-        return res.status(400).json({ success: false, message: 'المشتريات الآجلة تتطلب تحديد المورد — لا يمكن إثبات التزام بلا دائن' });
-      }
+    // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
+    if (Number(paid_amount) > 0) {
+      const expReceipt = receipt_no || `EXP-PUR-${result.lastInsertRowid}`;
+      await run(`
+        INSERT INTO expenses (receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes)
+        VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?)
+      `, [expReceipt, projectId, supplier_id ? Number(supplier_id) : null, Number(paid_amount), payment_method, date || new Date().toISOString().split('T')[0], `فاتورة مشتريات: ${item_description}`]);
     }
 
-    // الحالة تُشتق من المبالغ دائماً (لا ثقة بإدخال العميل)
-    const derivedStatus = remaining <= 0.005 ? 'مدفوع' : (paid > 0.005 ? 'جزئي' : 'غير مدفوع');
-
-    // SUGGESTION-5/6: أي أثر مالي (مرآة أو استحقاق) يتطلب فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
-    let creatorId = null;
-    let creatorName = 'النظام';
-    let mirrorCcId = null;
-    const hasFinancialEffect = willMirror || remaining > 0.005;
-    if (hasFinancialEffect) {
-      const period = await checkPeriodOpen(recDate);
-      if (!period.isOpen) {
-        return res.status(403).json({ success: false, message: period.message });
-      }
-      creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-      creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
-      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
-      mirrorCcId = prjCc ? prjCc.id : 1;
-    }
-
-    // السجل الفرعي + المرآة + قيدها + حركتها النقدية + إعادة الاحتساب — ذرياً
-    const txResult = await transaction(async (tx) => {
-      const result = await tx.run(`
-        INSERT INTO project_purchases (
-          project_id, invoice_no, supplier_id, supplier_name, item_description,
-          quantity, unit, unit_price, total_amount, paid_amount,
-          payment_status, payment_method, date, receipt_no, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        projectId, invoice_no ?? null, resolvedSupplierId, resolvedSupplierName, item_description,
-        qty, unit ?? null, price, total, paid,
-        derivedStatus, payment_method, recDate, receipt_no ?? null, notes ?? null
-      ]);
-      const purchaseId = result.lastInsertRowid || result.insertId;
-
-      // تسجيل مصروف آلي مرتبط بالمشروع إذا كان مدفوعاً
-      // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
-      if (willMirror) {
-        const expReceipt = receipt_no || `EXP-PUR-${purchaseId}`;
-        const mirrorRes = await tx.run(`
-          INSERT INTO expenses (
-            receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes,
-            source_table, source_id, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-          )
-          VALUES (?, 'مواد بناء', ?, ?, ?, ?, ?, ?, 'project_purchases', ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [expReceipt, projectId, resolvedSupplierId, paid, payment_method, recDate,
-            `فاتورة مشتريات: ${item_description}`, purchaseId, creatorId, creatorName, creatorId, creatorName]);
-        const mirrorId = mirrorRes.lastInsertRowid || mirrorRes.insertId;
-        // قيد المرآة على الجزء المدفوع فقط: مدين مصروف / دائن صندوق + حركة صندوق المشروع
-        await ProjectCostService.createMirrorJournal(tx, {
-          sourceTable: 'project_purchases', expenseId: mirrorId,
-          projectId, costCenterId: mirrorCcId, amount: paid, date: recDate,
-          receiptNo: expReceipt, label: item_description,
-          user: { id: creatorId, name: creatorName }
-        });
-        await CashBoxService.appendMovement(tx, {
-          projectId, cashOut: paid,
-          currency: 'ر.ي', date: recDate, notes: `مصروف مرآة مشتريات: ${expReceipt}`
-        });
-      }
-
-      // SUGGESTION-6: إثبات المتبقي التزاماً على المورد (دفتري — بلا حركة نقدية)
-      if (remaining > 0.005) {
-        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, resolvedSupplierId]);
-        await ProjectCostService.createPayableJournal(tx, {
-          purchaseId, supplierId: resolvedSupplierId,
-          projectId, costCenterId: mirrorCcId, amount: remaining, date: recDate,
-          invoiceRef: invoice_no || `#${purchaseId}`,
-          user: { id: creatorId, name: creatorName }
-        });
-      }
-
-      // توحيد التكلفة: إعادة الاحتساب من المصادر
-      await ProjectCostService.recalculateProjectCost(projectId, tx);
-      return { purchaseId };
-    });
-
-    // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
-    let dupWarnings = [];
-    try {
-      dupWarnings = await ProjectCostService.detectPossibleDuplicates({
-        projectId, amount: total, date: recDate,
-        excludeTable: 'project_purchases', excludeId: txResult.purchaseId
-      });
-    } catch {}
-
-    const created = await get('SELECT * FROM project_purchases WHERE id = ?', [txResult.purchaseId]);
-    res.json({
-      success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created, warnings: dupWarnings,
-      payable: remaining > 0.005 ? { supplier_id: resolvedSupplierId, amount: remaining } : null
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// SUGGESTION-6: سداد مستحق فاتورة موقعية (جزئي أو كامل)
-router.post('/:projectId/purchases/:id/pay', async (req, res) => {
-  try {
-    const { projectId, id } = req.params;
-    const {
-      amount, supplier_id, supplier_name,
-      payment_method = 'نقدي', date, notes
-    } = req.body;
-
-    const purchase = await get(
-      'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [id, projectId]
-    );
-    if (!purchase) return res.status(404).json({ success: false, message: 'فاتورة المشتريات غير موجودة' });
-
-    const payAmount = Number(amount) || 0;
-    if (!(payAmount > 0)) return res.status(400).json({ success: false, message: 'مبلغ السداد يجب أن يكون أكبر من الصفر' });
-    const outstanding = Number(purchase.total_amount) - (Number(purchase.paid_amount) || 0);
-    if (outstanding <= 0.005) return res.status(400).json({ success: false, message: 'الفاتورة مسددة بالكامل — لا متبقي للسداد' });
-    if (payAmount - outstanding > 0.005) {
-      return res.status(400).json({ success: false, message: `مبلغ السداد يتجاوز المتبقي (${outstanding})` });
-    }
-
-    const payDate = date || new Date().toISOString().split('T')[0];
-    const period = await checkPeriodOpen(payDate);
-    if (!period.isOpen) {
-      return res.status(403).json({ success: false, message: period.message });
-    }
-
-    // المورد: مورد الفاتورة، أو يُحل من الطلب للفواتير القديمة بلا مورد
-    let paySupplierId = purchase.supplier_id ? Number(purchase.supplier_id) : null;
-    if (!paySupplierId) {
-      if (supplier_id) {
-        const s = await get('SELECT id FROM suppliers WHERE id = ?', [Number(supplier_id)]);
-        if (!s) return res.status(400).json({ success: false, message: 'المورد المحدد للسداد غير مسجل' });
-        paySupplierId = s.id;
-      } else if (supplier_name && String(supplier_name).trim()) {
-        const s = await get('SELECT id FROM suppliers WHERE name = ? LIMIT 1', [String(supplier_name).trim()]);
-        if (!s) return res.status(400).json({ success: false, message: 'الفاتورة بلا مورد مسجل — حدد المورد المستلم للسداد' });
-        paySupplierId = s.id;
-      } else {
-        return res.status(400).json({ success: false, message: 'الفاتورة بلا مورد مسجل — حدد المورد المستلم للسداد' });
-      }
-    } else if (supplier_id && Number(supplier_id) !== paySupplierId) {
-      return res.status(400).json({ success: false, message: 'مورد السداد لا يطابق مورد الفاتورة' });
-    }
-
-    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-    const actorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
-    const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
-    const ccId = prjCc ? prjCc.id : 1;
-
-    const newPaid = (Number(purchase.paid_amount) || 0) + payAmount;
-    const newRemaining = Number(purchase.total_amount) - newPaid;
-    const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
-
-    await transaction(async (tx) => {
-      await tx.run(
-        'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
-        [newPaid, newStatus, purchase.id]
-      );
-      // توثيق المورد على الفاتورة القديمة بلا مورد
-      if (!purchase.supplier_id) {
-        await tx.run('UPDATE project_purchases SET supplier_id = ? WHERE id = ?', [paySupplierId, purchase.id]);
-      }
-      await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [payAmount, paySupplierId]);
-      await ProjectCostService.createSettlementJournal(tx, {
-        purchaseId: purchase.id, supplierId: paySupplierId,
-        projectId, costCenterId: ccId, amount: payAmount, date: payDate,
-        payRef: `فاتورة #${purchase.id}${purchase.invoice_no ? ' (' + purchase.invoice_no + ')' : ''}${notes ? ' — ' + notes : ''}`,
-        user: { id: actorId, name: actorName }
-      });
-      await CashBoxService.appendMovement(tx, {
-        projectId, cashOut: payAmount,
-        currency: 'ر.ي', date: payDate, notes: `سداد مستحق موقعية: فاتورة #${purchase.id}`
-      });
-    });
-
-    const updated = await get('SELECT * FROM project_purchases WHERE id = ?', [purchase.id]);
-    res.json({
-      success: true, message: `تم تسجيل سداد ${payAmount} — المتبقي: ${Math.max(0, newRemaining)}`,
-      data: updated, outstanding: Math.max(0, newRemaining)
-    });
+    const created = await get('SELECT * FROM project_purchases WHERE id = ?', [result.lastInsertRowid]);
+    res.json({ success: true, message: 'تم حفظ فاتورة المشتريات وتحديث تكلفة المشروع بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -857,51 +1044,8 @@ router.post('/:projectId/purchases/:id/pay', async (req, res) => {
 
 router.delete('/:projectId/purchases/:id', async (req, res) => {
   try {
-    await ProjectCostService.ensureSchema();
-    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-    const actorName = req.user?.username || req.user?.full_name || 'النظام';
-    // SUGGESTION-6: صف الفاتورة لازم لفك ذممها قبل حذفها
-    const doomed = await get(
-      'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]
-    );
-    // SUGGESTION-7: منع حذف فاتورة ممتصة بسند حي (يُعكس/يُفك أولاً)
-    if (doomed && doomed.linked_expense_id) {
-      const linkedExp = await get('SELECT id, status FROM expenses WHERE id = ?', [doomed.linked_expense_id]);
-      if (linkedExp && !['reversed', 'cancelled'].includes((linkedExp.status || '').toLowerCase())) {
-        const isDraft = (linkedExp.status || '').toLowerCase() === 'draft';
-        return res.status(400).json({ success: false, message: isDraft
-          ? 'لا يمكن حذف الفاتورة: مرتبطة بسند غير مرحل — فك الربط أولاً ثم احذف'
-          : 'لا يمكن حذف الفاتورة: مرتبطة بسند مرحل — اعكس السند أولاً ثم احذف' });
-      }
-    }
-    const txResult = await transaction(async (tx) => {
-      await tx.run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-      // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
-      const reversed = await ProjectCostService.reverseLinkedMirrors('project_purchases', req.params.id, {
-        tx, user: { id: actorId, name: actorName }, reason: 'حذف فاتورة المشتريات الأصل من المشروع'
-      });
-      // SUGGESTION-6: فك أثر الذمم (عكس الاستحقاق والتسويات + إعادة رصيد المورد)
-      let payables = { apReversed: 0, settlementsReversed: 0, balanceDelta: 0 };
-      if (doomed) {
-        payables = await ProjectCostService.reverseSitePurchasePayables(tx, doomed, {
-          user: { id: actorId, name: actorName }, reason: 'حذف الفاتورة الموقعية وفك ذممها'
-        });
-      }
-      const removed = await ProjectCostService.deleteLinkedMirrors('project_purchases', req.params.id, tx);
-      await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
-      return { reversed, removed, payables };
-    });
-    const parts = [];
-    if (txResult.reversed > 0) parts.push(`عكس ${txResult.reversed} مرآة`);
-    if (txResult.payables.apReversed > 0) parts.push('عكس استحقاق المورد');
-    if (txResult.payables.settlementsReversed > 0) parts.push(`عكس ${txResult.payables.settlementsReversed} سداد`);
-    if (txResult.removed > 0) parts.push(`حذف ${txResult.removed} مرآة يتيمة`);
-    res.json({
-      success: true,
-      message: parts.length > 0
-        ? `تم حذف الفاتورة (${parts.join('، ')}) وتحديث تكلفة المشروع`
-        : 'تم حذف الفاتورة وتحديث تكلفة المشروع بنجاح'
-    });
+    await run('DELETE FROM project_purchases WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    res.json({ success: true, message: 'تم حذف الفاتورة بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -924,189 +1068,39 @@ router.post('/:projectId/labor', async (req, res) => {
     const projectId = req.params.projectId;
     const {
       date, worker_name_or_team, trade = 'نجار مسلح', workers_count = 1,
-      daily_rate = 0, days_or_hours = 1, total_amount, paid_amount, expense_category = 'أجور عمالة',
+      daily_rate = 0, days_or_hours = 1, total_amount, expense_category = 'أجور عمالة',
       payment_status = 'مدفوع', supervisor_name, notes
     } = req.body;
 
     if (!worker_name_or_team) return res.status(400).json({ success: false, message: 'اسم العامل أو الطاقم مطلوب' });
 
-    await ProjectCostService.ensureSchema();
-
     const count = Number(workers_count) || 1;
     const rate = Number(daily_rate) || 0;
     const days = Number(days_or_hours) || 1;
     const total = total_amount ? Number(total_amount) : (count * rate * days);
-    const recDate = date || new Date().toISOString().split('T')[0];
 
-    if (!(total > 0)) return res.status(400).json({ success: false, message: 'إجمالي الأجور يجب أن يكون أكبر من الصفر' });
-    // SUGGESTION-8: المدفوع صريحاً، أو يُستنتج من الحالة للعملاء القدامى (توافق خلفي)
-    let paid;
-    const paidProvided = paid_amount !== undefined && paid_amount !== null && paid_amount !== '';
-    if (paidProvided) {
-      paid = Number(paid_amount) || 0;
-      if (!(paid >= 0)) return res.status(400).json({ success: false, message: 'المبلغ المدفوع لا يمكن أن يكون سالباً' });
-      if (paid - total > 0.005) return res.status(400).json({ success: false, message: 'المبلغ المدفوع يتجاوز إجمالي الأجور' });
-    } else if (payment_status === 'مدفوع' || !payment_status) {
-      paid = total;
-    } else if (payment_status === 'غير مدفوع') {
-      paid = 0;
-    } else {
-      return res.status(400).json({ success: false, message: 'الحالة الجزئية تتطلب إرسال المبلغ المدفوع (paid_amount) صراحةً' });
-    }
-    const remaining = total - paid;
-    const willMirror = paid > 0;
+    const result = await run(`
+      INSERT INTO project_labor_expenses (
+        project_id, date, worker_name_or_team, trade, workers_count,
+        daily_rate, days_or_hours, total_amount, expense_category,
+        payment_status, supervisor_name, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      projectId, date || new Date().toISOString().split('T')[0], worker_name_or_team, trade,
+      count, rate, days, total, expense_category, payment_status, supervisor_name, notes
+    ]);
 
-    // الحالة تُشتق من المبالغ دائماً (لا ثقة بإدخال العميل)
-    const derivedStatus = remaining <= 0.005 ? 'مدفوع' : (paid > 0.005 ? 'جزئي' : 'غير مدفوع');
-
-    // SUGGESTION-5/8: أي أثر مالي (مرآة أو استحقاق) يتطلب فترة مفتوحة + مستخدم + مركز تكلفة (خارج المعاملة)
-    let creatorId = null;
-    let creatorName = 'النظام';
-    let mirrorCcId = null;
-    const hasFinancialEffect = willMirror || remaining > 0.005;
-    if (hasFinancialEffect) {
-      const period = await checkPeriodOpen(recDate);
-      if (!period.isOpen) {
-        return res.status(403).json({ success: false, message: period.message });
-      }
-      creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-      creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
-      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
-      mirrorCcId = prjCc ? prjCc.id : 1;
+    // تسجيل مصروف آلي في جدول المصروفات العام
+    if (payment_status === 'مدفوع' && total > 0) {
+      const expReceipt = `EXP-LAB-${result.lastInsertRowid}`;
+      await run(`
+        INSERT INTO expenses (receipt_no, expense_type, project_id, amount, payment_method, date, notes)
+        VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?)
+      `, [expReceipt, projectId, total, date || new Date().toISOString().split('T')[0], `أجور ${trade}: ${worker_name_or_team}`]);
     }
 
-    // السجل الفرعي + المرآة + قيدها + حركتها النقدية + الاستحقاق + إعادة الاحتساب — ذرياً
-    const txResult = await transaction(async (tx) => {
-      const result = await tx.run(`
-        INSERT INTO project_labor_expenses (
-          project_id, date, worker_name_or_team, trade, workers_count,
-          daily_rate, days_or_hours, total_amount, paid_amount, expense_category,
-          payment_status, supervisor_name, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        projectId, recDate, worker_name_or_team, trade ?? null,
-        count, rate, days, total, paid, expense_category, derivedStatus, supervisor_name ?? null, notes ?? null
-      ]);
-      const laborId = result.lastInsertRowid || result.insertId;
-
-      // تسجيل مصروف آلي في جدول المصروفات العام (على الجزء المدفوع فقط)
-      // (مصروف «مرآة» مربوط بالمصدر عبر source_table/source_id ليُستبعد من التكلفة منعاً للازدواج)
-      if (willMirror) {
-        const expReceipt = `EXP-LAB-${laborId}`;
-        const mirrorRes = await tx.run(`
-          INSERT INTO expenses (
-            receipt_no, expense_type, project_id, amount, payment_method, date, notes,
-            source_table, source_id, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-          )
-          VALUES (?, 'أجور عمالة', ?, ?, 'نقدي', ?, ?, 'project_labor_expenses', ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [expReceipt, projectId, paid, recDate, `أجور ${trade}: ${worker_name_or_team}`, laborId,
-            creatorId, creatorName, creatorId, creatorName]);
-        const mirrorId = mirrorRes.lastInsertRowid || mirrorRes.insertId;
-        // قيد المرآة: مدين أجور / دائن صندوق + حركة صندوق المشروع
-        await ProjectCostService.createMirrorJournal(tx, {
-          sourceTable: 'project_labor_expenses', expenseId: mirrorId,
-          projectId, costCenterId: mirrorCcId, amount: paid, date: recDate,
-          receiptNo: expReceipt, label: `${trade}: ${worker_name_or_team}`,
-          user: { id: creatorId, name: creatorName }
-        });
-        await CashBoxService.appendMovement(tx, {
-          projectId, cashOut: paid,
-          currency: 'ر.ي', date: recDate, notes: `مصروف مرآة عمالة: ${expReceipt}`
-        });
-      }
-
-      // SUGGESTION-8: إثبات المتبقي التزاماً للأجر (دفتري — بلا حركة نقدية)
-      if (remaining > 0.005) {
-        await ProjectCostService.createWageAccrualJournal(tx, {
-          laborId, workerLabel: `${trade}: ${worker_name_or_team}`,
-          projectId, costCenterId: mirrorCcId, amount: remaining, date: recDate,
-          user: { id: creatorId, name: creatorName }
-        });
-      }
-
-      // توحيد التكلفة: إعادة الاحتساب من المصادر
-      await ProjectCostService.recalculateProjectCost(projectId, tx);
-      return { laborId };
-    });
-
-    // منع الازدواج: كشف الاشتباه بقيود مكررة (تحذير غير حاجب)
-    let dupWarnings = [];
-    try {
-      dupWarnings = await ProjectCostService.detectPossibleDuplicates({
-        projectId, amount: total, date: recDate,
-        excludeTable: 'project_labor_expenses', excludeId: txResult.laborId
-      });
-    } catch {}
-
-    const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [txResult.laborId]);
-    res.json({
-      success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created, warnings: dupWarnings,
-      payable: remaining > 0.005 ? { worker: worker_name_or_team, amount: remaining } : null
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// SUGGESTION-8: سداد مستحق أجور (جزئي أو كامل)
-router.post('/:projectId/labor/:id/pay', async (req, res) => {
-  try {
-    const { projectId, id } = req.params;
-    const {
-      amount, payment_method = 'نقدي', date, notes
-    } = req.body;
-
-    const labor = await get(
-      'SELECT * FROM project_labor_expenses WHERE id = ? AND project_id = ?', [id, projectId]
-    );
-    if (!labor) return res.status(404).json({ success: false, message: 'سجل الأجور غير موجود' });
-
-    const payAmount = Number(amount) || 0;
-    if (!(payAmount > 0)) return res.status(400).json({ success: false, message: 'مبلغ السداد يجب أن يكون أكبر من الصفر' });
-    const outstanding = Number(labor.total_amount) - (Number(labor.paid_amount) || 0);
-    if (outstanding <= 0.005) return res.status(400).json({ success: false, message: 'الأجر مسدد بالكامل — لا متبقي للسداد' });
-    if (payAmount - outstanding > 0.005) {
-      return res.status(400).json({ success: false, message: `مبلغ السداد يتجاوز المتبقي (${outstanding})` });
-    }
-
-    const payDate = date || new Date().toISOString().split('T')[0];
-    const period = await checkPeriodOpen(payDate);
-    if (!period.isOpen) {
-      return res.status(403).json({ success: false, message: period.message });
-    }
-
-    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-    const actorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
-    const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [projectId]);
-    const ccId = prjCc ? prjCc.id : 1;
-    const workerLabel = `${labor.trade || ''}: ${labor.worker_name_or_team}`.trim();
-
-    const newPaid = (Number(labor.paid_amount) || 0) + payAmount;
-    const newRemaining = Number(labor.total_amount) - newPaid;
-    const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
-
-    await transaction(async (tx) => {
-      await tx.run(
-        'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
-        [newPaid, newStatus, labor.id]
-      );
-      await ProjectCostService.createWageSettlementJournal(tx, {
-        laborId: labor.id, workerLabel,
-        projectId, costCenterId: ccId, amount: payAmount, date: payDate,
-        payRef: `سجل أجور #${labor.id}${notes ? ' — ' + notes : ''}`,
-        user: { id: actorId, name: actorName }
-      });
-      await CashBoxService.appendMovement(tx, {
-        projectId, cashOut: payAmount,
-        currency: 'ر.ي', date: payDate, notes: `سداد مستحق أجور: ${workerLabel} (#${labor.id})`
-      });
-    });
-
-    const updated = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [labor.id]);
-    res.json({
-      success: true, message: `تم تسجيل سداد ${payAmount} — المتبقي: ${Math.max(0, newRemaining)}`,
-      data: updated, outstanding: Math.max(0, newRemaining)
-    });
+    const created = await get('SELECT * FROM project_labor_expenses WHERE id = ?', [result.lastInsertRowid]);
+    res.json({ success: true, message: 'تم تسجيل أجور العمالة والمصروف الميداني بنجاح', data: created });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1114,68 +1108,190 @@ router.post('/:projectId/labor/:id/pay', async (req, res) => {
 
 router.delete('/:projectId/labor/:id', async (req, res) => {
   try {
-    await ProjectCostService.ensureSchema();
-    const actorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-    const actorName = req.user?.username || req.user?.full_name || 'النظام';
-    // SUGGESTION-7: منع حذف بند ممتص بسند حي (يُعكس/يُفك أولاً)
-    const doomedLabor = await get(
-      'SELECT * FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]
-    );
-    if (doomedLabor && doomedLabor.linked_expense_id) {
-      const linkedExp = await get('SELECT id, status FROM expenses WHERE id = ?', [doomedLabor.linked_expense_id]);
-      if (linkedExp && !['reversed', 'cancelled'].includes((linkedExp.status || '').toLowerCase())) {
-        const isDraft = (linkedExp.status || '').toLowerCase() === 'draft';
-        return res.status(400).json({ success: false, message: isDraft
-          ? 'لا يمكن حذف البند: مرتبط بسند غير مرحل — فك الربط أولاً ثم احذف'
-          : 'لا يمكن حذف البند: مرتبط بسند مرحل — اعكس السند أولاً ثم احذف' });
-      }
-    }
-    const txResult = await transaction(async (tx) => {
-      await tx.run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
-      // عكس المرايا ذات القيود + حذف اليتيمة بلا قيد، ثم إعادة الاحتساب
-      const reversed = await ProjectCostService.reverseLinkedMirrors('project_labor_expenses', req.params.id, {
-        tx, user: { id: actorId, name: actorName }, reason: 'حذف سجل الأجور الأصل من المشروع'
-      });
-      // SUGGESTION-8: فك مستحقات الأجور (عكس الاستحقاق والتسويات + تعويض نقدي)
-      let wages = { accrualReversed: 0, settlementsReversed: 0 };
-      if (doomedLabor) {
-        wages = await ProjectCostService.reverseSiteLaborPayables(tx, doomedLabor, {
-          user: { id: actorId, name: actorName }, reason: 'حذف سجل الأجور وفك مستحقاته'
-        });
-      }
-      const removed = await ProjectCostService.deleteLinkedMirrors('project_labor_expenses', req.params.id, tx);
-      await ProjectCostService.recalculateProjectCost(req.params.projectId, tx);
-      return { reversed, removed, wages };
-    });
-    const parts = [];
-    if (txResult.reversed > 0) parts.push(`عكس ${txResult.reversed} مرآة`);
-    if (txResult.wages.accrualReversed > 0) parts.push('عكس استحقاق الأجور');
-    if (txResult.wages.settlementsReversed > 0) parts.push(`عكس ${txResult.wages.settlementsReversed} سداد أجور`);
-    if (txResult.removed > 0) parts.push(`حذف ${txResult.removed} مرآة يتيمة`);
-    res.json({
-      success: true,
-      message: parts.length > 0
-        ? `تم حذف السجل (${parts.join('، ')}) وتحديث تكلفة المشروع`
-        : 'تم حذف السجل وتحديث تكلفة المشروع بنجاح'
-    });
+    await run('DELETE FROM project_labor_expenses WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    res.json({ success: true, message: 'تم حذف السجل بنجاح' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
 // ============================================================================
-// 9. مستخلصات وشهادات دفع المشروع (Project Invoices & IPCs)
+// 9. مستخلصات وشهادات دفع المشروع (FIDIC Interim Payment Certificates - IPC)
 // ============================================================================
 router.get('/:projectId/invoices', async (req, res) => {
   try {
+    const projectId = req.params.projectId;
+    const project = await get('SELECT name, code, currency, client_name, contract_value FROM projects WHERE id = ?', [projectId]) || {};
     const invoices = await query(`
       SELECT pi.*, c.name as client_name, c.phone as client_phone
       FROM project_invoices pi
       LEFT JOIN clients c ON pi.client_id = c.id
       WHERE pi.project_id = ?
       ORDER BY pi.date DESC, pi.id DESC
-    `, [req.params.projectId]);
-    res.json({ success: true, data: invoices });
+    `, [projectId]);
+
+    const enriched = invoices.map(i => {
+      let items = [];
+      try {
+        if (i.items_json) items = JSON.parse(i.items_json);
+      } catch (e) {}
+
+      const net = Number(i.net_amount) || 0;
+      const curr = project.currency || 'ر.ي';
+      let tafqeetText = '';
+      try {
+        tafqeetText = tafqeet(net, curr);
+      } catch (e) {
+        tafqeetText = `${net} ${curr}`;
+      }
+
+      return {
+        ...i,
+        items,
+        items_count: items.length,
+        tafqeet: tafqeetText
+      };
+    });
+
+    res.json({
+      success: true,
+      data: enriched,
+      project
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// تجهيز مسودة مستخلص تلقائياً بالاعتماد على جدول الكميات BOQ والمستخلصات السابقة
+router.get('/:projectId/invoices/prepare-from-boq', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const project = await get('SELECT * FROM projects WHERE id = ?', [projectId]);
+    if (!project) return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
+
+    const contract = await get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]) || {};
+    const prevInvoices = await query("SELECT * FROM project_invoices WHERE project_id = ? AND status != 'ملغي' ORDER BY id ASC", [projectId]);
+    const boqItems = await query('SELECT * FROM project_boq WHERE project_id = ? ORDER BY id ASC', [projectId]);
+
+    // حساب إجمالي المستخلصات السابقة
+    let totalPrevGross = 0;
+    let totalPrevNet = 0;
+    const itemPreviousQuantities = {};
+
+    prevInvoices.forEach(inv => {
+      totalPrevGross += Number(inv.current_gross_amount) || 0;
+      totalPrevNet += Number(inv.net_amount) || 0;
+
+      if (inv.items_json) {
+        try {
+          const parsed = JSON.parse(inv.items_json);
+          parsed.forEach(it => {
+            const key = it.boq_item_id || it.item_no;
+            itemPreviousQuantities[key] = Math.max(itemPreviousQuantities[key] || 0, Number(it.cumulative_qty) || Number(it.quantity) || 0);
+          });
+        } catch (e) {}
+      }
+    });
+
+    const nextNo = `IPC-${String(prevInvoices.length + 1).padStart(2, '0')}`;
+    const advancePct = Number(contract.advance_payment_pct) || 10;
+    const retentionPct = Number(contract.retention_pct) || 10;
+
+    // تجهيز بنود جدول الكميات مع الكميات السابقة والمنفذة
+    const preparedItems = boqItems.map(b => {
+      const cQty = Number(b.contract_qty) || 0;
+      const rate = Number(b.unit_rate) || 0;
+      const siteExecQty = Number(b.executed_qty) || 0;
+      const prevQty = itemPreviousQuantities[b.id] !== undefined ? itemPreviousQuantities[b.id] : (itemPreviousQuantities[b.item_no] || 0);
+      const currentQty = Math.max(0, siteExecQty - prevQty);
+      const cumQty = prevQty + currentQty;
+
+      return {
+        boq_item_id: b.id,
+        item_no: b.item_no,
+        description: b.description,
+        category: b.category,
+        unit: b.unit,
+        contract_qty: cQty,
+        unit_rate: rate,
+        contract_total: cQty * rate,
+        previous_qty: prevQty,
+        previous_amount: prevQty * rate,
+        current_qty: currentQty,
+        current_amount: currentQty * rate,
+        cumulative_qty: cumQty,
+        cumulative_amount: cumQty * rate,
+        completion_pct: cQty > 0 ? Math.min(100, Math.round((cumQty / cQty) * 100)) : 0
+      };
+    });
+
+    const currentGrossSum = preparedItems.reduce((acc, it) => acc + it.current_amount, 0);
+    const cumulativeWorkSum = totalPrevGross + currentGrossSum;
+    const advanceDeduction = (currentGrossSum * advancePct) / 100;
+    const retentionDeduction = (currentGrossSum * retentionPct) / 100;
+    const netDue = Math.max(0, currentGrossSum - (advanceDeduction + retentionDeduction));
+
+    res.json({
+      success: true,
+      draft: {
+        invoice_no: nextNo,
+        invoice_type: 'مستخلص جاري',
+        period_from: project.start_date || new Date().toISOString().split('T')[0],
+        period_to: new Date().toISOString().split('T')[0],
+        contract_value: Number(contract.contract_value) || Number(project.contract_value) || 0,
+        previous_bills_amount: totalPrevGross,
+        current_gross_amount: currentGrossSum,
+        cumulative_work_done: cumulativeWorkSum,
+        advance_pct: advancePct,
+        advance_deduction: advanceDeduction,
+        retention_pct: retentionPct,
+        retention_deduction: retentionDeduction,
+        other_deductions: 0,
+        net_amount: netDue,
+        items: preparedItems,
+        currency: project.currency || 'ر.ي'
+      }
+    });
+  } catch (err) {
+    console.error('Error preparing IPC draft from BOQ:', err);
+    res.status(500).json({ success: false, message: 'فشل في توليد مسودة المستخلص: ' + err.message });
+  }
+});
+
+// استعراض مستخلص فردي كامل بالتفاصيل
+router.get('/:projectId/invoices/:id', async (req, res) => {
+  try {
+    const { projectId, id } = req.params;
+    const invoice = await get('SELECT * FROM project_invoices WHERE id = ? AND project_id = ?', [id, projectId]);
+    if (!invoice) return res.status(404).json({ success: false, message: 'المستخلص غير موجود' });
+
+    const project = await get('SELECT * FROM projects WHERE id = ?', [projectId]) || {};
+    const contract = await get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]) || {};
+
+    let items = [];
+    try {
+      if (invoice.items_json) items = JSON.parse(invoice.items_json);
+    } catch (e) {}
+
+    const curr = project.currency || 'ر.ي';
+    let tafqeetText = '';
+    try {
+      tafqeetText = tafqeet(invoice.net_amount, curr);
+    } catch (e) {
+      tafqeetText = `${invoice.net_amount} ${curr}`;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...invoice,
+        items,
+        tafqeet: tafqeetText,
+        project,
+        contract
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1187,44 +1303,193 @@ router.post('/:projectId/invoices', async (req, res) => {
     const {
       client_id, invoice_no, invoice_type = 'مستخلص جاري', period_from, period_to,
       cumulative_work_done = 0, previous_bills_amount = 0, current_gross_amount = 0,
-      advance_deduction = 0, retention_deduction = 0, other_deductions = 0,
-      net_amount, status = 'معتمد للصرف', date, approval_date, notes
+      advance_pct = 10, advance_deduction = 0,
+      retention_pct = 10, retention_deduction = 0,
+      tax_wht_pct = 0, tax_wht_amount = 0,
+      other_deductions = 0,
+      net_amount, status = 'معتمد للصرف', date, approval_date, notes,
+      items = []
     } = req.body;
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM project_invoices WHERE project_id = ?', [projectId]);
-    const autoNo = invoice_no || `IPC-${String((countRes.cnt || 0) + 1).padStart(2, '0')}`;
+    const autoNo = invoice_no || `IPC-${String((countRes?.cnt || 0) + 1).padStart(2, '0')}`;
 
     const gross = Number(current_gross_amount) || (Number(cumulative_work_done) - Number(previous_bills_amount));
-    const deductions = (Number(advance_deduction) || 0) + (Number(retention_deduction) || 0) + (Number(other_deductions) || 0);
+    const deductions = (Number(advance_deduction) || 0) + (Number(retention_deduction) || 0) + (Number(other_deductions) || 0) + (Number(tax_wht_amount) || 0);
     const calculatedNet = net_amount !== undefined ? Number(net_amount) : Math.max(0, gross - deductions);
+
+    const itemsJson = items && Array.isArray(items) && items.length > 0 ? JSON.stringify(items) : null;
 
     const result = await run(`
       INSERT INTO project_invoices (
         project_id, client_id, invoice_no, invoice_type, period_from, period_to,
         cumulative_work_done, previous_bills_amount, current_gross_amount,
-        advance_deduction, retention_deduction, other_deductions, net_amount,
-        status, date, approval_date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        advance_pct, advance_deduction, retention_pct, retention_deduction,
+        tax_wht_pct, tax_wht_amount, other_deductions, net_amount,
+        status, date, approval_date, notes, items_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       projectId, client_id ? Number(client_id) : null, autoNo, invoice_type, period_from, period_to,
       Number(cumulative_work_done) || gross, Number(previous_bills_amount) || 0, gross,
-      Number(advance_deduction) || 0, Number(retention_deduction) || 0, Number(other_deductions) || 0,
-      calculatedNet, status, date || new Date().toISOString().split('T')[0], approval_date, notes
+      Number(advance_pct) || 0, Number(advance_deduction) || 0,
+      Number(retention_pct) || 0, Number(retention_deduction) || 0,
+      Number(tax_wht_pct) || 0, Number(tax_wht_amount) || 0,
+      Number(other_deductions) || 0, calculatedNet,
+      status, date || new Date().toISOString().split('T')[0], approval_date, notes, itemsJson
     ]);
 
-    // مزامنة مع جدول bills العام
+    // إذا تم تزويد بنود، نقوم بتحديث الكميات المنفذة في جدول الكميات BOQ لمزامنة الإنجاز
+    if (items && Array.isArray(items) && items.length > 0) {
+      for (const it of items) {
+        if (it.boq_item_id && it.cumulative_qty !== undefined) {
+          const cumQty = Number(it.cumulative_qty) || 0;
+          await run(`
+            UPDATE project_boq SET
+              executed_qty = MAX(executed_qty, ?),
+              status = CASE WHEN contract_qty > 0 AND ? >= contract_qty THEN 'مكتمل' ELSE 'جاري التنفيذ' END
+            WHERE id = ? AND project_id = ?
+          `, [cumQty, cumQty, it.boq_item_id, projectId]);
+        }
+      }
+    }
+
+    // جلب العقد والعميل المرتبط بالمشروع إذا لم يحددوا بدقة
+    const contract = await get('SELECT * FROM project_contracts WHERE project_id = ? LIMIT 1', [projectId]);
+    const effectiveClientId = client_id ? Number(client_id) : (contract?.client_id || (await get('SELECT client_id FROM projects WHERE id = ?', [projectId]))?.client_id || null);
+    const effectiveContractId = contract?.id || null;
+
+    // مزامنة مع جدول bills العام وربط السلسلة الهرمية
     await run(`
-      INSERT INTO bills (bill_no, bill_type, project_id, client_id, amount, deduction, net_amount, status, date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO bills (
+        bill_no, bill_type, project_id, contract_id, client_id,
+        amount, gross_amount, advance_deduction, retention_deduction, deduction,
+        net_amount, paid_amount, remaining_amount, payment_status,
+        status, date, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'unpaid', ?, ?, ?)
     `, [
-      autoNo, `${invoice_type} (${autoNo})`, projectId, client_id ? Number(client_id) : null,
-      gross, deductions, calculatedNet, status, date || new Date().toISOString().split('T')[0], notes
+      autoNo, `${invoice_type} (${autoNo})`, projectId, effectiveContractId, effectiveClientId,
+      calculatedNet, gross, Number(advance_deduction) || 0, Number(retention_deduction) || 0, deductions,
+      calculatedNet, calculatedNet, status, date || new Date().toISOString().split('T')[0], notes
     ]);
+
+    // التأثير التلقائي اللحظي في حساب ورصيد العميل
+    if (effectiveClientId) {
+      await clientChainService.syncClientBalances(effectiveClientId);
+    }
 
     const created = await get('SELECT * FROM project_invoices WHERE id = ?', [result.lastInsertRowid]);
-    res.json({ success: true, message: 'تم إصدار واعتماد المستخلص بنجاح', data: created });
+    res.json({ success: true, message: 'تم إصدار واعتماد شهادة المستخلص بنجاح 📑', data: created });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Error creating project invoice:', err);
+    res.status(500).json({ success: false, message: 'خطأ في إنشاء المستخلص: ' + err.message });
+  }
+});
+
+// تصدير تفاصيل المستخلص وشهادة الدفع إلى ملف Excel رسمي
+router.get('/:projectId/invoices/:id/export-excel', async (req, res) => {
+  try {
+    const { projectId, id } = req.params;
+    const inv = await get('SELECT * FROM project_invoices WHERE id = ? AND project_id = ?', [id, projectId]);
+    if (!inv) return res.status(404).json({ success: false, message: 'المستخلص غير موجود' });
+
+    const project = await get('SELECT * FROM projects WHERE id = ?', [projectId]) || { name: 'المشروع' };
+    const contract = await get('SELECT * FROM project_contracts WHERE project_id = ?', [projectId]) || {};
+
+    let items = [];
+    try {
+      if (inv.items_json) items = JSON.parse(inv.items_json);
+    } catch (e) {}
+
+    const curr = project.currency || 'ر.ي';
+
+    // 1. ورقة الشهادة والملخص المالي
+    const summaryRows = [
+      ['شركة رواسي عدن للهندسة والمقاولات'],
+      [`شهادة الدفع والمستخلص الجاري المعتمد (Interim Payment Certificate - IPC)`],
+      [`رقم المستخلص: ${inv.invoice_no}`, `تاريخ الاعتماد: ${inv.date}`, `المشروع: ${project.name}`],
+      [`المالك: ${project.client_name || inv.client_name || '-'}`, `المقاول: شركة رواسي عدن`, `الاستشاري المشرف: الإدارة الفنية والهندسية`],
+      [`الفترة من: ${inv.period_from || '-'} إلى: ${inv.period_to || '-'}`],
+      [],
+      ['البيان الهندسي والمحاسبي المعتمد', 'المبلغ (' + curr + ')', 'النسبة / الملاحظات'],
+      ['القيمة التعاقدية المعتمدة للمشروع', Number(contract.contract_value) || Number(project.contract_value) || 0, 'قيمة العقد الأصلية'],
+      ['إجمالي قيمة الأعمال المنفذة التراكمية حتى تاريخه', Number(inv.cumulative_work_done) || 0, 'إجمالي الأعمال السابقة + الحالية'],
+      ['يُخصم: إجمالي المستخلصات السابقة المصروفة', -(Number(inv.previous_bills_amount) || 0), 'قيمة ما تم صرفه سابقاً'],
+      ['قيمة الأعمال المنجزة خلال هذا المستخلص (Gross Work)', Number(inv.current_gross_amount) || 0, 'إجمالي الأعمال الحالية'],
+      ['يُخصم: استهلاك الدفعة المقدمة', -(Number(inv.advance_deduction) || 0), `بنسبة ${inv.advance_pct || 10}%`],
+      ['يُخصم: محتجزات ضمان حسن التنفيذ (Retention)', -(Number(inv.retention_deduction) || 0), `بنسبة ${inv.retention_pct || 10}%`],
+      ['يُخصم: استقطاعات وغرامات أخرى', -(Number(inv.other_deductions) || 0), 'خصميات أو مواد موردة'],
+      ['صافي المبلغ المعتمد والمستحق للصرف للمقاول (Net Payable)', Number(inv.net_amount) || 0, 'المبلغ الصافي للصرف'],
+      [],
+      ['التفقيط المالي بالحروف:', tafqeet(inv.net_amount, curr)],
+      [],
+      ['التوقيعات والاعتمادات الرسمية:'],
+      ['مهندس الموقع والمكتب الفني', 'مدير المشروع', 'المهندس الاستشاري المشرف', 'المالك / صاحب العمل']
+    ];
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+    if (!wsSummary['!views']) wsSummary['!views'] = [];
+    wsSummary['!views'].push({ RTL: true });
+    wsSummary['!cols'] = [{ wch: 45 }, { wch: 22 }, { wch: 28 }, { wch: 25 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'شهادة الدفع');
+
+    // 2. ورقة تفريغ بنود جدول الكميات التفصيلية إذا توفرت
+    if (items.length > 0) {
+      const itemsRows = [
+        ['شركة رواسي عدن للهندسة والمقاولات'],
+        [`كشف حصر وتفريغ كميات المستخلص رقم (${inv.invoice_no}) - مشروع: ${project.name}`],
+        [],
+        ['م', 'رقم البند', 'بيان الأعمال والمواصفات', 'الوحدة', 'فئة السعر', 'كمية العقد', 'كمية سابقة', 'كمية حالية', 'إجمالي الكمية', 'قيمة سابقة', 'قيمة حالية', 'إجمالي القيمة', 'نسبة الإنجاز']
+      ];
+
+      items.forEach((it, idx) => {
+        itemsRows.push([
+          idx + 1,
+          it.item_no,
+          it.description,
+          it.unit,
+          it.unit_rate,
+          it.contract_qty,
+          it.previous_qty || 0,
+          it.current_qty || 0,
+          it.cumulative_qty || (Number(it.previous_qty || 0) + Number(it.current_qty || 0)),
+          it.previous_amount || 0,
+          it.current_amount || 0,
+          it.cumulative_amount || 0,
+          `${it.completion_pct || 0}%`
+        ]);
+      });
+
+      // سطر المجموع
+      itemsRows.push([
+        'المجموع', '', 'إجمالي الأعمال المنفذة في هذا المستخلص', '', '', '', '', '', '',
+        items.reduce((s, it) => s + (Number(it.previous_amount) || 0), 0),
+        items.reduce((s, it) => s + (Number(it.current_amount) || 0), 0),
+        items.reduce((s, it) => s + (Number(it.cumulative_amount) || 0), 0),
+        ''
+      ]);
+
+      const wsItems = XLSX.utils.aoa_to_sheet(itemsRows);
+      if (!wsItems['!views']) wsItems['!views'] = [];
+      wsItems['!views'].push({ RTL: true });
+      wsItems['!cols'] = [
+        { wch: 5 }, { wch: 12 }, { wch: 45 }, { wch: 8 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+        { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 12 }
+      ];
+      XLSX.utils.book_append_sheet(wb, wsItems, 'تفاصيل بنود المستخلص');
+    }
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const filename = `IPC_${inv.invoice_no}_${(project.name || 'Project').replace(/[^\w\u0621-\u064A]/g, '_')}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('Error exporting IPC to Excel:', err);
+    res.status(500).json({ success: false, message: 'فشل في تصدير ملف المستخلص: ' + err.message });
   }
 });
 
@@ -1238,12 +1503,43 @@ router.delete('/:projectId/invoices/:id', async (req, res) => {
 });
 
 // ============================================================================
-// 10. التقارير اليومية للموقع (Daily Site Reports)
+// 10. التقارير اليومية للموقع (Daily Site Reports - Advanced Field Diary)
 // ============================================================================
 router.get('/:projectId/daily-reports', async (req, res) => {
   try {
     const reports = await query('SELECT * FROM project_daily_reports WHERE project_id = ? ORDER BY date DESC, id DESC', [req.params.projectId]);
-    res.json({ success: true, data: reports });
+    const parsed = reports.map(r => {
+      let photos = [];
+      let manpower_details = [];
+      let equipment_details = [];
+      let materials_details = [];
+      try { photos = typeof r.photos === 'string' ? JSON.parse(r.photos) : (r.photos || []); } catch {}
+      try { manpower_details = typeof r.manpower_details === 'string' ? JSON.parse(r.manpower_details) : (r.manpower_details || []); } catch {}
+      try { equipment_details = typeof r.equipment_details === 'string' ? JSON.parse(r.equipment_details) : (r.equipment_details || []); } catch {}
+      try { materials_details = typeof r.materials_details === 'string' ? JSON.parse(r.materials_details) : (r.materials_details || []); } catch {}
+      return {
+        ...r,
+        photos,
+        manpower_details,
+        equipment_details,
+        materials_details
+      };
+    });
+    res.json({ success: true, data: parsed });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get('/:projectId/daily-reports/:id', async (req, res) => {
+  try {
+    const report = await get('SELECT * FROM project_daily_reports WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
+    if (!report) return res.status(404).json({ success: false, message: 'التقرير غير موجود' });
+    try { report.photos = typeof report.photos === 'string' ? JSON.parse(report.photos) : (report.photos || []); } catch { report.photos = []; }
+    try { report.manpower_details = typeof report.manpower_details === 'string' ? JSON.parse(report.manpower_details) : (report.manpower_details || []); } catch { report.manpower_details = []; }
+    try { report.equipment_details = typeof report.equipment_details === 'string' ? JSON.parse(report.equipment_details) : (report.equipment_details || []); } catch { report.equipment_details = []; }
+    try { report.materials_details = typeof report.materials_details === 'string' ? JSON.parse(report.materials_details) : (report.materials_details || []); } catch { report.materials_details = []; }
+    res.json({ success: true, data: report });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1253,9 +1549,10 @@ router.post('/:projectId/daily-reports', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
-      report_no, date, weather = 'مشمس ومناسب للعمل', manpower_count = 0,
-      equipment_summary, work_performed, materials_received, safety_notes,
-      delays_obstacles, site_engineer, notes
+      report_no, date, weather = 'مشمس ومناسب للعمل', temperature, manpower_count = 0,
+      manpower_details, equipment_summary, equipment_details, work_performed, materials_received,
+      materials_details, safety_notes, delays_obstacles, site_engineer, notes,
+      photos, gps_lat, gps_lng, status = 'معتمد', approved_by
     } = req.body;
 
     if (!work_performed) return res.status(400).json({ success: false, message: 'بيان الأعمال المنفذة مطلوب' });
@@ -1263,19 +1560,104 @@ router.post('/:projectId/daily-reports', async (req, res) => {
     const countRes = await get('SELECT COUNT(*) as cnt FROM project_daily_reports WHERE project_id = ?', [projectId]);
     const autoNo = report_no || `DR-${new Date().getFullYear()}-${String((countRes.cnt || 0) + 1).padStart(3, '0')}`;
 
+    const jsonManpower = typeof manpower_details === 'object' ? JSON.stringify(manpower_details) : (manpower_details || null);
+    const jsonEquipment = typeof equipment_details === 'object' ? JSON.stringify(equipment_details) : (equipment_details || null);
+    const jsonMaterials = typeof materials_details === 'object' ? JSON.stringify(materials_details) : (materials_details || null);
+    const jsonPhotos = typeof photos === 'object' ? JSON.stringify(photos) : (photos || null);
+
     const result = await run(`
       INSERT INTO project_daily_reports (
-        project_id, report_no, date, weather, manpower_count,
-        equipment_summary, work_performed, materials_received,
-        safety_notes, delays_obstacles, site_engineer, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        project_id, report_no, date, weather, temperature, manpower_count,
+        manpower_details, equipment_summary, equipment_details, work_performed,
+        materials_received, materials_details, safety_notes, delays_obstacles,
+        site_engineer, notes, photos, gps_lat, gps_lng, status, approved_by, approved_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      projectId, autoNo, date || new Date().toISOString().split('T')[0], weather, Number(manpower_count) || 0,
-      equipment_summary, work_performed, materials_received, safety_notes, delays_obstacles, site_engineer, notes
+      projectId, autoNo, date || new Date().toISOString().split('T')[0], weather, temperature || null, Number(manpower_count) || 0,
+      jsonManpower, equipment_summary || null, jsonEquipment, work_performed,
+      materials_received || null, jsonMaterials, safety_notes || null, delays_obstacles || null,
+      site_engineer || 'م. الموقع', notes || null, jsonPhotos,
+      gps_lat ? Number(gps_lat) : null, gps_lng ? Number(gps_lng) : null,
+      status || 'معتمد', approved_by || null, status === 'معتمد' ? new Date().toISOString() : null
     ]);
 
     const created = await get('SELECT * FROM project_daily_reports WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تم توثيق التقرير اليومي للموقع بنجاح', data: created });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.put('/:projectId/daily-reports/:id', async (req, res) => {
+  try {
+    const { id, projectId } = req.params;
+    const {
+      report_no, date, weather, temperature, manpower_count,
+      manpower_details, equipment_summary, equipment_details, work_performed,
+      materials_received, materials_details, safety_notes, delays_obstacles,
+      site_engineer, notes, photos, gps_lat, gps_lng, status, approved_by
+    } = req.body;
+
+    const existing = await get('SELECT * FROM project_daily_reports WHERE id = ? AND project_id = ?', [id, projectId]);
+    if (!existing) return res.status(404).json({ success: false, message: 'التقرير غير موجود' });
+
+    const jsonManpower = manpower_details !== undefined ? (typeof manpower_details === 'object' ? JSON.stringify(manpower_details) : manpower_details) : existing.manpower_details;
+    const jsonEquipment = equipment_details !== undefined ? (typeof equipment_details === 'object' ? JSON.stringify(equipment_details) : equipment_details) : existing.equipment_details;
+    const jsonMaterials = materials_details !== undefined ? (typeof materials_details === 'object' ? JSON.stringify(materials_details) : materials_details) : existing.materials_details;
+    const jsonPhotos = photos !== undefined ? (typeof photos === 'object' ? JSON.stringify(photos) : photos) : existing.photos;
+
+    await run(`
+      UPDATE project_daily_reports SET
+        report_no = COALESCE(?, report_no),
+        date = COALESCE(?, date),
+        weather = COALESCE(?, weather),
+        temperature = COALESCE(?, temperature),
+        manpower_count = COALESCE(?, manpower_count),
+        manpower_details = ?,
+        equipment_summary = COALESCE(?, equipment_summary),
+        equipment_details = ?,
+        work_performed = COALESCE(?, work_performed),
+        materials_received = COALESCE(?, materials_received),
+        materials_details = ?,
+        safety_notes = COALESCE(?, safety_notes),
+        delays_obstacles = COALESCE(?, delays_obstacles),
+        site_engineer = COALESCE(?, site_engineer),
+        notes = COALESCE(?, notes),
+        photos = ?,
+        gps_lat = COALESCE(?, gps_lat),
+        gps_lng = COALESCE(?, gps_lng),
+        status = COALESCE(?, status),
+        approved_by = COALESCE(?, approved_by)
+      WHERE id = ? AND project_id = ?
+    `, [
+      report_no, date, weather, temperature, manpower_count !== undefined ? Number(manpower_count) : null,
+      jsonManpower, equipment_summary, jsonEquipment, work_performed,
+      materials_received, jsonMaterials, safety_notes, delays_obstacles,
+      site_engineer, notes, jsonPhotos,
+      gps_lat !== undefined ? Number(gps_lat) : null, gps_lng !== undefined ? Number(gps_lng) : null,
+      status, approved_by, id, projectId
+    ]);
+
+    const updated = await get('SELECT * FROM project_daily_reports WHERE id = ?', [id]);
+    res.json({ success: true, message: 'تم تحديث التقرير اليومي بنجاح', data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.put('/:projectId/daily-reports/:id/approve', async (req, res) => {
+  try {
+    const { id, projectId } = req.params;
+    const approvedBy = req.body.approved_by || req.user?.name || 'مدير المشروع / الاستشاري';
+    await run(`
+      UPDATE project_daily_reports SET
+        status = 'معتمد',
+        approved_by = ?,
+        approved_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND project_id = ?
+    `, [approvedBy, id, projectId]);
+
+    res.json({ success: true, message: 'تم اعتماد التقرير اليومي بنجاح', approved_by: approvedBy });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

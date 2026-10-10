@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>الملف الشخصي - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div id="appHeader"></div>
+
+  <div class="app-container">
+    <div style="margin-bottom: 16px;">
+      <h2 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;">الملف الشخصي والأمان</h2>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">إدارة بيانات حسابك، التحقق بخطوتين وكلمة المرور</p>
+    </div>
+
+    <!-- Client Organization Info Card -->
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-building"></i> بيانات الشركة / العميل</div>
+      <div style="font-size: 0.85rem; line-height: 1.8;">
+        <div><span style="color: var(--text-muted);">الاسم التجاري:</span> <b id="companyName" style="color: #FFFFFF;">—</b></div>
+        <div><span style="color: var(--text-muted);">الشخص المسؤول:</span> <span id="clientRep">—</span></div>
+        <div><span style="color: var(--text-muted);">الهاتف المسجل:</span> <span id="clientPhone">—</span></div>
+        <div><span style="color: var(--text-muted);">العنوان:</span> <span id="clientAddress">—</span></div>
+      </div>
+    </div>
+
+    <!-- User Account Form -->
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-user-shield"></i> بيانات المستخدم المسجل</div>
+      <form id="profileForm" onsubmit="updateProfile(event)">
+        <div class="form-group">
+          <label class="form-label">الاسم الكامل *</label>
+          <input type="text" id="profFullName" required class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">البريد الإلكتروني (غير قابل للتغيير)</label>
+          <input type="email" id="profEmail" readonly disabled class="form-input" style="opacity: 0.7;">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">رقم الهاتف</label>
+          <input type="tel" id="profPhone" class="form-input">
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px;">
+          <h4 style="font-size: 0.9rem; font-weight: bold; color: var(--gold); margin-bottom: 10px;">
+            <i class="fa-solid fa-shield-halved"></i> إعدادات الأمان والتحقق بخطوتين (2FA)
+          </h4>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-input); padding: 12px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 0.85rem; font-weight: bold; color: #FFFFFF;">تفعيل كود التحقق (OTP / 2FA)</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">طلب رمز الأمان عند كل تسجيل دخول جديد</div>
+            </div>
+            <input type="checkbox" id="prof2fa" style="width: 20px; height: 20px; accent-color: var(--gold);">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">رمز الـ PIN الاحتياطي الثابت (6 أرقام)</label>
+            <input type="text" id="profPin" maxlength="6" class="form-input" placeholder="123456" style="letter-spacing: 2px; font-weight: bold;">
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px;">
+          <h4 style="font-size: 0.9rem; font-weight: bold; color: #FFFFFF; margin-bottom: 10px;">
+            <i class="fa-solid fa-key"></i> تغيير كلمة المرور (اختياري)
+          </h4>
+
+          <div class="form-group">
+            <label class="form-label">كلمة المرور الحالية</label>
+            <input type="password" id="currentPass" class="form-input" placeholder="أدخل كلمة المرور الحالية">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">كلمة المرور الجديدة</label>
+            <input type="password" id="newPass" class="form-input" placeholder="6 خانات على الأقل">
+          </div>
+        </div>
+
+        <button type="submit" id="saveProfBtn" class="btn btn-primary" style="margin-top: 12px;">
+          <i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات
+        </button>
+      </form>
+    </div>
+
+    <!-- Logout Card -->
+    <div class="card" style="border-color: rgba(239, 68, 68, 0.3);">
+      <button onclick="handleLogout()" class="btn btn-danger">
+        <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج من التطبيق
+      </button>
+    </div>
+  </div>
+
+  <div id="bottomNav"></div>
+
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('dashboard');
+      const isAuth = await ClientAuth.requireAuth();
+      if (!isAuth) return;
+
+      loadProfile();
+    });
+
+    async function loadProfile() {
+      try {
+        const data = await ClientAPI.get('/profile');
+        if (!data.success) throw new Error(data.message);
+
+        const p = data.profile;
+        document.getElementById('companyName').innerText = p.client_company || p.client_name || '—';
+        document.getElementById('clientRep').innerText = p.client_name || '—';
+        document.getElementById('clientPhone').innerText = p.client_phone || '—';
+        document.getElementById('clientAddress').innerText = p.client_address || 'عدن، الجمهورية اليمنية';
+
+        document.getElementById('profFullName').value = p.full_name || '';
+        document.getElementById('profEmail').value = p.email || '';
+        document.getElementById('profPhone').value = p.phone || '';
+        document.getElementById('prof2fa').checked = Boolean(p.two_factor_enabled);
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل تحميل بيانات الملف الشخصي', 'error');
+      }
+    }
+
+    async function updateProfile(e) {
+      e.preventDefault();
+      const btn = document.getElementById('saveProfBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+
+      const payload = {
+        full_name: document.getElementById('profFullName').value.trim(),
+        phone: document.getElementById('profPhone').value.trim(),
+        two_factor_enabled: document.getElementById('prof2fa').checked,
+        two_factor_pin: document.getElementById('profPin').value.trim() || undefined
+      };
+
+      const curPass = document.getElementById('currentPass').value;
+      const newPass = document.getElementById('newPass').value;
+      if (newPass) {
+        if (!curPass) {
+          ClientApp.showToast('يرجى إدخال كلمة المرور الحالية', 'error');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات';
+          return;
+        }
+        payload.current_password = curPass;
+        payload.new_password = newPass;
+      }
+
+      try {
+        const res = await ClientAPI.put('/profile', payload);
+        if (!res.success) throw new Error(res.message);
+
+        ClientApp.showToast('تم تحديث الملف الشخصي بنجاح', 'success');
+        document.getElementById('currentPass').value = '';
+        document.getElementById('newPass').value = '';
+        document.getElementById('profPin').value = '';
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل التحديث', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات';
+      }
+    }
+
+    async function handleLogout() {
+      if (confirm('هل أنت متأكد من رغبتك في تسجيل الخروج؟')) {
+        await ClientAuth.logout();
+      }
+    }
+  </script>
+</body>
+</html>

@@ -24,11 +24,10 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
   const cleanup = async () => {
     try {
       await db.run("DELETE FROM journal_entry_lines WHERE project_id = ? OR entry_id IN (SELECT id FROM journal_entries WHERE created_by IN (?, ?) OR created_by_name IN ('maker_ctrl', 'checker_ctrl'))", [testProjectId, makerId, checkerId]);
+      await db.run("DELETE FROM journal_entries WHERE created_by IN (?, ?) OR created_by_name IN ('maker_ctrl', 'checker_ctrl')", [makerId, checkerId]);
       await db.run("DELETE FROM bills WHERE project_id = ? OR created_by IN (?, ?)", [testProjectId, makerId, checkerId]);
       await db.run("DELETE FROM expenses WHERE project_id = ? OR created_by IN (?, ?)", [testProjectId, makerId, checkerId]);
       await db.run("DELETE FROM purchases WHERE project_id = ? OR created_by IN (?, ?)", [testProjectId, makerId, checkerId]);
-      await db.run("DELETE FROM cash_movements WHERE project_id = ?", [testProjectId]);
-      await db.run("DELETE FROM journal_entries WHERE created_by IN (?, ?) OR created_by_name IN ('maker_ctrl', 'checker_ctrl')", [makerId, checkerId]);
       await db.run("DELETE FROM projects WHERE id = ?", [testProjectId]);
       await db.run("DELETE FROM clients WHERE id = ?", [testClientId]);
       await db.run("DELETE FROM users WHERE id IN (?, ?) OR username IN ('maker_ctrl', 'checker_ctrl')", [makerId, checkerId]);
