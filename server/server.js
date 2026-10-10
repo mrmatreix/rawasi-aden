@@ -39,8 +39,14 @@ app.use('/api/inventory', requireAuth, require('./routes/inventory'));
 app.use('/api/purchases', requireAuth, require('./routes/purchases'));
 app.use('/api/expenses', requireAuth, require('./routes/expenses'));
 app.use('/api/billing', requireAuth, require('./routes/billing'));
-app.use('/api/payments', requireAuth, require('./routes/payments'));
+app.use('/api/payments', (req, res, next) => {
+  if (req.path.startsWith('/webhook')) {
+    return next();
+  }
+  return requireAuth(req, res, next);
+}, require('./routes/payments'));
 app.use('/api/accounting', requireAuth, require('./routes/accounting'));
+app.use('/api/reports/payments', requireAuth, require('./routes/payment_reports'));
 app.use('/api/reports', requireAuth, require('./routes/reports'));
 app.use('/api/clients', requireAuth, require('./routes/clients'));
 app.use('/api/suppliers', requireAuth, require('./routes/suppliers'));

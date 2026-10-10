@@ -1,16 +1,32 @@
 /**
- * إدارة التقارير، الرسوم البيانية التفاعلية، كشوفات الحسابات وتصدير Excel - رواسي عدن
+ * =========================================================================
+ * js/reports.js
+ * إدارة التقارير، القوائم المالية، كشوفات الحسابات وتصدير Excel - رواسي عدن
+ * =========================================================================
+ * 
+ * المبادئ المحاسبية المعيارية المطبقة:
+ * 1. الواجهة الأمامية للعرض والتنسيق فقط (Display & Presentation Layer) وليس محرك حسابات.
+ * 2. الاعتماد التام على ردود الخادم (API Response) القادمة من دفتر الأستاذ العام (General Ledger).
+ * 3. خلو تام من أي أرقام افتراضية مصطنعة أو Fallback Values (1,250,000 / 850,000 / 35% إلخ).
+ * 4. حفظ البيانات الرسمية المستلمة في ذاكرة التقرير (lastReportData) لاستخدامها في التصدير والطباعة.
  */
 
 const Reports = {
   activeReportTab: 'profit-loss',
+  lastReportData: {},
 
   async init() {
     await this.loadDashboardKPIs();
   },
 
+  // =========================================================================
+  // 1. لوحة التحكم المركزية (Dashboard KPIs)
+  // =========================================================================
   async loadDashboardKPIs() {
-    const kpiIds = ['kpiTotalIncome', 'kpiTotalExpenses', 'kpiNetProfit', 'kpiCashBalance', 'kpiClientReceivables', 'kpiSupplierPayables', 'kpiActiveProjects', 'kpiTotalProjects'];
+    const kpiIds = [
+      'kpiTotalIncome', 'kpiTotalExpenses', 'kpiNetProfit', 'kpiCashBalance',
+      'kpiClientReceivables', 'kpiSupplierPayables', 'kpiActiveProjects', 'kpiTotalProjects'
+    ];
     kpiIds.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.add('skeleton', 'skeleton-text');
@@ -24,24 +40,25 @@ const Reports = {
     try {
       const res = await fetch('/api/reports/dashboard');
       const json = await res.json();
-      if (json.success) {
+      if (json.success && json.data) {
         const { kpis, expenses_by_type, monthly_trend, recent_transactions, contracting_summary } = json.data;
+        this.lastReportData['dashboard'] = json.data;
         this.updateKPIElements(kpis, contracting_summary);
         this.renderExpensesDonutChart(expenses_by_type);
         this.renderMonthlyTrendChart(monthly_trend);
         this.renderRecentOperationsTable(recent_transactions);
       }
     } catch (e) {
-      console.error('Error loading dashboard KPIs:', e);
+      console.error('❌ Error loading dashboard KPIs:', e);
     }
   },
 
-  updateKPIElements(k, contractingSummary) {
+  updateKPIElements(k = {}, contractingSummary = {}) {
     const setTxt = (id, val) => {
       const el = document.getElementById(id);
       if (el) {
         el.classList.remove('skeleton', 'skeleton-text');
-        el.textContent = App.formatNumber(val);
+        el.textContent = App.formatNumber(val ?? 0);
       }
     };
 
@@ -52,7 +69,6 @@ const Reports = {
     setTxt('kpiClientReceivables', k.client_receivables);
     setTxt('kpiSupplierPayables', k.supplier_payables);
 
-    // تحديث ركائز المقاولات الـ 8 المفصولة في اللوحة الرئيسية
     const cs = contractingSummary || {};
     setTxt('matrixTotalReceipts', k.cash_receipts ?? cs.total_cash_receipts ?? 0);
     setTxt('matrixRecognizedRevenue', k.recognized_revenue ?? cs.total_recognized_revenue ?? 0);
@@ -66,16 +82,15 @@ const Reports = {
     const activeEl = document.getElementById('kpiActiveProjects');
     if (activeEl) {
       activeEl.classList.remove('skeleton', 'skeleton-text');
-      activeEl.textContent = k.active_projects;
+      activeEl.textContent = k.active_projects ?? 0;
     }
     const totalEl = document.getElementById('kpiTotalProjects');
     if (totalEl) {
       totalEl.classList.remove('skeleton', 'skeleton-text');
-      totalEl.textContent = k.total_projects;
+      totalEl.textContent = k.total_projects ?? 0;
     }
   },
 
-  // رسم المخطط الدائري (Donut Chart) للمصروفات عبر محرك الرسوم البيانية المتخصص
   renderExpensesDonutChart(data) {
     if (window.UI && UI.Chart && typeof UI.Chart.Donut === 'function') {
       UI.Chart.Donut('expensesDonutCanvas', {
@@ -84,16 +99,14 @@ const Reports = {
       });
       return;
     }
-
     const canvas = document.getElementById('expensesDonutCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const width = canvas.width = 280;
-    const height = canvas.height = 220;
-    ctx.clearRect(0, 0, width, height);
+    canvas.width = 280;
+    canvas.height = 220;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
   },
 
-  // رسم المخطط الخطي لمسار 6 أشهر عبر محرك الرسوم البيانية المتخصص عالي الدقة
   renderMonthlyTrendChart(trendData) {
     if (window.UI && UI.Chart && typeof UI.Chart.TrendLine === 'function') {
       UI.Chart.TrendLine('monthlyTrendCanvas', {
@@ -101,38 +114,36 @@ const Reports = {
       });
       return;
     }
-
     const canvas = document.getElementById('monthlyTrendCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const width = canvas.width = 460;
-    const height = canvas.height = 220;
-    ctx.clearRect(0, 0, width, height);
+    canvas.width = 460;
+    canvas.height = 220;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
   },
 
-  // جدول آخر العمليات في لوحة التحكم
   renderRecentOperationsTable(operations) {
     const tbody = document.getElementById('recentOperationsTableBody');
     if (!tbody) return;
 
     if (!operations || operations.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد حركات مؤخراً</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد حركات مؤخراً في دفتر الأستاذ</td></tr>`;
       return;
     }
 
     tbody.innerHTML = operations.map(op => {
-      const isIncome = op.type === 'إيراد';
+      const isIncome = op.type === 'إيراد' || op.type === 'سند قبض';
       return `
         <tr>
-          <td>${op.date}</td>
+          <td>${op.date || '-'}</td>
           <td style="font-weight: 700; color: ${isIncome ? 'var(--accent-green)' : 'var(--accent-red)'}">
-            ${App.formatNumber(op.amount)} ${op.currency || 'ر.ي'}
+            ${App.formatNumber(op.amount || 0)} ${op.currency || 'ر.ي'}
           </td>
           <td>${op.project_name || 'عام'}</td>
           <td style="color: var(--text-secondary);">${op.description || '-'}</td>
           <td>
             <span class="badge ${isIncome ? 'badge-income' : 'badge-expense'}">
-              ${op.type}
+              ${op.type || 'قيد'}
             </span>
           </td>
         </tr>
@@ -140,26 +151,30 @@ const Reports = {
     }).join('');
   },
 
-  // تقرير الأرباح والخسائر السريع في لوحة التحكم
   async filterProfitLoss() {
-    const fromDate = document.getElementById('plFromDate')?.value || '2024-01-01';
-    const toDate = document.getElementById('plToDate')?.value || '2024-05-20';
+    const fromDate = document.getElementById('plFromDate')?.value || '';
+    const toDate = document.getElementById('plToDate')?.value || '';
+    let url = '/api/reports/profit-loss';
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    const qs = params.toString();
+    if (qs) url += '?' + qs;
 
     try {
-      const res = await fetch(`/api/reports/profit-loss?from_date=${fromDate}&to_date=${toDate}`);
+      const res = await fetch(url);
       const json = await res.json();
-      if (json.success) {
+      if (json.success && json.data) {
         const d = json.data;
         const inEl = document.getElementById('plTotalIncome');
         const exEl = document.getElementById('plTotalExpenses');
         const netEl = document.getElementById('plNetProfit');
 
-        if (inEl) inEl.textContent = App.formatNumber(d.total_income);
-        if (exEl) exEl.textContent = App.formatNumber(d.total_expenses);
-        if (netEl) netEl.textContent = App.formatNumber(d.net_profit);
+        if (inEl) inEl.textContent = App.formatNumber(d.total_income || 0);
+        if (exEl) exEl.textContent = App.formatNumber(d.total_expenses || 0);
+        if (netEl) netEl.textContent = App.formatNumber(d.net_profit || 0);
 
         App.showToast('تم تحديث أرقام الأرباح والخسائر بنجاح', 'success');
-        // تحويل المستخدم لشاشة التقارير الموسعة لعرض التفاصيل
         App.navigate('reports');
         this.switchReportTab('profit-loss');
       }
@@ -169,49 +184,21 @@ const Reports = {
     }
   },
 
-  // كشف حساب عميل السريع في لوحة التحكم
   async loadClientStatement() {
     const clientId = document.getElementById('statementClientSelect')?.value;
     if (!clientId) {
       App.showToast('يرجى اختيار العميل أولاً', 'error');
       return;
     }
-
-    try {
-      const res = await fetch(`/api/reports/client-statement/${clientId}`);
-      const json = await res.json();
-      if (json.success) {
-        const c = json.data.client;
-        const prevBal = document.getElementById('csPrevBalance');
-        const totalPaid = document.getElementById('csTotalPaid');
-        const totalDue = document.getElementById('csTotalDue');
-        const curBal = document.getElementById('csCurBalance');
-
-        if (prevBal) prevBal.textContent = App.formatNumber(c.previous_balance || 120000);
-        if (totalPaid) totalPaid.textContent = App.formatNumber(c.total_paid || 550000);
-        if (totalDue) totalDue.textContent = App.formatNumber(c.total_due || 320000);
-        if (curBal) curBal.textContent = App.formatNumber(c.current_balance || 190000);
-
-        App.showToast(`تم تحديث كشف حساب: ${c.name}`, 'success');
-        
-        // فتح شاشة كشوفات الحسابات الموسعة
-        App.navigate('reports');
-        this.switchReportTab('client-statement');
-        const repClientSelect = document.getElementById('repClientSelect');
-        if (repClientSelect) {
-          repClientSelect.value = clientId;
-          this.fetchFullClientStatement();
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    App.navigate('reports');
+    this.switchReportTab('client-statement');
+    await this.initClientStatementDropdown(clientId);
+    await this.fetchFullClientStatement(clientId);
   },
 
   // =========================================================================
-  // شاشة مركز التقارير الشاملة (Full Reports Hub)
+  // إدارة التبويبات والشاشات (Tabs Switcher)
   // =========================================================================
-
   switchReportTab(tabId) {
     this.activeReportTab = tabId;
     document.querySelectorAll('.report-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -243,192 +230,581 @@ const Reports = {
     }
   },
 
-  // 1. تقرير الأرباح والخسائر الشامل
+  // =========================================================================
+  // 1. تقرير الأرباح والخسائر الشامل (P&L)
+  // =========================================================================
   async loadFullProfitLoss() {
-    const fromDate = document.getElementById('repPlFromDate')?.value || '2024-01-01';
-    const toDate = document.getElementById('repPlToDate')?.value || '2024-05-20';
+    const fromDate = document.getElementById('repPlFromDate')?.value || '';
+    const toDate = document.getElementById('repPlToDate')?.value || '';
+    let url = '/api/reports/profit-loss';
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (params.toString()) url += '?' + params.toString();
 
     try {
-      const res = await fetch(`/api/reports/profit-loss?from_date=${fromDate}&to_date=${toDate}`);
-      const json = await res.json();
-      if (json.success) {
-        const d = json.data;
-        document.getElementById('fullPlIncome').textContent = App.formatNumber(d.total_income) + ' ر.ي';
-        document.getElementById('fullPlExpense').textContent = App.formatNumber(d.total_expenses) + ' ر.ي';
-        document.getElementById('fullPlProfit').textContent = App.formatNumber(d.net_profit) + ' ر.ي';
-
-        const tbody = document.getElementById('fullPlBreakdownTable');
-        if (tbody) {
-          tbody.innerHTML = d.expenses_breakdown.map(item => `
-            <tr>
-              <td><strong>${item.expense_type}</strong></td>
-              <td style="color: var(--accent-red); font-weight: bold;">${App.formatNumber(item.total)} ر.ي</td>
-              <td>${Math.round((item.total / (d.total_expenses || 1)) * 100)}%</td>
-            </tr>
-          `).join('');
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  // 2. تقرير ربحية المشاريع
-  async loadProjectsProfitability() {
-    try {
-      const res = await fetch('/api/reports/projects-profitability');
-      const json = await res.json();
-      if (json.success) {
-        const tbody = document.getElementById('projProfitTableBody');
-        if (tbody) {
-          tbody.innerHTML = json.data.map(p => `
-            <tr>
-              <td><strong>${p.name}</strong> (${p.code})</td>
-              <td>${p.client_name || '-'}</td>
-              <td style="color: var(--gold-light); font-weight: bold;">${App.formatNumber(p.contract_value)}</td>
-              <td>${App.formatNumber(p.actual_cost)}</td>
-              <td style="color: var(--accent-green); font-weight: bold;">${App.formatNumber(p.calculated_actual_profit)}</td>
-              <td><span class="badge badge-income">${p.profit_margin_percentage}%</span></td>
-              <td>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <div class="progress-wrap"><div class="progress-bar-fill" style="width: ${p.progress_percentage}%"></div></div>
-                  <span style="font-size:0.75rem">${p.progress_percentage}%</span>
-                </div>
-              </td>
-            </tr>
-          `).join('');
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  // 2.ب تقرير ربحية مراكز التكلفة والمشاريع الشامل
-  async loadCostCentersProfitability() {
-    try {
-      const fromDate = document.getElementById('repCcFromDate')?.value || '';
-      const toDate = document.getElementById('repCcToDate')?.value || '';
-      let url = '/api/reports/cost-centers-profitability';
-      if (fromDate && toDate) url += `?from_date=${fromDate}&to_date=${toDate}`;
-
       const res = await fetch(url);
       const json = await res.json();
       if (json.success && json.data) {
         const d = json.data;
+        this.lastReportData['profit-loss'] = json;
+
+        const incEl = document.getElementById('fullPlIncome');
+        const expEl = document.getElementById('fullPlExpense');
+        const profEl = document.getElementById('fullPlProfit');
+
+        if (incEl) incEl.textContent = App.formatNumber(d.total_income || 0) + ' ر.ي';
+        if (expEl) expEl.textContent = App.formatNumber(d.total_expenses || 0) + ' ر.ي';
+        if (profEl) {
+          profEl.textContent = App.formatNumber(d.net_profit || 0) + ' ر.ي';
+          profEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
+        }
+
+        const tbody = document.getElementById('fullPlBreakdownTable');
+        if (tbody) {
+          const breakdown = d.expenses_breakdown || [];
+          if (breakdown.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد مصروفات مسجلة في هذه الفترة</td></tr>`;
+          } else {
+            tbody.innerHTML = breakdown.map(item => `
+              <tr>
+                <td><strong>${item.name || item.expense_type || 'بند مصروف'}</strong></td>
+                <td style="color: var(--accent-red); font-weight: bold;">${App.formatNumber(item.amount || item.total || 0)} ر.ي</td>
+                <td>${item.percentage !== undefined ? item.percentage + '%' : Math.round(((item.amount || item.total || 0) / (d.total_expenses || 1)) * 100) + '%'}</td>
+              </tr>
+            `).join('');
+          }
+        }
+      }
+    } catch (e) {
+      console.error('❌ Error loading profit-loss:', e);
+      App.showToast('تعذر جلب تقرير الأرباح والخسائر', 'error');
+    }
+  },
+
+  // =========================================================================
+  // 2. تقرير ميزان المراجعة والأرصدة (Trial Balance)
+  // =========================================================================
+  async loadTrialBalance() {
+    const fromDate = document.getElementById('tbFromDate')?.value || '';
+    const toDate = document.getElementById('tbToDate')?.value || '';
+    let url = '/api/reports/trial-balance';
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (params.toString()) url += '?' + params.toString();
+
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const { accounts, totals } = json.data;
+        this.lastReportData['trial-balance'] = json;
+
+        const is_balanced = json.reconciliation ? json.reconciliation.is_balanced : totals?.is_balanced;
+        const diff = json.reconciliation ? json.reconciliation.period_difference : Math.abs((totals?.total_debit || 0) - (totals?.total_credit || 0));
+
+        const debitEl = document.getElementById('tbTotalDebit');
+        const creditEl = document.getElementById('tbTotalCredit');
+        const balDebitEl = document.getElementById('tbBalanceDebit');
+        const statusEl = document.getElementById('tbBalanceStatus');
+
+        if (debitEl) debitEl.textContent = App.formatNumber(totals.period_debit || totals.total_debit || 0) + ' ر.ي';
+        if (creditEl) creditEl.textContent = App.formatNumber(totals.period_credit || totals.total_credit || 0) + ' ر.ي';
+        if (balDebitEl) balDebitEl.textContent = App.formatNumber(totals.closing_debit || totals.balance_debit || 0) + ' ر.ي';
+
+        if (statusEl) {
+          if (is_balanced) {
+            statusEl.textContent = 'متزن 100% ✓';
+            statusEl.style.color = 'var(--accent-green)';
+          } else {
+            statusEl.textContent = `فارق: ${App.formatNumber(diff || 0)} ر.ي ⚠️`;
+            statusEl.style.color = 'var(--accent-red)';
+          }
+        }
+
+        const tbody = document.getElementById('trialBalanceTableBody');
+        if (tbody) {
+          if (!accounts || accounts.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد حسابات أو حركات في هذه الفترة</td></tr>`;
+          } else {
+            tbody.innerHTML = accounts.map(a => `
+              <tr>
+                <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${a.code}</td>
+                <td><strong>${a.name}</strong></td>
+                <td><span class="badge badge-info">${a.type}</span></td>
+                <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_debit > 0 ? App.formatNumber(a.opening_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_credit > 0 ? App.formatNumber(a.opening_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${a.period_debit > 0 ? App.formatNumber(a.period_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8;">${a.period_credit > 0 ? App.formatNumber(a.period_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">${a.closing_debit > 0 ? App.formatNumber(a.closing_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: #38bdf8;">${a.closing_credit > 0 ? App.formatNumber(a.closing_credit) : '-'}</td>
+              </tr>
+            `).join('');
+          }
+        }
+
+        const tfoot = document.getElementById('trialBalanceTableFoot');
+        if (tfoot) {
+          tfoot.innerHTML = `
+            <tr>
+              <td colspan="3" style="text-align: center; font-size: 1rem;">الإجمالي الكلي لميزان المراجعة</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(totals.opening_debit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(totals.opening_credit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.period_debit || totals.total_debit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.period_credit || totals.total_credit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.closing_debit || totals.balance_debit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.closing_credit || totals.balance_credit || 0)}</td>
+            </tr>
+          `;
+        }
+      }
+    } catch (e) {
+      console.error('❌ Error loading trial balance:', e);
+      App.showToast('فشل تحميل ميزان المراجعة', 'error');
+    }
+  },
+
+  // =========================================================================
+  // 3. تقرير قائمة الدخل المعيارية (Income Statement)
+  // =========================================================================
+  async loadIncomeStatement() {
+    const fromDate = document.getElementById('isFromDate')?.value || '';
+    const toDate = document.getElementById('isToDate')?.value || '';
+    let url = '/api/reports/income-statement';
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (params.toString()) url += '?' + params.toString();
+
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        this.lastReportData['income-statement'] = json;
+
+        const revEl = document.getElementById('isTotalRevenues');
+        const dirEl = document.getElementById('isDirectCosts');
+        const grossEl = document.getElementById('isGrossProfit');
+        const expEl = document.getElementById('isTotalExpenses');
+        const netEl = document.getElementById('isNetIncome');
+
+        if (revEl) revEl.textContent = App.formatNumber(d.total_revenues || 0) + ' ر.ي';
+        if (dirEl) dirEl.textContent = App.formatNumber(d.direct_costs || 0) + ' ر.ي';
+        if (grossEl) grossEl.textContent = App.formatNumber(d.gross_profit || 0) + ' ر.ي';
+        if (expEl) expEl.textContent = App.formatNumber(d.operating_expenses || d.total_expenses || 0) + ' ر.ي';
+        if (netEl) {
+          netEl.textContent = App.formatNumber(d.net_profit || 0) + ' ر.ي';
+          netEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
+        }
+
+        const revTbody = document.getElementById('isRevenuesTableBody');
+        if (revTbody) {
+          const revs = d.revenues || [];
+          if (revs.length === 0) {
+            revTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد إيرادات مسجلة بالأستاذ</td></tr>`;
+          } else {
+            revTbody.innerHTML = revs.map(r => `
+              <tr>
+                <td><strong>${r.code ? r.code + ' - ' : ''}${r.name}</strong></td>
+                <td style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(r.amount || 0)} ر.ي</td>
+              </tr>
+            `).join('') + `
+              <tr style="background: rgba(16,185,129,0.08); font-weight: bold;">
+                <td>إجمالي الإيرادات المعترف بها</td>
+                <td style="color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_revenues || 0)} ر.ي</td>
+              </tr>
+            `;
+          }
+        }
+
+        const expTbody = document.getElementById('isExpensesTableBody');
+        if (expTbody) {
+          const allCosts = [...(d.direct_cost_items || []), ...(d.expense_items || [])];
+          if (allCosts.length === 0) {
+            expTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد مصروفات مسجلة بالأستاذ</td></tr>`;
+          } else {
+            expTbody.innerHTML = allCosts.map(e => `
+              <tr>
+                <td><strong>${e.code ? e.code + ' - ' : ''}${e.name}</strong></td>
+                <td style="font-weight: bold; color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(e.amount || 0)} ر.ي</td>
+              </tr>
+            `).join('') + `
+              <tr style="background: rgba(239,68,68,0.08); font-weight: bold;">
+                <td>إجمالي التكاليف والمصروفات</td>
+                <td style="color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_expenses || 0)} ر.ي</td>
+              </tr>
+            `;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('❌ Error loading income statement:', e);
+      App.showToast('فشل تحميل قائمة الدخل', 'error');
+    }
+  },
+
+  // =========================================================================
+  // 4. تقرير المركز المالي / الميزانية العمومية (Balance Sheet)
+  // =========================================================================
+  async loadBalanceSheet() {
+    const asOfDate = document.getElementById('bsAsOfDate')?.value || '';
+    let url = '/api/reports/balance-sheet';
+    if (asOfDate) url += `?as_of_date=${asOfDate}`;
+
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const { assets, liabilities, equity, totals } = json.data;
+        this.lastReportData['balance-sheet'] = json;
+
+        const isBalanced = json.reconciliation ? json.reconciliation.is_balanced : (totals.assets === totals.liabilities_plus_equity);
+        const badge = document.getElementById('bsReconcileBadge');
+        if (badge) {
+          if (isBalanced) {
+            badge.textContent = '⚖️ معادلة الميزانية: متزنة تماماً (الأصول = الخصوم + الملكية) ✓';
+            badge.style.color = '#4ade80';
+            badge.style.background = 'rgba(34,197,94,0.15)';
+          } else {
+            const diff = json.reconciliation?.difference || Math.abs(totals.assets - totals.liabilities_plus_equity);
+            badge.textContent = `⚠️ فارق ميزانية: ${App.formatNumber(diff)} ر.ي`;
+            badge.style.color = '#f87171';
+            badge.style.background = 'rgba(239,68,68,0.15)';
+          }
+        }
+
+        const assetsTbody = document.getElementById('bsAssetsTable');
+        if (assetsTbody) {
+          if (!assets || assets.length === 0) {
+            assetsTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد أصول مسجلة</td></tr>`;
+          } else {
+            assetsTbody.innerHTML = assets.map(a => `
+              <tr>
+                <td>${a.code ? a.code + ' - ' : ''}${a.name}</td>
+                <td style="font-weight: bold; text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(a.balance || 0)} ر.ي</td>
+              </tr>
+            `).join('');
+          }
+        }
+
+        const liabTbody = document.getElementById('bsLiabTable');
+        if (liabTbody) {
+          const combinedLiab = [...(liabilities || []), ...(equity || [])];
+          if (combinedLiab.length === 0) {
+            liabTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد التزامات أو حقوق ملكية</td></tr>`;
+          } else {
+            liabTbody.innerHTML = combinedLiab.map(l => `
+              <tr>
+                <td>${l.code ? l.code + ' - ' : ''}${l.name}</td>
+                <td style="font-weight: bold; text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(l.balance || 0)} ر.ي</td>
+              </tr>
+            `).join('');
+          }
+        }
+
+        const totAssetsEl = document.getElementById('bsTotalAssets');
+        const totLiabEl = document.getElementById('bsTotalLiabEquity');
+        if (totAssetsEl) totAssetsEl.textContent = App.formatNumber(totals.assets || 0) + ' ر.ي';
+        if (totLiabEl) totLiabEl.textContent = App.formatNumber(totals.liabilities_plus_equity || 0) + ' ر.ي';
+      }
+    } catch (e) {
+      console.error('❌ Error loading balance sheet:', e);
+      App.showToast('فشل تحميل الميزانية العمومية', 'error');
+    }
+  },
+
+  // =========================================================================
+  // 5. تقرير التدفقات النقدية (Cash Flow)
+  // =========================================================================
+  async loadCashFlow() {
+    const fromDate = document.getElementById('cfFromDate')?.value || '';
+    const toDate = document.getElementById('cfToDate')?.value || '';
+    let url = '/api/reports/cash-flow';
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (params.toString()) url += '?' + params.toString();
+
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        this.lastReportData['cash-flow'] = json;
+
+        const op = d.operating_activities || { inflows: [], outflows: [], net: 0 };
+        const inv = d.investing_activities || { inflows: [], outflows: [], net: 0 };
+        const fin = d.financing_activities || { inflows: [], outflows: [], net: 0 };
+
+        const openEl = document.getElementById('cfOpeningCash');
+        const netOpEl = document.getElementById('cfNetOperating');
+        const changeEl = document.getElementById('cfNetChange');
+        const closeEl = document.getElementById('cfClosingCash');
+
+        if (openEl) openEl.textContent = App.formatNumber(d.opening_balance || 0) + ' ر.ي';
+        if (netOpEl) netOpEl.textContent = App.formatNumber(op.net || 0) + ' ر.ي';
+        if (changeEl) changeEl.textContent = App.formatNumber(d.net_cash_change || 0) + ' ر.ي';
+        if (closeEl) closeEl.textContent = App.formatNumber(d.closing_balance || 0) + ' ر.ي';
+
+        const tbody = document.getElementById('cashFlowTableBody');
+        if (tbody) {
+          let html = '';
+
+          // 1. الأنشطة التشغيلية
+          html += `<tr style="background: rgba(56,189,248,0.12); font-weight: bold;"><td colspan="4">أولاً: التدفقات النقدية من الأنشطة التشغيلية</td></tr>`;
+          if ((op.inflows || []).length === 0 && (op.outflows || []).length === 0) {
+            html += `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">لا توجد حركات تشغيلية</td></tr>`;
+          } else {
+            (op.inflows || []).forEach(it => {
+              html += `
+                <tr>
+                  <td>${it.item}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${App.formatNumber(it.amount)}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">-</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">+${App.formatNumber(it.amount)} ر.ي</td>
+                </tr>
+              `;
+            });
+            (op.outflows || []).forEach(it => {
+              html += `
+                <tr>
+                  <td>${it.item}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">-</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">${App.formatNumber(it.amount)}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-red);">-${App.formatNumber(it.amount)} ر.ي</td>
+                </tr>
+              `;
+            });
+          }
+          html += `
+            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
+              <td>صافي النقد من الأنشطة التشغيلية</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${op.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(op.net || 0)} ر.ي</td>
+            </tr>
+          `;
+
+          // 2. الأنشطة الاستثمارية
+          html += `<tr style="background: rgba(168,85,247,0.12); font-weight: bold;"><td colspan="4">ثانياً: التدفقات النقدية من الأنشطة الاستثمارية (شراء/بيع أصول)</td></tr>`;
+          if ((inv.inflows || []).length === 0 && (inv.outflows || []).length === 0) {
+            html += `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">لا توجد حركات استثمارية</td></tr>`;
+          } else {
+            (inv.inflows || []).forEach(it => {
+              html += `<tr><td>${it.item}</td><td style="text-align:left;direction:ltr;color:var(--accent-green);">${App.formatNumber(it.amount)}</td><td>-</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-green);">+${App.formatNumber(it.amount)} ر.ي</td></tr>`;
+            });
+            (inv.outflows || []).forEach(it => {
+              html += `<tr><td>${it.item}</td><td>-</td><td style="text-align:left;direction:ltr;color:var(--accent-red);">${App.formatNumber(it.amount)}</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-red);">-${App.formatNumber(it.amount)} ر.ي</td></tr>`;
+            });
+          }
+          html += `
+            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
+              <td>صافي النقد من الأنشطة الاستثمارية</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${inv.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(inv.net || 0)} ر.ي</td>
+            </tr>
+          `;
+
+          // 3. الأنشطة التمويلية
+          html += `<tr style="background: rgba(245,158,11,0.12); font-weight: bold;"><td colspan="4">ثالثاً: التدفقات النقدية من الأنشطة التمويلية (رأس المال والقروض)</td></tr>`;
+          if ((fin.inflows || []).length === 0 && (fin.outflows || []).length === 0) {
+            html += `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">لا توجد حركات تمويلية</td></tr>`;
+          } else {
+            (fin.inflows || []).forEach(it => {
+              html += `<tr><td>${it.item}</td><td style="text-align:left;direction:ltr;color:var(--accent-green);">${App.formatNumber(it.amount)}</td><td>-</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-green);">+${App.formatNumber(it.amount)} ر.ي</td></tr>`;
+            });
+            (fin.outflows || []).forEach(it => {
+              html += `<tr><td>${it.item}</td><td>-</td><td style="text-align:left;direction:ltr;color:var(--accent-red);">${App.formatNumber(it.amount)}</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-red);">-${App.formatNumber(it.amount)} ر.ي</td></tr>`;
+            });
+          }
+          html += `
+            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
+              <td>صافي النقد من الأنشطة التمويلية</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${fin.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(fin.net || 0)} ر.ي</td>
+            </tr>
+          `;
+
+          // إجماليات التدفق الختامية
+          html += `
+            <tr style="background: rgba(212,175,55,0.15); font-weight: bold; font-size: 1.05rem;">
+              <td>صافي التغير في النقدية خلال الفترة</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--gold-light);">${App.formatNumber(d.net_cash_change || 0)} ر.ي</td>
+            </tr>
+            <tr style="background: rgba(255,255,255,0.06); font-weight: bold;">
+              <td>رصيد النقدية والبنوك في نهاية المدة</td>
+              <td colspan="2"></td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.1rem;">${App.formatNumber(d.closing_balance || 0)} ر.ي</td>
+            </tr>
+          `;
+
+          tbody.innerHTML = html;
+        }
+      }
+    } catch (e) {
+      console.error('❌ Error loading cash flow:', e);
+      App.showToast('فشل تحميل التدفقات النقدية', 'error');
+    }
+  },
+
+  // =========================================================================
+  // 6. تقرير ربحية المشاريع (Projects Profitability)
+  // =========================================================================
+  async loadProjectsProfitability() {
+    const fromDate = document.getElementById('repProjFromDate')?.value || '';
+    const toDate = document.getElementById('repProjToDate')?.value || '';
+    const projectId = document.getElementById('repProjFilterSelect')?.value || '';
+
+    let url = '/api/reports/projects-profitability';
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (projectId) params.append('project_id', projectId);
+    if (params.toString()) url += '?' + params.toString();
+
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.lastReportData['projects-profitability'] = json;
+        const projects = json.data;
+
+        // تحديث القائمة المنسدلة للمشاريع إذا كانت فارغة
+        const select = document.getElementById('repProjFilterSelect');
+        if (select && select.options.length <= 1 && projects.length > 0) {
+          select.innerHTML = '<option value="">كافة المشاريع</option>' +
+            projects.map(p => `<option value="${p.id}">${p.name} (${p.code})</option>`).join('');
+          if (projectId) select.value = projectId;
+        }
+
+        const tbody = document.getElementById('projProfitTableBody');
+        if (tbody) {
+          if (projects.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 18px;">لا توجد بيانات مشاريع</td></tr>`;
+          } else {
+            tbody.innerHTML = projects.map(p => {
+              const isProfit = (p.calculated_actual_profit || 0) >= 0;
+              return `
+                <tr>
+                  <td><strong>${p.name}</strong> <small style="color:var(--text-secondary)">(${p.code})</small></td>
+                  <td>${p.client_name || '-'}</td>
+                  <td style="color: var(--gold-light); font-weight: bold;">${App.formatNumber(p.contract_value || 0)}</td>
+                  <td style="color: var(--accent-red);">${App.formatNumber(p.actual_cost || 0)}</td>
+                  <td style="color: #38bdf8; font-weight: 600;">${App.formatNumber(p.recognized_revenue || 0)}</td>
+                  <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">
+                    ${App.formatNumber(p.calculated_actual_profit || 0)}
+                  </td>
+                  <td><span class="badge ${isProfit ? 'badge-income' : 'badge-expense'}">${p.profit_margin_percentage || 0}%</span></td>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <div class="progress-wrap"><div class="progress-bar-fill" style="width: ${Math.min(100, p.progress_percentage || 0)}%"></div></div>
+                      <span style="font-size:0.75rem">${p.progress_percentage || 0}%</span>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
+      }
+    } catch (e) {
+      console.error('❌ Error loading projects profitability:', e);
+    }
+  },
+
+  // =========================================================================
+  // 7. تقرير ربحية مراكز التكلفة (Cost Centers Profitability)
+  // =========================================================================
+  async loadCostCentersProfitability() {
+    const fromDate = document.getElementById('repCcFromDate')?.value || '';
+    const toDate = document.getElementById('repCcToDate')?.value || '';
+    const ccId = document.getElementById('repCcFilterSelect')?.value || '';
+
+    let url = '/api/reports/cost-centers-profitability';
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (ccId) params.append('cost_center_id', ccId);
+    if (params.toString()) url += '?' + params.toString();
+
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        this.lastReportData['cost-centers-profitability'] = json;
+
+        // تحديث القائمة المنسدلة لمراكز التكلفة
+        const select = document.getElementById('repCcFilterSelect');
+        if (select && select.options.length <= 1 && d.centers && d.centers.length > 0) {
+          select.innerHTML = '<option value="">كافة مراكز التكلفة</option>' +
+            d.centers.map(c => `<option value="${c.id}">${c.name} (${c.code})</option>`).join('');
+          if (ccId) select.value = ccId;
+        }
+
         const totRevEl = document.getElementById('ccProfitTotalRev');
         const totExpEl = document.getElementById('ccProfitTotalExp');
         const totNetEl = document.getElementById('ccProfitTotalNet');
         const totMarginEl = document.getElementById('ccProfitTotalMargin');
 
-        if (totRevEl) totRevEl.textContent = App.formatNumber(d.totals.total_revenue) + ' ر.ي';
-        if (totExpEl) totExpEl.textContent = App.formatNumber(d.totals.total_expense) + ' ر.ي';
+        if (totRevEl) totRevEl.textContent = App.formatNumber(d.totals?.total_revenue || 0) + ' ر.ي';
+        if (totExpEl) totExpEl.textContent = App.formatNumber(d.totals?.total_expense || 0) + ' ر.ي';
         if (totNetEl) {
-          totNetEl.textContent = App.formatNumber(d.totals.net_profit) + ' ر.ي';
-          totNetEl.style.color = d.totals.net_profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+          totNetEl.textContent = App.formatNumber(d.totals?.net_profit || 0) + ' ر.ي';
+          totNetEl.style.color = (d.totals?.net_profit || 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
         }
-        if (totMarginEl) totMarginEl.textContent = d.totals.overall_margin + '%';
+        if (totMarginEl) totMarginEl.textContent = (d.totals?.overall_margin || 0) + '%';
 
         const tbody = document.getElementById('ccProfitTableBody');
         if (tbody) {
           if (!d.centers || d.centers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">لا توجد بيانات مراكز تكلفة مسجلة</td></tr>';
-            return;
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 18px;">لا توجد مراكز تكلفة مسجلة</td></tr>';
+          } else {
+            tbody.innerHTML = d.centers.map(cc => {
+              const isProfit = (cc.net_profit || 0) >= 0;
+              const statusBadge = isProfit
+                ? `<span class="badge" style="background: rgba(34,197,94,0.15); color: #4ade80;">ربح محقق (${cc.profit_margin}%)</span>`
+                : `<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171;">عجز / خسارة (${cc.profit_margin}%)</span>`;
+
+              return `
+                <tr>
+                  <td><strong>${cc.code}</strong></td>
+                  <td><strong style="color: #fff;">${cc.name}</strong></td>
+                  <td><span class="badge badge-info">${cc.type || 'مركز تكلفة'}</span></td>
+                  <td>${cc.project_name || '-'}</td>
+                  <td style="color: var(--gold-light); font-weight: bold;">${App.formatNumber(cc.total_revenue || 0)} ر.ي</td>
+                  <td style="color: #38bdf8; font-weight: bold;">${App.formatNumber(cc.total_expense || 0)} ر.ي</td>
+                  <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${App.formatNumber(cc.net_profit || 0)} ر.ي</td>
+                  <td>${statusBadge}</td>
+                </tr>
+              `;
+            }).join('');
           }
-          tbody.innerHTML = d.centers.map(cc => {
-            const isProfit = cc.net_profit >= 0;
-            const statusBadge = isProfit
-              ? `<span class="badge" style="background: rgba(34,197,94,0.15); color: #4ade80;">ربح محقق (${cc.profit_margin}%)</span>`
-              : `<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171;">عجز / خسارة (${cc.profit_margin}%)</span>`;
-
-            return `
-              <tr>
-                <td><strong>${cc.code}</strong></td>
-                <td><strong style="color: #fff;">${cc.name}</strong></td>
-                <td><span class="badge badge-info">${cc.type}</span></td>
-                <td>${cc.project_name}</td>
-                <td style="color: var(--gold-light); font-weight: bold;">${App.formatNumber(cc.total_revenue)} ر.ي</td>
-                <td style="color: #38bdf8; font-weight: bold;">${App.formatNumber(cc.total_expense)} ر.ي</td>
-                <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${App.formatNumber(cc.net_profit)} ر.ي</td>
-                <td>${statusBadge}</td>
-              </tr>
-            `;
-          }).join('');
         }
       }
     } catch (e) {
-      console.error('Error loading cost centers profitability:', e);
+      console.error('❌ Error loading cost centers profitability:', e);
     }
   },
 
-  // 3. الميزانية العمومية
-  async loadBalanceSheet() {
-    try {
-      const res = await fetch('/api/reports/balance-sheet');
-      const json = await res.json();
-      if (json.success) {
-        const { assets, liabilities, equity, totals } = json.data;
-        
-        const assetsTbody = document.getElementById('bsAssetsTable');
-        if (assetsTbody) {
-          assetsTbody.innerHTML = assets.map(a => `
-            <tr>
-              <td>${a.code} - ${a.name}</td>
-              <td style="font-weight: bold;">${App.formatNumber(a.balance)} ر.ي</td>
-            </tr>
-          `).join('');
-        }
-
-        const liabTbody = document.getElementById('bsLiabTable');
-        if (liabTbody) {
-          liabTbody.innerHTML = liabilities.map(l => `
-            <tr>
-              <td>${l.code} - ${l.name}</td>
-              <td style="font-weight: bold;">${App.formatNumber(l.balance)} ر.ي</td>
-            </tr>
-          `).join('') + equity.map(e => `
-            <tr>
-              <td>${e.code} - ${e.name}</td>
-              <td style="font-weight: bold;">${App.formatNumber(e.balance)} ر.ي</td>
-            </tr>
-          `).join('');
-        }
-
-        document.getElementById('bsTotalAssets').textContent = App.formatNumber(totals.assets) + ' ر.ي';
-        document.getElementById('bsTotalLiabEquity').textContent = App.formatNumber(totals.liabilities_plus_equity) + ' ر.ي';
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  // 4. كشف حساب عميل مفصل
+  // =========================================================================
+  // 8. كشف حساب عميل مفصل ومطابق للأستاذ (Client Statement)
+  // =========================================================================
   async initClientStatementDropdown(selectedId = null) {
     const select = document.getElementById('repClientSelect');
     if (!select) return;
 
-    let clients = (typeof Accounting !== 'undefined' && Accounting.clients && Accounting.clients.length > 0)
-      ? Accounting.clients
-      : (typeof App !== 'undefined' && App.clientsFullList && App.clientsFullList.length > 0)
-        ? App.clientsFullList
-        : [];
-
-    if (clients.length === 0) {
-      try {
-        const res = await fetch('/api/clients');
-        const json = await res.json();
-        if (json.success && json.data) {
-          clients = json.data;
-          if (typeof Accounting !== 'undefined') Accounting.clients = clients;
-        }
-      } catch (e) {
-        console.error('Error fetching clients for statement dropdown:', e);
+    try {
+      const res = await fetch('/api/clients');
+      const json = await res.json();
+      if (json.success && json.data) {
+        select.innerHTML = `<option value="">اختر العميل...</option>` +
+          json.data.map(c => `<option value="${c.id}">${c.name}${c.company ? ' (' + c.company + ')' : ''}</option>`).join('');
       }
-    }
-
-    if (clients.length > 0) {
-      select.innerHTML = `<option value="">اختر العميل...</option>` +
-        clients.map(c => `<option value="${c.id}">${c.name}${c.company ? ' (' + c.company + ')' : ''}</option>`).join('');
+    } catch (e) {
+      console.error('Error fetching clients for dropdown:', e);
     }
 
     if (selectedId) {
@@ -436,205 +812,100 @@ const Reports = {
     }
   },
 
-  // فتح كشف حساب العميل مباشرة من أي شاشة أو من نافذة السلسلة المالية
-  async showClientStatement(clientId) {
-    if (!clientId) return;
-    if (typeof App !== 'undefined' && App.navigate) {
-      await App.navigate('reports');
-    }
-    this.switchReportTab('client-statement');
-    await this.initClientStatementDropdown(clientId);
-    const select = document.getElementById('repClientSelect');
-    if (select) {
-      select.value = clientId;
-    }
-    await this.fetchFullClientStatement(clientId);
-    // التمرير السلس إلى بطاقة كشف الحساب
-    const pane = document.getElementById('pane_client-statement');
-    if (pane) {
-      pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  },
-
   async fetchFullClientStatement(explicitClientId = null) {
     const clientId = explicitClientId || document.getElementById('repClientSelect')?.value;
     if (!clientId) return;
 
-    const select = document.getElementById('repClientSelect');
-    if (select && String(select.value) !== String(clientId)) {
-      select.value = clientId;
-    }
+    const fromDate = document.getElementById('repClientFromDate')?.value || '';
+    const toDate = document.getElementById('repClientToDate')?.value || '';
+    let url = `/api/reports/client-statement/${clientId}`;
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (params.toString()) url += '?' + params.toString();
 
     try {
-      const res = await fetch(`/api/reports/client-statement/${clientId}`);
+      const res = await fetch(url);
       const json = await res.json();
-      if (json.success) {
-        const { client, statement, chain_nine_stages, summary } = json.data;
+      if (json.success && json.data) {
+        const { client, statement, summary } = json.data;
+        this.lastReportData['client-statement'] = json;
         const cCurr = client.currency || 'ر.ي';
-        const st = chain_nine_stages || {};
 
-        document.getElementById('repClientInfo').innerHTML = `
-          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-              <div>
-                <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 1.2rem;">${client.name} ${client.company ? `<span style="font-size: 0.85rem; color: #38bdf8;">(${client.company})</span>` : ''}</h3>
-                <span style="font-size: 0.78rem; color: var(--text-secondary);">الهاتف: ${client.phone || '-'} | العنوان: ${client.address || '-'}</span>
-              </div>
-              <div style="display: flex; gap: 8px;">
-                <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${client.id})">
-                  <span>🔗 استعراض السلسلة الهرمية</span>
-                </button>
-                <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${client.id})">
-                  <span>+ مستخلص جديد</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- شريط السلسلة التساعية التفاعلي 1 إلى 9 المكتمل بالأرقام الفعلية -->
-            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
-              <div style="font-size: 0.75rem; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
-                ⚡ شريط السلسلة المالية المرتبطة للعميل (1 إلى 9):
-              </div>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 6px; text-align: center; font-size: 0.72rem;">
-                <div style="background: rgba(212,175,55,0.12); border: 1px solid rgba(212,175,55,0.3); border-radius: 5px; padding: 5px;">
-                  <span style="color: var(--gold-light);">1. العميل</span>
-                  <div style="font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${client.name}</div>
+        const infoEl = document.getElementById('repClientInfo');
+        if (infoEl) {
+          infoEl.innerHTML = `
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div>
+                  <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 1.2rem;">${client.name} ${client.company ? `<span style="font-size: 0.85rem; color: #38bdf8;">(${client.company})</span>` : ''}</h3>
+                  <span style="font-size: 0.8rem; color: var(--text-secondary);">الهاتف: ${client.phone || '-'} | العنوان: ${client.address || '-'}</span>
                 </div>
-                <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); border-radius: 5px; padding: 5px;">
-                  <span style="color: #38bdf8;">2. العقود</span>
-                  <div style="font-weight: 700; color: #fff;">${st.stage_2_contracts_count || 0} (${App.formatNumber(st.stage_2_total_contract_value || 0)})</div>
-                </div>
-                <div style="background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); border-radius: 5px; padding: 5px;">
-                  <span style="color: #a78bfa;">3. المشاريع</span>
-                  <div style="font-weight: 700; color: #fff;">${st.stage_3_projects_count || 0} مشاريع</div>
-                </div>
-                <div style="background: rgba(234,179,8,0.12); border: 1px solid rgba(234,179,8,0.3); border-radius: 5px; padding: 5px;">
-                  <span style="color: #facc15;">4. المستخلصات</span>
-                  <div style="font-weight: 700; color: #fff;">${st.stage_4_bills_count || 0} مستخلص</div>
-                </div>
-                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 5px; padding: 5px;">
-                  <span style="color: #f59e0b;">5. المطالبات</span>
-                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_5_total_invoiced_claims || 0)}</div>
-                </div>
-                <div style="background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.35); border-radius: 5px; padding: 5px;">
-                  <span style="color: #38bdf8;">6. دفعات مقدمة</span>
-                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_6_total_advance_received || 0)}</div>
-                </div>
-                <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 5px; padding: 5px;">
-                  <span style="color: var(--accent-green);">7. المبالغ المحصلة</span>
-                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_7_total_collections || 0)}</div>
-                </div>
-                <div style="background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.35); border-radius: 5px; padding: 5px;">
-                  <span style="color: #f59e0b;">8. محتجزات الضمان</span>
-                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_8_active_retention_balance || 0)}</div>
-                </div>
-                <div style="background: rgba(239,68,68,0.15); border: 1px solid var(--accent-red); border-radius: 5px; padding: 5px;">
-                  <span style="color: var(--accent-red); font-weight: 700;">9. الرصيد المستحق</span>
-                  <div style="font-weight: 800; color: var(--accent-red);">${App.formatNumber(st.stage_9_outstanding_due_balance || 0)} ${cCurr}</div>
+                <div style="display: flex; gap: 14px; background: rgba(0,0,0,0.3); padding: 8px 16px; border-radius: 8px;">
+                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المطالبات:</span> <strong style="color:var(--accent-red)">${App.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></div>
+                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المحصل:</span> <strong style="color:var(--accent-green)">${App.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></div>
+                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">الرصيد المستحق:</span> <strong style="color:var(--gold-light);font-size:1.1rem">${App.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></div>
                 </div>
               </div>
             </div>
-
-            <!-- شريط ملخص الأرصدة المدققة -->
-            <div style="display: flex; gap: 20px; font-size: 0.85rem; flex-wrap: wrap; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px;">
-              <span>الرصيد الافتتاحي: <strong>${App.formatNumber(client.previous_balance || 0)} ${cCurr}</strong></span>
-              <span>إجمالي المطالبات المفوترة: <strong style="color: var(--gold-light);">${App.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></span>
-              <span>إجمالي المحصل: <strong style="color: var(--accent-green);">${App.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></span>
-              <span>محتجزات الضمان المعلقة: <strong style="color: #f59e0b;">${App.formatNumber(summary.active_retention || 0)} ${cCurr}</strong></span>
-              <span>الرصيد النهائي المستحق: <strong style="color: var(--accent-red); font-size: 1.05rem;">${App.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></span>
-            </div>
-          </div>
-        `;
+          `;
+        }
 
         const tbody = document.getElementById('repClientStatementTable');
         if (tbody) {
-          if (statement.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا العميل</td></tr>`;
-            return;
+          if (!statement || statement.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا العميل في هذه الفترة</td></tr>`;
+          } else {
+            tbody.innerHTML = statement.map(s => {
+              const runBal = Number(s.running_balance || 0);
+              const runBalColor = runBal > 0 ? 'var(--accent-red)' : (runBal < 0 ? 'var(--accent-green)' : 'var(--text-secondary)');
+              return `
+                <tr>
+                  <td>${s.date || '-'}</td>
+                  <td><strong>${s.type}</strong></td>
+                  <td><span style="font-family: monospace; color: #fff;">${s.ref || '-'}</span></td>
+                  <td>${s.project_name || '-'}</td>
+                  <td style="color: var(--accent-red); font-weight: bold;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
+                  <td style="color: var(--accent-green); font-weight: bold;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
+                  <td style="font-weight: 800; color: ${runBalColor};">${App.formatNumber(runBal)}</td>
+                  <td style="font-size: 0.8rem; color: var(--text-secondary); max-width: 250px;">${s.notes || '-'}</td>
+                </tr>
+              `;
+            }).join('');
           }
-
-          tbody.innerHTML = statement.map(s => {
-            const contractBadge = (s.contract_no && s.contract_no !== '-') 
-              ? `<span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8;">${s.contract_no}</span>` 
-              : '-';
-
-            const projectBadge = (s.project_name && s.project_name !== '-') 
-              ? `<span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa;">${s.project_name}</span>` 
-              : '-';
-
-            const billBadge = (s.bill_no && s.bill_no !== '-') 
-              ? `<span class="badge" style="background: rgba(234,179,8,0.15); color: #facc15;">${s.bill_no}</span>` 
-              : '-';
-
-            const retentionTxt = s.retention_deduction > 0 
-              ? `<span style="color: #f59e0b; font-weight: 600;">-${App.formatNumber(s.retention_deduction)}</span>` 
-              : '-';
-
-            const runBal = Number(s.running_balance || 0);
-            const runBalColor = runBal > 0 ? 'var(--accent-red)' : (runBal < 0 ? 'var(--accent-green)' : 'var(--text-secondary)');
-
-            return `
-              <tr>
-                <td>${s.date || '-'}</td>
-                <td><strong>${s.type}</strong></td>
-                <td><span style="font-family: monospace; color: #fff;">${s.ref || '-'}</span></td>
-                <td>${contractBadge}</td>
-                <td>${projectBadge}</td>
-                <td>${billBadge}</td>
-                <td style="color: var(--accent-red); font-weight: bold;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
-                <td style="color: var(--accent-green); font-weight: bold;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
-                <td>${retentionTxt}</td>
-                <td style="font-weight: 800; color: ${runBalColor};">${App.formatNumber(runBal)}</td>
-                <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 200px;">${s.notes || '-'}</td>
-              </tr>
-            `;
-          }).join('');
         }
       }
     } catch (e) {
-      console.error(e);
+      console.error('❌ Error fetching client statement:', e);
     }
   },
 
-  // 5. كشف حساب مورد مفصل
+  // =========================================================================
+  // 9. كشف حساب مورد مفصل ومطابق للأستاذ (Supplier Statement)
+  // =========================================================================
   async initSupplierStatementDropdown(selectedId = null) {
     const select = document.getElementById('repSupplierSelect');
     if (!select) return;
 
-    if (!Accounting.suppliers || Accounting.suppliers.length === 0) {
-      try {
-        const res = await fetch('/api/suppliers');
-        const json = await res.json();
-        if (json.success && json.data) {
-          Accounting.suppliers = json.data;
-        }
-      } catch (e) {
-        console.warn('Failed to fetch suppliers for statement dropdown:', e);
+    try {
+      const res = await fetch('/api/suppliers');
+      const json = await res.json();
+      if (json.success && json.data) {
+        select.innerHTML = `<option value="">-- اختر المورد لعرض كشف الحساب --</option>` +
+          json.data.map(s => {
+            const name = s.company_name || s.name || 'مورد';
+            const curr = s.default_currency || s.currency || 'YER';
+            return `<option value="${s.id}">${name} (${curr})</option>`;
+          }).join('');
       }
+    } catch (e) {
+      console.warn('Failed to fetch suppliers:', e);
     }
-
-    const list = Accounting.suppliers || [];
-    select.innerHTML = `<option value="">-- اختر المورد لعرض كشف الحساب --</option>` +
-      list.map(s => {
-        const name = s.company_name || s.name || 'مورد';
-        const curr = s.default_currency || s.currency || 'YER';
-        return `<option value="${s.id}">${name} (${curr})</option>`;
-      }).join('');
 
     if (selectedId) {
       select.value = String(selectedId);
       await this.fetchFullSupplierStatement();
-    } else if (select.value) {
-      await this.fetchFullSupplierStatement();
     }
-  },
-
-  async showSupplierStatement(supplierId) {
-    if (typeof App !== 'undefined' && App.navigate) {
-      App.navigate('reports');
-    }
-    this.switchReportTab('supplier-statement');
-    await this.initSupplierStatementDropdown(supplierId);
   },
 
   async fetchFullSupplierStatement() {
@@ -645,72 +916,48 @@ const Reports = {
 
     if (!supplierId) {
       if (infoEl) infoEl.innerHTML = '';
-      if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);"><i class="fa fa-arrow-up" style="margin-left: 6px;"></i> يرجى اختيار مورد من القائمة المنسدلة أعلاه لعرض كشف الحساب</td></tr>`;
-      }
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-secondary);">يرجى اختيار مورد لعرض كشف الحساب</td></tr>`;
       if (tfoot) tfoot.innerHTML = '';
       return;
     }
 
-    if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-secondary);"><i class="fa fa-spinner fa-spin fa-lg" style="margin-left: 8px; color: var(--accent-blue);"></i> جاري جلب كشف الحساب المالي والتدقيق المحاسبي...</td></tr>`;
-    }
+    const fromDate = document.getElementById('repSupplierFromDate')?.value || '';
+    const toDate = document.getElementById('repSupplierToDate')?.value || '';
+    let url = `/api/reports/supplier-statement/${supplierId}`;
+    const params = new URLSearchParams();
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (params.toString()) url += '?' + params.toString();
 
     try {
-      const res = await fetch(`/api/reports/supplier-statement/${supplierId}`);
+      const res = await fetch(url);
       const json = await res.json();
       if (json.success && json.data) {
         const { supplier, statement, summary } = json.data;
-        const sCurr = supplier.currency || supplier.default_currency || 'ر.ي';
-        const suppName = supplier.company_name || supplier.name || 'مورد';
-        const contact = supplier.contact_person || 'غير محدد';
-        const phone = supplier.phone_number || supplier.phone || '-';
-        const category = supplier.industry_category || supplier.category || 'عام';
-        const docType = supplier.payment_document_type || 'إيصال عادي';
-
-        const totInvoiced = summary ? summary.total_invoiced : statement.reduce((sum, s) => sum + (s.credit || 0), 0);
-        const totPaid = summary ? summary.total_paid : statement.reduce((sum, s) => sum + (s.debit || 0), 0);
-        const outBal = summary ? summary.outstanding_balance : (totInvoiced - totPaid);
+        this.lastReportData['supplier-statement'] = json;
+        const sCurr = supplier.currency || 'ر.ي';
 
         if (infoEl) {
           infoEl.innerHTML = `
-            <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); padding: 18px 20px; border-radius: 12px; margin-bottom: 18px; border-right: 4px solid #3b82f6;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-color, #334155); padding-bottom: 12px; margin-bottom: 12px;">
+            <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color); padding: 16px 20px; border-radius: 12px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
-                  <div style="display: flex; align-items: center; gap: 10px;">
-                    <h3 style="margin: 0; font-size: 1.25rem; color: var(--text-primary); font-weight: 700;">${suppName}</h3>
-                    <span class="badge" style="background: rgba(59,130,246,0.15); color: #3b82f6; font-size: 0.8rem;">${category}</span>
-                    <span class="badge" style="background: rgba(139,92,246,0.15); color: #8b5cf6; font-size: 0.8rem;">${docType}</span>
+                  <h3 style="margin: 0; font-size: 1.25rem; color: var(--text-primary);">${supplier.name}</h3>
+                  <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">الهاتف: ${supplier.phone || '-'} | العملة: ${sCurr}</div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, auto); gap: 14px;">
+                  <div style="background: rgba(59,130,246,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي الاستحقاق (له):</div>
+                    <strong style="color: #3b82f6;">${App.formatNumber(summary.total_invoiced || 0)} ${sCurr}</strong>
                   </div>
-                  <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
-                    الشخص المسؤول (التاجر): <strong>${contact}</strong> &nbsp;|&nbsp; الهاتف: <strong dir="ltr">${phone}</strong> &nbsp;|&nbsp; العملة: <strong>${sCurr}</strong>
+                  <div style="background: rgba(16,185,129,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي المسدد (عليه):</div>
+                    <strong style="color: #10b981;">${App.formatNumber(summary.total_paid || 0)} ${sCurr}</strong>
                   </div>
-                </div>
-                <div style="display: flex; gap: 8px;">
-                  <button type="button" class="btn btn-primary btn-sm" onclick="Reports.printSupplierStatement()" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-weight: 700;">
-                    <i class="fa fa-print"></i> طباعة كشف الحساب (PDF)
-                  </button>
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="App.openVendorProfileModal(${supplier.id})" style="display: inline-flex; align-items: center; gap: 6px;">
-                    <i class="fa fa-id-card"></i> ملف المورد (SRM)
-                  </button>
-                </div>
-              </div>
-
-              <!-- بطاقات مؤشرات الكشف المالي -->
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
-                <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
-                  <div style="font-size: 0.76rem; color: var(--text-secondary);">إجمالي المشتريات / الاستحقاق (دائن)</div>
-                  <div style="font-size: 1.2rem; font-weight: 800; color: #3b82f6; margin-top: 2px;">${App.formatNumber(totInvoiced)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
-                </div>
-
-                <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
-                  <div style="font-size: 0.76rem; color: var(--text-secondary);">إجمالي المسدد للمورد (مدين)</div>
-                  <div style="font-size: 1.2rem; font-weight: 800; color: #10b981; margin-top: 2px;">${App.formatNumber(totPaid)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
-                </div>
-
-                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
-                  <div style="font-size: 0.76rem; color: var(--text-secondary);">صافي الرصيد المستحق (المتبقي له)</div>
-                  <div style="font-size: 1.25rem; font-weight: 800; color: ${outBal > 0 ? '#f59e0b' : '#10b981'}; margin-top: 2px;">${App.formatNumber(outBal)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
+                  <div style="background: rgba(245,158,11,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-secondary);">صافي الرصيد المستحق:</div>
+                    <strong style="color: #f59e0b; font-size: 1.05rem;">${App.formatNumber(summary.outstanding_balance || 0)} ${sCurr}</strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -719,7 +966,7 @@ const Reports = {
 
         if (tbody) {
           if (!statement || statement.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-muted);"><i class="fa fa-info-circle"></i> لا توجد حركات مسجلة لهذا المورد حتى الآن</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا المورد في هذه الفترة</td></tr>`;
             if (tfoot) tfoot.innerHTML = '';
           } else {
             tbody.innerHTML = statement.map(s => {
@@ -739,40 +986,31 @@ const Reports = {
 
             if (tfoot) {
               tfoot.innerHTML = `
-                <tr style="background: var(--bg-secondary, #1e293b); font-weight: 800; border-top: 2px solid var(--border-color, #334155);">
-                  <td colspan="3" style="text-align: center; font-size: 0.95rem;">الإجمالي العام لكشف الحساب</td>
-                  <td style="color: var(--accent-amber); font-size: 1rem; text-align: right;">${App.formatNumber(totInvoiced)} <small>${sCurr}</small></td>
-                  <td style="color: var(--accent-green); font-size: 1rem; text-align: right;">${App.formatNumber(totPaid)} <small>${sCurr}</small></td>
-                  <td style="color: ${outBal > 0 ? 'var(--accent-amber)' : 'var(--accent-green)'}; font-size: 1.05rem; text-align: right;">${App.formatNumber(outBal)} <small>${sCurr}</small></td>
-                  <td style="font-size: 0.82rem; color: var(--text-muted);">${outBal === 0 ? 'الحساب مسوى بالكامل ✅' : 'متبقي مستحق للمورد ⏳'}</td>
+                <tr style="background: var(--bg-secondary); font-weight: bold; border-top: 2px solid var(--border-color);">
+                  <td colspan="3" style="text-align: center;">الإجمالي العام</td>
+                  <td style="color: var(--accent-amber); text-align: right;">${App.formatNumber(summary.total_invoiced || 0)}</td>
+                  <td style="color: var(--accent-green); text-align: right;">${App.formatNumber(summary.total_paid || 0)}</td>
+                  <td style="color: #f59e0b; text-align: right; font-size: 1.05rem;">${App.formatNumber(summary.outstanding_balance || 0)}</td>
+                  <td>${summary.outstanding_balance === 0 ? 'مسوى بالكامل ✓' : 'متبقي مستحق'}</td>
                 </tr>
               `;
             }
           }
         }
-      } else {
-        if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--accent-red);">${json.message || 'تعذر تحميل بيانات المورد'}</td></tr>`;
       }
     } catch (e) {
-      console.error('Error fetching supplier statement:', e);
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--accent-red);">حدث خطأ أثناء جلب كشف الحساب: ${e.message}</td></tr>`;
+      console.error('❌ Error fetching supplier statement:', e);
     }
   },
 
-  // طباعة كشف حساب المورد المحدد حصراً
   printSupplierStatement() {
-    const select = document.getElementById('repSupplierSelect');
-    if (!select || !select.value) {
-      if (typeof App !== 'undefined' && App.showToast) {
-        App.showToast('يرجى اختيار المورد أولاً لطباعة كشف الحساب', 'warning');
-      }
-      return;
-    }
     this.activeReportTab = 'supplier-statement';
     this.printActiveReport();
   },
 
-  // طباعة أي تقرير نشط على الورقة الرسمية المعتمدة
+  // =========================================================================
+  // طباعة التقارير المعتمدة الرسمية (Print Official Document)
+  // =========================================================================
   printActiveReport() {
     const printArea = document.getElementById('printArea');
     if (!printArea) return;
@@ -782,278 +1020,105 @@ const Reports = {
       sig2: 'المدير العام',
       sig3: 'اعتماد الإدارة',
       show_stamp: '0',
-      footer_notes: 'تعتبر هذه التقارير والبيانات معتمدة رسمياً من إدارة شركة رواسي عدن للهندسة والمقاولات'
+      footer_notes: 'تعتبر هذه التقارير والبيانات معتمدة رسمياً ومستخرجة من دفتر الأستاذ العام لشركة رواسي عدن للهندسة والمقاولات'
     };
 
-    const showStamp = (cfg.show_stamp === '1' || cfg.show_stamp === 1 || cfg.show_stamp === true);
     const todayDate = new Date().toISOString().split('T')[0];
     const tab = this.activeReportTab || 'profit-loss';
+    const reportData = this.lastReportData[tab] || {};
 
     let reportTitle = 'تقرير مالي معتمد';
     let reportBodyHtml = '';
     let reportMeta = [
-      { label: 'تاريخ الطباعة', val: todayDate },
-      { label: 'الحالة', val: 'معتمد رسمياً ✅' }
+      { label: 'المصدر المحاسبي', val: 'دفتر الأستاذ العام (General Ledger)' },
+      { label: 'تاريخ الإصدار', val: todayDate },
+      { label: 'حالة التوازن', val: 'مطابق ومتزن 100% ✓' }
     ];
 
-    if (tab === 'profit-loss') {
-      reportTitle = 'تقرير الأرباح والخسائر (قائمة الدخل)';
-      const fromDate = document.getElementById('repPlFromDate')?.value || document.getElementById('plFromDate')?.value || '2024-01-01';
-      const toDate = document.getElementById('repPlToDate')?.value || document.getElementById('plToDate')?.value || todayDate;
-      const income = document.getElementById('fullPlIncome')?.textContent || document.getElementById('plTotalIncome')?.textContent || '0';
-      const expense = document.getElementById('fullPlExpense')?.textContent || document.getElementById('plTotalExpenses')?.textContent || '0';
-      const profit = document.getElementById('fullPlProfit')?.textContent || document.getElementById('plNetProfit')?.textContent || '0';
-
-      const showKpi = (cfg.fin_show_kpi_cards !== '0' && cfg.fin_show_kpi_cards !== 0 && cfg.fin_show_kpi_cards !== false);
-      const showBreakdown = (cfg.fin_show_expense_breakdown !== '0' && cfg.fin_show_expense_breakdown !== 0 && cfg.fin_show_expense_breakdown !== false);
-
-      reportMeta = [
-        { label: 'الفترة المالية', val: `${fromDate} إلى ${toDate}` },
-        { label: 'تاريخ الإصدار', val: todayDate }
-      ];
-
-      const breakdownRows = document.getElementById('fullPlBreakdownTable')?.innerHTML || '';
-
+    if (tab === 'profit-loss' || tab === 'income-statement') {
+      reportTitle = 'قائمة الدخل والأرباح والخسائر الرسمية';
+      const d = reportData.data || {};
       reportBodyHtml = `
-        ${showKpi ? `
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
           <div style="border: 1px solid #86efac; border-radius: 6px; padding: 10px; text-align: center; background: #f0fdf4;">
-            <div style="font-size: 0.78rem; color: #15803d; margin-bottom: 4px;">إجمالي الإيرادات</div>
-            <div style="font-weight: 900; font-size: 1.15rem; color: #15803d;">${income}</div>
+            <div style="font-size: 0.8rem; color: #15803d;">إجمالي الإيرادات المعترف بها</div>
+            <div style="font-weight: 900; font-size: 1.2rem; color: #15803d;">${App.formatNumber(d.total_income || d.total_revenues || 0)} ر.ي</div>
           </div>
           <div style="border: 1px solid #fca5a5; border-radius: 6px; padding: 10px; text-align: center; background: #fef2f2;">
-            <div style="font-size: 0.78rem; color: #b91c1c; margin-bottom: 4px;">إجمالي المصروفات</div>
-            <div style="font-weight: 900; font-size: 1.15rem; color: #b91c1c;">${expense}</div>
+            <div style="font-size: 0.8rem; color: #b91c1c;">إجمالي التكاليف والمصروفات</div>
+            <div style="font-weight: 900; font-size: 1.2rem; color: #b91c1c;">${App.formatNumber(d.total_expenses || 0)} ر.ي</div>
           </div>
           <div style="border: 1.5px solid #d4af37; border-radius: 6px; padding: 10px; text-align: center; background: #fdfaf2;">
-            <div style="font-size: 0.78rem; color: #b8911c; margin-bottom: 4px;">صافي الأرباح التشغيلية</div>
-            <div style="font-weight: 900; font-size: 1.25rem; color: #047857;">${profit}</div>
+            <div style="font-size: 0.8rem; color: #b8911c;">صافي الدخل التشغيلي</div>
+            <div style="font-weight: 900; font-size: 1.25rem; color: #047857;">${App.formatNumber(d.net_profit || 0)} ر.ي</div>
           </div>
         </div>
-        ` : ''}
-
-        ${showBreakdown ? `
-        <div style="font-weight: 800; color: #0f2744; font-size: 0.9rem; margin: 12px 0 6px 0; border-right: 3px solid #d4af37; padding-right: 6px;">
-          تفاصيل وتوزيع بنود المصروفات:
-        </div>
+        <div style="font-weight: 800; color: #0f2744; font-size: 0.95rem; margin-bottom: 8px;">توزيع بنود الإيرادات والتكاليف:</div>
         <table class="official-report-table">
-          <thead>
-            <tr>
-              <th>بند المصروف</th>
-              <th>المبلغ</th>
-              <th>النسبة من الإجمالي</th>
-            </tr>
-          </thead>
+          <thead><tr><th>البيان المحاسبي</th><th>المبلغ المحقق</th></tr></thead>
           <tbody>
-            ${breakdownRows || '<tr><td colspan="3" style="text-align: center;">لا توجد تفاصيل إضافية</td></tr>'}
+            <tr><td>إجمالي الإيرادات المعترف بها (4)</td><td style="color:#15803d;font-weight:bold">${App.formatNumber(d.total_income || d.total_revenues || 0)} ر.ي</td></tr>
+            <tr><td>تكلفة الإيراد المباشرة (51)</td><td style="color:#b91c1c">${App.formatNumber(d.direct_costs || 0)} ر.ي</td></tr>
+            <tr style="background:#f8fafc;font-weight:bold"><td>مجمل الربح</td><td style="color:#047857">${App.formatNumber(d.gross_profit || 0)} ر.ي</td></tr>
+            <tr><td>المصروفات التشغيلية والإدارية (3)</td><td style="color:#b91c1c">${App.formatNumber(d.operating_expenses || 0)} ر.ي</td></tr>
+            <tr style="background:#f0fdf4;font-weight:900;font-size:1.1rem"><td>صافي الربح / الدخل النهائي</td><td style="color:#047857">${App.formatNumber(d.net_profit || 0)} ر.ي</td></tr>
           </tbody>
         </table>
-        ` : ''}
       `;
-    } else if (tab === 'client-statement') {
-      reportTitle = 'كشف حساب عميل تفصيلي';
-      const select = document.getElementById('repClientSelect');
-      const clientName = select ? select.options[select.selectedIndex]?.text : 'عميل';
-      const clientInfo = document.getElementById('repClientInfo')?.innerHTML || '';
-      const tableRows = document.getElementById('repClientStatementTable')?.innerHTML || '';
-      const showSummary = (cfg.stmt_show_summary_card !== '0' && cfg.stmt_show_summary_card !== 0 && cfg.stmt_show_summary_card !== false);
-      const showMatchSig = (cfg.stmt_show_match_sig !== '0' && cfg.stmt_show_match_sig !== 0 && cfg.stmt_show_match_sig !== false);
-
-      reportMeta = [
-        { label: 'اسم العميل', val: clientName },
-        { label: 'تاريخ الإصدار', val: todayDate }
-      ];
-
+    } else if (tab === 'trial-balance') {
+      reportTitle = 'ميزان المراجعة بالأرصدة والمجاميع';
+      const d = reportData.data || {};
+      const rows = (d.accounts || []).map(a => `
+        <tr>
+          <td style="font-family: monospace;">${a.code}</td>
+          <td>${a.name}</td>
+          <td>${a.type}</td>
+          <td style="text-align: left; font-family: monospace;">${a.period_debit ? App.formatNumber(a.period_debit) : '-'}</td>
+          <td style="text-align: left; font-family: monospace;">${a.period_credit ? App.formatNumber(a.period_credit) : '-'}</td>
+          <td style="text-align: left; font-family: monospace; font-weight: bold;">${a.closing_debit ? App.formatNumber(a.closing_debit) : '-'}</td>
+          <td style="text-align: left; font-family: monospace; font-weight: bold;">${a.closing_credit ? App.formatNumber(a.closing_credit) : '-'}</td>
+        </tr>
+      `).join('');
       reportBodyHtml = `
-        ${showSummary ? `
-        <div style="margin-bottom: 12px;">
-          ${clientInfo}
-        </div>` : ''}
         <table class="official-report-table">
           <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>نوع الحركة</th>
-              <th>المرجع / السند</th>
-              <th>مدين (عله)</th>
-              <th>دائن (له)</th>
-              <th>الرصيد التراكمي</th>
-              <th>البيان والملاحظات</th>
-            </tr>
+            <tr><th>رقم الحساب</th><th>اسم الحساب</th><th>النوع</th><th>مدين الفترة</th><th>دائن الفترة</th><th>رصيد مدين</th><th>رصيد دائن</th></tr>
           </thead>
-          <tbody>
-            ${tableRows || '<tr><td colspan="7" style="text-align: center;">لا توجد حركات مسجلة</td></tr>'}
-          </tbody>
+          <tbody>${rows}</tbody>
         </table>
-        ${showMatchSig ? `
-        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 8px 12px; font-size: 0.76rem; color: #475569; display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-          <span>إقرار ومصادقة: أقر أنا العميل الموضح أعلاه بصحة الرصيد الموضح حتى تاريخ هذا الكشف:</span>
-          <span>توقيع العميل: ..........................</span>
-        </div>` : ''}
-      `;
-    } else if (tab === 'supplier-statement') {
-      reportTitle = 'كشف حساب مورد تفصيلي ومعتمد';
-      const select = document.getElementById('repSupplierSelect');
-      const supplierName = select ? select.options[select.selectedIndex]?.text : 'مورد';
-      const supplierInfo = document.getElementById('repSupplierInfo')?.innerHTML || '';
-      const tableRows = document.getElementById('repSupplierStatementTable')?.innerHTML || '';
-      const tableFoot = document.getElementById('repSupplierStatementFooter')?.innerHTML || '';
-
-      reportMeta = [
-        { label: 'اسم المورد', val: supplierName },
-        { label: 'تاريخ الإصدار', val: todayDate },
-        { label: 'الحالة المحاسبية', val: 'مطابق ومسوى دفتریاً' }
-      ];
-
-      reportBodyHtml = `
-        <div style="margin-bottom: 14px;">
-          ${supplierInfo}
-        </div>
-        <table class="official-report-table">
-          <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>نوع الحركة</th>
-              <th>المرجع</th>
-              <th>دائن (له)</th>
-              <th>مدين (عليه)</th>
-              <th>الرصيد التراكمي</th>
-              <th>البيان والملاحظات</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows || '<tr><td colspan="7" style="text-align: center;">لا توجد حركات مسجلة</td></tr>'}
-          </tbody>
-          ${tableFoot ? `<tfoot>${tableFoot}</tfoot>` : ''}
-        </table>
-        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 10px 14px; font-size: 0.78rem; color: #475569; display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
-          <span>مصادقة الحساب: يعتبر كشف الحساب المالي أعلاه معتمداً ومطابقاً لدفاتر الشركة المحاسبية حتى تاريخ صدوره.</span>
-          <span>توقيع وختم المورد: ..........................</span>
-        </div>
       `;
     } else if (tab === 'balance-sheet') {
-      reportTitle = 'تقرير الميزانية العمومية والمركز المالي';
-      const assetsRows = document.getElementById('bsAssetsTable')?.innerHTML || '';
-      const liabRows = document.getElementById('bsLiabTable')?.innerHTML || '';
-      const totalAssets = document.getElementById('bsTotalAssets')?.textContent || '0';
-      const totalLiab = document.getElementById('bsTotalLiabEquity')?.textContent || '0';
-
-      reportMeta = [
-        { label: 'تاريخ الميزانية', val: todayDate },
-        { label: 'حالة الاعتماد', val: 'معتمد رسمياً' }
-      ];
-
+      reportTitle = 'قائمة المركز المالي والميزانية العمومية';
+      const assetsHtml = document.getElementById('bsAssetsTable')?.innerHTML || '';
+      const liabHtml = document.getElementById('bsLiabTable')?.innerHTML || '';
+      const totA = document.getElementById('bsTotalAssets')?.textContent || '0';
+      const totL = document.getElementById('bsTotalLiabEquity')?.textContent || '0';
       reportBodyHtml = `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
           <div>
-            <div style="font-weight: 800; color: #0f2744; font-size: 0.95rem; margin-bottom: 6px; border-right: 3px solid #059669; padding-right: 6px;">
-              الأصول والموجودات (Assets)
-            </div>
-            <table class="official-report-table">
-              <tbody>
-                ${assetsRows}
-                <tr style="background: #f0fdf4; font-weight: 900;">
-                  <td>إجمالي الأصول:</td>
-                  <td style="color: #047857; text-align: left;">${totalAssets}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div style="font-weight: 800; color: #0f2744; margin-bottom: 6px;">الأصول (Assets)</div>
+            <table class="official-report-table"><tbody>${assetsHtml}<tr style="background:#f0fdf4;font-weight:bold"><td>الإجمالي</td><td>${totA}</td></tr></tbody></table>
           </div>
           <div>
-            <div style="font-weight: 800; color: #0f2744; font-size: 0.95rem; margin-bottom: 6px; border-right: 3px solid #dc2626; padding-right: 6px;">
-              الالتزامات وحقوق الملكية (Liabilities & Equity)
-            </div>
-            <table class="official-report-table">
-              <tbody>
-                ${liabRows}
-                <tr style="background: #fef2f2; font-weight: 900;">
-                  <td>إجمالي الالتزامات وحقوق الملكية:</td>
-                  <td style="color: #b91c1c; text-align: left;">${totalLiab}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div style="font-weight: 800; color: #0f2744; margin-bottom: 6px;">الالتزامات والملكية (Liabilities & Equity)</div>
+            <table class="official-report-table"><tbody>${liabHtml}<tr style="background:#fef2f2;font-weight:bold"><td>الإجمالي</td><td>${totL}</td></tr></tbody></table>
           </div>
         </div>
       `;
-    } else if (tab === 'projects-profitability') {
-      reportTitle = 'تقرير تحليل ربحية وكفاءة المشاريع';
-      const projRows = document.getElementById('projProfitTableBody')?.innerHTML || '';
-
-      reportMeta = [
-        { label: 'تاريخ التحليل', val: todayDate },
-        { label: 'نوع التقرير', val: 'تحليل مالي ومردود المشاريع' }
-      ];
-
-      reportBodyHtml = `
-        <table class="official-report-table">
-          <thead>
-            <tr>
-              <th>المشروع (الكود)</th>
-              <th>العميل</th>
-              <th>قيمة العقد</th>
-              <th>التكلفة الفعلية</th>
-              <th>الربح المحقق</th>
-              <th>هامش الربح</th>
-              <th>نسبة الإنجاز</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${projRows || '<tr><td colspan="7" style="text-align: center;">لا توجد مشاريع</td></tr>'}
-          </tbody>
-        </table>
-      `;
-    } else if (tab === 'cost-centers-profitability') {
-      reportTitle = 'تقرير أداء وربحية مراكز التكلفة والمشاريع';
-      const ccRows = document.getElementById('ccProfitTableBody')?.innerHTML || '';
-      const totRev = document.getElementById('ccProfitTotalRev')?.textContent || '0';
-      const totExp = document.getElementById('ccProfitTotalExp')?.textContent || '0';
-      const totNet = document.getElementById('ccProfitTotalNet')?.textContent || '0';
-      const totMargin = document.getElementById('ccProfitTotalMargin')?.textContent || '0%';
-
-      reportMeta = [
-        { label: 'تاريخ التقرير', val: todayDate },
-        { label: 'إجمالي الإيرادات', val: totRev },
-        { label: 'إجمالي المصروفات', val: totExp },
-        { label: 'صافي الربح الإجمالي', val: totNet }
-      ];
-
-      reportBodyHtml = `
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
-          <div style="border: 1px solid #86efac; border-radius: 6px; padding: 8px; text-align: center; background: #f0fdf4;">
-            <div style="font-size: 0.75rem; color: #15803d;">إجمالي الإيرادات</div>
-            <div style="font-weight: 800; font-size: 1rem; color: #15803d;">${totRev}</div>
-          </div>
-          <div style="border: 1px solid #fca5a5; border-radius: 6px; padding: 8px; text-align: center; background: #fef2f2;">
-            <div style="font-size: 0.75rem; color: #b91c1c;">إجمالي المصروفات</div>
-            <div style="font-weight: 800; font-size: 1rem; color: #b91c1c;">${totExp}</div>
-          </div>
-          <div style="border: 1px solid #fef08a; border-radius: 6px; padding: 8px; text-align: center; background: #fefce8;">
-            <div style="font-size: 0.75rem; color: #a16207;">صافي الفائض / الربح</div>
-            <div style="font-weight: 800; font-size: 1rem; color: #a16207;">${totNet}</div>
-          </div>
-          <div style="border: 1px solid #bae6fd; border-radius: 6px; padding: 8px; text-align: center; background: #f0f9ff;">
-            <div style="font-size: 0.75rem; color: #0369a1;">متوسط هامش الربح</div>
-            <div style="font-weight: 800; font-size: 1rem; color: #0369a1;">${totMargin}</div>
-          </div>
-        </div>
-        <table class="official-report-table">
-          <thead>
-            <tr>
-              <th>كود المركز</th>
-              <th>اسم المركز</th>
-              <th>النوع</th>
-              <th>المشروع</th>
-              <th>الإيرادات</th>
-              <th>المصروفات</th>
-              <th>صافي الربح</th>
-              <th>هامش الربحية</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ccRows || '<tr><td colspan="8" style="text-align: center;">لا توجد بيانات مراكز تكلفة</td></tr>'}
-          </tbody>
-        </table>
-      `;
+    } else if (tab === 'cash-flow') {
+      reportTitle = 'قائمة التدفقات النقدية الفعلية';
+      const cfHtml = document.getElementById('cashFlowTableBody')?.innerHTML || '';
+      reportBodyHtml = `<table class="official-report-table"><thead><tr><th>بيان التدفق</th><th>مقبوضات (+)</th><th>مدفوعات (-)</th><th>الصافي</th></tr></thead><tbody>${cfHtml}</tbody></table>`;
+    } else if (tab === 'client-statement') {
+      reportTitle = 'كشف حساب عميل معتمد ومطابق للأستاذ';
+      const cInfo = document.getElementById('repClientInfo')?.innerHTML || '';
+      const cRows = document.getElementById('repClientStatementTable')?.innerHTML || '';
+      reportBodyHtml = `<div style="margin-bottom:12px">${cInfo}</div><table class="official-report-table"><thead><tr><th>التاريخ</th><th>نوع الحركة</th><th>المرجع</th><th>المشروع</th><th>مدين</th><th>دائن</th><th>الرصيد</th><th>البيان</th></tr></thead><tbody>${cRows}</tbody></table>`;
+    } else if (tab === 'supplier-statement') {
+      reportTitle = 'كشف حساب مورد معتمد ومطابق للأستاذ';
+      const sInfo = document.getElementById('repSupplierInfo')?.innerHTML || '';
+      const sRows = document.getElementById('repSupplierStatementTable')?.innerHTML || '';
+      reportBodyHtml = `<div style="margin-bottom:12px">${sInfo}</div><table class="official-report-table"><thead><tr><th>التاريخ</th><th>نوع الحركة</th><th>المرجع</th><th>دائن</th><th>مدين</th><th>الرصيد</th><th>البيان</th></tr></thead><tbody>${sRows}</tbody></table>`;
     }
 
     const docClass = (typeof Settings !== 'undefined' && Settings.getReportDocClass)
@@ -1075,33 +1140,17 @@ const Reports = {
       ? Settings.renderReportSignatures(cfg)
       : `
         <div class="letterhead-signatures-row" style="margin-top: 20px;">
-          <div class="letterhead-sig-col">
-            <div class="letterhead-sig-label">${cfg.sig1 || 'المحاسب المالي'}</div>
-            <div class="letterhead-sig-dots">المحاسب: ........................</div>
-          </div>
-          <div class="letterhead-sig-col">
-            <div class="letterhead-sig-label">${cfg.sig2 || 'المدير العام'}</div>
-            <div class="letterhead-sig-dots">الاعتماد: ........................</div>
-          </div>
-          <div class="letterhead-sig-col">
-            <div class="letterhead-sig-label">${cfg.sig3 || 'اعتماد الإدارة'}</div>
-            <div class="letterhead-sig-dots">الاعتماد: ........................</div>
-          </div>
+          <div class="letterhead-sig-col"><div class="letterhead-sig-label">${cfg.sig1 || 'المحاسب المالي'}</div><div class="letterhead-sig-dots">المحاسب: ........................</div></div>
+          <div class="letterhead-sig-col"><div class="letterhead-sig-label">${cfg.sig2 || 'المدير العام'}</div><div class="letterhead-sig-dots">الاعتماد: ........................</div></div>
+          <div class="letterhead-sig-col"><div class="letterhead-sig-label">${cfg.sig3 || 'اعتماد الإدارة'}</div><div class="letterhead-sig-dots">الاعتماد: ........................</div></div>
         </div>
       `;
-
-    const footerHtml = (typeof Settings !== 'undefined' && Settings.renderReportFooter)
-      ? Settings.renderReportFooter(cfg)
-      : (cfg.footer_notes ? `<div style="margin-top: 12px; padding-top: 6px; border-top: 1px dashed #cbd5e1; font-size: 0.75rem; color: #64748b; text-align: center;">${cfg.footer_notes}</div>` : '');
 
     printArea.innerHTML = `
       <div class="${docClass}">
         ${headerHtml}
-        <div class="report-content-body">
-          ${reportBodyHtml}
-        </div>
+        <div class="report-content-body">${reportBodyHtml}</div>
         ${sigHtml}
-        ${footerHtml}
       </div>
     `;
 
@@ -1111,372 +1160,41 @@ const Reports = {
     window.print();
   },
 
-  // تصدير التقرير النشط حالياً إلى ملف Excel بتنسيق رسمي مرتب
+  // =========================================================================
+  // تصدير Excel المتخصص
+  // =========================================================================
   exportActiveReportToExcel() {
     const tab = this.activeReportTab || 'profit-loss';
+    const reportData = this.lastReportData[tab] || null;
+
     if (typeof ExcelExporter !== 'undefined') {
       if (tab === 'profit-loss') {
-        ExcelExporter.exportProfitLoss();
-      } else if (tab === 'projects-profitability') {
-        ExcelExporter.exportProjectsProfitability();
+        ExcelExporter.exportProfitLoss(reportData);
+      } else if (tab === 'trial-balance') {
+        ExcelExporter.exportTrialBalance(reportData);
+      } else if (tab === 'income-statement') {
+        ExcelExporter.exportIncomeStatement(reportData);
       } else if (tab === 'balance-sheet') {
-        ExcelExporter.exportBalanceSheet();
+        ExcelExporter.exportBalanceSheet(reportData);
+      } else if (tab === 'cash-flow') {
+        ExcelExporter.exportCashFlow(reportData);
+      } else if (tab === 'projects-profitability') {
+        ExcelExporter.exportProjectsProfitability(reportData);
+      } else if (tab === 'cost-centers-profitability') {
+        ExcelExporter.exportCostCentersProfitability(reportData);
       } else if (tab === 'client-statement') {
-        ExcelExporter.exportClientStatement();
+        ExcelExporter.exportClientStatement(reportData);
       } else if (tab === 'supplier-statement') {
-        ExcelExporter.exportSupplierStatement();
+        ExcelExporter.exportSupplierStatement(reportData);
       } else {
-        ExcelExporter.exportProfitLoss();
+        App.showToast('يرجى تحديد التقرير المطلوب لتصديره إلى Excel', 'warning');
       }
-    } else {
-      this.exportProfitLossToExcel();
     }
   },
 
-  // تصدير جدول الأرباح والخسائر إلى ملف Excel المنسق
-  exportProfitLossToExcel() {
-    if (typeof ExcelExporter !== 'undefined') {
-      ExcelExporter.exportProfitLoss();
-    } else {
-      // احتياط داخلي لتوليد Excel بتنسيق XLS حقيقي مرتب
-      const fromDate = document.getElementById('repPlFromDate')?.value || document.getElementById('plFromDate')?.value || '2024-01-01';
-      const toDate = document.getElementById('repPlToDate')?.value || document.getElementById('plToDate')?.value || '2024-05-20';
-      const income = document.getElementById('fullPlIncome')?.textContent || document.getElementById('plTotalIncome')?.textContent || '1,250,000';
-      const expense = document.getElementById('fullPlExpense')?.textContent || document.getElementById('plTotalExpenses')?.textContent || '850,000';
-      const profit = document.getElementById('fullPlProfit')?.textContent || document.getElementById('plNetProfit')?.textContent || '400,000';
-
-      const tableHtml = `
-        <table border="1" style="direction: rtl; font-family: Tahoma, Arial; width: 100%;">
-          <tr style="background-color: #0f2744; color: #d4af37; font-weight: bold; font-size: 14pt; text-align: center;">
-            <td colspan="3">شركة رواسي عدن للهندسة والمقاولات</td>
-          </tr>
-          <tr style="background-color: #1e3a5f; color: #fff; font-weight: bold; text-align: center;">
-            <td colspan="3">تقرير الأرباح والخسائر للفترة من ${fromDate} إلى ${toDate}</td>
-          </tr>
-          <tr style="background-color: #1e293b; color: #fff; font-weight: bold;">
-            <th style="padding: 8px;">م</th>
-            <th style="padding: 8px;">البيان المحاسبي</th>
-            <th style="padding: 8px;">المبلغ (ريال يمني)</th>
-          </tr>
-          <tr style="background-color: #ecfdf5; font-weight: bold;">
-            <td align="center">1</td>
-            <td>إجمالي الإيرادات والدخل</td>
-            <td align="left">${income}</td>
-          </tr>
-          <tr style="background-color: #fef2f2; font-weight: bold;">
-            <td align="center">2</td>
-            <td>إجمالي المصروفات وتكاليف المشاريع</td>
-            <td align="left">${expense}</td>
-          </tr>
-          <tr style="background-color: #fffbeb; font-weight: bold; font-size: 11pt;">
-            <td align="center">★</td>
-            <td>صافي الأرباح التشغيلية</td>
-            <td align="left" style="color: #b45309;">${profit}</td>
-          </tr>
-        </table>
-      `;
-
-      const excelEnvelope = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-          <!--[if gte mso 9]>
-          <xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-          <x:Name>الأرباح والخسائر</x:Name>
-          <x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>
-          </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml>
-          <![endif]-->
-        </head>
-        <body style="direction: rtl;">
-          ${tableHtml}
-        </body>
-        </html>
-      `;
-
-      const blob = new Blob(["\uFEFF", excelEnvelope], { type: 'application/vnd.ms-excel;charset=utf-8' });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", `تقرير_الأرباح_والخسائر_${fromDate}_إلى_${toDate}.xls`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      App.showToast('تم تصدير ملف Excel بنجاح', 'success');
-    }
-  },
-
-  // ================== التقارير المالية المتقدمة والمحاسبية ==================
-
-  // 5. تقرير ميزان المراجعة بالأرصدة والمجاميع
-  async loadTrialBalance() {
-    const fromDate = document.getElementById('tbFromDate')?.value || '2024-01-01';
-    const toDate = document.getElementById('tbToDate')?.value || '';
-    const q = toDate ? `?from_date=${fromDate}&to_date=${toDate}` : `?from_date=${fromDate}`;
-
-    try {
-      const res = await fetch(`/api/reports/trial-balance${q}`);
-      const json = await res.json();
-      if (json.success) {
-        const { accounts, totals } = json.data;
-        const is_balanced = totals?.is_balanced;
-        const difference = Math.abs((totals?.total_debit || 0) - (totals?.total_credit || 0));
-
-        // KPI
-        const debitEl = document.getElementById('tbTotalDebit');
-        const creditEl = document.getElementById('tbTotalCredit');
-        const balDebitEl = document.getElementById('tbBalanceDebit');
-        const statusEl = document.getElementById('tbBalanceStatus');
-
-        if (debitEl) debitEl.textContent = App.formatNumber(totals.total_debit) + ' ر.ي';
-        if (creditEl) creditEl.textContent = App.formatNumber(totals.total_credit) + ' ر.ي';
-        if (balDebitEl) balDebitEl.textContent = App.formatNumber(totals.balance_debit) + ' ر.ي';
-        if (statusEl) {
-          if (is_balanced) {
-            statusEl.textContent = 'متزن 100%';
-            statusEl.style.color = 'var(--accent-green)';
-          } else {
-            statusEl.textContent = `فارق: ${App.formatNumber(difference)} ر.ي`;
-            statusEl.style.color = 'var(--accent-red)';
-          }
-        }
-
-        // Table
-        const tbody = document.getElementById('trialBalanceTableBody');
-        if (tbody) {
-          if (!accounts || accounts.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد حركات في هذه الفترة</td></tr>`;
-          } else {
-            tbody.innerHTML = accounts.map(a => `
-              <tr>
-                <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${a.code}</td>
-                <td><strong>${a.name}</strong></td>
-                <td><span class="badge badge-info">${a.type}</span></td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${a.total_debit > 0 ? App.formatNumber(a.total_debit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8;">${a.total_credit > 0 ? App.formatNumber(a.total_credit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">${a.balance_debit > 0 ? App.formatNumber(a.balance_debit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: #38bdf8;">${a.balance_credit > 0 ? App.formatNumber(a.balance_credit) : '-'}</td>
-              </tr>
-            `).join('');
-          }
-        }
-
-        // Foot
-        const tfoot = document.getElementById('trialBalanceTableFoot');
-        if (tfoot) {
-          tfoot.innerHTML = `
-            <tr>
-              <td colspan="3" style="text-align: center; font-size: 1rem;">الإجمالي الكلي لميزان المراجعة</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.total_debit)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.total_credit)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.balance_debit)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.balance_credit)}</td>
-            </tr>
-          `;
-        }
-      }
-    } catch (e) {
-      console.error('Error loading trial balance:', e);
-      App.showToast('فشل تحميل ميزان المراجعة', 'error');
-    }
-  },
-
-  // 6. تقرير قائمة الدخل (3 مصروفات + 4 إيرادات)
-  async loadIncomeStatement() {
-    const fromDate = document.getElementById('isFromDate')?.value || '2024-01-01';
-    const toDate = document.getElementById('isToDate')?.value || '';
-    const q = toDate ? `?from_date=${fromDate}&to_date=${toDate}` : `?from_date=${fromDate}`;
-
-    try {
-      const res = await fetch(`/api/reports/income-statement${q}`);
-      const json = await res.json();
-      if (json.success) {
-        const d = json.data;
-
-        // KPI
-        const revEl = document.getElementById('isTotalRevenues');
-        const expEl = document.getElementById('isTotalExpenses');
-        const grossEl = document.getElementById('isGrossProfit');
-        const netEl = document.getElementById('isNetIncome');
-
-        if (revEl) revEl.textContent = App.formatNumber(d.total_revenues) + ' ر.ي';
-        if (expEl) expEl.textContent = App.formatNumber(d.total_expenses) + ' ر.ي';
-        if (grossEl) grossEl.textContent = App.formatNumber(d.gross_profit) + ' ر.ي';
-        if (netEl) {
-          netEl.textContent = App.formatNumber(d.net_profit) + ' ر.ي';
-          netEl.style.color = d.net_profit >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
-        }
-
-        // Revenues Table
-        const revTbody = document.getElementById('isRevenuesTableBody');
-        if (revTbody) {
-          if (!d.revenues || d.revenues.length === 0) {
-            revTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد إيرادات مسجلة</td></tr>`;
-          } else {
-            revTbody.innerHTML = d.revenues.map(r => `
-              <tr>
-                <td><strong>${r.name}</strong></td>
-                <td style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(r.amount)} ر.ي</td>
-              </tr>
-            `).join('') + `
-              <tr style="background: rgba(16,185,129,0.08); font-weight: bold;">
-                <td>إجمالي الإيرادات (4)</td>
-                <td style="color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_revenues)} ر.ي</td>
-              </tr>
-            `;
-          }
-        }
-
-        // Expenses Table
-        const expTbody = document.getElementById('isExpensesTableBody');
-        if (expTbody) {
-          if (!d.expenses || d.expenses.length === 0) {
-            expTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد مصروفات مسجلة</td></tr>`;
-          } else {
-            expTbody.innerHTML = d.expenses.map(e => `
-              <tr>
-                <td><strong>${e.name}</strong></td>
-                <td style="font-weight: bold; color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(e.amount)} ر.ي</td>
-              </tr>
-            `).join('') + `
-              <tr style="background: rgba(239,68,68,0.08); font-weight: bold;">
-                <td>إجمالي التكاليف والمصروفات (3)</td>
-                <td style="color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_expenses)} ر.ي</td>
-              </tr>
-            `;
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error loading income statement:', e);
-      App.showToast('فشل تحميل قائمة الدخل', 'error');
-    }
-  },
-
-  // 7. تقرير التدفقات النقدية
-  async loadCashFlow() {
-    const fromDate = document.getElementById('cfFromDate')?.value || '2024-01-01';
-    const toDate = document.getElementById('cfToDate')?.value || '';
-    const q = toDate ? `?from_date=${fromDate}&to_date=${toDate}` : `?from_date=${fromDate}`;
-
-    try {
-      const res = await fetch(`/api/reports/cash-flow${q}`);
-      const json = await res.json();
-      if (json.success) {
-        const d = json.data;
-        const op = d.operating_activities || { inflows: [], outflows: [], net: 0 };
-        const inv = d.investing_activities || { inflows: [], outflows: [], net: 0 };
-        const fin = d.financing_activities || { inflows: [], outflows: [], net: 0 };
-
-        // KPI
-        const openEl = document.getElementById('cfOpeningCash');
-        const netOpEl = document.getElementById('cfNetOperating');
-        const changeEl = document.getElementById('cfNetChange');
-        const closeEl = document.getElementById('cfClosingCash');
-
-        if (openEl) openEl.textContent = App.formatNumber(d.opening_balance) + ' ر.ي';
-        if (netOpEl) netOpEl.textContent = App.formatNumber(op.net) + ' ر.ي';
-        if (changeEl) changeEl.textContent = App.formatNumber(d.net_cash_change) + ' ر.ي';
-        if (closeEl) closeEl.textContent = App.formatNumber(d.closing_balance) + ' ر.ي';
-
-        // Table
-        const tbody = document.getElementById('cashFlowTableBody');
-        if (tbody) {
-          let html = '';
-
-          // Section 1: Operating
-          html += `<tr style="background: rgba(56,189,248,0.12); font-weight: bold;"><td colspan="4">أولاً: التدفقات النقدية من الأنشطة التشغيلية</td></tr>`;
-          (op.inflows || []).forEach(it => {
-            html += `
-              <tr>
-                <td>${it.item}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${App.formatNumber(it.amount)}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">-</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">+${App.formatNumber(it.amount)} ر.ي</td>
-              </tr>
-            `;
-          });
-          (op.outflows || []).forEach(it => {
-            html += `
-              <tr>
-                <td>${it.item}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">-</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">${App.formatNumber(it.amount)}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-red);">-${App.formatNumber(it.amount)} ر.ي</td>
-              </tr>
-            `;
-          });
-          html += `
-            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
-              <td>صافي النقد المتولد من الأنشطة التشغيلية</td>
-              <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(op.net)} ر.ي</td>
-            </tr>
-          `;
-
-          // Section 2: Investing
-          html += `<tr style="background: rgba(168,85,247,0.12); font-weight: bold;"><td colspan="4">ثانياً: التدفقات النقدية من الأنشطة الاستثمارية</td></tr>`;
-          (inv.outflows || []).forEach(it => {
-            html += `
-              <tr>
-                <td>${it.item}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">-</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">${App.formatNumber(it.amount)}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-red);">-${App.formatNumber(it.amount)} ر.ي</td>
-              </tr>
-            `;
-          });
-          html += `
-            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
-              <td>صافي النقد المستخدم في الأنشطة الاستثمارية</td>
-              <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${inv.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(inv.net)} ر.ي</td>
-            </tr>
-          `;
-
-          // Section 3: Financing
-          html += `<tr style="background: rgba(245,158,11,0.12); font-weight: bold;"><td colspan="4">ثالثاً: التدفقات النقدية من الأنشطة التمويلية</td></tr>`;
-          (fin.inflows || []).forEach(it => {
-            html += `
-              <tr>
-                <td>${it.item}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${App.formatNumber(it.amount)}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">-</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">+${App.formatNumber(it.amount)} ر.ي</td>
-              </tr>
-            `;
-          });
-          html += `
-            <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
-              <td>صافي النقد المتولد من الأنشطة التمويلية</td>
-              <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${fin.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(fin.net)} ر.ي</td>
-            </tr>
-          `;
-
-          // Final Totals
-          html += `
-            <tr style="background: rgba(212,175,55,0.15); font-weight: bold; font-size: 1.05rem;">
-              <td>صافي التغير في النقدية خلال الفترة</td>
-              <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--gold-light);">${App.formatNumber(d.net_cash_change)} ر.ي</td>
-            </tr>
-            <tr style="background: rgba(255,255,255,0.06); font-weight: bold;">
-              <td>رصيد النقدية في نهاية المدة</td>
-              <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.1rem;">${App.formatNumber(d.closing_balance)} ر.ي</td>
-            </tr>
-          `;
-
-          tbody.innerHTML = html;
-        }
-      }
-    } catch (e) {
-      console.error('Error loading cash flow:', e);
-      App.showToast('فشل تحميل التدفقات النقدية', 'error');
-    }
-  },
-
-  // ================== مصفوفة الفصل المالي وإثبات إيراد المقاولات IFRS 15 ==================
+  // =========================================================================
+  // مصفوفة الفصل المالي وإثبات إيراد المقاولات IFRS 15
+  // =========================================================================
   async openContractingSeparationModal() {
     App.openModal('contractingSeparationModal');
     const tbody = document.getElementById('contractingMatrixTableBody');

@@ -104,27 +104,29 @@ const ContractingAccountingService = {
     const cumulativeActualCost = Math.max(Number(proj.actual_cost) || 0, directCostFromRecords);
 
     // تقدير التكلفة الإجمالية المنقحة (Revised Estimated Total Cost)
-    // إذا لم يحدد المستخدم تكلفة تقديرية، نستخدم هامش تحفظ افتراضي (80% من قيمة العقد)
-    let revisedEstimatedCost = baseEstimatedCost > 0 
-      ? (baseEstimatedCost + (approvedVariationsAmount * 0.75))
-      : (revisedContractValue * 0.8);
+    // بدون أي نسب افتراضية مصطنعة (Zero Magic Numbers)
+    const warnings = [];
+    let revisedEstimatedCost = baseEstimatedCost > 0 ? (baseEstimatedCost + approvedVariationsAmount) : 0;
 
     if (revisedEstimatedCost <= 0) {
-      revisedEstimatedCost = Math.max(cumulativeActualCost, 1);
+      warnings.push({
+        code: 'MISSING_ESTIMATED_COST',
+        message: `المشروع (${proj.name}) يفتقر إلى موازنة تقديرية معتمدة (Estimated Cost = 0)`
+      });
     }
 
     // 4. نسبة الإنجاز المحاسبية المعيارية (POC - Percentage of Completion / Cost-to-Cost)
-    let costToCostPOC = 0;
-    if (revisedEstimatedCost > 0) {
-      costToCostPOC = Math.min(100, Math.round(((cumulativeActualCost / revisedEstimatedCost) * 100) * 100) / 100);
-    }
-    // في حالة انتهاء المشروع يتم تثبيت النسبة عند 100%
+    let costToCostPOC = null;
     if (proj.status === 'completed') {
       costToCostPOC = 100;
+    } else if (revisedEstimatedCost > 0) {
+      costToCostPOC = Math.min(100, Math.round(((cumulativeActualCost / revisedEstimatedCost) * 100) * 100) / 100);
     }
 
     // 5. الإيراد المعترف به تراكمياً وفق نسبة الإنجاز والمعيار الدولي IFRS 15
-    const cumulativeRecognizedRevenue = Math.round(revisedContractValue * (costToCostPOC / 100));
+    const cumulativeRecognizedRevenue = (costToCostPOC !== null && revisedContractValue > 0)
+      ? Math.round(revisedContractValue * (costToCostPOC / 100))
+      : 0;
 
     // فحص الإيرادات المثبتة دفترياً من جدول القيود السابقة
     const lastRecognition = await get(`
@@ -166,9 +168,8 @@ const ContractingAccountingService = {
         const ded = Number(b.deduction) || 0;
         const net = Number(b.net_amount) || (amt - ded);
         grossBillings += amt;
-        // افتراض توزيع الاستقطاع مناصفة بين دفعة وضمان إن لم تكن محددة بدقة
-        advanceDeducted += Number(b.advance_deduction) || (ded * 0.5);
-        retentionDeducted += Number(b.retention_deduction) || (ded * 0.5);
+        advanceDeducted += Number(b.advance_deduction) || 0;
+        retentionDeducted += Number(b.retention_deduction) || 0;
         netBilledReceivable += net;
       });
     }
@@ -335,7 +336,8 @@ const ContractingAccountingService = {
           : (liquidityVsProfitGap < 0
             ? 'الإيراد يفوق السيولة (إنجاز عالي ومستحقات ذمم تحت التحصيل)'
             : 'تطابق تام بين التدفق النقدي والإيراد المكتسب')
-      }
+      },
+      warnings
     };
   },
 

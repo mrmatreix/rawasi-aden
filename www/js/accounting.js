@@ -28,7 +28,7 @@ const Accounting = {
 
   async loadDropdowns() {
     try {
-      const [cRes, sRes, pRes, aAllRes, aUsableRes, ccRes, empRes, currRes] = await Promise.all([
+      const [cRes, sRes, pRes, aAllRes, aUsableRes, ccRes, empRes, currRes, bRes] = await Promise.all([
         fetch('/api/clients').then(r => r.json()).catch(() => ({ success: false })),
         fetch('/api/suppliers').then(r => r.json()).catch(() => ({ success: false })),
         fetch('/api/projects').then(r => r.json()).catch(() => ({ success: false })),
@@ -36,7 +36,8 @@ const Accounting = {
         fetch('/api/accounting/accounts?usable_only=true').then(r => r.json()).catch(() => ({ success: false })),
         fetch('/api/accounting/cost-centers').then(r => r.json()).catch(() => ({ success: false })),
         fetch('/api/hr/employees').then(r => r.json()).catch(() => ({ success: false })),
-        fetch('/api/accounting/currencies').then(r => r.json()).catch(() => ({ success: false }))
+        fetch('/api/accounting/currencies').then(r => r.json()).catch(() => ({ success: false })),
+        fetch('/api/bank-reconciliation/accounts').then(r => r.json()).catch(() => ({ success: false }))
       ]);
 
       if (cRes.success) {
@@ -74,36 +75,67 @@ const Accounting = {
       }
       if (aUsableRes.success && Array.isArray(aUsableRes.data) && aUsableRes.data.length > 0) {
         this.accounts = aUsableRes.data;
-      } else if (aAllRes.success) {
+      } else if (aAllRes.success && Array.isArray(aAllRes.data) && aAllRes.data.length > 0) {
         // احتياطي في حال عدم تطبيق الفلترة
-        this.accounts = (aAllRes.data || []).filter(a => a.status === 'active' && (a.children_count === 0 || !a.children_count));
-      }
-
-      // ملء قوائم الحسابات في شاشات سندات القبض والصرف والعهد (الحسابات الطرفية التحليلية فقط)
-      if (this.accounts && this.accounts.length) {
-        const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || a.account_type || ''})`;
-        this.populateSelectCustom('rcAccountSelect', this.accounts, formatLeafAcc);
-        this.populateSelectCustom('modalRcAccountSelect', this.accounts, formatLeafAcc);
-        this.populateSelectCustom('expAccountSelect', this.accounts, formatLeafAcc);
-        this.populateSelectCustom('modalExpAccountSelect', this.accounts, formatLeafAcc);
-        this.populateSelectCustom('modalCustodyAccountSelect', this.accounts, formatLeafAcc);
-        this.populateSelectCustom('quickCustodyAccountSelect', this.accounts, formatLeafAcc);
+        this.accounts = aAllRes.data.filter(a => (a.status === 'active' || !a.status) && (a.children_count === 0 || !a.children_count) && (a.is_posting === 1 || a.level === 5 || a.is_leaf));
       }
 
       if (ccRes.success) {
         this.costCenters = ccRes.data;
-        this.populateSelectCustom('rcCostCenterSelect', ccRes.data, cc => `${cc.code} - ${cc.name}`);
-        this.populateSelectCustom('modalRcCostCenterSelect', ccRes.data, cc => `${cc.code} - ${cc.name}`);
-        this.populateSelectCustom('expCostCenterSelect', ccRes.data, cc => `${cc.code} - ${cc.name}`);
-        this.populateSelectCustom('modalExpCostCenterSelect', ccRes.data, cc => `${cc.code} - ${cc.name}`);
       }
       if (empRes.success) {
         this.employees = empRes.data;
         this.populateSelectCustom('custodyEmployeeSelect', empRes.data, e => `${e.name} (${e.employee_no || e.role || 'موظف'})`);
         this.populateSelectCustom('modalCustodyEmployeeSelect', empRes.data, e => `${e.name} (${e.employee_no || e.role || 'موظف'})`);
       }
+      if (bRes && bRes.success && Array.isArray(bRes.data)) {
+        this.bankAccounts = bRes.data;
+        const formatBank = b => `${b.bank_name} - ${b.account_number} (${b.currency || 'ر.ي'})`;
+        this.populateSelectCustom('modalExpBankAccountSelect', this.bankAccounts, formatBank);
+        this.populateSelectCustom('modalRcBankAccountSelect', this.bankAccounts, formatBank);
+        this.populateSelectCustom('expBankAccountSelect', this.bankAccounts, formatBank);
+        this.populateSelectCustom('rcBankAccountSelect', this.bankAccounts, formatBank);
+      }
+
+      // تحديث كافة القوائم المنسدلة للحسابات ومراكز التكلفة فوراً
+      this.refreshAllAccountSelects();
     } catch (e) {
       console.error('Error loading dropdowns:', e);
+    }
+  },
+
+  refreshAllAccountSelects() {
+    if (this.accounts && this.accounts.length) {
+      const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || a.account_type || ''})`;
+      this.populateSelectCustom('rcAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('modalRcAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('expAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('modalExpAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('modalCustodyAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('quickCustodyAccountSelect', this.accounts, formatLeafAcc);
+
+      // تحديث أي حقول أسطر قيد يومية مفتوحة حالياً إذا كانت خالية من الخيارات
+      const jeAccSelects = document.querySelectorAll('#journalLinesTableBody .je-line-account');
+      if (jeAccSelects && jeAccSelects.length > 0) {
+        jeAccSelects.forEach(sel => {
+          if (sel.options.length <= 1) {
+            const currentVal = sel.value;
+            const optionsHtml = this.accounts.map(a => 
+              `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${currentVal == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || ''})</option>`
+            ).join('');
+            sel.innerHTML = `<option value="">اختر الحساب...</option>` + optionsHtml;
+            if (currentVal) sel.value = currentVal;
+          }
+        });
+      }
+    }
+
+    if (this.costCenters && this.costCenters.length) {
+      this.populateSelectCustom('rcCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
+      this.populateSelectCustom('modalRcCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
+      this.populateSelectCustom('expCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
+      this.populateSelectCustom('modalExpCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
+      this.populateSelectCustom('modalJeCostCenter', this.costCenters, cc => `${cc.code} - ${cc.name}`);
     }
   },
 
@@ -128,12 +160,33 @@ const Accounting = {
       this.populateReceiptContractsAndBills([]);
       return;
     }
-    const match = (this.clients || []).find(c => c.name === val || String(c.id) === val);
+
+    const norm = (s) => (s || '').trim().toLowerCase()
+      .replace(/[إأآا]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/[\u064B-\u065F]/g, '');
+
+    const normVal = norm(val);
+    const match = (this.clients || []).find(c => 
+      String(c.id) === String(val) || 
+      c.name === val || 
+      norm(c.name) === normVal ||
+      (normVal.length >= 3 && norm(c.name).includes(normVal)) ||
+      (normVal.length >= 3 && normVal.includes(norm(c.name)))
+    );
+
     const clientId = match ? match.id : null;
     if (hid) hid.value = clientId || '';
 
     if (clientId) {
       await this.loadClientHierarchyForReceipt(clientId);
+      // إذا كان للعميل مشروع مسجل ولم يتم اختيار مشروع بعد، نختاره تلقائياً
+      const prjSelect = document.getElementById('modalRcProjectSelect');
+      if (prjSelect && (!prjSelect.value || prjSelect.value === '')) {
+        const clientProject = (this.projects || []).find(p => p.client_id == clientId);
+        if (clientProject) prjSelect.value = clientProject.id;
+      }
     } else {
       this.populateReceiptContractsAndBills([]);
     }
@@ -142,15 +195,13 @@ const Accounting = {
   async loadClientHierarchyForReceipt(clientId) {
     try {
       const [contractsRes, billsRes] = await Promise.all([
-        fetch(`/api/clients/${clientId}/contracts`),
-        fetch(`/api/billing?client_id=${clientId}`)
+        fetch(`/api/clients/${clientId}/contracts`).then(r => r.json()).catch(() => ({ success: false })),
+        fetch(`/api/billing?client_id=${clientId}`).then(r => r.json()).catch(() => ({ success: false }))
       ]);
-      const contractsJson = await contractsRes.json();
-      const billsJson = await billsRes.json();
 
-      this.receiptClientContracts = contractsJson.data || [];
+      this.receiptClientContracts = contractsRes.success ? (contractsRes.data || []) : [];
       // تصفية المستخلصات المستحقة (غير المسددة بالكامل)
-      const allBills = billsJson.data || [];
+      const allBills = billsRes.success ? (billsRes.data || []) : [];
       this.receiptClientBills = allBills.filter(b => {
         const net = Number(b.net_amount || b.amount || 0);
         const paid = Number(b.paid_amount || 0);
@@ -167,26 +218,28 @@ const Accounting = {
   populateReceiptContractsAndBills(contracts = [], bills = []) {
     const cSelect = document.getElementById('modalRcContractSelect');
     if (cSelect) {
+      const currVal = cSelect.value;
       cSelect.innerHTML = '<option value="">بدون عقد محدد...</option>' + 
-        contracts.map(c => `<option value="${c.id}">عقد ${c.contract_no || c.id} (قيمة: ${App.formatNumber(c.contract_value)})</option>`).join('');
+        contracts.map(c => `<option value="${c.id}" ${currVal == c.id ? 'selected' : ''}>عقد ${c.contract_no || c.id} (قيمة: ${App.formatNumber(c.contract_value)})</option>`).join('');
     }
 
     const bSelect = document.getElementById('modalRcBillSelect');
     const hint = document.getElementById('modalRcBillRemainingHint');
     if (bSelect) {
       if (bills.length === 0) {
-        bSelect.innerHTML = '<option value="">لا توجد مستخلصات غير مسددة لهذا العميل</option>';
+        bSelect.innerHTML = '<option value="">لا توجد مستخلصات غير مسددة لهذا العميل / المشروع</option>';
         if (hint) hint.style.display = 'none';
       } else {
+        const currVal = bSelect.value;
         bSelect.innerHTML = '<option value="">اختر المستخلص لسداده وتحديث رصيد العميل آلياً...</option>' +
           bills.map(b => {
             const net = Number(b.net_amount || b.amount || 0);
             const paid = Number(b.paid_amount || 0);
             const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : Math.max(0, net - paid));
-            return `<option value="${b.id}" data-project="${b.project_id || ''}" data-contract="${b.contract_id || ''}" data-rem="${rem}" data-billno="${b.bill_no}">مستخلص ${b.bill_no} - متبقي: ${App.formatNumber(rem)} ر.ي (${b.project_name || 'مشروع'})</option>`;
+            return `<option value="${b.id}" data-project="${b.project_id || ''}" data-contract="${b.contract_id || ''}" data-rem="${rem}" data-billno="${b.bill_no}" ${currVal == b.id ? 'selected' : ''}>مستخلص ${b.bill_no} - متبقي: ${App.formatNumber(rem)} ر.ي (${b.project_name || 'مشروع'})</option>`;
           }).join('');
         if (hint) {
-          hint.innerText = `💡 يوجد ${bills.length} مستخلصات مستحقة للتحصيل على هذا العميل`;
+          hint.innerText = `💡 يوجد ${bills.length} مستخلصات مستحقة للتحصيل على هذا العميل / المشروع`;
           hint.style.display = 'block';
         }
       }
@@ -207,14 +260,61 @@ const Accounting = {
     }
   },
 
-  onReceiptProjectChange(projectId) {
-    if (!projectId) return;
-    // تصفية المستخلصات التابعة للمشروع المختار
-    if (this.receiptClientBills && this.receiptClientBills.length > 0) {
-      const filteredBills = this.receiptClientBills.filter(b => b.project_id == projectId);
-      if (filteredBills.length > 0) {
-        this.populateReceiptContractsAndBills(this.receiptClientContracts || [], filteredBills);
+  async onReceiptProjectChange(projectId) {
+    if (!projectId) {
+      const clientId = document.getElementById('modalRcClientSelect')?.value;
+      if (clientId) {
+        await this.loadClientHierarchyForReceipt(clientId);
       }
+      return;
+    }
+
+    // 1. مزامنة العميل التابع للمشروع تلقائياً
+    const project = (this.projects || []).find(p => p.id == projectId);
+    if (project && project.client_id) {
+      const client = (this.clients || []).find(c => c.id == project.client_id);
+      if (client) {
+        const cInput = document.getElementById('modalRcClientInput');
+        const cHid = document.getElementById('modalRcClientSelect');
+        if (cInput && (!cInput.value || cInput.value !== client.name)) {
+          cInput.value = client.name;
+        }
+        if (cHid) cHid.value = client.id;
+      }
+    }
+
+    // 2. جلب عقود ومستخلصات هذا المشروع تحديداً وربط السلسلة المالية
+    await this.loadProjectHierarchyForReceipt(projectId);
+  },
+
+  async loadProjectHierarchyForReceipt(projectId) {
+    try {
+      const [contractsRes, billsRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}/contracts`).then(r => r.json()).catch(() => ({ success: false })),
+        fetch(`/api/billing?project_id=${projectId}`).then(r => r.json()).catch(() => ({ success: false }))
+      ]);
+
+      let contracts = contractsRes.success ? (contractsRes.data || []) : [];
+      let bills = billsRes.success ? (billsRes.data || []) : [];
+
+      if (contracts.length === 0 && this.receiptClientContracts) {
+        contracts = this.receiptClientContracts.filter(c => c.project_id == projectId);
+      }
+      if (bills.length === 0 && this.receiptClientBills) {
+        bills = this.receiptClientBills.filter(b => b.project_id == projectId);
+      }
+
+      this.receiptClientContracts = contracts;
+      this.receiptClientBills = bills.filter(b => {
+        const net = Number(b.net_amount || b.amount || 0);
+        const paid = Number(b.paid_amount || 0);
+        const rem = Number(b.remaining_amount !== undefined ? b.remaining_amount : (net - paid));
+        return b.status !== 'ملغي' && (b.payment_status !== 'paid' || rem > 0);
+      });
+
+      this.populateReceiptContractsAndBills(this.receiptClientContracts, this.receiptClientBills);
+    } catch (err) {
+      console.error('Error loading project hierarchy for receipt:', err);
     }
   },
 
@@ -465,21 +565,81 @@ const Accounting = {
     }
   },
 
-  // إظهار/إخفاء حقول الشيك بناء على طريقة الدفع
+  // إظهار/إخفاء وضبط حقول الحساب المالي والمرجع بناء على طريقة الدفع
   handlePaymentMethodChange(selectId, targetRowId) {
     const el = typeof selectId === 'string' ? document.getElementById(selectId) : selectId;
     const row = document.getElementById(targetRowId);
     if (!el || !row) return;
-    const isCheck = el.value === 'شيك';
-    row.style.display = isCheck ? 'block' : 'none';
-    const checkNoInput = row.querySelector('input[type="text"]');
+    const val = el.value;
+    const isRc = targetRowId.includes('Rc');
+    const faSelectId = isRc ? 'modalRcFinancialAccountSelect' : 'modalExpFinancialAccountSelect';
+    const faHintId = isRc ? 'modalRcFaHint' : 'modalExpFaHint';
+    const checkNoInput = isRc ? document.getElementById('modalRcCheckNo') : document.getElementById('modalExpCheckNo');
+    const refLabel = isRc ? document.getElementById('modalRcRefLabel') : document.getElementById('modalExpRefLabel');
+
+    // تحديث قائمة الحسابات المالية المناسبة لطريقة الدفع
+    this.updateFinancialAccountsDropdown(faSelectId, val, faHintId);
+
+    // ضبط حقل المرجع والشيك
+    const isCheck = val === 'شيك' || val === 'CHEQUE';
+    const isBank = val === 'تحويل بنكي' || val === 'BANK_TRANSFER';
+    const isCard = val === 'CREDIT_CARD' || val === 'DEBIT_CARD' || val === 'ONLINE_GATEWAY' || val === 'POS';
+
+    if (refLabel) {
+      if (isCheck) refLabel.innerHTML = 'رقم الشيك البنكي <span style="color: var(--accent-red);">*</span>';
+      else if (isBank) refLabel.innerHTML = 'المرجع / رقم الحوالة البنكية <span style="color: var(--accent-red);">*</span>';
+      else if (isCard) refLabel.innerHTML = 'رقم المعاملة / التفويض (Txn Ref)';
+      else refLabel.innerHTML = 'المرجع / رقم السند الورقي (اختياري)';
+    }
+
     if (checkNoInput) {
-      if (isCheck) {
-        checkNoInput.setAttribute('required', 'true');
-        checkNoInput.focus();
-      } else {
-        checkNoInput.removeAttribute('required');
-      }
+      if (isCheck) checkNoInput.placeholder = 'أدخل رقم الشيك الصادر/الوارد';
+      else if (isBank) checkNoInput.placeholder = 'رقم الحوالة البنكية أو الإشعار';
+      else if (isCard) checkNoInput.placeholder = 'رقم تفويض أو مرجع بوابة الدفع';
+      else checkNoInput.placeholder = 'رقم الإشعار أو المرجع إن وجد';
+    }
+  },
+
+  onFinancialAccountChange(faId, hintId) {
+    const hint = document.getElementById(hintId);
+    if (!hint) return;
+    if (!faId) {
+      hint.innerHTML = '';
+      return;
+    }
+    const fa = (this.financialAccounts || []).find(f => String(f.id) === String(faId));
+    if (fa) {
+      hint.innerHTML = `💡 الحساب المحاسبي المرتبط: <strong style="color: var(--gold-light);">${fa.coa_code || ''} - ${fa.coa_name || ''}</strong> (حساب فرعي أخير)`;
+    } else {
+      hint.innerHTML = '';
+    }
+  },
+
+  updateFinancialAccountsDropdown(selectId, methodVal, hintId = null) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    let targetType = 'cash';
+    const m = (methodVal || '').toUpperCase();
+    if (m === 'BANK_TRANSFER' || m === 'تحويل بنكي' || m === 'CHEQUE' || m === 'شيك') {
+      targetType = 'bank';
+    } else if (m === 'CREDIT_CARD' || m === 'DEBIT_CARD' || m === 'ONLINE_GATEWAY' || m === 'POS') {
+      targetType = 'gateway';
+    } else if (m === 'WALLET' || m === 'محفظة إلكترونية') {
+      targetType = 'wallet';
+    } else {
+      targetType = 'cash';
+    }
+
+    const allFa = this.financialAccounts || [];
+    let filtered = allFa.filter(f => f.type === targetType);
+    if (filtered.length === 0) filtered = allFa;
+
+    select.innerHTML = '<option value="">اختر الحساب المالي...</option>' +
+      filtered.map((f, idx) => `<option value="${f.id}" ${idx === 0 ? 'selected' : ''}>${f.name} (${f.type})</option>`).join('');
+
+    if (filtered.length > 0 && hintId) {
+      this.onFinancialAccountChange(filtered[0].id, hintId);
     }
   },
 
@@ -703,6 +863,83 @@ const Accounting = {
       }
     }
 
+    // التحقق الصارم من توفر الحسابات والمشاريع ومراكز التكلفة وجلبها فوراً عند الحاجة
+    if (!this.accounts || !this.accounts.length) {
+      try {
+        const aRes = await fetch('/api/accounting/accounts?usable_only=true').then(r => r.json());
+        if (aRes.success && Array.isArray(aRes.data)) this.accounts = aRes.data;
+      } catch (e) {}
+    }
+    if (!this.costCenters || !this.costCenters.length) {
+      try {
+        const ccRes = await fetch('/api/accounting/cost-centers').then(r => r.json());
+        if (ccRes.success && Array.isArray(ccRes.data)) this.costCenters = ccRes.data;
+      } catch (e) {}
+    }
+    if (!this.projects || !this.projects.length) {
+      try {
+        const pRes = await fetch('/api/projects').then(r => r.json());
+        if (pRes.success && Array.isArray(pRes.data)) this.projects = pRes.data;
+      } catch (e) {}
+    }
+    if (!this.bankAccounts || !this.bankAccounts.length) {
+      try {
+        const bRes = await fetch('/api/bank-reconciliation/accounts').then(r => r.json());
+        if (bRes.success && Array.isArray(bRes.data)) this.bankAccounts = bRes.data;
+      } catch (e) {}
+    }
+    if (!this.clients || !this.clients.length) {
+      try {
+        const cRes = await fetch('/api/clients').then(r => r.json());
+        if (cRes.success && Array.isArray(cRes.data)) this.clients = cRes.data;
+      } catch (e) {}
+    }
+
+    if (!this.paymentMethods || !this.paymentMethods.length) {
+      try {
+        const pmRes = await fetch('/api/payments/methods').then(r => r.json());
+        if (pmRes.success && Array.isArray(pmRes.data)) this.paymentMethods = pmRes.data;
+      } catch (e) {}
+    }
+    if (!this.financialAccounts || !this.financialAccounts.length) {
+      try {
+        const faRes = await fetch('/api/payments/financial-accounts').then(r => r.json());
+        if (faRes.success && Array.isArray(faRes.data)) this.financialAccounts = faRes.data;
+      } catch (e) {}
+    }
+
+    // ملء قوائم الحسابات، المشاريع، ومراكز التكلفة فوراً
+    if (this.accounts && this.accounts.length) {
+      const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || a.account_type || ''})`;
+      this.populateSelectCustom('modalRcAccountSelect', this.accounts, formatLeafAcc);
+    }
+    if (this.costCenters && this.costCenters.length) {
+      this.populateSelectCustom('modalRcCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
+    }
+    if (this.projects && this.projects.length) {
+      const prjSelect = document.getElementById('modalRcProjectSelect');
+      if (prjSelect) {
+        const currVal = prjSelect.value;
+        prjSelect.innerHTML = `<option value="">عام / بدون مشروع محدد...</option>` +
+          this.projects.map(p => `<option value="${p.id}" ${currVal == p.id ? 'selected' : ''}>${p.name}</option>`).join('');
+      }
+    }
+    if (this.bankAccounts && this.bankAccounts.length) {
+      const formatBank = b => `${b.bank_name} - ${b.account_number} (${b.currency || 'ر.ي'})`;
+      this.populateSelectCustom('modalRcBankAccountSelect', this.bankAccounts, formatBank);
+    }
+    if (this.clients && this.clients.length) {
+      const dl = document.getElementById('modalRcClientDatalist');
+      if (dl) {
+        dl.innerHTML = this.clients.map(c => `<option value="${c.name}">${c.phone ? 'هاتف: ' + c.phone : ''}</option>`).join('');
+      }
+    }
+
+    const payMethodSelect = document.getElementById('modalRcPaymentMethod');
+    if (payMethodSelect) {
+      this.handlePaymentMethodChange(payMethodSelect, 'modalRcCheckRow');
+    }
+
     App.openModal('newReceiptModal');
   },
 
@@ -731,6 +968,7 @@ const Accounting = {
     const bill_id = document.getElementById('modalRcBillSelect')?.value || null;
     const receipt_category = document.getElementById('modalRcCategory')?.value || 'bill_collection';
     const account_id = document.getElementById('modalRcAccountSelect')?.value || null;
+    const financial_account_id = document.getElementById('modalRcFinancialAccountSelect')?.value || null;
     const cost_center_id = document.getElementById('modalRcCostCenterSelect')?.value || null;
     const date = document.getElementById('modalRcDate').value;
     const payment_method = document.getElementById('modalRcPaymentMethod').value;
@@ -740,14 +978,31 @@ const Accounting = {
     const currency = document.getElementById('modalRcCurrency')?.value || 'ر.ي';
     const exchange_rate = currency === 'ر.ي' ? 1.0 : (parseFloat(document.getElementById('modalRcExchangeRate')?.value) || 1.0);
     const local_amount = currency === 'ر.ي' ? Number(amount) : (parseFloat(document.getElementById('modalRcLocalAmount')?.value) || (Number(amount) * exchange_rate));
+    const bank_account_id = document.getElementById('modalRcBankAccountSelect')?.value || null;
     const notes = document.getElementById('modalRcNotes').value;
+    const idempotency_key = 'rc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
 
     if (!client_id && !client_name) {
       App.showToast('يرجى اختيار أو كتابة اسم العميل', 'error');
       return;
     }
+    if (!account_id) {
+      App.showToast('يرجى اختيار الحساب المحاسبي من دليل الحسابات', 'error');
+      document.getElementById('modalRcAccountSelect')?.focus();
+      return;
+    }
+    const selectedAcc = (this.allAccounts || []).find(a => String(a.id) === String(account_id)) || (this.accounts || []).find(a => String(a.id) === String(account_id));
+    if (selectedAcc && ((selectedAcc.children_count && selectedAcc.children_count > 0) || (selectedAcc.is_posting === 0 && selectedAcc.level < 5))) {
+      App.showToast('لا يمكن تسجيل العملية على هذا الحساب، يرجى اختيار الحساب الفرعي الأخير.', 'error');
+      return;
+    }
     if (!amount || Number(amount) <= 0) {
       App.showToast('يرجى تحديد المبلغ بشكل صحيح', 'error');
+      return;
+    }
+    if (payment_method === 'تحويل بنكي' && !bank_account_id) {
+      App.showToast('يرجى تحديد حساب البنك لإتمام التحويل البنكي', 'error');
+      document.getElementById('modalRcBankAccountSelect')?.focus();
       return;
     }
     if (payment_method === 'شيك' && !check_no) {
@@ -759,7 +1014,10 @@ const Accounting = {
     try {
       const res = await fetch('/api/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotency_key
+        },
         body: JSON.stringify({
           type: 'قبض',
           client_id: client_id || null,
@@ -768,7 +1026,9 @@ const Accounting = {
           contract_id: contract_id ? Number(contract_id) : null,
           bill_id: bill_id ? Number(bill_id) : null,
           receipt_category,
-          account_id,
+          account_id: account_id ? Number(account_id) : null,
+          financial_account_id: financial_account_id ? Number(financial_account_id) : null,
+          bank_account_id: bank_account_id ? Number(bank_account_id) : null,
           cost_center_id,
           date,
           payment_method,
@@ -778,7 +1038,8 @@ const Accounting = {
           currency,
           exchange_rate,
           local_amount,
-          notes
+          notes,
+          idempotency_key
         })
       });
       const data = await res.json();
@@ -838,6 +1099,7 @@ const Accounting = {
     const client_id = document.getElementById('rcClientSelect').value;
     const project_id = document.getElementById('rcProjectSelect').value;
     const account_id = document.getElementById('rcAccountSelect')?.value || null;
+    const bank_account_id = document.getElementById('rcBankAccountSelect')?.value || null;
     const cost_center_id = document.getElementById('rcCostCenterSelect')?.value || null;
     const date = document.getElementById('rcDate').value;
     const payment_method = document.getElementById('rcPaymentMethod').value;
@@ -847,8 +1109,24 @@ const Accounting = {
     const currency = document.getElementById('rcCurrency')?.value || 'ر.ي';
     const notes = document.getElementById('rcNotes').value;
 
+    if (!account_id) {
+      App.showToast('يرجى اختيار الحساب المحاسبي من دليل الحسابات', 'error');
+      document.getElementById('rcAccountSelect')?.focus();
+      return;
+    }
+    const selectedAcc = (this.allAccounts || []).find(a => String(a.id) === String(account_id)) || (this.accounts || []).find(a => String(a.id) === String(account_id));
+    if (selectedAcc && ((selectedAcc.children_count && selectedAcc.children_count > 0) || (selectedAcc.is_posting === 0 && selectedAcc.level < 5))) {
+      App.showToast('لا يمكن تسجيل العملية على هذا الحساب، يرجى اختيار الحساب الفرعي الأخير.', 'error');
+      return;
+    }
+
     if (!amount || Number(amount) <= 0) {
       App.showToast('يرجى تحديد المبلغ بشكل صحيح', 'error');
+      return;
+    }
+    if (payment_method === 'تحويل بنكي' && !bank_account_id) {
+      App.showToast('يرجى تحديد حساب البنك لإتمام التحويل البنكي', 'error');
+      document.getElementById('rcBankAccountSelect')?.focus();
       return;
     }
     if (payment_method === 'شيك' && !check_no) {
@@ -865,7 +1143,8 @@ const Accounting = {
           type: 'قبض',
           client_id,
           project_id,
-          account_id,
+          account_id: account_id ? Number(account_id) : null,
+          bank_account_id: bank_account_id ? Number(bank_account_id) : null,
           cost_center_id,
           date,
           payment_method,
@@ -928,6 +1207,7 @@ const Accounting = {
     const project_id = document.getElementById('expProjectSelect').value;
     const supplier_id = document.getElementById('expSupplierSelect').value;
     const account_id = document.getElementById('expAccountSelect')?.value || null;
+    const bank_account_id = document.getElementById('expBankAccountSelect')?.value || null;
     const cost_center_id = document.getElementById('expCostCenterSelect')?.value || null;
     const date = document.getElementById('expDate').value;
     const payment_method = document.getElementById('expPaymentMethod').value;
@@ -937,8 +1217,24 @@ const Accounting = {
     const currency = document.getElementById('expCurrency')?.value || 'ر.ي';
     const notes = document.getElementById('expNotes').value;
 
+    if (!account_id) {
+      App.showToast('يرجى اختيار الحساب المحاسبي من دليل الحسابات', 'error');
+      document.getElementById('expAccountSelect')?.focus();
+      return;
+    }
+    const selectedAcc = (this.allAccounts || []).find(a => String(a.id) === String(account_id)) || (this.accounts || []).find(a => String(a.id) === String(account_id));
+    if (selectedAcc && ((selectedAcc.children_count && selectedAcc.children_count > 0) || (selectedAcc.is_posting === 0 && selectedAcc.level < 5))) {
+      App.showToast('لا يمكن تسجيل العملية على هذا الحساب، يرجى اختيار الحساب الفرعي الأخير.', 'error');
+      return;
+    }
+
     if (!expense_type || !amount || Number(amount) <= 0) {
       App.showToast('يرجى تحديد نوع المصروف والمبلغ', 'error');
+      return;
+    }
+    if (payment_method === 'تحويل بنكي' && !bank_account_id) {
+      App.showToast('يرجى تحديد حساب البنك لإتمام التحويل البنكي', 'error');
+      document.getElementById('expBankAccountSelect')?.focus();
       return;
     }
     if (payment_method === 'شيك' && !check_no) {
@@ -955,7 +1251,8 @@ const Accounting = {
           expense_type,
           project_id,
           supplier_id,
-          account_id,
+          account_id: account_id ? Number(account_id) : null,
+          bank_account_id: bank_account_id ? Number(bank_account_id) : null,
           cost_center_id,
           date,
           payment_method,
@@ -1111,6 +1408,38 @@ const Accounting = {
     const dateInput = document.getElementById('modalExpDate');
     if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 
+    // التحقق الصارم من توفر الحسابات والمشاريع ومراكز التكلفة وجلبها فوراً عند الحاجة
+    if (!this.accounts || !this.accounts.length) {
+      try {
+        const aRes = await fetch('/api/accounting/accounts?usable_only=true').then(r => r.json());
+        if (aRes.success && Array.isArray(aRes.data)) this.accounts = aRes.data;
+      } catch (e) {}
+    }
+    if (!this.costCenters || !this.costCenters.length) {
+      try {
+        const ccRes = await fetch('/api/accounting/cost-centers').then(r => r.json());
+        if (ccRes.success && Array.isArray(ccRes.data)) this.costCenters = ccRes.data;
+      } catch (e) {}
+    }
+    if (!this.projects || !this.projects.length) {
+      try {
+        const pRes = await fetch('/api/projects').then(r => r.json());
+        if (pRes.success && Array.isArray(pRes.data)) this.projects = pRes.data;
+      } catch (e) {}
+    }
+    if (!this.suppliers || !this.suppliers.length) {
+      try {
+        const sRes = await fetch('/api/suppliers').then(r => r.json());
+        if (sRes.success && Array.isArray(sRes.data)) this.suppliers = sRes.data;
+      } catch (e) {}
+    }
+    if (!this.bankAccounts || !this.bankAccounts.length) {
+      try {
+        const bRes = await fetch('/api/bank-reconciliation/accounts').then(r => r.json());
+        if (bRes.success && Array.isArray(bRes.data)) this.bankAccounts = bRes.data;
+      } catch (e) {}
+    }
+
     // ملء قوائم المشاريع والموردين والحسابات ومراكز التكلفة
     if (this.projects && this.projects.length) {
       const projSelect = document.getElementById('modalExpProjectSelect');
@@ -1132,6 +1461,10 @@ const Accounting = {
     if (this.costCenters && this.costCenters.length) {
       this.populateSelectCustom('modalExpCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
     }
+    if (this.bankAccounts && this.bankAccounts.length) {
+      const formatBank = b => `${b.bank_name} - ${b.account_number} (${b.currency || 'ر.ي'})`;
+      this.populateSelectCustom('modalExpBankAccountSelect', this.bankAccounts, formatBank);
+    }
 
     const checkRow = document.getElementById('modalExpCheckRow');
     if (checkRow) checkRow.style.display = 'none';
@@ -1139,6 +1472,11 @@ const Accounting = {
     if (convRow) convRow.style.display = 'none';
     const tafqeetEl = document.getElementById('modalExpLocalTafqeet');
     if (tafqeetEl) tafqeetEl.innerHTML = '';
+
+    const expPayMethod = document.getElementById('modalExpPaymentMethod');
+    if (expPayMethod) {
+      this.handlePaymentMethodChange(expPayMethod, 'modalExpCheckRow');
+    }
 
     App.openModal('newExpenseModal');
   },
@@ -1161,6 +1499,7 @@ const Accounting = {
     }
 
     const account_id = document.getElementById('modalExpAccountSelect')?.value || null;
+    const bank_account_id = document.getElementById('modalExpBankAccountSelect')?.value || null;
     const cost_center_id = document.getElementById('modalExpCostCenterSelect')?.value || null;
     const date = document.getElementById('modalExpDate').value;
     const payment_method = document.getElementById('modalExpPaymentMethod').value;
@@ -1172,8 +1511,25 @@ const Accounting = {
     const local_amount = currency === 'ر.ي' ? Number(amount) : (parseFloat(document.getElementById('modalExpLocalAmount')?.value) || (Number(amount) * exchange_rate));
     const notes = document.getElementById('modalExpNotes').value;
 
+    if (!account_id) {
+      App.showToast('يرجى اختيار الحساب المحاسبي من دليل الحسابات', 'error');
+      document.getElementById('modalExpAccountSelect')?.focus();
+      return;
+    }
+
+    const selectedAcc = (this.allAccounts || []).find(a => String(a.id) === String(account_id)) || (this.accounts || []).find(a => String(a.id) === String(account_id));
+    if (selectedAcc && ((selectedAcc.children_count && selectedAcc.children_count > 0) || (selectedAcc.is_posting === 0 && selectedAcc.level < 5))) {
+      App.showToast('لا يمكن تسجيل العملية على هذا الحساب، يرجى اختيار الحساب الفرعي الأخير.', 'error');
+      return;
+    }
+
     if (!amount || Number(amount) <= 0) {
       App.showToast('يرجى تحديد المبلغ المطلوب بشكل صحيح', 'error');
+      return;
+    }
+    if (payment_method === 'تحويل بنكي' && !bank_account_id) {
+      App.showToast('يرجى تحديد حساب البنك لإتمام التحويل البنكي', 'error');
+      document.getElementById('modalExpBankAccountSelect')?.focus();
       return;
     }
     if (payment_method === 'شيك' && !check_no) {
@@ -1182,16 +1538,24 @@ const Accounting = {
       return;
     }
 
+    const financial_account_id = document.getElementById('modalExpFinancialAccountSelect')?.value || null;
+    const idempotency_key = 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+
     try {
       const res = await fetch('/api/expenses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': idempotency_key
+        },
         body: JSON.stringify({
           expense_type: expense_type || 'مصروف عام',
           project_id: project_id || null,
           supplier_id: supplier_id || null,
           supplier_name: supplier_name || supplier_input,
-          account_id,
+          account_id: account_id ? Number(account_id) : null,
+          financial_account_id: financial_account_id ? Number(financial_account_id) : null,
+          bank_account_id: bank_account_id ? Number(bank_account_id) : null,
           cost_center_id,
           date,
           payment_method,
@@ -1201,7 +1565,8 @@ const Accounting = {
           currency,
           exchange_rate,
           local_amount,
-          notes
+          notes,
+          idempotency_key
         })
       });
       const data = await res.json();
@@ -2783,6 +3148,31 @@ const Accounting = {
 
   async openNewJournalModal() {
     await this.loadDropdowns();
+    if (!this.accounts || this.accounts.length === 0) {
+      try {
+        const aRes = await fetch('/api/accounting/accounts?usable_only=true').then(r => r.json());
+        if (aRes.success && Array.isArray(aRes.data) && aRes.data.length > 0) {
+          this.accounts = aRes.data;
+        }
+      } catch (e) {
+        console.warn('Fallback fetching usable accounts:', e);
+      }
+    }
+    if (!this.costCenters || this.costCenters.length === 0) {
+      try {
+        const ccRes = await fetch('/api/accounting/cost-centers').then(r => r.json());
+        if (ccRes.success && Array.isArray(ccRes.data)) {
+          this.costCenters = ccRes.data;
+        }
+      } catch (e) {}
+    }
+    this.populateSelectCustom('modalJeCostCenter', this.costCenters, cc => `${cc.code} - ${cc.name}`);
+    const jeCcSelect = document.getElementById('modalJeCostCenter');
+    if (jeCcSelect) {
+      jeCcSelect.value = '';
+      jeCcSelect.style.borderColor = 'rgba(56, 189, 248, 0.5)';
+    }
+
     await this.fetchNextNumbers();
     const form = document.getElementById('modalJournalForm');
     if (form) form.reset();
@@ -2833,12 +3223,14 @@ const Accounting = {
     tr.id = rowId;
     tr.className = 'journal-line-row';
 
-    const accountOptions = this.accounts.map(a => 
-      `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${data.account_id == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || ''})</option>`
-    ).join('');
+    let accountsList = (this.accounts && this.accounts.length > 0) ? this.accounts : (this.allAccounts || []);
+    if (accountsList.length > 0 && accountsList.some(a => a.children_count > 0 || (a.level && a.level < 5))) {
+      const leaves = accountsList.filter(a => (a.is_posting === 1 || a.level === 5 || a.is_leaf) && (!a.children_count || Number(a.children_count) === 0));
+      if (leaves.length > 0) accountsList = leaves;
+    }
 
-    const ccOptions = this.costCenters.map(cc => 
-      `<option value="${cc.id}" ${data.cost_center_id == cc.id ? 'selected' : ''}>${cc.code} - ${cc.name}</option>`
+    const accountOptions = (accountsList || []).map(a => 
+      `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${data.account_id == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || ''})</option>`
     ).join('');
 
     tr.innerHTML = `
@@ -2846,12 +3238,6 @@ const Accounting = {
         <select class="form-control je-line-account" required style="font-size: 0.85rem;" onchange="Accounting.onJournalAccountChange('${rowId}')">
           <option value="">اختر الحساب...</option>
           ${accountOptions}
-        </select>
-      </td>
-      <td>
-        <select class="form-control je-line-costcenter" style="font-size: 0.85rem;">
-          <option value="">مركز التكلفة...</option>
-          ${ccOptions}
         </select>
       </td>
       <td>
@@ -2877,22 +3263,17 @@ const Accounting = {
     const tr = document.getElementById(rowId);
     if (!tr) return;
     const accSelect = tr.querySelector('.je-line-account');
-    const ccSelect = tr.querySelector('.je-line-costcenter');
-    if (!accSelect || !ccSelect) return;
+    if (!accSelect) return;
 
     const opt = accSelect.options[accSelect.selectedIndex];
     const code = opt ? (opt.getAttribute('data-code') || '') : '';
     const type = opt ? (opt.getAttribute('data-type') || '') : '';
 
     const isNominal = type === 'مصروفات' || type === 'إيرادات' || code.startsWith('4') || code.startsWith('5');
-    if (isNominal) {
-      ccSelect.style.borderColor = '#f59e0b';
-      ccSelect.title = 'مركز التكلفة إلزامي لحسابات المصروفات والإيرادات لضمان سلامة تقارير الربحية';
-      if (ccSelect.options[0]) ccSelect.options[0].textContent = 'اختر مركز التكلفة (إلزامي *)';
-    } else {
-      ccSelect.style.borderColor = '';
-      ccSelect.title = '';
-      if (ccSelect.options[0]) ccSelect.options[0].textContent = 'مركز التكلفة (اختياري)...';
+    const jeCcSelect = document.getElementById('modalJeCostCenter');
+    if (isNominal && jeCcSelect && !jeCcSelect.value) {
+      jeCcSelect.style.borderColor = '#f59e0b';
+      jeCcSelect.title = 'مركز التكلفة إلزامي عند استخدام حسابات المصروفات والإيرادات لضمان سلامة تقارير الربحية';
     }
   },
 
@@ -3012,6 +3393,7 @@ const Accounting = {
     if (e) e.preventDefault();
     const date = document.getElementById('modalJeDate').value;
     const currency = document.getElementById('modalJeCurrency')?.value || 'ر.ي';
+    const unifiedCostCenterId = document.getElementById('modalJeCostCenter')?.value || null;
     const description = document.getElementById('modalJeDescription').value.trim();
 
     if (!description) {
@@ -3040,18 +3422,23 @@ const Accounting = {
     let totalDebit = 0;
     let totalCredit = 0;
     let hasInvalidAccount = false;
-    let missingCostCenterMsg = null;
+    let hasNominalAccount = false;
+    let nonLeafAccountMsg = null;
 
     rows.forEach(r => {
       const accountSelect = r.querySelector('.je-line-account');
       const account_id = accountSelect?.value;
-      const cost_center_id = r.querySelector('.je-line-costcenter')?.value || null;
       const debit = Number(r.querySelector('.je-line-debit')?.value) || 0;
       const credit = Number(r.querySelector('.je-line-credit')?.value) || 0;
       const lineDesc = r.querySelector('.je-line-desc')?.value?.trim() || '';
 
       if (!account_id) {
         hasInvalidAccount = true;
+      } else {
+        const accObj = (this.allAccounts || []).find(a => String(a.id) === String(account_id)) || (this.accounts || []).find(a => String(a.id) === String(account_id));
+        if (accObj && ((accObj.children_count && accObj.children_count > 0) || (accObj.is_posting === 0 && accObj.level < 5))) {
+          nonLeafAccountMsg = 'لا يمكن تسجيل العملية على هذا الحساب، يرجى اختيار الحساب الفرعي الأخير.';
+        }
       }
 
       // فحص إلزامية مركز التكلفة لحسابات الأرباح والخسائر
@@ -3060,15 +3447,15 @@ const Accounting = {
         const code = opt ? (opt.getAttribute('data-code') || '') : '';
         const type = opt ? (opt.getAttribute('data-type') || '') : '';
         const isNominal = type === 'مصروفات' || type === 'إيرادات' || code.startsWith('4') || code.startsWith('5');
-        if (isNominal && !cost_center_id) {
-          missingCostCenterMsg = `يجب اختيار مركز التكلفة لحساب [${opt.text}] لكونه حساب ${type}، لضمان دقة تقارير الربحية.`;
+        if (isNominal) {
+          hasNominalAccount = true;
         }
       }
 
       if (debit > 0 || credit > 0) {
         lines.push({
           account_id,
-          cost_center_id,
+          cost_center_id: unifiedCostCenterId ? Number(unifiedCostCenterId) : null,
           debit,
           credit,
           notes: lineDesc
@@ -3083,8 +3470,18 @@ const Accounting = {
       return;
     }
 
-    if (missingCostCenterMsg) {
-      App.showToast(missingCostCenterMsg, 'error');
+    if (nonLeafAccountMsg) {
+      App.showToast(nonLeafAccountMsg, 'error');
+      return;
+    }
+
+    if (hasNominalAccount && !unifiedCostCenterId) {
+      App.showToast('يرجى اختيار مركز التكلفة الموحد للقيد لكونه يتضمن حسابات مصروفات أو إيرادات', 'error');
+      const ccEl = document.getElementById('modalJeCostCenter');
+      if (ccEl) {
+        ccEl.focus();
+        ccEl.style.borderColor = '#f59e0b';
+      }
       return;
     }
 

@@ -2,6 +2,28 @@
   "version": "1.0.0",
   "items": [
     {
+      "id": "vault_20261008_091306",
+      "fileName": "rawasi_archive_bundle_20261008_091306.rawasi.enc",
+      "filePath": "C:\\Users\\a.ba3baid\\رواسي عدن\\server\\database\\backups\\cloud_vault\\rawasi_archive_bundle_20261008_091306.rawasi.enc",
+      "size": 588202,
+      "rawZipSize": 588150,
+      "createdAt": "2026-10-08T06:13:06.435Z",
+      "encrypted": true,
+      "includeProjectsFiles": true,
+      "sha256": "a87e755ddd343da424270c1d6a82d932f7f19e0fbba1da21fe95a5c954c26381",
+      "stats": {
+        "projectsCount": 10,
+        "contractsCount": 0,
+        "journalEntriesCount": 15,
+        "vouchersCount": 0,
+        "usersCount": 9,
+        "boqItemsCount": 0
+      },
+      "cloudSynced": true,
+      "cloudSyncTime": "2026-10-08T06:13:06.676Z",
+      "cloudProvider": "cloud_vault"
+    },
+    {
       "id": "vault_20261007_162912",
       "fileName": "rawasi_archive_bundle_20261007_162912.rawasi.enc",
       "filePath": "/app/applet/server/database/backups/cloud_vault/rawasi_archive_bundle_20261007_162912.rawasi.enc",

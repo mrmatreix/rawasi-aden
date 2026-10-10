@@ -6,19 +6,31 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const http = require('http');
-const db = require('../server/database/db');
+const app = require('../server/server');
 const seedClientPortal = require('../scripts/seed_client_portal');
 
 let server;
-let baseUrl = 'http://localhost:3000';
+let baseUrl = 'http://localhost:5050';
 let authToken = '';
-let clientUserId = 1;
-let clientId = 1;
+let seededProjectId = null;
 
 test.before(async () => {
-  // التأكد من تهيئة البيانات الأولية
+  // 1. تهيئة بيانات الاختبار الأولى
   await seedClientPortal();
+
+  // 2. تشغيل خادم الاختبار على المنفذ 5050
+  await new Promise((resolve) => {
+    server = app.listen(5050, () => {
+      console.log('🚀 Test Server listening on http://localhost:5050');
+      resolve();
+    });
+  });
+});
+
+test.after(async () => {
+  if (server) {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test('1. Client Auth: Login with valid credentials and receive OTP challenge', async () => {
@@ -37,7 +49,7 @@ test('1. Client Auth: Login with valid credentials and receive OTP challenge', a
   assert.strictEqual(data.requireOtp, true);
   assert.ok(data.tempToken, 'Should return tempToken for OTP verification');
 
-  // التحقق من الـ OTP باستخدام الـ PIN الاحتياطي أو الكود المولد
+  // التحقق من الـ OTP
   const verifyRes = await fetch(`${baseUrl}/api/client-portal/auth/verify-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -74,7 +86,16 @@ test('2. Security (Deny by Default): Verify internal financial metrics are NEVER
 });
 
 test('3. Security (Deny by Default): Verify Project Details never leaks actual cost or internal profit', async () => {
-  const res = await fetch(`${baseUrl}/api/client-portal/projects/1`, {
+  const listRes = await fetch(`${baseUrl}/api/client-portal/projects`, {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+  const listData = await listRes.json();
+  assert.strictEqual(listData.success, true);
+  assert.ok(listData.projects.length > 0, 'Client should have assigned projects');
+  
+  seededProjectId = listData.projects[0].id;
+
+  const res = await fetch(`${baseUrl}/api/client-portal/projects/${seededProjectId}`, {
     headers: { 'Authorization': `Bearer ${authToken}` }
   });
 
@@ -136,7 +157,7 @@ test('6. Messages: Send a new message to management', async () => {
       'Authorization': `Bearer ${authToken}`
     },
     body: JSON.stringify({
-      project_id: 1,
+      project_id: seededProjectId || 1,
       subject: 'استفسار فني للاختبار',
       priority: 'high',
       body: 'هذه رسالة اختبارية للتحقق من تكامل واجهة مراسلات العميل'

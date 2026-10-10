@@ -39,7 +39,57 @@ const Settings = {
       this.loadLogoutBackups();
       this.loadMysqlStatus();
       this.loadCloudBackupStatus();
+    } else if (tab === 'client_app') {
+      this.loadClientUsersForSettings();
     }
+  },
+
+  // ================== إدارة حسابات تطبيـق العمالاء ==================
+  async loadClientUsersForSettings() {
+    try {
+      const res = await fetch('/api/admin/client-users');
+      const json = await res.json();
+      if (!json.success) return;
+
+      const tbody = document.getElementById('clientUsersSettingsTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = '';
+      const users = json.users || [];
+
+      const statTot = document.getElementById('statClientUsersTotal');
+      const statAct = document.getElementById('statClientUsersActive');
+      if (statTot) statTot.textContent = users.length;
+      if (statAct) statAct.textContent = users.filter(u => u.status === 'active').length;
+
+      if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">لا توجد حسابات عملاء مسجلة حالياً للتطبيق. انقر على "+ إضافة حساب عميل جديد" لإنشاء حساب.</td></tr>';
+        return;
+      }
+
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${u.full_name}</strong></td>
+          <td>${u.client_company || u.client_name || '-'}</td>
+          <td><div>${u.email}</div><small style="color: var(--text-muted);">${u.phone || ''}</small></td>
+          <td><span class="badge" style="background: rgba(212, 175, 55, 0.2); color: #d4af37;">${u.role === 'owner' ? 'مالك (Owner)' : (u.role === 'manager' ? 'مدير (Manager)' : 'مطلع (Viewer)')}</span></td>
+          <td><span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">${u.assigned_projects_count || 0} مشاريع</span></td>
+          <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
+          <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? '#34d399' : '#f87171'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
+          <td>
+            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: #34d399; border-color: #10b981;">إدارة التفاصيل والصلاحيات ↗</a>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (e) {
+      console.error('Error loading client users for settings:', e);
+    }
+  },
+
+  openClientUserModal() {
+    window.open('/views/client_users.html', '_blank');
   },
 
   // ================== إعدادات الشركة ==================

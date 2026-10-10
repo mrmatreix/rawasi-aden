@@ -1767,3 +1767,99 @@ CREATE TABLE IF NOT EXISTS project_closeout_internal_audit_boq (
 CREATE INDEX IF NOT EXISTS idx_closeouts_proj ON project_closeouts(project_id);
 CREATE INDEX IF NOT EXISTS idx_client_boq_closeout ON project_closeout_client_boq(closeout_id);
 CREATE INDEX IF NOT EXISTS idx_audit_boq_closeout ON project_closeout_internal_audit_boq(closeout_id);
+
+-- =========================================================================
+-- جداول وقوادح حماية دفتر الأستاذ العام والتقارير المالية
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS cash_flow_account_mappings (
+    account_id INTEGER PRIMARY KEY REFERENCES accounts(id),
+    activity TEXT NOT NULL CHECK (activity IN ('operating','investing','financing','excluded')),
+    is_active INTEGER DEFAULT 1,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS party_account_mappings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_type TEXT NOT NULL CHECK (party_type IN ('client','supplier')),
+    party_id INTEGER NOT NULL,
+    account_id INTEGER NOT NULL REFERENCES accounts(id),
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(party_type, party_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_je_status_date ON journal_entries(status, date);
+CREATE INDEX IF NOT EXISTS idx_jel_entry_account ON journal_entry_lines(entry_id, account_id);
+CREATE INDEX IF NOT EXISTS idx_jel_account ON journal_entry_lines(account_id);
+CREATE INDEX IF NOT EXISTS idx_jel_project ON journal_entry_lines(project_id);
+CREATE INDEX IF NOT EXISTS idx_jel_cost_center ON journal_entry_lines(cost_center_id);
+CREATE INDEX IF NOT EXISTS idx_payments_date_type_status ON payments(date, type, status);
+CREATE INDEX IF NOT EXISTS idx_expenses_date_status ON expenses(date, status);
+
+CREATE TRIGGER IF NOT EXISTS trg_journal_line_leaf_insert
+BEFORE INSERT ON journal_entry_lines
+FOR EACH ROW
+WHEN EXISTS (
+    SELECT 1
+    FROM accounts a
+    WHERE a.id = NEW.account_id
+      AND EXISTS (
+          SELECT 1
+          FROM accounts c
+          WHERE c.parent_id = a.id
+      )
+)
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'لا يمكن تسجيل العملية على حساب أب. يجب اختيار الحساب الفرعي الأخير.'
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_journal_line_leaf_update
+BEFORE UPDATE OF account_id ON journal_entry_lines
+FOR EACH ROW
+WHEN EXISTS (
+    SELECT 1
+    FROM accounts a
+    WHERE a.id = NEW.account_id
+      AND EXISTS (
+          SELECT 1
+          FROM accounts c
+          WHERE c.parent_id = a.id
+      )
+)
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'لا يمكن تحديث القيد إلى حساب أب. يجب اختيار الحساب الفرعي الأخير.'
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_journal_line_values_insert
+BEFORE INSERT ON journal_entry_lines
+FOR EACH ROW
+WHEN (NEW.debit <= 0 AND NEW.credit <= 0)
+  OR (NEW.debit > 0 AND NEW.credit > 0)
+  OR (NEW.debit < 0 OR NEW.credit < 0)
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'سطر القيد غير صالح: يجب أن يكون إما مدين أكبر من الصفر فقط أو دائن أكبر من الصفر فقط.'
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_journal_line_values_update
+BEFORE UPDATE OF debit, credit ON journal_entry_lines
+FOR EACH ROW
+WHEN (NEW.debit <= 0 AND NEW.credit <= 0)
+  OR (NEW.debit > 0 AND NEW.credit > 0)
+  OR (NEW.debit < 0 OR NEW.credit < 0)
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'سطر القيد غير صالح: يجب أن يكون إما مدين أكبر من الصفر فقط أو دائن أكبر من الصفر فقط.'
+    );
+END;
+

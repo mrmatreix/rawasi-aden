@@ -13,8 +13,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261004-vmtb">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261004-vmtb">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261007-pj6k">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261007-pj6k">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -502,6 +502,12 @@
                 <span>تقرير التدفقات النقدية</span>
               </a>
             </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('cashFlow', this)">
+                <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+                <span>توقعات التدفق النقدي والسيولة (Cash Flow)</span>
+              </a>
+            </li>
           </ul>
         </li>
 
@@ -609,6 +615,12 @@
               <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('projectCloseout', this)">
                 <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                 <span>إغلاق المشروع والتقارير التحليلية (CQRS)</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-sub-item" href="javascript:void(0)" onclick="App.navigate('contractLifecycle', this)">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <span>دورة حياة العقود والتنبيهات الذكية</span>
               </a>
             </li>
           </ul>
@@ -1129,16 +1141,19 @@
                   <option value="شيك">شيك</option>
                 </select>
               </div>
-              <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
-              <div id="rcCheckFieldsRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+              <!-- حقول التحويل البنكي والشيك الشرطية -->
+              <div id="rcCheckFieldsRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
+                    <label style="color: #38bdf8; font-weight: bold; font-size: 0.78rem;">حساب البنك <span style="color: var(--accent-red);">*</span></label>
+                    <select id="rcBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
+                      <option value="">اختر حساب البنك...</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="rcCheckNoGroup" style="margin-bottom: 0; display: none;">
                     <label style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
                     <input type="text" id="rcCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
-                  </div>
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.78rem;">البنك المسحوب عليه</label>
-                    <input type="text" id="rcBankName" class="form-control" placeholder="اسم البنك">
+                    <input type="hidden" id="rcBankName" value="">
                   </div>
                 </div>
               </div>
@@ -1241,16 +1256,19 @@
                   <option value="شيك">شيك</option>
                 </select>
               </div>
-              <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
-              <div id="expCheckFieldsRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+              <!-- حقول الصرف البنكي والشيك -->
+              <div id="expCheckFieldsRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
+                    <label style="color: #38bdf8; font-weight: bold; font-size: 0.78rem;">حساب البنك <span style="color: var(--accent-red);">*</span></label>
+                    <select id="expBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
+                      <option value="">اختر حساب البنك...</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="expCheckNoGroup" style="margin-bottom: 0; display: none;">
                     <label style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
                     <input type="text" id="expCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
-                  </div>
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.78rem;">البنك المسحوب عليه</label>
-                    <input type="text" id="expBankName" class="form-control" placeholder="اسم البنك">
+                    <input type="hidden" id="expBankName" value="">
                   </div>
                 </div>
               </div>
@@ -2782,6 +2800,210 @@
                   <td id="clientFooterNetPayable" style="text-align: right; font-size: 1.15rem; color: var(--accent-green);">-</td>
                 </tr>
               </tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================== دورة حياة العقود والتنبيهات الذكية ================== -->
+      <section id="contractLifecycleView" class="app-view-section" style="display: none;">
+        <div class="page-header-row" style="align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+          <div>
+            <h2 class="page-title">دورة حياة العقود والتنبيهات التعاقدية الذكية</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">إدارة الـ 10 مراحل لدورة حياة العقود، التوقيع الرقمي المشفر (SHA-256)، ورادار التنبيهات الاستباقية للغرامات والاستحقاقات</p>
+          </div>
+          <div class="page-actions" style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="ContractAlertsUI.loadDashboard()">🔄 تحديث التنبيهات</button>
+          </div>
+        </div>
+
+        <!-- بطاقات المؤشرات الرقمية للتنبيهات والمخاطر -->
+        <div class="kpi-grid" style="margin-bottom: 20px;">
+          <div class="kpi-card" style="border-right: 4px solid #ef4444;">
+            <div class="kpi-content">
+              <span class="kpi-label">تنبيهات حرجة (Critical)</span>
+              <span class="kpi-value" id="caKpiCritical" style="color: #f87171;">0</span>
+            </div>
+            <div class="kpi-icon-wrap" style="color: #ef4444;">🚨</div>
+          </div>
+          <div class="kpi-card" style="border-right: 4px solid #f59e0b;">
+            <div class="kpi-content">
+              <span class="kpi-label">تحذيرات هامة (Warning)</span>
+              <span class="kpi-value" id="caKpiWarning" style="color: #fbbf24;">0</span>
+            </div>
+            <div class="kpi-icon-wrap" style="color: #f59e0b;">⚠️</div>
+          </div>
+          <div class="kpi-card" style="border-right: 4px solid #0284c7;">
+            <div class="kpi-content">
+              <span class="kpi-label">تنبيهات معلوماتية (Info)</span>
+              <span class="kpi-value" id="caKpiInfo" style="color: #38bdf8;">0</span>
+            </div>
+            <div class="kpi-icon-wrap" style="color: #0284c7;">ℹ️</div>
+          </div>
+          <div class="kpi-card" style="border-right: 4px solid var(--gold-primary);">
+            <div class="kpi-content">
+              <span class="kpi-label">إجمالي المبالغ تحت المخاطرة</span>
+              <span class="kpi-value" id="caKpiRisk" style="color: var(--gold-light);">0 $</span>
+            </div>
+            <div class="kpi-icon-wrap" style="color: var(--gold-primary);">🛡️</div>
+          </div>
+        </div>
+
+        <!-- معالج دورة حياة العقد (Lifecycle 10-Stage Pipeline) -->
+        <div class="panel-card" style="margin-bottom: 20px; padding: 18px; border: 1px solid rgba(212, 175, 55, 0.3);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">📜</span>
+              <h3 style="margin: 0; color: var(--gold-light); font-size: 1.05rem;">متابعة الدورة المستندية ومراحل العقد الـ 10</h3>
+            </div>
+            <div style="min-width: 280px;">
+              <select id="contractSelectLifecycle" class="form-control" onchange="ContractAlertsUI.onContractSelectChange(this.value)">
+                <option value="">اختر المشروع لعرض دورة حياة عقده...</option>
+              </select>
+            </div>
+          </div>
+          <div id="lifecycleWizardWrap">
+            <div style="text-align: center; padding: 25px; color: var(--text-secondary); background: rgba(0,0,0,0.15); border-radius: 8px;">
+              يرجى اختيار مشروع من القائمة أعلاه لعرض مراحل العقد، التوقيع الرقمي المشفر (SHA-256)، وخيارات الترحيل بين المراحل.
+            </div>
+          </div>
+        </div>
+
+        <!-- جدول التنبيهات الذكية والرادار -->
+        <div class="panel-card" style="padding: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">⚡</span>
+              <h3 style="margin: 0; font-size: 1.05rem;">سجل التنبيهات التعاقدية النشطة</h3>
+            </div>
+            <!-- فلاتر التنبيهات -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <select id="caFilterSeverity" class="form-control" style="width: auto; padding: 4px 8px;" onchange="ContractAlertsUI.loadDashboard()">
+                <option value="">كافة مستويات الخطورة</option>
+                <option value="critical">حرج (Critical)</option>
+                <option value="warning">تحذير (Warning)</option>
+                <option value="info">معلوماتي (Info)</option>
+              </select>
+              <select id="caFilterType" class="form-control" style="width: auto; padding: 4px 8px;" onchange="ContractAlertsUI.loadDashboard()">
+                <option value="">كافة أنواع التنبيهات</option>
+                <option value="expiry">انتهاء العقد</option>
+                <option value="ipc_due">موعد مستخلص</option>
+                <option value="advance_payment">استرداد دفعة مقدمة</option>
+                <option value="retention_due">محتجز ضمان</option>
+                <option value="penalty">غرامات تأخير</option>
+              </select>
+              <select id="caFilterStatus" class="form-control" style="width: auto; padding: 4px 8px;" onchange="ContractAlertsUI.loadDashboard()">
+                <option value="pending">المعلقة فقط</option>
+                <option value="acknowledged">تم الإقرار بها</option>
+                <option value="resolved">المعالجة / المحلولة</option>
+                <option value="">الكل</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th style="width: 110px;">الخطورة</th>
+                  <th style="width: 130px;">نوع التنبيه</th>
+                  <th style="width: 160px;">المشروع</th>
+                  <th>وصف التنبيه والتفاصيل التعاقدية</th>
+                  <th style="width: 130px;">المبلغ المعرض للخطر</th>
+                  <th style="width: 100px;">الحالة</th>
+                  <th style="width: 140px; text-align: center;">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="contractAlertsTableBody">
+                <tr><td colspan="7" style="text-align: center; padding: 24px;">جاري تحميل التنبيهات...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================== توقعات التدفق النقدي والسيولة ================== -->
+      <section id="cashFlowView" class="app-view-section" style="display: none;">
+        <div class="page-header-row" style="align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+          <div>
+            <h2 class="page-title">توقعات التدفق النقدي والسيولة (Cash Flow Projection)</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">تخطيط ومحاكاة السيولة النقدية، التحصيلات والالتزامات المستقبلية، وسيناريوهات اختبار الضغط المالي</p>
+          </div>
+          <div class="page-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label style="font-size: 0.82rem; color: #94a3b8;">من:</label>
+              <input type="month" id="cfMonthFrom" class="form-control" style="width: 140px; padding: 4px 8px;">
+              <label style="font-size: 0.82rem; color: #94a3b8;">إلى:</label>
+              <input type="month" id="cfMonthTo" class="form-control" style="width: 140px; padding: 4px 8px;">
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="CashFlowUI.loadProjections()">تحديث الفلترة</button>
+            <button class="btn btn-primary btn-sm" onclick="CashFlowUI.regenerate()">⚡ إعادة احتساب تلقائي من البيانات الحية</button>
+          </div>
+        </div>
+
+        <!-- بطاقات المؤشرات المالية العامة للتدفق -->
+        <div class="kpi-grid" style="margin-bottom: 20px;">
+          <div class="kpi-card">
+            <div class="kpi-content">
+              <span class="kpi-label">الرصيد النقدي الافتتاحي (حركة الصندوق)</span>
+              <span class="kpi-value" id="cfKpiInitialCash" style="color: var(--accent-blue);">0 $</span>
+            </div>
+            <div class="kpi-icon-wrap">🏦</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-content">
+              <span class="kpi-label">إجمالي المقبوضات المتوقعة (Inflows)</span>
+              <span class="kpi-value" id="cfKpiTotalIn" style="color: #4ade80;">0 $</span>
+            </div>
+            <div class="kpi-icon-wrap" style="color: #22c55e;">📈</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-content">
+              <span class="kpi-label">إجمالي المدفوعات والالتزامات (Outflows)</span>
+              <span class="kpi-value" id="cfKpiTotalOut" style="color: #f87171;">0 $</span>
+            </div>
+            <div class="kpi-icon-wrap" style="color: #ef4444;">📉</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-content">
+              <span class="kpi-label">صافي التدفق النقدي للفترة (Net Cash)</span>
+              <span class="kpi-value" id="cfKpiNetCash" style="color: var(--gold-light);">0 $</span>
+            </div>
+            <div class="kpi-icon-wrap" style="color: var(--gold-primary);">⚖️</div>
+          </div>
+        </div>
+
+        <!-- سيناريوهات المحاكاة المالية (Realistic, Optimistic, Pessimistic) -->
+        <div class="panel-card" style="margin-bottom: 20px; padding: 18px; border: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.25rem;">🎲</span>
+            <h3 style="margin: 0; font-size: 1.05rem;">سيناريوهات محاكاة التدفق النقدي واختبار الضغط (Stress Testing)</h3>
+          </div>
+          <div id="cfScenariosWrap">
+            <!-- سيتم توليد البطاقات الثلاث آلياً بواسطة CashFlowUI.renderScenarioCards -->
+          </div>
+        </div>
+
+        <!-- جدول التوقعات الشهرية التفصيلي -->
+        <div class="panel-card" style="padding: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <h3 style="margin: 0; font-size: 1.05rem;">جدول التدفق النقدي الشهري المتوقع والرصيد التراكمي</h3>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th style="width: 110px;">الشهر (Period)</th>
+                  <th style="width: 140px;">التحصيلات المتوقعة (+)</th>
+                  <th style="width: 140px;">المدفوعات المتوقعة (-)</th>
+                  <th style="width: 140px;">صافي التدفق (+ / -)</th>
+                  <th style="width: 160px;">الرصيد التراكمي المتوقع</th>
+                  <th>توزيع المكونات الرئيسية للشهر</th>
+                </tr>
+              </thead>
+              <tbody id="cashFlowMonthsTableBody">
+                <tr><td colspan="6" style="text-align: center; padding: 24px;">جاري تحميل جدول التدفقات...</td></tr>
+              </tbody>
             </table>
           </div>
         </div>
@@ -6127,7 +6349,7 @@
             <label style="margin-bottom: 0;">العميل / المستلم منه <span style="color: var(--accent-red);">*</span></label>
             <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('modalRcClientSelect')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة عميل جديد</a>
           </div>
-          <input list="modalRcClientDatalist" id="modalRcClientInput" class="form-control" placeholder="اختر العميل أو اكتب اسمه مباشرة..." required oninput="Accounting.onClientInputChange(this.value)">
+          <input list="modalRcClientDatalist" id="modalRcClientInput" class="form-control" placeholder="اختر العميل أو اكتب اسمه مباشرة..." required oninput="Accounting.onClientInputChange(this.value)" onchange="Accounting.onClientInputChange(this.value)">
           <datalist id="modalRcClientDatalist"></datalist>
           <input type="hidden" id="modalRcClientSelect" value="">
         </div>
@@ -6193,26 +6415,36 @@
             <input type="date" id="modalRcDate" class="form-control" required>
           </div>
           <div class="form-group">
-            <label>طريقة الدفع</label>
+            <label>طريقة الدفع (Payment Method)</label>
             <select id="modalRcPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('modalRcPaymentMethod', 'modalRcCheckRow')">
-              <option value="تحويل بنكي">تحويل بنكي</option>
-              <option value="نقدي">نقدي</option>
-              <option value="شيك">شيك</option>
+              <option value="CASH" selected>نقداً (CASH)</option>
+              <option value="BANK_TRANSFER">تحويل بنكي (BANK_TRANSFER)</option>
+              <option value="CREDIT_CARD">بطاقة ائتمانية (CREDIT_CARD)</option>
+              <option value="DEBIT_CARD">بطاقة خصم (DEBIT_CARD)</option>
+              <option value="WALLET">محفظة إلكترونية (WALLET)</option>
+              <option value="ONLINE_GATEWAY">بوابة دفع إلكترونية (ONLINE_GATEWAY)</option>
+              <option value="CHEQUE">شيك بنكي (CHEQUE)</option>
+              <option value="POS">نقطة بيع (POS)</option>
             </select>
           </div>
         </div>
-        <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
-        <div id="modalRcCheckRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;">
+        <!-- تفاصيل الحساب المالي (Financial Account) المنفصل تماماً عن طريقة الدفع والمرتبط بحساب فرعي أخير -->
+        <div id="modalRcCheckRow" style="background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="color: var(--gold-light); font-weight: bold; font-size: 0.82rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
-              <input type="text" id="modalRcCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+              <label id="modalRcFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">الحساب المالي (Financial Account) <span style="color: var(--accent-red);">*</span></label>
+              <select id="modalRcFinancialAccountSelect" class="form-control" onchange="Accounting.onFinancialAccountChange(this.value, 'modalRcFaHint')">
+                <option value="">اختر الحساب المالي...</option>
+              </select>
+              <select id="modalRcBankAccountSelect" style="display: none;"></select>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem;">البنك المسحوب عليه</label>
-              <input type="text" id="modalRcBankName" class="form-control" placeholder="اسم البنك">
+            <div class="form-group" id="modalRcCheckNoGroup" style="margin-bottom: 0;">
+              <label id="modalRcRefLabel" style="color: var(--gold-light); font-weight: bold; font-size: 0.82rem;">المرجع / رقم الشيك / المعاملة</label>
+              <input type="text" id="modalRcCheckNo" class="form-control" placeholder="رقم الشيك أو المرجع البنكي">
+              <input type="hidden" id="modalRcBankName" value="">
             </div>
           </div>
+          <div id="modalRcFaHint" style="font-size: 0.76rem; color: var(--gold-light); margin-top: 5px; font-weight: 500;"></div>
         </div>
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
@@ -6312,26 +6544,36 @@
             <input type="date" id="modalExpDate" class="form-control" required>
           </div>
           <div class="form-group">
-            <label>طريقة الدفع</label>
+            <label>طريقة الصرف (Payment Method)</label>
             <select id="modalExpPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('modalExpPaymentMethod', 'modalExpCheckRow')">
-              <option value="نقدي">نقدي</option>
-              <option value="تحويل بنكي">تحويل بنكي</option>
-              <option value="شيك">شيك</option>
+              <option value="CASH" selected>نقداً (CASH)</option>
+              <option value="BANK_TRANSFER">تحويل بنكي (BANK_TRANSFER)</option>
+              <option value="CREDIT_CARD">بطاقة ائتمانية (CREDIT_CARD)</option>
+              <option value="DEBIT_CARD">بطاقة خصم (DEBIT_CARD)</option>
+              <option value="WALLET">محفظة إلكترونية (WALLET)</option>
+              <option value="ONLINE_GATEWAY">بوابة دفع إلكترونية (ONLINE_GATEWAY)</option>
+              <option value="CHEQUE">شيك بنكي (CHEQUE)</option>
+              <option value="POS">نقطة بيع (POS)</option>
             </select>
           </div>
         </div>
-        <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
-        <div id="modalExpCheckRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;">
+        <!-- تفاصيل الحساب المالي (Financial Account) المنفصل تماماً عن طريقة الصرف والمرتبط بحساب فرعي أخير -->
+        <div id="modalExpCheckRow" style="background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="color: var(--accent-red); font-weight: bold; font-size: 0.82rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
-              <input type="text" id="modalExpCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+              <label id="modalExpFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">الحساب المالي المصروف منه (Financial Account) <span style="color: var(--accent-red);">*</span></label>
+              <select id="modalExpFinancialAccountSelect" class="form-control" onchange="Accounting.onFinancialAccountChange(this.value, 'modalExpFaHint')">
+                <option value="">اختر الحساب المالي...</option>
+              </select>
+              <select id="modalExpBankAccountSelect" style="display: none;"></select>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem;">البنك المسحوب عليه</label>
-              <input type="text" id="modalExpBankName" class="form-control" placeholder="اسم البنك">
+            <div class="form-group" id="modalExpCheckNoGroup" style="margin-bottom: 0;">
+              <label id="modalExpRefLabel" style="color: var(--gold-light); font-weight: bold; font-size: 0.82rem;">المرجع / رقم الشيك / المعاملة</label>
+              <input type="text" id="modalExpCheckNo" class="form-control" placeholder="رقم الشيك أو المرجع البنكي">
+              <input type="hidden" id="modalExpBankName" value="">
             </div>
           </div>
+          <div id="modalExpFaHint" style="font-size: 0.76rem; color: var(--gold-light); margin-top: 5px; font-weight: 500;"></div>
         </div>
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
@@ -6477,12 +6719,12 @@
           <strong id="modalJeEntryNoBadge" style="font-family: monospace; font-size: 1.1rem; color: #38bdf8; letter-spacing: 1px;">JV-2026-XXXX</strong>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; margin-bottom: 12px;">
-          <div class="form-group">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1.5fr 2fr; gap: 12px; margin-bottom: 12px; align-items: end;">
+          <div class="form-group" style="margin-bottom: 0;">
             <label>التاريخ <span style="color: var(--accent-red);">*</span></label>
             <input type="date" id="modalJeDate" class="form-control" required>
           </div>
-          <div class="form-group">
+          <div class="form-group" style="margin-bottom: 0;">
             <label>العملة</label>
             <select id="modalJeCurrency" class="form-control" onchange="Accounting.onJournalCurrencyChange()">
               <option value="ر.ي" selected>ريال يمني (ر.ي)</option>
@@ -6490,7 +6732,13 @@
               <option value="$">دولار أمريكي ($)</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>مركز التكلفة (موحد لكافة الأطراف)</label>
+            <select id="modalJeCostCenter" class="form-control" style="border-color: rgba(56, 189, 248, 0.5);">
+              <option value="">اختر مركز التكلفة...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
             <label>البيان العام للقيد <span style="color: var(--accent-red);">*</span></label>
             <input type="text" id="modalJeDescription" class="form-control" placeholder="مثال: إثبات سداد مصاريف موقع / تسوية حسابات..." required>
           </div>
@@ -6523,11 +6771,10 @@
             <table class="custom-table" style="margin-bottom: 0;">
               <thead>
                 <tr>
-                  <th style="width: 25%;">الحساب الفرعي (دليل الحسابات) <span style="color: var(--accent-red);">*</span></th>
-                  <th style="width: 20%;">مركز التكلفة</th>
-                  <th style="width: 15%;">مدين (منه)</th>
-                  <th style="width: 15%;">دائن (له)</th>
-                  <th style="width: 20%;">بيان السطر / الملاحظات</th>
+                  <th style="width: 35%;">الحساب الفرعي (دليل الحسابات) <span style="color: var(--accent-red);">*</span></th>
+                  <th style="width: 18%;">مدين (منه)</th>
+                  <th style="width: 18%;">دائن (له)</th>
+                  <th style="width: 24%;">بيان السطر / الملاحظات</th>
                   <th style="width: 5%; text-align: center;">حذف</th>
                 </tr>
               </thead>
@@ -9809,26 +10056,27 @@
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/auth.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/auth.js?v=1.0.0.20261007-pj6k"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/projects.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/accounting.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/inventory.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/hr.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/settings.js?v=1.0.0.20261004-vmtb"></script>
-  <script src="js/app.js?v=1.0.0.20261004-vmtb"></script>
+  <script src="js/reports.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/projects.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/accounting.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/inventory.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/hr.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/settings.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/contracts_cashflow.js?v=1.0.0.20261007-pj6k"></script>
+  <script src="js/app.js?v=1.0.0.20261007-pj6k"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261004-vmtb')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261007-pj6k')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

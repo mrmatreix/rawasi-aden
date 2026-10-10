@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام تصنيف المدفوعات الخماسي — رواسي عدن للهندسة والمقاولات</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/payment-wizard.css">
+</head>
+<body>
+
+  <div class="payment-system-container">
+    
+    <!-- Header -->
+    <header class="system-header">
+      <div class="header-title">
+        <h1><i class="fas fa-layer-group"></i> نظام تصنيف المدفوعات خماسي الطبقات</h1>
+        <p>رواسي عدن للهندسة والمقاولات — وحدة الدفع والتحصيل والتكامل المحاسبي الذكي</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick="PaymentWizard.switchView('transactions')">
+          <i class="fas fa-list"></i> سجل المعاملات
+        </button>
+        <button class="btn btn-primary" onclick="PaymentWizard.switchView('wizard')">
+          <i class="fas fa-plus-circle"></i> معاملة جديدة (Wizard)
+        </button>
+      </div>
+    </header>
+
+    <!-- Alert Message Box -->
+    <div id="alertBox" style="display: none; margin-bottom: 20px; padding: 14px 18px; border-radius: 8px; font-weight: bold; font-size: 14px;"></div>
+
+    <!-- WIZARD VIEW -->
+    <div id="wizardView">
+      
+      <!-- Progress Bar -->
+      <div class="wizard-progress-card">
+        <div class="wizard-steps-indicator">
+          <div class="step-item active" data-step="1" onclick="PaymentWizard.goToStep(1)">
+            <div class="step-number"><i class="fas fa-university"></i></div>
+            <div class="step-label">1. السياق</div>
+          </div>
+          <div class="step-item" data-step="2" onclick="PaymentWizard.goToStep(2)">
+            <div class="step-number"><i class="fas fa-wallet"></i></div>
+            <div class="step-label">2. الوسيلة</div>
+          </div>
+          <div class="step-item" data-step="3" onclick="PaymentWizard.goToStep(3)">
+            <div class="step-number"><i class="fas fa-building"></i></div>
+            <div class="step-label">3. القناة</div>
+          </div>
+          <div class="step-item" data-step="4" onclick="PaymentWizard.goToStep(4)">
+            <div class="step-number"><i class="fas fa-clock"></i></div>
+            <div class="step-label">4. التوقيت</div>
+          </div>
+          <div class="step-item" data-step="5" onclick="PaymentWizard.goToStep(5)">
+            <div class="step-number"><i class="fas fa-file-alt"></i></div>
+            <div class="step-label">5. المستند</div>
+          </div>
+          <div class="step-item" data-step="6" onclick="PaymentWizard.goToStep(6)">
+            <div class="step-number"><i class="fas fa-edit"></i></div>
+            <div class="step-label">6. التفاصيل</div>
+          </div>
+          <div class="step-item" data-step="7" onclick="PaymentWizard.goToStep(7)">
+            <div class="step-number"><i class="fas fa-check-double"></i></div>
+            <div class="step-label">7. المعاينة والتأكيد</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP CONTENT CONTAINER -->
+      <div class="wizard-content-card" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 28px; margin-bottom: 24px;">
+
+        <!-- STEP 1: Context -->
+        <div class="wizard-step" id="step1">
+          <h2 style="color: var(--accent-gold); font-size: 20px; margin-top: 0;">الطبقة 1: 🏛️ سياق الدفع (Context) — لماذا ندفع؟</h2>
+          <p style="color: var(--text-secondary); font-size: 14px;">حدد السبب الرئيسي لإجراء هذه العملية المالية:</p>
+          <div class="options-grid" id="contextGrid"></div>
+        </div>
+
+        <!-- STEP 2: Instrument -->
+        <div class="wizard-step" id="step2" style="display: none;">
+          <h2 style="color: var(--accent-gold); font-size: 20px; margin-top: 0;">الطبقة 2: 💰 وسيلة الدفع (Instrument) — بأي أداة؟</h2>
+          <p style="color: var(--text-secondary); font-size: 14px;">اختر أداة الدفع أو التحصيل المستخدمة في العملية:</p>
+          <div class="options-grid" id="instrumentGrid"></div>
+        </div>
+
+        <!-- STEP 3: Channel -->
+        <div class="wizard-step" id="step3" style="display: none;">
+          <h2 style="color: var(--accent-gold); font-size: 20px; margin-top: 0;">الطبقة 3: 🏦 القناة (Channel) — من أي جهة؟</h2>
+          <p style="color: var(--text-secondary); font-size: 14px;">حدد الحساب المصرفي أو الصندوق الرئيسي المنفذ للعملية:</p>
+          <div class="options-grid" id="channelGrid"></div>
+        </div>
+
+        <!-- STEP 4: Timing -->
+        <div class="wizard-step" id="step4" style="display: none;">
+          <h2 style="color: var(--accent-gold); font-size: 20px; margin-top: 0;">الطبقة 4: ⏱️ التوقيت (Timing) — متى ندفع؟</h2>
+          <p style="color: var(--text-secondary); font-size: 14px;">حدد الإطار الزمني لتسوية المقاصة والاستحقاق:</p>
+          <div class="options-grid" id="timingGrid"></div>
+        </div>
+
+        <!-- STEP 5: Document -->
+        <div class="wizard-step" id="step5" style="display: none;">
+          <h2 style="color: var(--accent-gold); font-size: 20px; margin-top: 0;">الطبقة 5: 📋 المستند (Document) — بأي وثيقة؟</h2>
+          <p style="color: var(--text-secondary); font-size: 14px;">اختر المستند أو الوثيقة الثبوتية المعززة للعملية:</p>
+          <div class="options-grid" id="documentGrid"></div>
+        </div>
+
+        <!-- STEP 6: Detailed Inputs -->
+        <div class="wizard-step" id="step6" style="display: none;">
+          <h2 style="color: var(--accent-gold); font-size: 20px; margin-top: 0;">الخطوة 6: 📝 البيانات التفصيلية والحقول الشرطية</h2>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+            
+            <div class="form-group">
+              <label class="form-label">اتجاه الحركة المالية *</label>
+              <select class="form-select" id="inputDirection" onchange="PaymentWizard.recalculate()">
+                <option value="IN">قبض / تحصيل (Receipt - IN)</option>
+                <option value="OUT">صرف / سداد (Disbursement - OUT)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">تاريخ الحركة *</label>
+              <input type="date" class="form-control" id="inputDate">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">المبلغ الإجمالي *</label>
+              <input type="number" step="0.01" class="form-control" id="inputAmount" placeholder="0.00" oninput="PaymentWizard.recalculate()">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">العملة *</label>
+              <select class="form-select" id="inputCurrency" onchange="PaymentWizard.recalculate()">
+                <option value="USD">دولار أمريكي (USD)</option>
+                <option value="YER">ريال يمني (YER)</option>
+                <option value="SAR">ريال سعودي (SAR)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">سعر الصرف (مقابل USD)</label>
+              <input type="number" step="0.0001" class="form-control" id="inputExchangeRate" value="1.0000" oninput="PaymentWizard.recalculate()">
+            </div>
+
+            <!-- Dynamic Party Selection -->
+            <div class="form-group" id="groupClient">
+              <label class="form-label">العميل المرتبط</label>
+              <select class="form-select" id="inputClientId">
+                <option value="">-- اختر العميل --</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="groupSupplier">
+              <label class="form-label">المورد المرتبط</label>
+              <select class="form-select" id="inputSupplierId">
+                <option value="">-- اختر المورد --</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">المشروع</label>
+              <select class="form-select" id="inputProjectId">
+                <option value="">-- اختر المشروع (اختياري) --</option>
+              </select>
+            </div>
+
+            <!-- Conditional Cheque Fields -->
+            <div class="form-group conditional-field" id="fieldChequeNo" style="display: none;">
+              <label class="form-label">رقم الشيك *</label>
+              <input type="text" class="form-control" id="inputChequeNo" placeholder="أدخل رقم الشيك">
+            </div>
+
+            <div class="form-group conditional-field" id="fieldBankName" style="display: none;">
+              <label class="form-label">اسم البنك المسحوب عليه *</label>
+              <input type="text" class="form-control" id="inputBankName" placeholder="مثال: بنك التضامن">
+            </div>
+
+            <!-- Conditional IBAN Field -->
+            <div class="form-group conditional-field" id="fieldIban" style="display: none;">
+              <label class="form-label">رقم الآيبان (IBAN) / الحساب *</label>
+              <input type="text" class="form-control" id="inputIban" placeholder="YE93...">
+            </div>
+
+            <!-- Conditional Wallet Phone -->
+            <div class="form-group conditional-field" id="fieldWalletPhone" style="display: none;">
+              <label class="form-label">رقم هاتف المحفظة الرقمية *</label>
+              <input type="text" class="form-control" id="inputWalletPhone" placeholder="77XXXXXXX">
+            </div>
+
+            <!-- Conditional Document Fields -->
+            <div class="form-group conditional-field" id="fieldDocNo">
+              <label class="form-label">رقم المستند الثبوتي</label>
+              <input type="text" class="form-control" id="inputDocNumber" placeholder="رقم السند/الفاتورة">
+            </div>
+
+            <div class="form-group conditional-field" id="fieldDocFile">
+              <label class="form-label">رابط/ملف المستند</label>
+              <input type="text" class="form-control" id="inputDocFileUrl" placeholder="https://...">
+            </div>
+
+          </div>
+
+          <div class="form-group" style="margin-top: 16px;">
+            <label class="form-label">ملاحظات وبيان المعاملة</label>
+            <textarea class="form-control" id="inputNotes" rows="3" placeholder="اكتب بياناً تفصيلياً للعملية..."></textarea>
+          </div>
+        </div>
+
+        <!-- STEP 7: Review & Expected Journal Entry Preview -->
+        <div class="wizard-step" id="step7" style="display: none;">
+          <h2 style="color: var(--accent-gold); font-size: 20px; margin-top: 0;">الخطوة 7: 🔍 المراجعة وعرض القيد المحاسبي المتوقع قبل الحفظ</h2>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; background: var(--bg-card); padding: 16px; border-radius: 8px;">
+            <div><strong style="color: var(--text-secondary);">السياق:</strong> <span id="revContext"></span></div>
+            <div><strong style="color: var(--text-secondary);">الوسيلة:</strong> <span id="revInstrument"></span></div>
+            <div><strong style="color: var(--text-secondary);">القناة:</strong> <span id="revChannel"></span></div>
+            <div><strong style="color: var(--text-secondary);">التوقيت:</strong> <span id="revTiming"></span></div>
+            <div><strong style="color: var(--text-secondary);">المستند:</strong> <span id="revDocument"></span></div>
+            <div><strong style="color: var(--text-secondary);">المبلغ الصافي:</strong> <span id="revNet" style="color: var(--accent-gold); font-weight: bold;"></span></div>
+          </div>
+
+          <!-- Journal Entry Box -->
+          <div class="journal-preview-card">
+            <div class="preview-header">
+              <h3 style="margin: 0; color: var(--accent-gold); font-size: 16px;">
+                <i class="fas fa-balance-scale"></i> معاينة القيد المحاسبي المزدوج التلقائي (Auto-Journal Entry)
+              </h3>
+              <span class="journal-balance-status balanced" id="journalStatusBadge">
+                <i class="fas fa-check-circle"></i> القيد متزن محاسبياً
+              </span>
+            </div>
+
+            <table class="journal-table">
+              <thead>
+                <tr>
+                  <th>رمز الحساب</th>
+                  <th>اسم الحساب المحاسبي (Leaf Account)</th>
+                  <th>مدين (Debit)</th>
+                  <th>دائن (Credit)</th>
+                  <th>البيان والملحوظات</th>
+                </tr>
+              </thead>
+              <tbody id="journalTableBody">
+                <!-- Calculated dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Navigation Buttons -->
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-secondary" id="btnPrev" onclick="PaymentWizard.prevStep()" style="visibility: hidden;">
+          <i class="fas fa-arrow-right"></i> السابق
+        </button>
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-secondary" onclick="PaymentWizard.saveDraft()">
+            <i class="fas fa-save"></i> حفظ كمسودة
+          </button>
+          <button class="btn btn-primary" id="btnNext" onclick="PaymentWizard.nextStep()">
+            التالي <i class="fas fa-arrow-left"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TRANSACTIONS LIST VIEW -->
+    <div id="transactionsView" style="display: none;">
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px;">
+        <h2 style="color: var(--accent-gold); margin-top: 0;">سجل المعاملات الخماسية الأخيرة</h2>
+        <div style="overflow-x: auto;">
+          <table class="journal-table" style="margin-top: 16px;">
+            <thead>
+              <tr>
+                <th>رقم المعاملة</th>
+                <th>التاريخ</th>
+                <th>الاتجاه</th>
+                <th>السياق</th>
+                <th>الوسيلة</th>
+                <th>القناة</th>
+                <th>المبلغ</th>
+                <th>حالة المقاصة</th>
+                <th>رقم القيد</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="txTableBody">
+              <!-- Loaded via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/payment-wizard.js"></script>
+</body>
+</html>

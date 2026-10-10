@@ -4,6 +4,7 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
+const AccountingService = require('../services/accountingService');
 const FinancialControlService = {
   ...require('../services/financialControlService')
 };
@@ -102,6 +103,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       payment_method = 'نقدي',
       check_no,
       bank_name,
+      bank_account_id,
       date = new Date().toISOString().split('T')[0],
       notes,
       recipient,
@@ -118,8 +120,28 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'المبلغ مطلوب ويجب أن يكون أكبر من الصفر' });
     }
 
+    if (!account_id) {
+      return res.status(400).json({ success: false, message: 'يرجى اختيار الحساب المالي لسند الصرف' });
+    }
+
+    // التحقق الصارم من الحساب المالي المختار أنه حساب فرعي أخير
+    const leafAccount = await AccountingService.assertLeafAccount(account_id);
+
+    if (!payment_method) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد طريقة الدفع (نقدي / تحويل بنكي / شيك)' });
+    }
+
     if (payment_method === 'شيك' && (!check_no || !String(check_no).trim())) {
       return res.status(400).json({ success: false, message: 'عند اختيار طريقة الدفع (شيك) يجب إدخال رقم الشيك' });
+    }
+
+    const isBank = (payment_method === 'شيك' || payment_method === 'تحويل بنكي');
+    let resolvedBank = null;
+    if (isBank) {
+      resolvedBank = await AccountingService.resolveBankAccount(bank_account_id, bank_name);
+      if (!resolvedBank || !resolvedBank.coaAccount) {
+        return res.status(400).json({ success: false, message: 'عند اختيار الصرف عبر البنك يجب تحديد حساب البنك في دليل الحسابات' });
+      }
     }
 
     // توليد رقم سند الصرف
@@ -135,7 +157,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
     const parsedAmount = Number(amount);
     const selectedCurrency = currency || 'ر.ي';
     const cleanCheckNo = check_no ? String(check_no).trim() : null;
-    const cleanBankName = bank_name ? String(bank_name).trim() : null;
+    const cleanBankName = bank_name ? String(bank_name).trim() : (resolvedBank?.bankRecord?.bank_name || null);
 
     let finalExchangeRate = 1.0;
     if (selectedCurrency !== 'ر.ي') {
@@ -154,19 +176,44 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
 
     const pId = project_id && project_id !== '' ? Number(project_id) : null;
     const sId = supplier_id && supplier_id !== '' ? Number(supplier_id) : null;
-    const accId = account_id && account_id !== '' ? Number(account_id) : null;
-    let finalCcId = cost_center_id && cost_center_id !== '' ? Number(cost_center_id) : null;
-
-    if (!finalCcId && pId) {
-      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [pId]);
+    let validProjectId = null;
+    if (pId) {
+      const prjExists = await get('SELECT id FROM projects WHERE id = ?', [pId]);
+      if (prjExists) validProjectId = prjExists.id;
+    }
+    let validSupplierId = null;
+    if (sId) {
+      const suppExists = await get('SELECT id FROM suppliers WHERE id = ?', [sId]);
+      if (suppExists) validSupplierId = suppExists.id;
+    }
+    let validBankAccId = null;
+    if (isBank) {
+      const bAccId = bank_account_id ? Number(bank_account_id) : (resolvedBank?.bankRecord?.id || null);
+      if (bAccId) {
+        const bExists = await get('SELECT id FROM bank_accounts WHERE id = ?', [bAccId]);
+        if (bExists) validBankAccId = bExists.id;
+      }
+    }
+    let finalCcId = null;
+    if (cost_center_id && cost_center_id !== '') {
+      const ccExists = await get('SELECT id FROM cost_centers WHERE id = ?', [Number(cost_center_id)]);
+      if (ccExists) finalCcId = ccExists.id;
+    }
+    if (!finalCcId && validProjectId) {
+      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [validProjectId]);
       if (prjCc) finalCcId = prjCc.id;
     }
-    if (!finalCcId) finalCcId = 1;
+    if (!finalCcId) {
+      const defCc = await get('SELECT id FROM cost_centers ORDER BY id ASC LIMIT 1');
+      if (defCc) finalCcId = defCc.id;
+    }
 
+    const accId = leafAccount.id;
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
     const creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
     const finalStatus = (requestedStatus === 'draft') ? 'draft' : 'posted';
+    let createdJe = null;
 
     const txResult = await transaction(async (tx) => {
       // 1. تسجيل سند الصرف مع هوية المنشئ وحالة دورة المستند وسعر الصرف واسم المورد المباشر
@@ -174,14 +221,14 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         INSERT INTO expenses (
           receipt_no, expense_type, project_id, supplier_id, supplier_name,
           account_id, cost_center_id, amount, currency, payment_method, 
-          check_no, bank_name, recipient, date, notes,
+          check_no, bank_name, bank_account_id, recipient, date, notes,
           exchange_rate, local_amount,
           status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        receipt_no, finalExpenseType, pId, sId, directSupplierName,
+        receipt_no, finalExpenseType, validProjectId, validSupplierId, directSupplierName,
         accId, finalCcId, parsedAmount, selectedCurrency, payment_method,
-        cleanCheckNo, cleanBankName, directSupplierName || recipient || '', date, notes || '',
+        cleanCheckNo, cleanBankName, validBankAccId, directSupplierName || recipient || '', date, notes || '',
         finalExchangeRate, finalLocalAmount,
         finalStatus, creatorId, creatorName,
         finalStatus === 'posted' ? creatorId : null,
@@ -217,39 +264,23 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
           VALUES (?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [prevBal, finalLocalAmount, newBal, 'ر.ي', date, moveDesc, moveType, payment_method, receipt_no, accId]);
 
-        // تسجيل قيد يومي تلقائي متزن بالعملة المحلية
-        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-        let entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-          jeSeq++;
-          entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-        }
-        const jeRes = await tx.run(`
-          INSERT INTO journal_entries (
-            entry_no, date, description, reference_type, reference_id, 
-            total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-          )
-          VALUES (?, ?, ?, 'سند صرف', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [
-          entryNo, date,
-          `سند صرف ${receipt_no} ${selectedCurrency !== 'ر.ي' ? '(' + parsedAmount + ' ' + selectedCurrency + ' بسعر صرف ' + finalExchangeRate + ')' : ''} ${cleanCheckNo ? '(شيك: ' + cleanCheckNo + ')' : ''} - ${notes || expense_type}`,
-          expenseId, finalLocalAmount, finalLocalAmount,
-          creatorId, creatorName, creatorId, creatorName
-        ]);
-
-        const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-        const debitAccountId = accId || 10;
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
-          VALUES (?, ?, ?, ?, ?, 0, ?)
-        `, [jeId, debitAccountId, finalCcId, pId, finalLocalAmount, `مصروف ${expense_type}${cleanCheckNo ? ' - شيك: ' + cleanCheckNo : ''}`]);
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
-          VALUES (?, 3, ?, ?, 0, ?, ?)
-        `, [jeId, finalCcId, pId, finalLocalAmount, `الصندوق الرئيسي / البنك - طريقة الدفع: ${payment_method}${cleanCheckNo ? ' (شيك: ' + cleanCheckNo + ')' : ''}`]);
+        // تسجيل قيد يومي تلقائي متزن بدقة عبر الخدمة المحاسبية الموحدة
+        createdJe = await AccountingService.createVoucherJournalEntry({
+          voucherType: 'سند صرف',
+          voucherId: expenseId,
+          receiptNo: receipt_no,
+          date,
+          amount: finalLocalAmount,
+          accountId: accId,
+          paymentMethod: payment_method,
+          bankAccountId: validBankAccId,
+          bankName: cleanBankName || resolvedBank?.bankRecord?.bank_name || null,
+          costCenterId: finalCcId,
+          projectId: pId,
+          notes: notes || finalExpenseType,
+          user: req.user,
+          req
+        }, tx);
       }
 
       return result;
@@ -270,11 +301,14 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         : `تم حفظ وترحيل سند الصرف بنجاح برقم ${receipt_no} وتحديث الحسابات ومراكز التكلفة داخل معاملة ذرية آمنة`,
       receipt_no,
       status: finalStatus,
-      id: txResult.lastInsertRowid || txResult.insertId
+      id: txResult.lastInsertRowid || txResult.insertId,
+      journal_entry_id: createdJe?.id || null,
+      entry_no: createdJe?.entry_no || null
     });
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('مغلقة') ? 400 : 500;
-    res.status(status).json({ success: false, message: 'خطأ أثناء إضافة سند الصرف: ' + err.message, error: err.message });
+    const status = err.message.includes('لا يمكن') || err.message.includes('مغلقة') || err.message.includes('الحساب') || err.message.includes('غير متزن') ? 400 : 500;
+    const msg = status === 400 ? err.message : 'خطأ أثناء إضافة سند الصرف: ' + err.message;
+    res.status(status).json({ success: false, message: msg, error: err.message });
   }
 });
 
@@ -376,6 +410,11 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
 
     await FinancialControlService.assertPeriodOpen(exp.date);
 
+    if (!exp.account_id) {
+      return res.status(400).json({ success: false, message: 'لا يمكن ترحيل سند صرف بدون تحديد حساب مالي صالح في الدليل' });
+    }
+    const leafAcc = await AccountingService.assertLeafAccount(exp.account_id);
+
     const rawPosterId = req.user?.id || null;
     const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
     const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
@@ -405,40 +444,23 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         VALUES (?, 0, ?, 0, ?, ?, ?, ?)
       `, [prevBal, parsedAmount, newBal, exp.currency || 'ر.ي', exp.date, moveDesc]);
 
-      // 4. تسجيل قيد يومي تلقائي متزن
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-        jeSeq++;
-        entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      }
-      const jeRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id, 
-          total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        )
-        VALUES (?, ?, ?, 'سند صرف', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entryNo, exp.date,
-        `سند صرف مرحل ${exp.receipt_no} - ${exp.notes || exp.expense_type}`,
-        exp.id, parsedAmount, parsedAmount,
-        posterId, posterName, posterId, posterName
-      ]);
-
-      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-      const debitAccountId = exp.account_id || 10;
-      const finalCcId = exp.cost_center_id || 1;
-
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
-        VALUES (?, ?, ?, ?, ?, 0, ?)
-      `, [jeId, debitAccountId, finalCcId, exp.project_id, parsedAmount, `مصروف ${exp.expense_type}`]);
-
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes) 
-        VALUES (?, 3, ?, ?, 0, ?, ?)
-      `, [jeId, finalCcId, exp.project_id, parsedAmount, `الصندوق / البنك - ترحيل سند صرف`]);
+      // 4. تسجيل قيد يومي تلقائي متزن بدقة عبر الخدمة المحاسبية الموحدة مع منع التكرار
+      await AccountingService.createVoucherJournalEntry({
+        voucherType: 'سند صرف',
+        voucherId: exp.id,
+        receiptNo: exp.receipt_no,
+        date: exp.date,
+        amount: parsedAmount,
+        accountId: leafAcc.id,
+        paymentMethod: exp.payment_method || 'نقدي',
+        bankAccountId: exp.bank_account_id || null,
+        bankName: exp.bank_name || null,
+        costCenterId: exp.cost_center_id,
+        projectId: exp.project_id,
+        notes: exp.notes || exp.expense_type,
+        user: req.user,
+        req
+      }, tx);
 
       // 5. تحديث حالة السند
       await tx.run(`

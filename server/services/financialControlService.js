@@ -11,6 +11,7 @@
 const { get, query, run, transaction } = require('../database/db');
 const { checkPeriodOpen } = require('./periodService');
 const { logAudit } = require('./auditService');
+const AccountingService = require('./accountingService');
 
 const DOCUMENT_STATUSES = {
   DRAFT: 'draft',               // مسودة (قابلة للتعديل والحذف دون أثر مالي)
@@ -187,16 +188,30 @@ const FinancialControlService = {
       reversingJeId = jeRes.lastInsertRowid || jeRes.insertId;
 
       // أسطر القيد العكسي: يتم عكس الطرفين تماماً
-      // المدين: الصندوق والبنك (حساب 3)
-      // الدائن: حساب المصروف الأصلي (accId أو 10)
-      const expenseAccId = exp.account_id || 10;
+      // تحديد حساب الصندوق أو البنك بدقة
+      const isBank = exp.payment_method === 'تحويل بنكي' || exp.payment_method === 'شيك' || exp.payment_method === 'bank_transfer' || exp.payment_method === 'check';
+      const contraAcc = isBank
+        ? await AccountingService.resolveBankAccount(exp.bank_account_id)
+        : await AccountingService.resolveCashAccount();
+      const contraAccId = contraAcc.id;
+
+      let expenseAccId = exp.account_id;
+      if (expenseAccId) {
+        const vAcc = await AccountingService.assertLeafAccount(expenseAccId);
+        expenseAccId = vAcc.id;
+      } else {
+        const defaultExpAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR code LIKE '4%') ORDER BY id ASC LIMIT 1");
+        expenseAccId = defaultExpAcc ? defaultExpAcc.id : contraAccId;
+      }
       const finalCcId = exp.cost_center_id || 1;
 
+      // المدين: الصندوق والبنك (إعادة المبلغ)
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-        VALUES (?, 3, ?, ?, ?, 0, ?)
-      `, [reversingJeId, finalCcId, exp.project_id, amount, `إعادة المبلغ للصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
+        VALUES (?, ?, ?, ?, ?, 0, ?)
+      `, [reversingJeId, contraAccId, finalCcId, exp.project_id, amount, `إعادة المبلغ للصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
 
+      // الدائن: حساب المصروف الأصلي (إلغاء قيد المصروف)
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, ?, 0, ?, ?)
@@ -325,19 +340,38 @@ const FinancialControlService = {
       reversingJeId = jeRes.lastInsertRowid || jeRes.insertId;
       const finalCcId = pay.cost_center_id || 1;
 
+      const isBank = pay.payment_method === 'تحويل بنكي' || pay.payment_method === 'شيك' || pay.payment_method === 'bank_transfer' || pay.payment_method === 'check';
+      const contraAcc = isBank
+        ? await AccountingService.resolveBankAccount(pay.bank_account_id)
+        : await AccountingService.resolveCashAccount();
+      const contraAccId = contraAcc.id;
+
+      let voucherAccId = pay.account_id;
+      if (voucherAccId) {
+        const vAcc = await AccountingService.assertLeafAccount(voucherAccId);
+        voucherAccId = vAcc.id;
+      } else {
+        if (isReceipt) {
+          const clientAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND (code = '12301001' OR name LIKE '%عملاء%') ORDER BY id ASC LIMIT 1");
+          voucherAccId = clientAcc ? clientAcc.id : contraAccId;
+        } else {
+          const suppAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND (code = '21101001' OR name LIKE '%مورد%') ORDER BY id ASC LIMIT 1");
+          voucherAccId = suppAcc ? suppAcc.id : contraAccId;
+        }
+      }
+
       if (isReceipt) {
-        // كان الأصلي: مدين (صندوق 3) ودائن (عملاء 4)
-        // العكسي: مدين (عملاء 4 أو accId) ودائن (صندوق 3)
-        const clientAccId = pay.account_id || 4;
+        // كان الأصلي: مدين (صندوق/بنك) ودائن (حساب مختار/عملاء)
+        // العكسي: مدين (حساب مختار/عملاء) ودائن (صندوق/بنك)
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
           VALUES (?, ?, ?, ?, ?, 0, ?)
-        `, [reversingJeId, clientAccId, finalCcId, pay.project_id, amount, `إعادة إثبات ذمة العميل بموجب قيد عكسي - ${cleanReason}`]);
+        `, [reversingJeId, voucherAccId, finalCcId, pay.project_id, amount, `إعادة إثبات ذمة العميل/الإيراد بموجب قيد عكسي - ${cleanReason}`]);
 
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-          VALUES (?, 3, ?, ?, 0, ?, ?)
-        `, [reversingJeId, finalCcId, pay.project_id, amount, `تخفيض الصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
+          VALUES (?, ?, ?, ?, 0, ?, ?)
+        `, [reversingJeId, contraAccId, finalCcId, pay.project_id, amount, `تخفيض الصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
 
         // عكس تأثير السداد على المستخلص ورصيد العميل آلياً
         const clientChainService = require('./clientChainService');
@@ -348,18 +382,17 @@ const FinancialControlService = {
           await clientChainService.syncClientBalances(pay.client_id, tx);
         }
       } else {
-        // كان الأصلي: مدين (موردين 7) ودائن (صندوق 3)
-        // العكسي: مدين (صندوق 3) ودائن (موردين 7 أو accId)
-        const suppAccId = pay.account_id || 7;
+        // كان الأصلي: مدين (حساب مختار/موردين) ودائن (صندوق/بنك)
+        // العكسي: مدين (صندوق/بنك) ودائن (حساب مختار/موردين)
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-          VALUES (?, 3, ?, ?, ?, 0, ?)
-        `, [reversingJeId, finalCcId, pay.project_id, amount, `إعادة المبلغ للصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
+          VALUES (?, ?, ?, ?, ?, 0, ?)
+        `, [reversingJeId, contraAccId, finalCcId, pay.project_id, amount, `إعادة المبلغ للصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
 
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
           VALUES (?, ?, ?, ?, 0, ?, ?)
-        `, [reversingJeId, suppAccId, finalCcId, pay.project_id, amount, `إعادة إثبات استحقاق المورد بموجب قيد عكسي - ${cleanReason}`]);
+        `, [reversingJeId, voucherAccId, finalCcId, pay.project_id, amount, `إعادة إثبات استحقاق المورد بموجب قيد عكسي - ${cleanReason}`]);
       }
 
       // 4. تحديث حالة السند الأصلي

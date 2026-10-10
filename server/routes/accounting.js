@@ -9,7 +9,7 @@ const FinancialControlService = require('../services/financialControlService');
 const { requirePermission } = require('../middleware/security');
 
 // دليل الحسابات الشجري مع دعم الهرمية، الرتب، والحسابات التحليلية الطرفية
-router.get('/accounts', requirePermission('accounting:view'), async (req, res) => {
+router.get('/accounts', requirePermission('accounting:view,accounting,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
   try {
     const { leaf_only, usable_only, active_only } = req.query;
     let sql = `
@@ -28,10 +28,11 @@ router.get('/accounts', requirePermission('accounting:view'), async (req, res) =
     }
 
     if (leaf_only === 'true' || usable_only === 'true') {
-      // فقط الحسابات الطرفية النشطة (التي ليس لها أبناء وتكون من الرتبة الثالثة فما فوق)
+      // فقط الحسابات الفرعية الأخيرة النشطة القابلة للتسجيل (is_posting = 1 ولا يوجد لها أبناء)
+      conditions.push("(a.is_posting = 1 OR a.level = 5)");
       conditions.push("(SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) = 0");
       conditions.push("(a.status IS NULL OR a.status = 'active')");
-      conditions.push("(a.level >= 3 OR LENGTH(a.code) >= 3 OR a.parent_id IS NOT NULL)");
+      conditions.push("(a.is_active IS NULL OR a.is_active = 1)");
     }
 
     if (conditions.length > 0) {
@@ -42,7 +43,7 @@ router.get('/accounts', requirePermission('accounting:view'), async (req, res) =
     const accounts = await query(sql, params);
     const enriched = accounts.map(a => ({
       ...a,
-      is_leaf: (Number(a.children_count) === 0 && (Number(a.level) >= 3 || String(a.code).length >= 3)),
+      is_leaf: ((a.is_posting === 1 || a.level === 5) && Number(a.children_count || 0) === 0),
       status: a.status || 'active'
     }));
 
@@ -400,7 +401,7 @@ router.put('/currencies/:id', requirePermission('accounting:edit,settings:compan
 });
 
 // جلب قائمة مراكز التكلفة
-router.get('/cost-centers', requirePermission('accounting:view'), async (req, res) => {
+router.get('/cost-centers', requirePermission('accounting:view,accounting,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
   try {
     const centers = await query(`
       SELECT cc.*, p.name as project_name 
