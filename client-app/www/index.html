@@ -78,20 +78,29 @@
     </div>
 
     <div class="card" style="padding: 24px;">
+      <!-- Inline Error Alert -->
+      <div id="loginErrorAlert" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 12px; padding: 12px; margin-bottom: 16px; color: #f87171; font-size: 0.85rem; font-weight: bold; text-align: center;">
+        <i class="fa-solid fa-circle-exclamation"></i> <span id="loginErrorAlertText"></span>
+      </div>
+
       <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="form-group">
           <label class="form-label" for="emailInput"><i class="fa-solid fa-envelope text-gold"></i> البريد الإلكتروني المسجل</label>
-          <input type="email" id="emailInput" name="email" class="form-input" required placeholder="client@example.com" autocomplete="email">
+          <input type="email" id="emailInput" name="email" class="form-input" required placeholder="client@example.com" autocomplete="email" oninput="hideLoginError()">
         </div>
 
         <div class="form-group">
           <label class="form-label" for="passwordInput"><i class="fa-solid fa-lock text-gold"></i> كلمة المرور</label>
           <div style="position: relative;">
-            <input type="password" id="passwordInput" name="password" class="form-input" required placeholder="••••••••" autocomplete="current-password" style="padding-left: 42px;">
+            <input type="password" id="passwordInput" name="password" class="form-input" required placeholder="••••••••" autocomplete="current-password" style="padding-left: 42px;" oninput="hideLoginError()">
             <button type="button" onclick="togglePassword()" style="position: absolute; left: 12px; top: 12px; background: none; border: none; color: var(--text-muted); cursor: pointer;">
               <i id="eyeIcon" class="fa-solid fa-eye"></i>
             </button>
           </div>
+        </div>
+
+        <div style="text-align: left; margin-top: 8px;">
+          <a href="javascript:void(0)" onclick="openForgotModal()" style="color: var(--gold); font-size: 0.8rem; font-weight: 600; text-decoration: none;">نسيت كلمة المرور؟</a>
         </div>
 
         <button type="submit" id="submitBtn" class="btn btn-primary" style="margin-top: 20px;">
@@ -166,8 +175,23 @@
       }
     }
 
+    function showLoginError(msg) {
+      const box = document.getElementById('loginErrorAlert');
+      const txt = document.getElementById('loginErrorAlertText');
+      if (box && txt) {
+        txt.textContent = msg;
+        box.style.display = 'block';
+      }
+    }
+
+    function hideLoginError() {
+      const box = document.getElementById('loginErrorAlert');
+      if (box) box.style.display = 'none';
+    }
+
     async function handleLogin(e) {
       e.preventDefault();
+      hideLoginError();
       const email = document.getElementById('emailInput').value.trim();
       const password = document.getElementById('passwordInput').value;
       const btn = document.getElementById('submitBtn');
@@ -190,7 +214,7 @@
           setTimeout(() => window.location.href = 'dashboard.html', 400);
         }
       } catch (err) {
-        ClientApp.showToast(err.message || 'فشل تسجيل الدخول', 'error');
+        showLoginError(err.message || 'فشل تسجيل الدخول: البريد غير مسجل أو كلمة المرور غير صحيحة');
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<span>تسجيل الدخول</span> <i class="fa-solid fa-arrow-left"></i>';
