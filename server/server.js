@@ -24,7 +24,10 @@ app.use((req, res, next) => {
 
 const { verifyCsrfToken, requireAuth } = require('./middleware/security');
 
-// خدمة الملفات الثابتة للواجهة الأمامية (HTML, CSS, JS, Images)
+// خدمة تطبيق وبوابة العملاء المخصص (Client App Portal)
+app.use('/client-app', express.static(path.join(__dirname, '../client-app/www')));
+
+// خدمة الملفات الثابتة للواجهة الأمامية النظام الرئيسي (HTML, CSS, JS, Images)
 const publicDir = path.join(__dirname, '..');
 app.use(express.static(publicDir));
 
