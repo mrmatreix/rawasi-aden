@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>تسجيل الدخول - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      padding-bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 20%, #152238 0%, #0B1329 100%);
+    }
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .logo-hero {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo-icon-large {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 16px;
+      border-radius: 20px;
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid var(--gold);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--gold);
+      font-size: 2.2rem;
+      box-shadow: 0 10px 25px rgba(212, 175, 55, 0.2);
+    }
+    .otp-inputs {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      direction: ltr;
+      margin: 20px 0;
+    }
+    .otp-digit {
+      width: 45px;
+      height: 52px;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-main);
+      outline: none;
+    }
+    .otp-digit:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px var(--gold-glow);
+    }
+  </style>
+</head>
+<body>
+  <div id="offlineBanner" class="offline-banner"></div>
+
+  <div class="login-container">
+    <div class="logo-hero">
+      <div class="logo-icon-large">
+        <i class="fa-solid fa-helmet-safety"></i>
+      </div>
+      <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin-bottom: 6px;">شركة رواسي عدن</h1>
+      <p style="font-size: 0.85rem; color: var(--gold); font-weight: 600;">بوابة وتطبيق العملاء المخصص</p>
+      <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">متابعة المشاريع، المستخلصات، والدفعات الهندسية</p>
+    </div>
+
+    <div class="card" style="padding: 24px;">
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label"><i class="fa-solid fa-envelope text-gold"></i> البريد الإلكتروني المسجل</label>
+          <input type="email" id="emailInput" class="form-input" required placeholder="client@example.com" autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label"><i class="fa-solid fa-lock text-gold"></i> كلمة المرور</label>
+          <div style="position: relative;">
+            <input type="password" id="passwordInput" class="form-input" required placeholder="••••••••" autocomplete="current-password" style="padding-left: 42px;">
+            <button type="button" onclick="togglePassword()" style="position: absolute; left: 12px; top: 12px; background: none; border: none; color: var(--text-muted); cursor: pointer;">
+              <i id="eyeIcon" class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" id="submitBtn" class="btn btn-primary" style="margin-top: 20px;">
+          <span>تسجيل الدخول</span>
+          <i class="fa-solid fa-arrow-left"></i>
+        </button>
+      </form>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px;">
+      <p style="font-size: 0.78rem; color: var(--text-muted);">
+        <i class="fa-solid fa-shield-halved text-gold"></i> نظام مشفّر وآمن متوافق مع معايير الحماية الهندسية
+      </p>
+    </div>
+  </div>
+
+  <!-- OTP Verification Modal -->
+  <div id="otpModal" class="modal-overlay">
+    <div class="modal-box text-center">
+      <div style="width: 54px; height: 54px; margin: 0 auto 12px; border-radius: 16px; background: var(--gold-glow); border: 1px solid var(--gold); display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 1.5rem;">
+        <i class="fa-solid fa-mobile-screen"></i>
+      </div>
+      <h3 style="font-size: 1.2rem; font-weight: bold; margin-bottom: 6px;">التحقق بخطوتين (OTP)</h3>
+      <p id="otpMessage" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">
+        تم إرسال رمز التحقق إلى بريدك أو هاتفك المسجل، يرجى إدخال الرمز المكون من 6 أرقام.
+      </p>
+
+      <div class="otp-inputs">
+        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 0)">
+        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 1)">
+        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 2)">
+        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 3)">
+        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 4)">
+        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 5)">
+      </div>
+
+      <button id="verifyOtpBtn" onclick="submitOtp()" class="btn btn-primary" style="margin-bottom: 10px;">
+        <span>تأكيد الدخول</span>
+      </button>
+
+      <button type="button" onclick="closeOtpModal()" class="btn btn-secondary btn-sm" style="width: 100%;">
+        إلغاء والعودة
+      </button>
+    </div>
+  </div>
+
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.setupToastContainer();
+      // إذا كان المستخدم مسجل مسبقاً ينتقل للوحة التحكم
+      const isAuth = await ClientAuth.isAuthenticated();
+      if (isAuth) {
+        window.location.href = 'dashboard.html';
+      }
+    });
+
+    function togglePassword() {
+      const p = document.getElementById('passwordInput');
+      const icon = document.getElementById('eyeIcon');
+      if (p.type === 'password') {
+        p.type = 'text';
+        icon.className = 'fa-solid fa-eye-slash';
+      } else {
+        p.type = 'password';
+        icon.className = 'fa-solid fa-eye';
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('emailInput').value.trim();
+      const password = document.getElementById('passwordInput').value;
+      const btn = document.getElementById('submitBtn');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...';
+
+      try {
+        const result = await ClientAuth.login(email, password);
+        if (result.requireOtp) {
+          document.getElementById('otpMessage').innerText = result.message || 'أدخل رمز التحقق (OTP) المكون من 6 أرقام';
+          document.getElementById('otpModal').classList.add('active');
+          const firstInput = document.querySelector('.otp-digit');
+          if (firstInput) firstInput.focus();
+          if (result.debugOtp) {
+            ClientApp.showToast(`رمز التجربة السريع: ${result.debugOtp}`, 'info');
+          }
+        } else {
+          ClientApp.showToast('تم تسجيل الدخول بنجاح', 'success');
+          setTimeout(() => window.location.href = 'dashboard.html', 400);
+        }
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل تسجيل الدخول', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>تسجيل الدخول</span> <i class="fa-solid fa-arrow-left"></i>';
+      }
+    }
+
+    function handleOtpInput(input, index) {
+      const digits = document.querySelectorAll('.otp-digit');
+      if (input.value.length === 1 && index < digits.length - 1) {
+        digits[index + 1].focus();
+      }
+      if (index === digits.length - 1 && input.value.length === 1) {
+        submitOtp();
+      }
+    }
+
+    function getEnteredOtp() {
+      const digits = document.querySelectorAll('.otp-digit');
+      let code = '';
+      digits.forEach(d => code += d.value);
+      return code.trim();
+    }
+
+    async function submitOtp() {
+      const otp = getEnteredOtp();
+      const email = document.getElementById('emailInput').value.trim();
+      const btn = document.getElementById('verifyOtpBtn');
+
+      if (otp.length < 6) {
+        ClientApp.showToast('يرجى إدخال كافة أرقام الرمز الستة', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التأكيد...';
+
+      try {
+        await ClientAuth.verifyOtp(otp, email);
+        ClientApp.showToast('تم التحقق بنجاح، مرحباً بك!', 'success');
+        setTimeout(() => window.location.href = 'dashboard.html', 500);
+      } catch (err) {
+        ClientApp.showToast(err.message || 'رمز التحقق غير صحيح', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<span>تأكيد الدخول</span>';
+      }
+    }
+
+    function closeOtpModal() {
+      document.getElementById('otpModal').classList.remove('active');
+    }
+  </script>
+</body>
+</html>

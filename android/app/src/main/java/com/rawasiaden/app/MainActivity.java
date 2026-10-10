@@ -10,8 +10,9 @@ import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
     private WebView webView;
-    // تم توجيه التطبيق ليفتح مسار تطبيق العميل (Client App) مباشرة
-    private static final String SERVER_URL = "https://rawasi-aden-production.up.railway.app/client-app/";
+    // تم توجيه التطبيق ليفتح مسار تطبيق العميل (Client App) محلياً لسرعة فائقة
+    // مع الإبقاء على ارتباطه بالسيرفر الحي لجلب البيانات عبر الـ API
+    private static final String SERVER_URL = "file:///android_asset/public/client-app/index.html";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -35,6 +36,12 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url != null && url.startsWith("file:///")) {
+                    // معالجة الروابط الداخلية لتطبيق العميل
+                    if (url.contains("client-app/www/")) {
+                        url = url.replace("client-app/www/", "client-app/");
+                    }
+                }
                 view.loadUrl(url);
                 return true;
             }
@@ -51,6 +58,11 @@ public class MainActivity extends Activity {
                 newWebView.setWebViewClient(new WebViewClient() {
                     @Override
                     public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        if (url != null && url.startsWith("file:///")) {
+                            if (url.contains("client-app/www/")) {
+                                url = url.replace("client-app/www/", "client-app/");
+                            }
+                        }
                         view.loadUrl(url);
                         return true;
                     }
