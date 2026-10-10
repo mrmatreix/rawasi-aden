@@ -15,8 +15,22 @@
 
   window.fetch = async function (resource, init = {}) {
     try {
-      const url = typeof resource === 'string' ? resource : (resource?.url || '');
+      let url = typeof resource === 'string' ? resource : (resource?.url || '');
       const isApiCall = url.startsWith('/api/') || url.includes('/api/');
+
+      // توجيه الطلبات إلى السيرفر الخارجي إذا كان التطبيق يعمل من الهاتف مباشرة (file://)
+      if (isApiCall && url.startsWith('/api/') && window.location.protocol === 'file:') {
+        // بناءً على طلبك، نستخدم عنوان IP للكمبيوتر للعمل محلياً عبر شبكة الواي فاي
+        // ملاحظة: تأكد من أن هاتفك والكمبيوتر متصلان بنفس شبكة الواي فاي
+        // يمكنك تغيير هذا لاحقاً إلى رابط موقعك عند الرفع على الإنترنت
+        const BASE_URL = 'http://10.0.2.2:3000'; // 10.0.2.2 هو الـ IP المخصص لمحاكي أندرويد ستوديو للوصول للكمبيوتر
+        url = BASE_URL + url;
+        if (typeof resource === 'string') {
+          resource = url;
+        } else if (resource && resource.url) {
+          resource = new Request(url, resource);
+        }
+      }
 
       if (isApiCall) {
         init = init || {};
@@ -154,19 +168,19 @@ const Auth = {
     this.fetchSecuritySettings();
     this.fetchCsrfToken();
 
-    // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها
-    const savedToken = sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token');
-    const savedUserStr = sessionStorage.getItem('rawasi_user') || localStorage.getItem('rawasi_user');
+    // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها في هذه النافذة الحالية
+    const isSessionActive = sessionStorage.getItem('rawasi_session_active') === 'true';
+    const savedToken = isSessionActive ? (sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token')) : null;
+    const savedUserStr = isSessionActive ? (sessionStorage.getItem('rawasi_user') || localStorage.getItem('rawasi_user')) : null;
 
     if (savedToken && savedUserStr) {
       try {
         this.token = savedToken;
         this.currentUser = JSON.parse(savedUserStr);
-        sessionStorage.setItem('rawasi_session_active', 'true');
         sessionStorage.setItem('rawasi_token', savedToken);
         sessionStorage.setItem('rawasi_user', savedUserStr);
-        localStorage.setItem('rawasi_token', savedToken);
-        localStorage.setItem('rawasi_user', savedUserStr);
+        localStorage.removeItem('rawasi_token');
+        localStorage.removeItem('rawasi_user');
 
         // إذا كانت الشاشة مقفلة قبل إعادة تحميل الصفحة
         if (sessionStorage.getItem('rawasi_is_locked') === 'true') {
@@ -479,9 +493,9 @@ const Auth = {
         sessionStorage.setItem('rawasi_session_active', 'true');
         sessionStorage.setItem('rawasi_token', this.token);
         sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
-        localStorage.setItem('rawasi_token', this.token);
-        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         sessionStorage.removeItem('rawasi_is_locked');
+        localStorage.removeItem('rawasi_token');
+        localStorage.removeItem('rawasi_user');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || username);
 
@@ -610,43 +624,14 @@ const Auth = {
     }, 1000);
   },
 
-  // تطبيع وتوحيد مدخلات رمز التحقق بخطوتين (تحويل الأرقام العربية إلى إنجليزية ومنع الرموز)
-  normalize2FaInput(input) {
-    if (!input) return;
-    let val = String(input.value || '')
-      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
-      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
-      .replace(/[^0-9]/g, '');
-    input.value = val.slice(0, 6);
-  },
-
-  // تبديل إظهار / إخفاء رمز 2FA في نافذة تسجيل الدخول
-  toggle2FaLoginEye() {
-    const input = document.getElementById('twoFactorCodeInput');
-    const eye = document.getElementById('twoFactorLoginEyeIcon');
-    if (!input) return;
-    if (input.type === 'password') {
-      input.type = 'text';
-      if (eye) eye.textContent = '🙈';
-    } else {
-      input.type = 'password';
-      if (eye) eye.textContent = '👁️';
-    }
-  },
-
-  // فتح نافذة التحقق بخطوتين (2FA)
+  // فتح نافذة التحقق بخطوتين (2FA) للمدير العام
   show2FAModal() {
     const modal = document.getElementById('twoFactorModal');
     const input = document.getElementById('twoFactorCodeInput');
     const err = document.getElementById('twoFactorErrorMsg');
-    const subtitle = document.getElementById('twoFactorSubtitle');
     if (err) {
       err.style.display = 'none';
       err.textContent = '';
-    }
-    if (subtitle && this._pending2FAUser) {
-      const uName = this._pending2FAUser.full_name || this._pending2FAUser.username;
-      subtitle.textContent = `مرحباً بك (${uName})! حسابك محمي بالتحقق بخطوتين. يرجى إدخال رمز الأمان (PIN) المكون من 6 أرقام للدخول.`;
     }
     if (modal) {
       modal.style.display = 'flex';
@@ -654,9 +639,6 @@ const Auth = {
     }
     if (input) {
       input.value = '';
-      input.type = 'password';
-      const eye = document.getElementById('twoFactorLoginEyeIcon');
-      if (eye) eye.textContent = '👁️';
       setTimeout(() => input.focus(), 150);
     }
   },
@@ -684,17 +666,7 @@ const Auth = {
     const input = document.getElementById('twoFactorCodeInput');
     const err = document.getElementById('twoFactorErrorMsg');
     const btn = document.getElementById('btnSubmit2FA');
-
-    const normalizeDigits = (str) => {
-      if (!str) return '';
-      return String(str)
-        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
-        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
-        .replace(/[^0-9]/g, '')
-        .trim();
-    };
-
-    const code = normalizeDigits(input ? input.value : '');
+    const code = input ? input.value.trim() : '';
 
     if (!code || code.length !== 6) {
       if (err) {
@@ -749,9 +721,9 @@ const Auth = {
         sessionStorage.setItem('rawasi_session_active', 'true');
         sessionStorage.setItem('rawasi_token', this.token);
         sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
-        localStorage.setItem('rawasi_token', this.token);
-        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         sessionStorage.removeItem('rawasi_is_locked');
+        localStorage.removeItem('rawasi_token');
+        localStorage.removeItem('rawasi_user');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || 'admin');
 
@@ -961,12 +933,12 @@ const Auth = {
     }
   },
 
-  // فحص ما إذا كان المستخدم يملك صلاحية معينة (متطابق بالكامل مع محرك الخادم RBAC)
+  // فحص ما إذا كان المستخدم يملك صلاحية معينة
   hasPermission(permKey) {
     if (!this.currentUser) return false;
 
     // مدير النظام الرئيسي (Super Admin) يملك كافة الصلاحيات دائماً
-    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') {
+    if (this.currentUser.username === 'admin') {
       return true;
     }
 
@@ -979,6 +951,11 @@ const Auth = {
       }
     }
 
+    // إذا كان المستخدم يملك صلاحية 'all' أو '*'
+    if (Array.isArray(perms) && (perms.includes('*') || perms.includes('all'))) {
+      return true;
+    }
+
     // إذا كانت الصلاحيات فارغة تماماً ولم تُخصص، نطبق الصلاحيات الافتراضية حسب الدور
     if (!perms || perms.length === 0) {
       if (this.currentUser.role === 'admin') {
@@ -986,37 +963,19 @@ const Auth = {
       }
       if (this.currentUser.role === 'accountant') {
         perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-          'custody:view', 'custody:create', 'custody:manage', 'custody:export',
-          'clients:view', 'clients:create', 'clients:manage', 'clients:statement',
-          'suppliers:view', 'suppliers:create', 'suppliers:manage', 'suppliers:statement',
+          'dashboard:view',
+          'revenues:view', 'revenues:create', 'revenues:print',
+          'expenses:view', 'expenses:create',
+          'custody:view', 'custody:manage',
+          'clients:view', 'clients:manage', 'clients:statement',
+          'suppliers:view', 'suppliers:manage', 'suppliers:statement',
           'cash:view',
-          'hr:view', 'hr:payroll',
-          'reports:view', 'reports:export'
-        ];
-      } else if (this.currentUser.role === 'auditor') {
-        perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-          'expenses:view', 'expenses:approve', 'expenses:export',
-          'revenues:view', 'revenues:approve', 'revenues:export',
-          'billing:view', 'billing:approve', 'billing:export',
-          'custody:view', 'custody:approve', 'custody:export',
-          'projects:view', 'projects:export',
-          'inventory:view', 'inventory:export',
-          'purchases:view', 'purchases:approve', 'purchases:export',
-          'hr:view', 'hr:approve', 'hr:export',
-          'reports:view', 'reports:export',
-          'cash:view'
+          'reports:view'
         ];
       } else if (this.currentUser.role === 'project_manager') {
         perms = [
           'dashboard:view',
-          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export', 'projects:manage', 'projects:print',
+          'projects:view', 'projects:manage', 'projects:print',
           'expenses:view', 'expenses:create',
           'custody:view',
           'inventory:view', 'inventory:issue',
@@ -1024,37 +983,17 @@ const Auth = {
         ];
       } else if (this.currentUser.role === 'storekeeper') {
         perms = [
-          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export', 'inventory:manage',
-          'purchases:view',
+          'inventory:view', 'inventory:manage', 'inventory:issue',
           'projects:view'
         ];
-      } else {
-        perms = ['dashboard:view'];
       }
     }
 
-    if (Array.isArray(perms) && (perms.includes('*') || perms.includes('all'))) {
-      return true;
-    }
+    if (perms.includes('*') || perms.includes('all')) return true;
 
-    // فحص المفاتيح المطلوبة مع دعم التوافقية والـ Wildcards
-    const keys = permKey.split(',').map(k => k.trim()).filter(Boolean);
-    return keys.some(key => {
-      if (perms.includes(key)) return true;
-
-      const [domain, action] = key.split(':');
-      if (perms.includes(`${domain}:*`)) return true;
-
-      if ((action === 'create' || action === 'edit') && perms.includes(`${domain}:manage`)) return true;
-      if (action === 'export' && (perms.includes(`${domain}:print`) || perms.includes(`${domain}:statement`))) return true;
-      if (action === 'view' && (perms.includes(`${domain}:manage`) || perms.includes(`${domain}:statement`))) return true;
-      if (domain === 'inventory' && (action === 'create' || action === 'issue') && (perms.includes('inventory:issue') || perms.includes('inventory:manage'))) return true;
-      if (domain === 'accounting' && (action === 'create' || action === 'edit') && perms.includes('accounting:journal')) return true;
-      if (domain === 'hr' && (action === 'post' || action === 'create') && perms.includes('hr:payroll')) return true;
-      if (domain === 'users' && perms.includes('settings:users')) return true;
-
-      return false;
-    });
+    // إذا كان المفتاح يحتوي خيارات مفصولة بفواصل
+    const keys = permKey.split(',').map(k => k.trim());
+    return keys.some(k => perms.includes(k));
   },
 
   // التحقق الأمني من صلاحية المستخدم للوصول لشاشة معينة لمنع التلاعب بالـ DOM
@@ -1066,7 +1005,6 @@ const Auth = {
       'dashboard': 'dashboard:view',
       'projects': 'projects:view',
       'projectHub': 'projects:view',
-      'projectCloseout': 'projects:view,reports:view',
       'inventory': 'inventory:view',
       'hr': 'hr:view',
       'reports': 'reports:view',
@@ -1081,8 +1019,6 @@ const Auth = {
       'clients': 'clients:view',
       'suppliers': 'suppliers:view',
       'cash': 'cash:view',
-      'contractLifecycle': 'projects:view',
-      'cashFlow': 'accounting:view,reports:view',
       'settings': 'settings:users,settings:company,settings:backup'
     };
 
@@ -2037,13 +1973,39 @@ const Auth = {
   }
 };
 
-// =================== الحفاظ على الجلسة وسلامة البيانات ===================
-// معالجة هادئة بدون حظر الإغلاق أو قطع الجلسة القسري في بيئات الـ iFrame
-window.addEventListener('beforeunload', () => {
-  // حفظ آخر نشاط محلياً بسلاسة
+// =================== معالجة الإغلاق من زر (X) أعلى النافذة ===================
+// 1. عند محاولة إغلاق النافذة من زر X: إظهار رسالة تأكيد للمستخدم
+window.addEventListener('beforeunload', (e) => {
   if (Auth && Auth.currentUser && Auth.token) {
-    try {
-      localStorage.setItem('rawasi_last_active_time', Date.now().toString());
-    } catch (e) {}
+    e.preventDefault();
+    const msg = 'هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن؟ سيتم أخذ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.';
+    e.returnValue = msg;
+    return msg;
+  }
+});
+
+// 2. عند موافقة المستخدم وتأكيد الإغلاق: أخذ نسخة احتياطية تلقائية وإنهاء الجلسة في الخادم
+window.addEventListener('pagehide', () => {
+  try {
+    if (Auth && Auth.currentUser && Auth.token) {
+      const username = Auth.currentUser.username || Auth.currentUser.full_name || 'admin';
+      const userId = Auth.currentUser.id;
+      const isOnline = (typeof App !== 'undefined' && App.dbStatus) ? App.dbStatus.isOnline : false;
+      const data = JSON.stringify({
+        username: username,
+        mode: isOnline ? 'online' : 'offline',
+        notes: `نسخة احتياطية تلقائية فور إغلاق النافذة من زر (X) بواسطة: ${username}`
+      });
+
+      if (navigator.sendBeacon) {
+        const blob = new Blob([data], { type: 'application/json' });
+        navigator.sendBeacon('/api/settings/shutdown-app', blob);
+
+        const logoutBlob = new Blob([JSON.stringify({ username: username, userId: userId })], { type: 'application/json' });
+        navigator.sendBeacon('/api/auth/logout', logoutBlob);
+      }
+    }
+  } catch (e) {
+    console.warn('Backup/logout on exit note:', e);
   }
 });

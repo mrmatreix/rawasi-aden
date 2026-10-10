@@ -17,7 +17,8 @@ const ClientAPI = {
     if (window.location.origin && !window.location.origin.startsWith('file://')) {
       return window.location.origin;
     }
-    return 'http://localhost:3000';
+    // للعمل محلياً على محاكي أندرويد
+    return 'http://10.0.2.2:3000';
   },
 
   isOnline: navigator.onLine,

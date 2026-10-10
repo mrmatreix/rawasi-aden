@@ -15,8 +15,22 @@
 
   window.fetch = async function (resource, init = {}) {
     try {
-      const url = typeof resource === 'string' ? resource : (resource?.url || '');
+      let url = typeof resource === 'string' ? resource : (resource?.url || '');
       const isApiCall = url.startsWith('/api/') || url.includes('/api/');
+
+      // توجيه الطلبات إلى السيرفر الخارجي إذا كان التطبيق يعمل من الهاتف مباشرة (file://)
+      if (isApiCall && url.startsWith('/api/') && window.location.protocol === 'file:') {
+        // بناءً على طلبك، نستخدم عنوان IP للكمبيوتر للعمل محلياً عبر شبكة الواي فاي
+        // ملاحظة: تأكد من أن هاتفك والكمبيوتر متصلان بنفس شبكة الواي فاي
+        // يمكنك تغيير هذا لاحقاً إلى رابط موقعك عند الرفع على الإنترنت
+        const BASE_URL = 'http://10.0.2.2:3000'; // 10.0.2.2 هو الـ IP المخصص لمحاكي أندرويد ستوديو للوصول للكمبيوتر
+        url = BASE_URL + url;
+        if (typeof resource === 'string') {
+          resource = url;
+        } else if (resource && resource.url) {
+          resource = new Request(url, resource);
+        }
+      }
 
       if (isApiCall) {
         init = init || {};

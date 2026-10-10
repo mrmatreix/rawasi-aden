@@ -119,8 +119,8 @@ router.post('/', async (req, res) => {
     
     if (targetProjectIds.length === 0) {
       const clientProjs = await db.query(`
-        SELECT id FROM projects WHERE client_id = ? OR client_name = ?
-      `, [parsedClientId, client.name]);
+        SELECT id FROM projects WHERE client_id = ?
+      `, [parsedClientId]);
       targetProjectIds = clientProjs.map(p => p.id);
     }
 
@@ -161,9 +161,9 @@ router.get('/client-projects/:clientId', async (req, res) => {
     const projects = await db.query(`
       SELECT id, name, code, status 
       FROM projects 
-      WHERE client_id = ? OR client_name = ?
+      WHERE client_id = ?
       ORDER BY id DESC
-    `, [clientId, client.name]);
+    `, [clientId]);
 
     res.json({ success: true, projects });
   } catch (err) {
