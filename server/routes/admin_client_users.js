@@ -104,9 +104,18 @@ router.post('/', async (req, res) => {
 
     const newUserId = result.lastID || result.lastInsertRowid;
 
-    // تعيين المشاريع المسموحة إذا تم تمريرها
-    if (Array.isArray(project_ids) && project_ids.length > 0) {
-      for (const pId of project_ids) {
+    // تعيين المشاريع المسموحة إذا تم تمريرها، أو التعيين التلقائي لمشاريع العميل إذا كان المالك أو المدير
+    let targetProjectIds = Array.isArray(project_ids) && project_ids.length > 0 ? project_ids : [];
+    
+    if (targetProjectIds.length === 0) {
+      const clientProjs = await db.query(`
+        SELECT id FROM projects WHERE client_id = ? OR client_name = ?
+      `, [client_id, client.name]);
+      targetProjectIds = clientProjs.map(p => p.id);
+    }
+
+    if (targetProjectIds.length > 0) {
+      for (const pId of targetProjectIds) {
         await db.run(`
           INSERT INTO client_project_access 
           (client_user_id, project_id, can_view_progress, can_view_invoices, can_view_payments, can_view_reports, can_view_drawings, can_approve_invoices, can_send_messages, granted_by)
@@ -117,12 +126,39 @@ router.post('/', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'تم إنشاء حساب العميل بنجاح',
-      user_id: newUserId
+      message: 'تم إنشاء حساب العميل وتخصيص المشاريع بنجاح',
+      user_id: newUserId,
+      assigned_projects_count: targetProjectIds.length
     });
   } catch (err) {
     console.error('Create Client User Error:', err);
     res.status(500).json({ success: false, message: 'حدث خطأ في إنشاء حساب العميل' });
+  }
+});
+
+/**
+ * GET /api/admin/client-users/client-projects/:clientId
+ * جلب قائمة المشاريع التابعة لعميل محدد لإتاحة اختيارها عند إضافة مستخدم
+ */
+router.get('/client-projects/:clientId', async (req, res) => {
+  try {
+    const clientId = parseInt(req.params.clientId, 10);
+    const client = await db.get(`SELECT id, name FROM clients WHERE id = ?`, [clientId]);
+    if (!client) {
+      return res.json({ success: true, projects: [] });
+    }
+
+    const projects = await db.query(`
+      SELECT id, name, code, status 
+      FROM projects 
+      WHERE client_id = ? OR client_name = ?
+      ORDER BY id DESC
+    `, [clientId, client.name]);
+
+    res.json({ success: true, projects });
+  } catch (err) {
+    console.error('Error fetching client projects:', err);
+    res.status(500).json({ success: false, message: 'خطأ في جلب مشاريع العميل' });
   }
 });
 

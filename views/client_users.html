@@ -81,7 +81,6 @@
       outline: none;
     }
 
-    /* Scrollbar Styling */
     ::-webkit-scrollbar {
       width: 8px;
       height: 8px;
@@ -100,6 +99,14 @@
 </head>
 <body class="min-h-screen pb-12">
 
+  <!-- Alert Toast Notification Area -->
+  <div id="toastNotification" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 hidden transition-all duration-300">
+    <div id="toastContent" class="glass-card px-6 py-3.5 rounded-2xl border flex items-center gap-3 shadow-2xl text-sm font-bold">
+      <i id="toastIcon" class="fa-solid fa-circle-check text-lg"></i>
+      <span id="toastMessage"></span>
+    </div>
+  </div>
+
   <!-- Main Container -->
   <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
 
@@ -116,7 +123,7 @@
               <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-wide">إدارة حسابات بوابة وتطبيق العملاء</h1>
               <span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold">Client Portal</span>
             </div>
-            <p class="text-sm text-slate-400">إدارة حسابات أندرويد والبوابة الخاصة بالعملاء، تحديد الصلاحيات والمشاريع المسموحة في نظام رواسي عدن</p>
+            <p class="text-sm text-slate-400">إدارة حسابات أندرويد والبوابة الخاصة بالعملاء، ربطها بدليل العملاء وتحديد صلاحيات المشاريع</p>
           </div>
         </div>
 
@@ -131,9 +138,9 @@
             <span>تحديث</span>
           </button>
 
-          <a href="/#settings" class="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-emerald-400 font-semibold rounded-xl border border-emerald-500/30 transition flex items-center gap-2 cursor-pointer">
-            <i class="fa-solid fa-gear"></i>
-            <span>العودة للإعدادات</span>
+          <a href="/" class="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-emerald-400 font-semibold rounded-xl border border-emerald-500/30 transition flex items-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-house"></i>
+            <span>العودة للنظام الرئيسي</span>
           </a>
         </div>
 
@@ -226,7 +233,7 @@
 
         <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-700">
           <i class="fa-solid fa-lock text-emerald-400"></i>
-          <span>نظام الحماية: <strong>Deny by Default</strong> (الصلاحية المباشرة فقط)</span>
+          <span>نظام الحماية: <strong>Deny by Default</strong> (تحديد وصول العميل لمشاريعه فقط)</span>
         </div>
 
       </div>
@@ -237,7 +244,7 @@
           <thead class="bg-slate-950/80 text-amber-400 uppercase text-xs border-b border-slate-700/80 tracking-wider">
             <tr>
               <th class="px-6 py-4 font-bold">مستخدم العميل</th>
-              <th class="px-6 py-4 font-bold">الشركة / العميل</th>
+              <th class="px-6 py-4 font-bold">الشركة / العميل المرتبط</th>
               <th class="px-6 py-4 font-bold">الدور والصلاحية</th>
               <th class="px-6 py-4 font-bold">المشاريع المسموحة</th>
               <th class="px-6 py-4 font-bold">الأمان والـ 2FA</th>
@@ -281,9 +288,9 @@
         <input type="hidden" id="userId">
 
         <div>
-          <label class="block text-xs font-bold text-slate-300 mb-1.5">العميل التابع له في النظام *</label>
-          <select id="userClientId" required class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
-            <option value="">اختر العميل...</option>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">العميل التابع له في قاعدة البيانات *</label>
+          <select id="userClientId" onchange="onClientSelected()" required class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+            <option value="">اختر العميل من الدليل...</option>
           </select>
         </div>
 
@@ -327,6 +334,17 @@
           </div>
         </div>
 
+        <!-- Section for Client's Projects Selection -->
+        <div id="clientProjectsSection" class="hidden">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>المشاريع المسموح بها لهذا العميل</span>
+            <span class="text-[0.7rem] text-amber-400 font-normal">يتم التعيين التلقائي لجميع مشاريع العميل إذا تُرك فارغاً</span>
+          </label>
+          <div id="clientProjectsContainer" class="p-3 bg-slate-900/90 rounded-xl border border-slate-700/80 max-h-36 overflow-y-auto space-y-1.5 text-xs">
+            <div class="text-slate-500 italic">اختر العميل أعلاه لعرض مشاريعه...</div>
+          </div>
+        </div>
+
         <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80 flex items-center justify-between mt-2">
           <div>
             <div class="text-xs font-bold text-white">تفعيل التحقق بخطوتين (2FA / OTP)</div>
@@ -353,20 +371,69 @@
   <script>
     let allUsers = [];
 
+    // Unified Authentication Token Resolver
+    function getAuthToken() {
+      return localStorage.getItem('rawasi_token') || 
+             sessionStorage.getItem('rawasi_token') || 
+             localStorage.getItem('token') || 
+             sessionStorage.getItem('token') || '';
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toastNotification');
+      const toastContent = document.getElementById('toastContent');
+      const toastIcon = document.getElementById('toastIcon');
+      const toastMsg = document.getElementById('toastMessage');
+
+      toastMsg.textContent = message;
+      if (type === 'success') {
+        toastContent.className = 'glass-card px-6 py-3.5 rounded-2xl border border-emerald-500/40 text-emerald-400 flex items-center gap-3 shadow-2xl text-sm font-bold bg-slate-900/90';
+        toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+      } else {
+        toastContent.className = 'glass-card px-6 py-3.5 rounded-2xl border border-rose-500/40 text-rose-400 flex items-center gap-3 shadow-2xl text-sm font-bold bg-slate-900/90';
+        toastIcon.className = 'fa-solid fa-circle-exclamation text-rose-400 text-lg';
+      }
+
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 4000);
+    }
+
     async function loadClientUsers() {
+      const tbody = document.getElementById('usersTableBody');
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        const res = await fetch('/api/admin/client-users', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        const res = await fetch('/api/admin/client-users', { headers });
         const data = await res.json();
+
         if (data.success) {
           allUsers = data.users || [];
           renderUsers(allUsers);
           updateStats(allUsers);
+        } else {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="text-center py-12 text-slate-400">
+                <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-400 mb-2"></i>
+                <div class="font-bold text-white mb-1">${data.message || 'تعذر تحميل حسابات العملاء'}</div>
+                <div class="text-xs text-slate-500 mb-4">يرجى التأكد من تسجيل الدخول بالنظام الرئيسي أولاً</div>
+                <button onclick="loadClientUsers()" class="px-4 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold">إعادة المحاولة</button>
+              </td>
+            </tr>`;
         }
       } catch (err) {
         console.error('Error loading client users:', err);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-wifi-slash text-3xl text-rose-400 mb-2"></i>
+              <div class="font-bold text-white mb-1">حدث خطأ في الاتصال بالخادم</div>
+              <button onclick="loadClientUsers()" class="px-4 py-2 bg-slate-800 text-amber-400 rounded-xl text-xs font-bold mt-2">إعادة المحاولة</button>
+            </td>
+          </tr>`;
       }
     }
 
@@ -459,21 +526,52 @@
 
     async function loadClientsList() {
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        const res = await fetch('/api/clients', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch('/api/clients', { headers });
         const data = await res.json();
         const select = document.getElementById('userClientId');
-        select.innerHTML = '<option value="">اختر العميل...</option>';
-        if (data.data || Array.isArray(data)) {
-          const list = data.data || data;
-          list.forEach(c => {
-            select.innerHTML += `<option value="${c.id}">${c.name} ${c.company ? `(${c.company})` : ''}</option>`;
-          });
+        select.innerHTML = '<option value="">اختر العميل من الدليل...</option>';
+
+        const clientsList = Array.isArray(data) ? data : (data.data || data.clients || []);
+        clientsList.forEach(c => {
+          select.innerHTML += `<option value="${c.id}">${c.name} ${c.company ? `(${c.company})` : ''}</option>`;
+        });
+      } catch (e) {
+        console.error('Error loading clients list:', e);
+      }
+    }
+
+    async function onClientSelected() {
+      const clientId = document.getElementById('userClientId').value;
+      const section = document.getElementById('clientProjectsSection');
+      const container = document.getElementById('clientProjectsContainer');
+
+      if (!clientId) {
+        section.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+      }
+
+      try {
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch(`/api/admin/client-users/client-projects/${clientId}`, { headers });
+        const data = await res.json();
+
+        section.classList.remove('hidden');
+        if (data.success && data.projects && data.projects.length > 0) {
+          container.innerHTML = data.projects.map(p => `
+            <label class="flex items-center justify-between p-2 rounded bg-slate-800/80 hover:bg-slate-700/80 cursor-pointer">
+              <span class="font-bold text-white">${p.name} <small class="text-slate-400">(${p.code || ''})</small></span>
+              <input type="checkbox" name="selected_project_ids" value="${p.id}" checked class="accent-amber-500 w-4 h-4">
+            </label>
+          `).join('');
+        } else {
+          container.innerHTML = '<div class="text-amber-400 p-2">لا توجد مشاريع مسجلة مباشرة لهذا العميل حالياً (سيتم منح الوصول التلقائي لجميع العقود المبرمة لاحقاً).</div>';
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error fetching client projects:', e);
       }
     }
 
@@ -483,6 +581,7 @@
       document.getElementById('passwordFieldGroup').style.display = 'block';
       document.getElementById('userPassword').required = true;
       document.getElementById('userForm').reset();
+      document.getElementById('clientProjectsSection').classList.add('hidden');
       loadClientsList();
       document.getElementById('userModal').classList.remove('hidden');
     }
@@ -503,6 +602,7 @@
         document.getElementById('userRole').value = user.role || 'viewer';
         document.getElementById('userStatus').value = user.status || 'active';
         document.getElementById('user2fa').checked = !!user.two_factor_enabled;
+        onClientSelected();
         document.getElementById('userModal').classList.remove('hidden');
       });
     }
@@ -514,7 +614,9 @@
     async function saveClientUser(e) {
       e.preventDefault();
       const id = document.getElementById('userId').value;
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = getAuthToken();
+
+      const selectedProjects = Array.from(document.querySelectorAll('input[name="selected_project_ids"]:checked')).map(cb => parseInt(cb.value, 10));
 
       const payload = {
         client_id: document.getElementById('userClientId').value,
@@ -523,7 +625,8 @@
         phone: document.getElementById('userPhone').value,
         role: document.getElementById('userRole').value,
         status: document.getElementById('userStatus').value,
-        two_factor_enabled: document.getElementById('user2fa').checked
+        two_factor_enabled: document.getElementById('user2fa').checked,
+        project_ids: selectedProjects
       };
 
       if (!id) {
@@ -533,37 +636,50 @@
       const url = id ? `/api/admin/client-users/${id}` : '/api/admin/client-users';
       const method = id ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.success) {
-        closeModal();
-        loadClientUsers();
-      } else {
-        alert(data.message || 'خطأ أثناء الحفظ');
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeModal();
+          showToast(data.message || 'تم حفظ حساب العميل بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'خطأ أثناء الحفظ', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء الحفظ', 'error');
       }
     }
 
     async function resetPassword(id) {
       const newPass = prompt('أدخل كلمة المرور الجديدة للحساب (6 أحرف على الأقل):');
       if (!newPass) return;
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`/api/admin/client-users/${id}/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ new_password: newPass })
-      });
-      const data = await res.json();
-      alert(data.message || 'تم تحديث كلمة المرور');
+      const token = getAuthToken();
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/reset-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ new_password: newPass })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تمت إعادة تعيين كلمة المرور بنجاح', 'success');
+        } else {
+          showToast(data.message || 'خطأ في إعادة تعيين كلمة المرور', 'error');
+        }
+      } catch (e) {
+        showToast('خطأ في الاتصال أثناء إعادة التعيين', 'error');
+      }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

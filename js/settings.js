@@ -47,7 +47,9 @@ const Settings = {
   // ================== إدارة حسابات تطبيـق العمالاء ==================
   async loadClientUsersForSettings() {
     try {
-      const res = await fetch('/api/admin/client-users');
+      const token = localStorage.getItem('rawasi_token') || sessionStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/client-users', { headers });
       const json = await res.json();
       if (!json.success) return;
 
