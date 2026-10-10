@@ -289,6 +289,45 @@ router.post('/auth/verify-otp', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/client-portal/auth/forgot-password
+ * طلب استعادة كلمة المرور وإرسال كود OTP
+ */
+router.post('/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'يرجى إدخال البريد الإلكتروني' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const user = await db.get(`SELECT id, full_name, phone, status FROM client_users WHERE LOWER(email) = ?`, [cleanEmail]);
+
+    if (!user || user.status !== 'active') {
+      // إرجاع استجابة نجاح وهمية لحماية الأمان والخصوصية من كشف وجود البريد
+      return res.json({
+        success: true,
+        message: 'إذا كان البريد الإلكتروني مسجلاً لدينا ومفعلاً، فسيتم إرسال تعليمات إعادة التعيين إليه.'
+      });
+    }
+
+    const otpCode = generateOtpCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 دقيقة
+
+    await db.run(`UPDATE client_users SET otp_code = ?, otp_expires_at = ? WHERE id = ?`, [otpCode, expiresAt, user.id]);
+
+    res.json({
+      success: true,
+      message: 'تمت إرسال تعليمات ورمز إعادة تعيين كلمة المرور بنجاح',
+      maskedPhone: user.phone ? user.phone.replace(/(\d{3})\d+(\d{2})/, '$1****$2') : null,
+      debugOtp: process.env.NODE_ENV !== 'production' ? otpCode : undefined
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء طلب استعادة كلمة المرور' });
+  }
+});
+
 // =========================================================================
 // المسارات المحمية بالكامل بـ requireClientAuth (Deny by Default)
 // =========================================================================
@@ -816,6 +855,93 @@ router.get('/payments', async (req, res) => {
   } catch (err) {
     console.error('Client Payments Error:', err);
     res.status(500).json({ success: false, message: 'حدث خطأ في تحميل سجل الدفعات' });
+  }
+});
+
+/**
+ * GET /api/client-portal/statement
+ * كشف حساب العميل التحليلي (Real Accounting Ledger Statement)
+ * يربط الفواتير المعتمدة (مدين) بالسندات والتحصيلات (دائن) مع حساب الرصيد التراكمي
+ */
+router.get('/statement', async (req, res) => {
+  try {
+    const clientId = req.clientUser.client_id;
+    const { project_id, from_date, to_date } = req.query;
+
+    // 1. جلب فواتير العميل (مدين - Debit)
+    let invSql = `
+      SELECT 
+        b.id,
+        b.bill_no AS doc_no,
+        'مستخلص رقم ' || b.bill_no AS description,
+        b.date AS entry_date,
+        COALESCE(b.net_amount, b.amount, 0) AS debit,
+        0 AS credit,
+        p.name AS project_name
+      FROM bills b
+      LEFT JOIN projects p ON p.id = b.project_id
+      WHERE b.client_id = ? AND (b.status != 'cancelled' OR b.status IS NULL)
+    `;
+    const invParams = [clientId];
+    if (project_id) { invSql += ' AND b.project_id = ?'; invParams.push(parseInt(project_id, 10)); }
+    if (from_date) { invSql += ' AND b.date >= ?'; invParams.push(from_date); }
+    if (to_date) { invSql += ' AND b.date <= ?'; invParams.push(to_date); }
+
+    const invoices = await db.query(invSql, invParams);
+
+    // 2. جلب سندات قبض العميل (دائن - Credit)
+    let paySql = `
+      SELECT 
+        pay.id,
+        pay.receipt_no AS doc_no,
+        'سند قبض رقم ' || COALESCE(pay.receipt_no, pay.id) || ' (' || COALESCE(pay.payment_method, 'نقد') || ')' AS description,
+        pay.date AS entry_date,
+        0 AS debit,
+        COALESCE(pay.amount, 0) AS credit,
+        p.name AS project_name
+      FROM payments pay
+      LEFT JOIN projects p ON p.id = pay.project_id
+      WHERE pay.client_id = ? AND pay.type = 'قبض'
+    `;
+    const payParams = [clientId];
+    if (project_id) { paySql += ' AND pay.project_id = ?'; payParams.push(parseInt(project_id, 10)); }
+    if (from_date) { paySql += ' AND pay.date >= ?'; payParams.push(from_date); }
+    if (to_date) { paySql += ' AND pay.date <= ?'; payParams.push(to_date); }
+
+    const payments = await db.query(paySql, payParams);
+
+    // دمج وترتيب القيود تسلسلياً حسب التاريخ
+    const combined = [...invoices, ...payments].sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date));
+
+    let runningBalance = 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+
+    const statement = combined.map(item => {
+      totalDebit += Number(item.debit || 0);
+      totalCredit += Number(item.credit || 0);
+      runningBalance += Number(item.debit || 0) - Number(item.credit || 0);
+      return {
+        ...item,
+        running_balance: runningBalance
+      };
+    });
+
+    res.json({
+      success: true,
+      client_name: req.clientUser.client_name,
+      company_name: req.clientUser.client_company,
+      summary: {
+        total_debit: totalDebit,
+        total_credit: totalCredit,
+        ending_balance: runningBalance
+      },
+      count: statement.length,
+      statement
+    });
+  } catch (err) {
+    console.error('Client Statement Error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ في استخراج كشف الحساب' });
   }
 });
 
