@@ -83,8 +83,8 @@ const ClientAPI = {
         headers
       });
 
-      // التعامل مع انتهاء صلاحية الجلسة
-      if (res.status === 401) {
+      // التعامل مع انتهاء صلاحية الجلسة في المسارات المحمية فقط وليس مسارات المصادقة الأولية
+      if (res.status === 401 && !endpoint.includes('/auth/')) {
         await window.SecureStorage.clear();
         if (!window.location.pathname.endsWith('index.html')) {
           window.location.href = 'index.html';
