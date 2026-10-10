@@ -54,12 +54,20 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { client_id, email, password, full_name, phone, role, two_factor_enabled, project_ids } = req.body;
+    const { client_id, email, password, full_name, phone, role, status, two_factor_enabled, project_ids } = req.body;
 
     if (!client_id || !email || !password || !full_name) {
       return res.status(400).json({
         success: false,
         message: 'الحقول المطلوبة: العميل، البريد الإلكتروني، كلمة المرور، الاسم الكامل'
+      });
+    }
+
+    const parsedClientId = parseInt(client_id, 10);
+    if (isNaN(parsedClientId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'معرف العميل غير صحيح'
       });
     }
 
@@ -75,34 +83,36 @@ router.post('/', async (req, res) => {
     }
 
     // التحقق من وجود العميل
-    const client = await db.get(`SELECT id, name FROM clients WHERE id = ?`, [client_id]);
+    const client = await db.get(`SELECT id, name FROM clients WHERE id = ?`, [parsedClientId]);
     if (!client) {
       return res.status(404).json({
         success: false,
-        message: 'العميل المحدد غير موجود في النظام'
+        message: 'العميل المحدد غير موجود في قاعدة البيانات'
       });
     }
 
     const salt = bcrypt.genSaltSync(10);
     const passwordHash = bcrypt.hashSync(String(password), salt);
     const userRole = ['owner', 'manager', 'viewer'].includes(role) ? role : 'viewer';
+    const userStatus = ['active', 'inactive', 'suspended'].includes(status) ? status : 'active';
     const enable2fa = typeof two_factor_enabled === 'boolean' ? (two_factor_enabled ? 1 : 0) : 1;
 
     const result = await db.run(`
       INSERT INTO client_users 
       (client_id, email, phone, password_hash, full_name, role, status, two_factor_enabled, two_factor_pin, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, '123456', CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '123456', CURRENT_TIMESTAMP)
     `, [
-      client_id,
+      parsedClientId,
       cleanEmail,
       phone ? String(phone).trim() : null,
       passwordHash,
       String(full_name).trim(),
       userRole,
+      userStatus,
       enable2fa
     ]);
 
-    const newUserId = result.lastID || result.lastInsertRowid;
+    const newUserId = result.lastID || result.lastInsertRowid || result.id;
 
     // تعيين المشاريع المسموحة إذا تم تمريرها، أو التعيين التلقائي لمشاريع العميل إذا كان المالك أو المدير
     let targetProjectIds = Array.isArray(project_ids) && project_ids.length > 0 ? project_ids : [];
@@ -110,7 +120,7 @@ router.post('/', async (req, res) => {
     if (targetProjectIds.length === 0) {
       const clientProjs = await db.query(`
         SELECT id FROM projects WHERE client_id = ? OR client_name = ?
-      `, [client_id, client.name]);
+      `, [parsedClientId, client.name]);
       targetProjectIds = clientProjs.map(p => p.id);
     }
 
@@ -132,7 +142,7 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     console.error('Create Client User Error:', err);
-    res.status(500).json({ success: false, message: 'حدث خطأ في إنشاء حساب العميل' });
+    res.status(500).json({ success: false, message: 'حدث خطأ في إنشاء حساب العميل: ' + (err.message || '') });
   }
 });
 

@@ -616,27 +616,61 @@
       const id = document.getElementById('userId').value;
       const token = getAuthToken();
 
+      const clientId = document.getElementById('userClientId').value;
+      const fullName = document.getElementById('userFullName').value.trim();
+      const email = document.getElementById('userEmail').value.trim();
+      const phone = document.getElementById('userPhone').value.trim();
+      const password = document.getElementById('userPassword').value;
+      const role = document.getElementById('userRole').value;
+      const status = document.getElementById('userStatus').value;
+      const twoFactor = document.getElementById('user2fa').checked;
+
+      if (!clientId) {
+        showToast('يرجى اختيار العميل التابع له من القائمة', 'error');
+        return;
+      }
+      if (!fullName) {
+        showToast('يرجى إدخال الاسم الكامل للمستخدم', 'error');
+        return;
+      }
+      if (!email) {
+        showToast('يرجى إدخال البريد الإلكتروني', 'error');
+        return;
+      }
+      if (!id && (!password || password.length < 6)) {
+        showToast('كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل', 'error');
+        return;
+      }
+
       const selectedProjects = Array.from(document.querySelectorAll('input[name="selected_project_ids"]:checked')).map(cb => parseInt(cb.value, 10));
 
       const payload = {
-        client_id: document.getElementById('userClientId').value,
-        full_name: document.getElementById('userFullName').value,
-        email: document.getElementById('userEmail').value,
-        phone: document.getElementById('userPhone').value,
-        role: document.getElementById('userRole').value,
-        status: document.getElementById('userStatus').value,
-        two_factor_enabled: document.getElementById('user2fa').checked,
+        client_id: parseInt(clientId, 10),
+        full_name: fullName,
+        email: email,
+        phone: phone,
+        role: role,
+        status: status,
+        two_factor_enabled: twoFactor,
         project_ids: selectedProjects
       };
 
       if (!id) {
-        payload.password = document.getElementById('userPassword').value;
+        payload.password = password;
       }
 
       const url = id ? `/api/admin/client-users/${id}` : '/api/admin/client-users';
       const method = id ? 'PUT' : 'POST';
 
+      const btnSubmit = e.target.querySelector('button[type="submit"]');
+      const originalText = btnSubmit ? btnSubmit.innerHTML : 'حفظ التغييرات';
+
       try {
+        if (btnSubmit) {
+          btnSubmit.disabled = true;
+          btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+        }
+
         const res = await fetch(url, {
           method,
           headers: {
@@ -655,6 +689,11 @@
         }
       } catch (err) {
         showToast('خطأ في الاتصال بالخادم أثناء الحفظ', 'error');
+      } finally {
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalText;
+        }
       }
     }
 
