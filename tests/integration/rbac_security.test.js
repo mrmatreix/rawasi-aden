@@ -19,36 +19,11 @@ test('RBAC & Scoped Security - Strict Server Enforcement (Deny by Default & SoD)
 
   const secret = process.env.JWT_SECRET || 'rawasi_aden_secret_key_2024';
 
-  const cleanup = async () => {
-    try {
-      const exps = await db.query(`SELECT id FROM expenses WHERE project_id IN (901, 902) AND recipient = 'مهندس الموقع'`);
-      const expIds = exps.map(e => e.id);
-      if (expIds.length > 0) {
-        const ph = expIds.map(() => '?').join(',');
-        const jes = await db.query(`SELECT id FROM journal_entries WHERE reference_id IN (${ph})`, expIds);
-        const jeIds = jes.map(j => j.id);
-        if (jeIds.length > 0) {
-          const jph = jeIds.map(() => '?').join(',');
-          await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds);
-          await db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds);
-        }
-        await db.run(`DELETE FROM expenses WHERE id IN (${ph})`, expIds);
-      }
-      await db.run('DELETE FROM cash_movements WHERE project_id IN (901, 902)');
-      await db.run('DELETE FROM projects WHERE id IN (901, 902)');
-      await db.run('DELETE FROM clients WHERE id = 903');
-    } catch {}
-  };
-  await cleanup();
-  t.after(() => cleanup().catch(() => {}));
-
-  // Seed sample projects for scope testing if not present (own client: no seed dependency)
-  await db.run(`INSERT OR IGNORE INTO clients (id, name, company, phone)
-    VALUES (903, 'عميل اختبار الصلاحيات', 'اختبار', '700000002')`);
+  // Seed sample projects for scope testing if not present
   await db.run(`INSERT OR IGNORE INTO projects (id, code, name, client_id, status, contract_value, actual_cost)
-    VALUES (901, 'PRJ-TEST-01', 'مشروع برج الأمانة 1', 903, 'active', 5000000, 100000)`);
+    VALUES (901, 'PRJ-TEST-01', 'مشروع برج الأمانة 1', 1, 'active', 5000000, 100000)`);
   await db.run(`INSERT OR IGNORE INTO projects (id, code, name, client_id, status, contract_value, actual_cost)
-    VALUES (902, 'PRJ-TEST-02', 'مشروع مجمع الساحل 2', 903, 'active', 8000000, 200000)`);
+    VALUES (902, 'PRJ-TEST-02', 'مشروع مجمع الساحل 2', 1, 'active', 8000000, 200000)`);
 
   // Helper to generate auth headers
   function getAuthHeaders(userObj) {

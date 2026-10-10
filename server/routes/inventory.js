@@ -4,7 +4,6 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
-const ProjectCostService = require('../services/projectCostService');
 
 // جلب جميع المواد مع حالة المخزون وتنبيهات النواقص
 router.get('/items', requirePermission('inventory:view'), async (req, res) => {
@@ -33,12 +32,7 @@ router.post('/items', requirePermission('inventory:create'), async (req, res) =>
     }
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM items');
-    let itemSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-    let code = `ITM-${String(itemSeq).padStart(2, '0')}`;
-    while (await get('SELECT id FROM items WHERE code = ?', [code])) {
-      itemSeq += 1;
-      code = `ITM-${String(itemSeq).padStart(2, '0')}`;
-    }
+    const code = `ITM-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(2, '0')}`;
     const selectedCurrency = currency || 'ر.ي';
 
     const result = await run(`
@@ -112,6 +106,7 @@ router.post('/transactions', (req, res, next) => {
     const {
       item_id,
       project_id,
+      boq_item_id,
       type = 'out', // 'out' (صرف لمشروع) أو 'in' (توريد للمخزن)
       quantity,
       unit_price,
@@ -131,10 +126,6 @@ router.post('/transactions', (req, res, next) => {
     }
 
     const parsedQty = Number(quantity);
-    const pId = project_id ? Number(project_id) : null;
-
-    // تجهيز مخطط توحيد التكلفة قبل بدء المعاملة
-    if (pId) await ProjectCostService.ensureSchema();
 
     const refPrefix = type === 'out' ? 'MAT-OUT' : 'MAT-IN';
     const countRes = await get('SELECT COUNT(*) as cnt FROM inventory_transactions WHERE type = ?', [type]);
@@ -149,34 +140,52 @@ router.post('/transactions', (req, res, next) => {
       const parsedPrice = unit_price !== undefined ? Number(unit_price) : Number(item.unit_price || 0);
       const totalAmount = parsedQty * parsedPrice;
 
+      let boqWarning = null;
+      if (type === 'out' && project_id && boq_item_id) {
+        const boq = await tx.get('SELECT * FROM project_boq WHERE id = ? AND project_id = ?', [boq_item_id, project_id]);
+        if (boq) {
+          const priorIssues = await tx.get(`
+            SELECT COALESCE(SUM(quantity), 0) as issued_qty 
+            FROM inventory_transactions 
+            WHERE project_id = ? AND boq_item_id = ? AND type = 'out'
+          `, [project_id, boq_item_id]);
+
+          const totalIssued = Number(priorIssues?.issued_qty || 0) + parsedQty;
+          if (totalIssued > Number(boq.contract_qty)) {
+            boqWarning = `تنبيه: إجمالي الكمية المصروفة للبند [${boq.item_no} - ${boq.description}] (${totalIssued}) تجاوزت الكمية المعتمدة في جدول الكميات التعاقدي (${boq.contract_qty})`;
+          }
+        }
+      }
+
       if (type === 'out') {
         if (Number(item.current_quantity) < parsedQty) {
           throw new Error(`الكمية المتوفرة في المخزن (${item.current_quantity} ${item.unit}) لا تكفي للصرف المطلوب (${parsedQty} ${item.unit})`);
         }
         // إنقاص رصيد المخزن
         await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
-        // (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
+
+        // إذا كان الصرف لمشروع، زيادة التكلفة الفعلية للمشروع
+        if (project_id) {
+          await tx.run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [totalAmount, project_id]);
+        }
       } else if (type === 'in') {
         // زيادة رصيد المخزن
         await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [parsedQty, item_id]);
       }
 
+      const finalNotes = notes ? `${notes} ${boqWarning ? ' | ' + boqWarning : ''}` : (boqWarning || '');
+
       const result = await tx.run(`
         INSERT INTO inventory_transactions (
-          item_id, project_id, type, quantity, unit_price, total_amount, 
+          item_id, project_id, boq_item_id, type, quantity, unit_price, total_amount, 
           reference_no, recipient, date, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        item_id, project_id || null, type, parsedQty, parsedPrice, totalAmount,
-        reference_no, recipient || '', date, notes || ''
+        item_id, project_id || null, boq_item_id ? Number(boq_item_id) : null, type, parsedQty, parsedPrice, totalAmount,
+        reference_no, recipient || '', date, finalNotes
       ]);
 
-      // توحيد التكلفة: إعادة احتساب تكلفة المشروع من مصادرها بعد تثبيت الحركة
-      if (pId) {
-        await ProjectCostService.recalculateProjectCost(pId, tx);
-      }
-
-      return { result, totalAmount, parsedPrice };
+      return { result, totalAmount, parsedPrice, boqWarning };
     });
 
 

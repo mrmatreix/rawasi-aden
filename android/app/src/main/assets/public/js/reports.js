@@ -25,8 +25,8 @@ const Reports = {
       const res = await fetch('/api/reports/dashboard');
       const json = await res.json();
       if (json.success) {
-        const { kpis, expenses_by_type, monthly_trend, recent_transactions } = json.data;
-        this.updateKPIElements(kpis);
+        const { kpis, expenses_by_type, monthly_trend, recent_transactions, contracting_summary } = json.data;
+        this.updateKPIElements(kpis, contracting_summary);
         this.renderExpensesDonutChart(expenses_by_type);
         this.renderMonthlyTrendChart(monthly_trend);
         this.renderRecentOperationsTable(recent_transactions);
@@ -36,7 +36,7 @@ const Reports = {
     }
   },
 
-  updateKPIElements(k) {
+  updateKPIElements(k, contractingSummary) {
     const setTxt = (id, val) => {
       const el = document.getElementById(id);
       if (el) {
@@ -51,6 +51,17 @@ const Reports = {
     setTxt('kpiCashBalance', k.cash_balance);
     setTxt('kpiClientReceivables', k.client_receivables);
     setTxt('kpiSupplierPayables', k.supplier_payables);
+
+    // تحديث ركائز المقاولات الـ 8 المفصولة في اللوحة الرئيسية
+    const cs = contractingSummary || {};
+    setTxt('matrixTotalReceipts', k.cash_receipts ?? cs.total_cash_receipts ?? 0);
+    setTxt('matrixRecognizedRevenue', k.recognized_revenue ?? cs.total_recognized_revenue ?? 0);
+    setTxt('matrixGrossBillings', k.progress_billings ?? cs.total_gross_billings ?? 0);
+    setTxt('matrixAdvanceLiability', k.advance_payments_liability ?? cs.total_advance_liability ?? 0);
+    setTxt('matrixActiveRetention', k.retention_receivable_asset ?? cs.total_active_retention ?? 0);
+    setTxt('matrixContractAssetWIP', k.contract_asset_wip ?? cs.total_contract_asset_wip ?? 0);
+    setTxt('matrixApprovedVariations', k.approved_variations ?? cs.total_approved_variations ?? 0);
+    setTxt('matrixTrueNetProfit', k.true_net_profit ?? cs.total_true_profit ?? 0);
 
     const activeEl = document.getElementById('kpiActiveProjects');
     if (activeEl) {
@@ -392,49 +403,189 @@ const Reports = {
   },
 
   // 4. كشف حساب عميل مفصل
-  initClientStatementDropdown() {
+  async initClientStatementDropdown(selectedId = null) {
     const select = document.getElementById('repClientSelect');
-    if (select && Accounting.clients.length > 0) {
+    if (!select) return;
+
+    let clients = (typeof Accounting !== 'undefined' && Accounting.clients && Accounting.clients.length > 0)
+      ? Accounting.clients
+      : (typeof App !== 'undefined' && App.clientsFullList && App.clientsFullList.length > 0)
+        ? App.clientsFullList
+        : [];
+
+    if (clients.length === 0) {
+      try {
+        const res = await fetch('/api/clients');
+        const json = await res.json();
+        if (json.success && json.data) {
+          clients = json.data;
+          if (typeof Accounting !== 'undefined') Accounting.clients = clients;
+        }
+      } catch (e) {
+        console.error('Error fetching clients for statement dropdown:', e);
+      }
+    }
+
+    if (clients.length > 0) {
       select.innerHTML = `<option value="">اختر العميل...</option>` +
-        Accounting.clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        clients.map(c => `<option value="${c.id}">${c.name}${c.company ? ' (' + c.company + ')' : ''}</option>`).join('');
+    }
+
+    if (selectedId) {
+      select.value = selectedId;
     }
   },
 
-  async fetchFullClientStatement() {
-    const clientId = document.getElementById('repClientSelect')?.value;
+  // فتح كشف حساب العميل مباشرة من أي شاشة أو من نافذة السلسلة المالية
+  async showClientStatement(clientId) {
     if (!clientId) return;
+    if (typeof App !== 'undefined' && App.navigate) {
+      await App.navigate('reports');
+    }
+    this.switchReportTab('client-statement');
+    await this.initClientStatementDropdown(clientId);
+    const select = document.getElementById('repClientSelect');
+    if (select) {
+      select.value = clientId;
+    }
+    await this.fetchFullClientStatement(clientId);
+    // التمرير السلس إلى بطاقة كشف الحساب
+    const pane = document.getElementById('pane_client-statement');
+    if (pane) {
+      pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  },
+
+  async fetchFullClientStatement(explicitClientId = null) {
+    const clientId = explicitClientId || document.getElementById('repClientSelect')?.value;
+    if (!clientId) return;
+
+    const select = document.getElementById('repClientSelect');
+    if (select && String(select.value) !== String(clientId)) {
+      select.value = clientId;
+    }
 
     try {
       const res = await fetch(`/api/reports/client-statement/${clientId}`);
       const json = await res.json();
       if (json.success) {
-        const { client, statement } = json.data;
+        const { client, statement, chain_nine_stages, summary } = json.data;
         const cCurr = client.currency || 'ر.ي';
+        const st = chain_nine_stages || {};
+
         document.getElementById('repClientInfo').innerHTML = `
-          <div style="background: rgba(212,175,55,0.06); border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-md); margin-bottom: 14px;">
-            <h4 style="color: var(--gold-light);">${client.name}</h4>
-            <div style="display: flex; gap: 24px; font-size: 0.85rem; margin-top: 8px;">
-              <span>الهاتف: <strong>${client.phone || '-'}</strong></span>
-              <span>الرصيد السابق: <strong>${App.formatNumber(client.previous_balance)} ${cCurr}</strong></span>
-              <span>الرصيد الحالي المستحق: <strong style="color: var(--accent-red); font-size: 1rem;">${App.formatNumber(client.current_balance)} ${cCurr}</strong></span>
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 1.2rem;">${client.name} ${client.company ? `<span style="font-size: 0.85rem; color: #38bdf8;">(${client.company})</span>` : ''}</h3>
+                <span style="font-size: 0.78rem; color: var(--text-secondary);">الهاتف: ${client.phone || '-'} | العنوان: ${client.address || '-'}</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${client.id})">
+                  <span>🔗 استعراض السلسلة الهرمية</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${client.id})">
+                  <span>+ مستخلص جديد</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- شريط السلسلة التساعية التفاعلي 1 إلى 9 المكتمل بالأرقام الفعلية -->
+            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+              <div style="font-size: 0.75rem; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
+                ⚡ شريط السلسلة المالية المرتبطة للعميل (1 إلى 9):
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 6px; text-align: center; font-size: 0.72rem;">
+                <div style="background: rgba(212,175,55,0.12); border: 1px solid rgba(212,175,55,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: var(--gold-light);">1. العميل</span>
+                  <div style="font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${client.name}</div>
+                </div>
+                <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #38bdf8;">2. العقود</span>
+                  <div style="font-weight: 700; color: #fff;">${st.stage_2_contracts_count || 0} (${App.formatNumber(st.stage_2_total_contract_value || 0)})</div>
+                </div>
+                <div style="background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #a78bfa;">3. المشاريع</span>
+                  <div style="font-weight: 700; color: #fff;">${st.stage_3_projects_count || 0} مشاريع</div>
+                </div>
+                <div style="background: rgba(234,179,8,0.12); border: 1px solid rgba(234,179,8,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #facc15;">4. المستخلصات</span>
+                  <div style="font-weight: 700; color: #fff;">${st.stage_4_bills_count || 0} مستخلص</div>
+                </div>
+                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: #f59e0b;">5. المطالبات</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_5_total_invoiced_claims || 0)}</div>
+                </div>
+                <div style="background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.35); border-radius: 5px; padding: 5px;">
+                  <span style="color: #38bdf8;">6. دفعات مقدمة</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_6_total_advance_received || 0)}</div>
+                </div>
+                <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 5px; padding: 5px;">
+                  <span style="color: var(--accent-green);">7. المبالغ المحصلة</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_7_total_collections || 0)}</div>
+                </div>
+                <div style="background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.35); border-radius: 5px; padding: 5px;">
+                  <span style="color: #f59e0b;">8. محتجزات الضمان</span>
+                  <div style="font-weight: 700; color: #fff;">${App.formatNumber(st.stage_8_active_retention_balance || 0)}</div>
+                </div>
+                <div style="background: rgba(239,68,68,0.15); border: 1px solid var(--accent-red); border-radius: 5px; padding: 5px;">
+                  <span style="color: var(--accent-red); font-weight: 700;">9. الرصيد المستحق</span>
+                  <div style="font-weight: 800; color: var(--accent-red);">${App.formatNumber(st.stage_9_outstanding_due_balance || 0)} ${cCurr}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- شريط ملخص الأرصدة المدققة -->
+            <div style="display: flex; gap: 20px; font-size: 0.85rem; flex-wrap: wrap; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px;">
+              <span>الرصيد الافتتاحي: <strong>${App.formatNumber(client.previous_balance || 0)} ${cCurr}</strong></span>
+              <span>إجمالي المطالبات المفوترة: <strong style="color: var(--gold-light);">${App.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></span>
+              <span>إجمالي المحصل: <strong style="color: var(--accent-green);">${App.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></span>
+              <span>محتجزات الضمان المعلقة: <strong style="color: #f59e0b;">${App.formatNumber(summary.active_retention || 0)} ${cCurr}</strong></span>
+              <span>الرصيد النهائي المستحق: <strong style="color: var(--accent-red); font-size: 1.05rem;">${App.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></span>
             </div>
           </div>
         `;
 
         const tbody = document.getElementById('repClientStatementTable');
         if (tbody) {
-          let runningBalance = Number(client.previous_balance || 0);
+          if (statement.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا العميل</td></tr>`;
+            return;
+          }
+
           tbody.innerHTML = statement.map(s => {
-            runningBalance += (s.debit || 0) - (s.credit || 0);
+            const contractBadge = (s.contract_no && s.contract_no !== '-') 
+              ? `<span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8;">${s.contract_no}</span>` 
+              : '-';
+
+            const projectBadge = (s.project_name && s.project_name !== '-') 
+              ? `<span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa;">${s.project_name}</span>` 
+              : '-';
+
+            const billBadge = (s.bill_no && s.bill_no !== '-') 
+              ? `<span class="badge" style="background: rgba(234,179,8,0.15); color: #facc15;">${s.bill_no}</span>` 
+              : '-';
+
+            const retentionTxt = s.retention_deduction > 0 
+              ? `<span style="color: #f59e0b; font-weight: 600;">-${App.formatNumber(s.retention_deduction)}</span>` 
+              : '-';
+
+            const runBal = Number(s.running_balance || 0);
+            const runBalColor = runBal > 0 ? 'var(--accent-red)' : (runBal < 0 ? 'var(--accent-green)' : 'var(--text-secondary)');
+
             return `
               <tr>
-                <td>${s.date}</td>
-                <td>${s.type}</td>
-                <td>${s.ref || '-'}</td>
+                <td>${s.date || '-'}</td>
+                <td><strong>${s.type}</strong></td>
+                <td><span style="font-family: monospace; color: #fff;">${s.ref || '-'}</span></td>
+                <td>${contractBadge}</td>
+                <td>${projectBadge}</td>
+                <td>${billBadge}</td>
                 <td style="color: var(--accent-red); font-weight: bold;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
                 <td style="color: var(--accent-green); font-weight: bold;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
-                <td style="font-weight: bold;">${App.formatNumber(runningBalance)}</td>
-                <td>${s.notes || '-'}</td>
+                <td>${retentionTxt}</td>
+                <td style="font-weight: 800; color: ${runBalColor};">${App.formatNumber(runBal)}</td>
+                <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 200px;">${s.notes || '-'}</td>
               </tr>
             `;
           }).join('');
@@ -446,51 +597,179 @@ const Reports = {
   },
 
   // 5. كشف حساب مورد مفصل
-  initSupplierStatementDropdown() {
+  async initSupplierStatementDropdown(selectedId = null) {
     const select = document.getElementById('repSupplierSelect');
-    if (select && Accounting.suppliers.length > 0) {
-      select.innerHTML = `<option value="">اختر المورد...</option>` +
-        Accounting.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    if (!select) return;
+
+    if (!Accounting.suppliers || Accounting.suppliers.length === 0) {
+      try {
+        const res = await fetch('/api/suppliers');
+        const json = await res.json();
+        if (json.success && json.data) {
+          Accounting.suppliers = json.data;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch suppliers for statement dropdown:', e);
+      }
     }
+
+    const list = Accounting.suppliers || [];
+    select.innerHTML = `<option value="">-- اختر المورد لعرض كشف الحساب --</option>` +
+      list.map(s => {
+        const name = s.company_name || s.name || 'مورد';
+        const curr = s.default_currency || s.currency || 'YER';
+        return `<option value="${s.id}">${name} (${curr})</option>`;
+      }).join('');
+
+    if (selectedId) {
+      select.value = String(selectedId);
+      await this.fetchFullSupplierStatement();
+    } else if (select.value) {
+      await this.fetchFullSupplierStatement();
+    }
+  },
+
+  async showSupplierStatement(supplierId) {
+    if (typeof App !== 'undefined' && App.navigate) {
+      App.navigate('reports');
+    }
+    this.switchReportTab('supplier-statement');
+    await this.initSupplierStatementDropdown(supplierId);
   },
 
   async fetchFullSupplierStatement() {
     const supplierId = document.getElementById('repSupplierSelect')?.value;
-    if (!supplierId) return;
+    const infoEl = document.getElementById('repSupplierInfo');
+    const tbody = document.getElementById('repSupplierStatementTable');
+    const tfoot = document.getElementById('repSupplierStatementFooter');
+
+    if (!supplierId) {
+      if (infoEl) infoEl.innerHTML = '';
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);"><i class="fa fa-arrow-up" style="margin-left: 6px;"></i> يرجى اختيار مورد من القائمة المنسدلة أعلاه لعرض كشف الحساب</td></tr>`;
+      }
+      if (tfoot) tfoot.innerHTML = '';
+      return;
+    }
+
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-secondary);"><i class="fa fa-spinner fa-spin fa-lg" style="margin-left: 8px; color: var(--accent-blue);"></i> جاري جلب كشف الحساب المالي والتدقيق المحاسبي...</td></tr>`;
+    }
 
     try {
       const res = await fetch(`/api/reports/supplier-statement/${supplierId}`);
       const json = await res.json();
-      if (json.success) {
-        const { supplier, statement } = json.data;
-        const sCurr = supplier.currency || 'ر.ي';
-        document.getElementById('repSupplierInfo').innerHTML = `
-          <div style="background: rgba(56,189,248,0.06); border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-md); margin-bottom: 14px;">
-            <h4 style="color: var(--accent-blue);">${supplier.name} (${supplier.category || 'مورد'})</h4>
-            <div style="display: flex; gap: 24px; font-size: 0.85rem; margin-top: 8px;">
-              <span>الهاتف: <strong>${supplier.phone || '-'}</strong></span>
-              <span>الرصيد المستحق للمورد: <strong style="color: var(--accent-amber); font-size: 1rem;">${App.formatNumber(supplier.balance)} ${sCurr}</strong></span>
-            </div>
-          </div>
-        `;
+      if (json.success && json.data) {
+        const { supplier, statement, summary } = json.data;
+        const sCurr = supplier.currency || supplier.default_currency || 'ر.ي';
+        const suppName = supplier.company_name || supplier.name || 'مورد';
+        const contact = supplier.contact_person || 'غير محدد';
+        const phone = supplier.phone_number || supplier.phone || '-';
+        const category = supplier.industry_category || supplier.category || 'عام';
+        const docType = supplier.payment_document_type || 'إيصال عادي';
 
-        const tbody = document.getElementById('repSupplierStatementTable');
-        if (tbody) {
-          tbody.innerHTML = statement.map(s => `
-            <tr>
-              <td>${s.date}</td>
-              <td>${s.type}</td>
-              <td>${s.ref || '-'}</td>
-              <td style="color: var(--accent-amber); font-weight: bold;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
-              <td style="color: var(--accent-green); font-weight: bold;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
-              <td>${s.notes || '-'}</td>
-            </tr>
-          `).join('');
+        const totInvoiced = summary ? summary.total_invoiced : statement.reduce((sum, s) => sum + (s.credit || 0), 0);
+        const totPaid = summary ? summary.total_paid : statement.reduce((sum, s) => sum + (s.debit || 0), 0);
+        const outBal = summary ? summary.outstanding_balance : (totInvoiced - totPaid);
+
+        if (infoEl) {
+          infoEl.innerHTML = `
+            <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); padding: 18px 20px; border-radius: 12px; margin-bottom: 18px; border-right: 4px solid #3b82f6;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-color, #334155); padding-bottom: 12px; margin-bottom: 12px;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3 style="margin: 0; font-size: 1.25rem; color: var(--text-primary); font-weight: 700;">${suppName}</h3>
+                    <span class="badge" style="background: rgba(59,130,246,0.15); color: #3b82f6; font-size: 0.8rem;">${category}</span>
+                    <span class="badge" style="background: rgba(139,92,246,0.15); color: #8b5cf6; font-size: 0.8rem;">${docType}</span>
+                  </div>
+                  <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+                    الشخص المسؤول (التاجر): <strong>${contact}</strong> &nbsp;|&nbsp; الهاتف: <strong dir="ltr">${phone}</strong> &nbsp;|&nbsp; العملة: <strong>${sCurr}</strong>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="Reports.printSupplierStatement()" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-weight: 700;">
+                    <i class="fa fa-print"></i> طباعة كشف الحساب (PDF)
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="App.openVendorProfileModal(${supplier.id})" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fa fa-id-card"></i> ملف المورد (SRM)
+                  </button>
+                </div>
+              </div>
+
+              <!-- بطاقات مؤشرات الكشف المالي -->
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
+                  <div style="font-size: 0.76rem; color: var(--text-secondary);">إجمالي المشتريات / الاستحقاق (دائن)</div>
+                  <div style="font-size: 1.2rem; font-weight: 800; color: #3b82f6; margin-top: 2px;">${App.formatNumber(totInvoiced)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
+                </div>
+
+                <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
+                  <div style="font-size: 0.76rem; color: var(--text-secondary);">إجمالي المسدد للمورد (مدين)</div>
+                  <div style="font-size: 1.2rem; font-weight: 800; color: #10b981; margin-top: 2px;">${App.formatNumber(totPaid)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
+                </div>
+
+                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 10px 14px; text-align: center;">
+                  <div style="font-size: 0.76rem; color: var(--text-secondary);">صافي الرصيد المستحق (المتبقي له)</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: ${outBal > 0 ? '#f59e0b' : '#10b981'}; margin-top: 2px;">${App.formatNumber(outBal)} <small style="font-size: 0.75rem;">${sCurr}</small></div>
+                </div>
+              </div>
+            </div>
+          `;
         }
+
+        if (tbody) {
+          if (!statement || statement.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-muted);"><i class="fa fa-info-circle"></i> لا توجد حركات مسجلة لهذا المورد حتى الآن</td></tr>`;
+            if (tfoot) tfoot.innerHTML = '';
+          } else {
+            tbody.innerHTML = statement.map(s => {
+              const runBalColor = (s.running_balance || 0) > 0 ? 'var(--accent-amber)' : 'var(--accent-green)';
+              return `
+                <tr>
+                  <td style="white-space: nowrap; font-family: monospace;">${s.date || '-'}</td>
+                  <td><span class="badge" style="background: rgba(59,130,246,0.12); color: #3b82f6; font-size: 0.78rem;">${s.type}</span></td>
+                  <td style="font-weight: 600; font-family: monospace;">${s.ref || '-'}</td>
+                  <td style="color: var(--accent-amber); font-weight: 700; text-align: right;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
+                  <td style="color: var(--accent-green); font-weight: 700; text-align: right;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
+                  <td style="font-weight: 800; text-align: right; color: ${runBalColor};">${App.formatNumber(s.running_balance ?? 0)}</td>
+                  <td style="font-size: 0.85rem; color: var(--text-secondary);">${s.notes || '-'}</td>
+                </tr>
+              `;
+            }).join('');
+
+            if (tfoot) {
+              tfoot.innerHTML = `
+                <tr style="background: var(--bg-secondary, #1e293b); font-weight: 800; border-top: 2px solid var(--border-color, #334155);">
+                  <td colspan="3" style="text-align: center; font-size: 0.95rem;">الإجمالي العام لكشف الحساب</td>
+                  <td style="color: var(--accent-amber); font-size: 1rem; text-align: right;">${App.formatNumber(totInvoiced)} <small>${sCurr}</small></td>
+                  <td style="color: var(--accent-green); font-size: 1rem; text-align: right;">${App.formatNumber(totPaid)} <small>${sCurr}</small></td>
+                  <td style="color: ${outBal > 0 ? 'var(--accent-amber)' : 'var(--accent-green)'}; font-size: 1.05rem; text-align: right;">${App.formatNumber(outBal)} <small>${sCurr}</small></td>
+                  <td style="font-size: 0.82rem; color: var(--text-muted);">${outBal === 0 ? 'الحساب مسوى بالكامل ✅' : 'متبقي مستحق للمورد ⏳'}</td>
+                </tr>
+              `;
+            }
+          }
+        }
+      } else {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--accent-red);">${json.message || 'تعذر تحميل بيانات المورد'}</td></tr>`;
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching supplier statement:', e);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--accent-red);">حدث خطأ أثناء جلب كشف الحساب: ${e.message}</td></tr>`;
     }
+  },
+
+  // طباعة كشف حساب المورد المحدد حصراً
+  printSupplierStatement() {
+    const select = document.getElementById('repSupplierSelect');
+    if (!select || !select.value) {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast('يرجى اختيار المورد أولاً لطباعة كشف الحساب', 'warning');
+      }
+      return;
+    }
+    this.activeReportTab = 'supplier-statement';
+    this.printActiveReport();
   },
 
   // طباعة أي تقرير نشط على الورقة الرسمية المعتمدة
@@ -613,19 +892,21 @@ const Reports = {
         </div>` : ''}
       `;
     } else if (tab === 'supplier-statement') {
-      reportTitle = 'كشف حساب مورد تفصيلي';
+      reportTitle = 'كشف حساب مورد تفصيلي ومعتمد';
       const select = document.getElementById('repSupplierSelect');
       const supplierName = select ? select.options[select.selectedIndex]?.text : 'مورد';
       const supplierInfo = document.getElementById('repSupplierInfo')?.innerHTML || '';
       const tableRows = document.getElementById('repSupplierStatementTable')?.innerHTML || '';
+      const tableFoot = document.getElementById('repSupplierStatementFooter')?.innerHTML || '';
 
       reportMeta = [
         { label: 'اسم المورد', val: supplierName },
-        { label: 'تاريخ الإصدار', val: todayDate }
+        { label: 'تاريخ الإصدار', val: todayDate },
+        { label: 'الحالة المحاسبية', val: 'مطابق ومسوى دفتریاً' }
       ];
 
       reportBodyHtml = `
-        <div style="margin-bottom: 12px;">
+        <div style="margin-bottom: 14px;">
           ${supplierInfo}
         </div>
         <table class="official-report-table">
@@ -633,16 +914,22 @@ const Reports = {
             <tr>
               <th>التاريخ</th>
               <th>نوع الحركة</th>
-              <th>رقم الفاتورة/السند</th>
-              <th>مستحق له (دائن)</th>
-              <th>المدفوع له (مدين)</th>
+              <th>المرجع</th>
+              <th>دائن (له)</th>
+              <th>مدين (عليه)</th>
+              <th>الرصيد التراكمي</th>
               <th>البيان والملاحظات</th>
             </tr>
           </thead>
           <tbody>
-            ${tableRows || '<tr><td colspan="6" style="text-align: center;">لا توجد حركات مسجلة</td></tr>'}
+            ${tableRows || '<tr><td colspan="7" style="text-align: center;">لا توجد حركات مسجلة</td></tr>'}
           </tbody>
+          ${tableFoot ? `<tfoot>${tableFoot}</tfoot>` : ''}
         </table>
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 10px 14px; font-size: 0.78rem; color: #475569; display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+          <span>مصادقة الحساب: يعتبر كشف الحساب المالي أعلاه معتمداً ومطابقاً لدفاتر الشركة المحاسبية حتى تاريخ صدوره.</span>
+          <span>توقيع وختم المورد: ..........................</span>
+        </div>
       `;
     } else if (tab === 'balance-sheet') {
       reportTitle = 'تقرير الميزانية العمومية والمركز المالي';
@@ -1187,5 +1474,169 @@ const Reports = {
       console.error('Error loading cash flow:', e);
       App.showToast('فشل تحميل التدفقات النقدية', 'error');
     }
+  },
+
+  // ================== مصفوفة الفصل المالي وإثبات إيراد المقاولات IFRS 15 ==================
+  async openContractingSeparationModal() {
+    App.openModal('contractingSeparationModal');
+    const tbody = document.getElementById('contractingMatrixTableBody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">جاري تحميل مصفوفة المقاولات المالية (IFRS 15)...</td></tr>';
+    }
+
+    try {
+      const res = await fetch('/api/billing/contracting-matrix');
+      const json = await res.json();
+      if (!res.ok || !json.projects) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--accent-red); padding: 20px;">${json.message || 'فشل جلب بيانات مصفوفة المقاولات'}</td></tr>`;
+        return;
+      }
+
+      if (json.projects.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">لا توجد مشاريع مسجلة في مصفوفة المقاولات</td></tr>';
+        return;
+      }
+
+      if (tbody) {
+        tbody.innerHTML = json.projects.map(p => {
+          const contractVal = p.revised_contract_value || p.base_contract_value || 0;
+          const actualCost = p.cumulative_actual_cost || 0;
+          const pocPct = (p.cost_to_cost_poc_pct || 0).toFixed(1);
+          const recRev = p.recognized_revenue?.cumulative || 0;
+          const billed = p.progress_billings?.gross || 0;
+          const wip = p.contract_assets?.work_in_progress_wip || 0;
+          const cash = p.cash_receipts?.total || 0;
+          const adv = p.contract_liabilities?.unamortized_advance || 0;
+          const ret = p.contract_assets?.retention_receivable || 0;
+          const profit = p.performance_comparison?.net_profit || 0;
+          const netCash = p.performance_comparison?.net_cash_flow || 0;
+
+          return `
+            <tr>
+              <td><strong>${p.project_name}</strong><br><small style="color: var(--text-secondary);">${p.project_code || ''}</small></td>
+              <td>${p.client_name || '-'}</td>
+              <td style="color: var(--gold-light); font-weight: 600;">${App.formatNumber(contractVal)}</td>
+              <td style="color: var(--accent-red);">${App.formatNumber(actualCost)}</td>
+              <td><strong>${pocPct}%</strong></td>
+              <td style="color: #38bdf8; font-weight: 600;">${App.formatNumber(recRev)}</td>
+              <td style="color: var(--accent-green);">${App.formatNumber(billed)}</td>
+              <td>${App.formatNumber(wip)}</td>
+              <td style="color: #4ade80;">${App.formatNumber(cash)}</td>
+              <td style="color: #facc15;">${App.formatNumber(adv)}</td>
+              <td style="color: #94a3b8;">${App.formatNumber(ret)}</td>
+              <td style="color: ${profit >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${App.formatNumber(profit)}</td>
+              <td style="color: ${netCash >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${App.formatNumber(netCash)}</td>
+              <td style="text-align: center;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="Reports.openRevenueRecognitionModal(${p.project_id})" title="إثبات إيراد دوري" style="padding: 3px 8px; font-size: 0.75rem; white-space: nowrap;">
+                  إثبات POC
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    } catch (e) {
+      console.error(e);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; color: var(--accent-red); padding: 20px;">خطأ في الاتصال بالخادم</td></tr>`;
+    }
+  },
+
+  async openRevenueRecognitionModal(preselectedProjectId = null) {
+    App.openModal('revenueRecognitionModal');
+    const select = document.getElementById('revRecProjectId');
+    const dateInput = document.getElementById('revRecDate');
+    const previewCard = document.getElementById('revRecPreviewCard');
+    if (previewCard) previewCard.style.display = 'none';
+    if (dateInput && !dateInput.value) {
+      dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    if (select) {
+      try {
+        const res = await fetch('/api/projects');
+        const json = await res.json();
+        if (json.success && json.data) {
+          select.innerHTML = '<option value="">-- اختر المشروع لتحديث المعايير ونسبة الإنجاز --</option>' +
+            json.data.map(p => `<option value="${p.id}">${p.name} (${p.code || p.id})</option>`).join('');
+
+          if (preselectedProjectId) {
+            select.value = String(preselectedProjectId);
+            this.onRevenueProjectChanged(preselectedProjectId);
+          }
+        }
+      } catch (e) {
+        console.error('Error populating projects:', e);
+      }
+    }
+  },
+
+  async onRevenueProjectChanged(projectId) {
+    const previewCard = document.getElementById('revRecPreviewCard');
+    if (!projectId) {
+      if (previewCard) previewCard.style.display = 'none';
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/billing/contracting-matrix/${projectId}`);
+      const json = await res.json();
+      if (json.success && json.data && previewCard) {
+        const d = json.data;
+        previewCard.style.display = 'block';
+        const setTxt = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = typeof val === 'number' ? App.formatNumber(val) : (val || '0');
+        };
+        setTxt('prevContractVal', d.revised_contract_value || d.base_contract_value || 0);
+        setTxt('prevActualCost', d.cumulative_actual_cost || 0);
+        setTxt('prevPocPct', (d.cost_to_cost_poc_pct || 0).toFixed(1) + '%');
+        setTxt('prevPostedRev', d.recognized_revenue?.previously_posted || 0);
+        setTxt('prevUnpostedRev', d.recognized_revenue?.unposted_period_revenue || 0);
+      }
+    } catch (e) {
+      console.error('Error fetching project metrics:', e);
+    }
+  },
+
+  async submitRevenueRecognition(event) {
+    if (event) event.preventDefault();
+    const projectId = document.getElementById('revRecProjectId')?.value;
+    const periodDate = document.getElementById('revRecDate')?.value || new Date().toISOString().split('T')[0];
+    const notes = document.getElementById('revRecNotes')?.value || '';
+
+    if (!projectId) {
+      App.showToast('يرجى اختيار المشروع', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/billing/recognize-revenue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          period_date: periodDate,
+          notes
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم إثبات الإيراد المحاسبي بنجاح', 'success');
+        App.closeModal('revenueRecognitionModal');
+        this.openContractingSeparationModal();
+      } else {
+        App.showToast(json.message || 'فشل إثبات الإيراد المحاسبي', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      App.showToast('حدث خطأ أثناء الاتصال بالخادم', 'error');
+    }
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.Reports = Reports;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Reports;
+}

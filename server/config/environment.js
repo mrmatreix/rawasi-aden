@@ -11,9 +11,9 @@ const isStaging = env === 'staging';
 const isProd = env === 'production';
 const isDev = !isStaging && !isProd;
 
-// تحديد المنفذ حسب البيئة (Unified: 5500 default; AI Studio can set PORT=3000)
-let defaultPort = 5500;
-if (isStaging) defaultPort = 5501;
+// تحديد المنفذ حسب البيئة (Port 3000 for AI Studio)
+let defaultPort = 3000;
+if (isStaging) defaultPort = 3000;
 
 const port = Number(process.env.PORT) || defaultPort;
 
@@ -46,7 +46,7 @@ const config = {
   version,
   appName: 'نظام رواسي عدن للهندسة والمقاولات',
   cors: {
-    origin: (isProd || isStaging) ? false : true,
+    origin: isProd ? false : true,
     credentials: true
   },
   logging: {

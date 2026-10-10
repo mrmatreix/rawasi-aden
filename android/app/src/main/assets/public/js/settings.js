@@ -35,8 +35,90 @@ const Settings = {
       this.loadPrintSettings();
     } else if (tab === 'backup') {
       this.loadDbConfig();
+      this.loadAutoBackupSchedule();
       this.loadLogoutBackups();
       this.loadMysqlStatus();
+      this.loadCloudBackupStatus();
+    } else if (tab === 'client_app') {
+      this.loadClientUsersForSettings();
+    }
+  },
+
+  // ================== إدارة حسابات تطبيـق العمالاء ==================
+  async loadClientUsersForSettings() {
+    try {
+      const token = localStorage.getItem('rawasi_token') || sessionStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/client-users', { headers });
+      const json = await res.json();
+      if (!json.success) return;
+
+      const tbody = document.getElementById('clientUsersSettingsTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = '';
+      const users = json.users || [];
+
+      const statTot = document.getElementById('statClientUsersTotal');
+      const statAct = document.getElementById('statClientUsersActive');
+      if (statTot) statTot.textContent = users.length;
+      if (statAct) statAct.textContent = users.filter(u => u.status === 'active').length;
+
+      if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">لا توجد حسابات عملاء مسجلة حالياً للتطبيق. انقر على "+ إضافة حساب عميل جديد" لإنشاء حساب.</td></tr>';
+        return;
+      }
+
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${u.full_name}</strong></td>
+          <td>${u.client_company || u.client_name || '-'}</td>
+          <td><div>${u.email}</div><small style="color: var(--text-muted);">${u.phone || ''}</small></td>
+          <td><span class="badge" style="background: rgba(212, 175, 55, 0.2); color: #d4af37;">${u.role === 'owner' ? 'مالك (Owner)' : (u.role === 'manager' ? 'مدير (Manager)' : 'مطلع (Viewer)')}</span></td>
+          <td><span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">${u.assigned_projects_count || 0} مشاريع</span></td>
+          <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
+          <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? '#34d399' : '#f87171'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
+          <td>
+            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: #34d399; border-color: #10b981;">إدارة التفاصيل ↗</a>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.deleteClientUser(${u.id}, '${(u.full_name || '').replace(/'/g, "\\'")}')" style="padding: 3px 8px; font-size: 0.8rem; color: #f87171; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); margin-right: 4px;" title="حذف حساب العميل">🗑️ حذف</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (e) {
+      console.error('Error loading client users for settings:', e);
+    }
+  },
+
+  openClientUserModal() {
+    window.open('/views/client_users.html', '_blank');
+  },
+
+  async deleteClientUser(id, fullName) {
+    if (!confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('rawasi_token') || sessionStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
+      const res = await fetch(`/api/admin/client-users/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (typeof App !== 'undefined' && App.showNotification) {
+          App.showNotification('نجاح', data.message || 'تم حذف حساب العميل بنجاح', 'success');
+        } else {
+          alert(data.message || 'تم حذف حساب العميل بنجاح');
+        }
+        this.loadClientUsersForSettings();
+      } else {
+        alert(data.message || 'خطأ في حذف حساب العميل');
+      }
+    } catch (e) {
+      console.error('Error deleting client user:', e);
     }
   },
 
@@ -1334,6 +1416,9 @@ const Settings = {
           } else if (u.role === 'accountant') {
             roleBadgeClass = 'badge-role-accountant';
             roleTitle = 'المحاسب المالي';
+          } else if (u.role === 'auditor') {
+            roleBadgeClass = 'badge-warning';
+            roleTitle = 'المراجع المالي (مدقق)';
           } else if (u.role === 'project_manager') {
             roleBadgeClass = 'badge-role-pm';
             roleTitle = 'مهندس المشاريع';
@@ -1345,12 +1430,24 @@ const Settings = {
           // Permissions summary
           const perms = u.permissions_list || [];
           let permsHtml = '';
-          if (u.role === 'admin' || perms.includes('all') || perms.length >= 18) {
+          if (u.role === 'admin' || perms.includes('all') || perms.length >= 25) {
             permsHtml = `<span class="badge badge-role-admin">كافة الصلاحيات (شامل)</span>`;
           } else if (perms.length === 0) {
             permsHtml = `<span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary);">صلاحيات افتراضية (${roleTitle})</span>`;
           } else {
             permsHtml = `<span class="badge badge-active" title="${perms.join(', ')}">${perms.length} صلاحية مخصصة</span>`;
+          }
+
+          // Scope summary
+          let scopeHtml = '';
+          const scopeParts = [];
+          if (u.branch) scopeParts.push(`🏢 ${u.branch}`);
+          if (u.department) scopeParts.push(`📑 ${u.department}`);
+          if (u.allowed_projects && u.allowed_projects !== 'all' && u.allowed_projects !== '*' && u.allowed_projects !== '[]') {
+            scopeParts.push(`🏗️ مشاريع محددة`);
+          }
+          if (scopeParts.length > 0) {
+            scopeHtml = `<div style="font-size: 0.72rem; color: #38bdf8; margin-top: 3px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
           }
 
           // User security & session badge
@@ -1379,7 +1476,7 @@ const Settings = {
           if (u.role === 'admin' || u.username === 'admin' || has2Fa) {
             const currentPin = u.two_factor_pin || '123456';
             tfaBadgeHtml = `<div style="margin-top: 5px;">
-              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id})" title="رمز التحقق بخطوتين (PIN) المعتمد لهذا الحساب - انقر للتعديل في أي وقت">
+              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="رمز التحقق بخطوتين (PIN) المعتمد لهذا الحساب - انقر للتعديل وتغيير الرمز">
                 🔐 PIN: <strong style="font-family: monospace; letter-spacing: 1px; color: #fbbf24;">${currentPin}</strong>
               </span>
             </div>`;
@@ -1413,6 +1510,7 @@ const Settings = {
               </td>
               <td>
                 ${permsHtml}
+                ${scopeHtml}
                 ${secBadgeHtml}
                 ${tfaBadgeHtml}
               </td>
@@ -1454,8 +1552,84 @@ const Settings = {
     }
   },
 
+  // ================== إدارة نطاق الصلاحيات (المشاريع، الفروع، الأقسام) ==================
+  async fetchScopesMeta() {
+    if (this._scopesMeta) return this._scopesMeta;
+    try {
+      const res = await fetch('/api/users/scopes-meta', {
+        headers: Auth.token ? { 'Authorization': `Bearer ${Auth.token}` } : {}
+      });
+      const data = await res.json();
+      if (data.success) {
+        this._scopesMeta = data;
+        return data;
+      }
+    } catch (e) {
+      console.error('Error fetching scopes meta:', e);
+    }
+    return null;
+  },
+
+  async renderScopesControls(user = null) {
+    const meta = await this.fetchScopesMeta();
+    const branchSelect = document.getElementById('userBranchVal');
+    const deptSelect = document.getElementById('userDepartmentVal');
+    const projectsList = document.getElementById('userProjectsCheckList');
+    const allProjChk = document.getElementById('userAllProjectsScopeChk');
+    const projContainer = document.getElementById('userProjectsScopeContainer');
+
+    if (branchSelect) {
+      const currentBranchId = user ? (user.branch_id || '') : '';
+      branchSelect.innerHTML = `<option value="">كافة الفروع (غير مقيد)</option>` +
+        (meta?.branches || []).map(b => `<option value="${b.id}" ${String(b.id) === String(currentBranchId) ? 'selected' : ''}>🏢 ${b.name} (${b.city || ''})</option>`).join('');
+    }
+
+    if (deptSelect) {
+      const currentDeptId = user ? (user.department_id || '') : '';
+      deptSelect.innerHTML = `<option value="">كافة الأقسام (غير مقيد)</option>` +
+        (meta?.departments || []).map(d => `<option value="${d.id}" ${String(d.id) === String(currentDeptId) ? 'selected' : ''}>📑 ${d.name}</option>`).join('');
+    }
+
+    if (projectsList) {
+      let allowedProjIds = [];
+      if (user && user.allowed_projects) {
+        try {
+          allowedProjIds = typeof user.allowed_projects === 'string' && (user.allowed_projects.startsWith('[') || user.allowed_projects.startsWith('{'))
+            ? JSON.parse(user.allowed_projects)
+            : String(user.allowed_projects).split(',').map(s => s.trim());
+        } catch (e) {
+          allowedProjIds = [String(user.allowed_projects)];
+        }
+      }
+
+      const isAll = !user || allowedProjIds.length === 0 || allowedProjIds.includes('*') || allowedProjIds.includes('all');
+      if (allProjChk) allProjChk.checked = isAll;
+      if (projContainer) projContainer.style.display = isAll ? 'none' : 'block';
+
+      projectsList.innerHTML = (meta?.projects || []).map(p => {
+        const checked = !isAll && allowedProjIds.some(id => String(id) === String(p.id));
+        return `
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: #f1f5f9; cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;">
+            <input type="checkbox" class="user-proj-scope-chk" value="${p.id}" ${checked ? 'checked' : ''} style="accent-color: #38bdf8;">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</span>
+          </label>
+        `;
+      }).join('');
+    }
+  },
+
+  onAllProjectsScopeToggle(isAll) {
+    const projContainer = document.getElementById('userProjectsScopeContainer');
+    if (projContainer) {
+      projContainer.style.display = isAll ? 'none' : 'block';
+    }
+    if (isAll) {
+      document.querySelectorAll('.user-proj-scope-chk').forEach(c => c.checked = false);
+    }
+  },
+
   // ================== نافذة إضافة مستخدم جديد ==================
-  openNewUserModal() {
+  async openNewUserModal() {
     const titleEl = document.getElementById('userModalTitle');
     if (titleEl) titleEl.textContent = 'إضافة مستخدم جديد وتحديد الصلاحيات';
 
@@ -1486,6 +1660,9 @@ const Settings = {
       this.applyRolePermissionsPreset('accountant');
     }
 
+    // تجهيز نطاق الصلاحيات الجغرافي والإداري (فروع، أقسام، مشاريع)
+    await this.renderScopesControls(null);
+
     // تجهيز بطاقة الأمان والجلسات المخصصة (المكان الأخضر)
     const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
     const secCard = document.getElementById('userModalSecurityCard');
@@ -1509,7 +1686,7 @@ const Settings = {
   },
 
   // ================== نافذة تعديل مستخدم ==================
-  openEditUserModal(userId) {
+  async openEditUserModal(userId, focus2Fa = false) {
     const user = this._cachedUsers.find(u => u.id === userId);
     if (!user) {
       App.showToast('لم يتم العثور على بيانات المستخدم', 'error');
@@ -1544,6 +1721,9 @@ const Settings = {
     if (roleSelect) {
       roleSelect.value = user.role || 'custom';
     }
+
+    // تجهيز نطاق الصلاحيات الجغرافي والإداري لهذا المستخدم
+    await this.renderScopesControls(user);
 
     // تعبئة حقل رمز التحقق بخطوتين (2FA PIN) وحالته للمستخدم الحالي
     const editPinInput = document.getElementById('user2FaPinVal');
@@ -1593,6 +1773,27 @@ const Settings = {
     }
 
     App.openModal('newUserModal');
+
+    if (focus2Fa) {
+      setTimeout(() => {
+        const card = document.getElementById('user2FaCardContainer');
+        const pinInput = document.getElementById('user2FaPinVal');
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.style.transition = 'box-shadow 0.4s ease, border-color 0.4s ease';
+          card.style.borderColor = 'var(--gold-primary)';
+          card.style.boxShadow = '0 0 16px rgba(212, 175, 55, 0.4)';
+          setTimeout(() => {
+            card.style.boxShadow = '';
+            card.style.borderColor = 'rgba(212, 175, 55, 0.35)';
+          }, 1500);
+        }
+        if (pinInput) {
+          pinInput.focus();
+          pinInput.select();
+        }
+      }, 350);
+    }
   },
 
   // ================== دوال التحكم برمز التحقق بخطوتين (2FA PIN) ==================
@@ -1849,20 +2050,39 @@ const Settings = {
         return;
       case 'accountant':
         permsToSelect = [
-          'dashboard:view',
-          'revenues:view', 'revenues:create', 'revenues:print',
-          'expenses:view', 'expenses:create',
-          'custody:view', 'custody:manage',
-          'clients:view', 'clients:manage', 'clients:statement',
-          'suppliers:view', 'suppliers:manage', 'suppliers:statement',
+          'dashboard:view', 'dashboard:export',
+          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
+          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
+          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
+          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
+          'custody:view', 'custody:create', 'custody:export',
+          'clients:view', 'clients:create', 'clients:export',
+          'suppliers:view', 'suppliers:create', 'suppliers:export',
           'cash:view',
-          'reports:view'
+          'hr:view',
+          'reports:view', 'reports:export'
+        ];
+        break;
+      case 'auditor':
+        permsToSelect = [
+          'dashboard:view', 'dashboard:export',
+          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
+          'expenses:view', 'expenses:approve', 'expenses:export',
+          'revenues:view', 'revenues:approve', 'revenues:export',
+          'billing:view', 'billing:approve', 'billing:export',
+          'custody:view', 'custody:approve', 'custody:export',
+          'projects:view', 'projects:export',
+          'inventory:view', 'inventory:export',
+          'purchases:view', 'purchases:approve', 'purchases:export',
+          'hr:view', 'hr:approve', 'hr:export',
+          'reports:view', 'reports:export',
+          'cash:view'
         ];
         break;
       case 'project_manager':
         permsToSelect = [
           'dashboard:view',
-          'projects:view', 'projects:manage', 'projects:print',
+          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export',
           'expenses:view', 'expenses:create',
           'custody:view',
           'inventory:view', 'inventory:issue',
@@ -1871,7 +2091,8 @@ const Settings = {
         break;
       case 'storekeeper':
         permsToSelect = [
-          'inventory:view', 'inventory:manage', 'inventory:issue',
+          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export',
+          'purchases:view',
           'projects:view'
         ];
         break;
@@ -2031,7 +2252,17 @@ const Settings = {
     // قراءة والتحقق من رمز التحقق بخطوتين (2FA PIN)
     const pinInput = document.getElementById('user2FaPinVal');
     const tfaEnabledChk = document.getElementById('user2FaEnabledVal');
-    const twoFactorPin = pinInput ? pinInput.value.trim() : '123456';
+    
+    const normalizeDigits = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+        .replace(/[^0-9]/g, '')
+        .trim();
+    };
+
+    const twoFactorPin = normalizeDigits(pinInput ? pinInput.value : '123456');
     const twoFactorEnabled = tfaEnabledChk ? (tfaEnabledChk.checked ? 1 : 0) : 1;
 
     if (twoFactorEnabled && twoFactorPin) {
@@ -2040,6 +2271,16 @@ const Settings = {
         if (pinInput) pinInput.focus();
         return;
       }
+    }
+
+    // قراءة وتحديد نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects)
+    const branch_id = document.getElementById('userBranchVal')?.value || null;
+    const department_id = document.getElementById('userDepartmentVal')?.value || null;
+    const allProjScope = document.getElementById('userAllProjectsScopeChk')?.checked;
+    let allowed_projects = 'all';
+    if (!allProjScope) {
+      const selectedProjIds = Array.from(document.querySelectorAll('.user-proj-scope-chk:checked')).map(c => Number(c.value));
+      allowed_projects = selectedProjIds;
     }
 
     const payload = {
@@ -2051,7 +2292,10 @@ const Settings = {
       status,
       permissions: finalPerms,
       two_factor_pin: twoFactorPin || '123456',
-      two_factor_enabled: twoFactorEnabled
+      two_factor_enabled: twoFactorEnabled,
+      branch_id: branch_id ? Number(branch_id) : null,
+      department_id: department_id ? Number(department_id) : null,
+      allowed_projects
     };
 
     if (userSecuritySettings !== undefined) {
@@ -2529,6 +2773,236 @@ const Settings = {
     this.executeRestore();
   },
 
+  // ================== الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين ==================
+  async loadAutoBackupSchedule() {
+    try {
+      const res = await fetch('/api/settings/auto-backup/status');
+      const json = await res.json();
+      if (!json.success || !json.data) return;
+      const d = json.data;
+
+      // ملء حقول النموذج
+      const enabledSel = document.getElementById('cfgAutoBackupEnabled');
+      const intervalSel = document.getElementById('cfgAutoBackupInterval');
+      const daySel = document.getElementById('cfgAutoBackupDayOfWeek');
+      const timeInp = document.getElementById('cfgAutoBackupTime');
+      const maxFilesSel = document.getElementById('cfgAutoBackupMaxFiles');
+      const pathInp = document.getElementById('cfgAutoBackupPath');
+
+      if (enabledSel) enabledSel.value = d.enabled ? 'true' : 'false';
+      if (intervalSel) intervalSel.value = d.interval || 'daily';
+      if (daySel) daySel.value = String(d.dayOfWeek !== undefined ? d.dayOfWeek : 5);
+      if (timeInp) timeInp.value = d.time || '02:00';
+      if (maxFilesSel) maxFilesSel.value = String(d.maxFiles || 14);
+      if (pathInp) {
+        pathInp.value = d.storagePath || d.defaultStoragePath || '';
+        pathInp.dataset.defaultPath = d.defaultStoragePath || '';
+      }
+
+      this.toggleAutoBackupFields();
+
+      // تحديث بطاقة الحالة الحية
+      const statusBadge = document.getElementById('liveBackupStatusBadge');
+      const intervalText = document.getElementById('liveBackupIntervalText');
+      const lastRunText = document.getElementById('liveBackupLastRunText');
+      const nextRunText = document.getElementById('liveBackupNextRunText');
+      const pathStatus = document.getElementById('cfgAutoBackupPathStatus');
+
+      if (statusBadge) {
+        if (!d.enabled) {
+          statusBadge.innerHTML = '🟡 معطل مؤقتاً';
+          statusBadge.style.color = '#facc15';
+        } else if (d.lastStatus === 'failed') {
+          statusBadge.innerHTML = '🔴 فشل آخر نسخ';
+          statusBadge.style.color = '#f87171';
+        } else {
+          statusBadge.innerHTML = '🟢 مفعل ومنتظم';
+          statusBadge.style.color = '#4ade80';
+        }
+      }
+
+      if (intervalText) {
+        intervalText.textContent = d.interval === 'weekly'
+          ? `أسبوعياً (كل ${d.dayOfWeekName || 'جمعة'} في تمام ${d.time || '02:00'})`
+          : `يومياً في تمام ${d.time || '02:00'}`;
+      }
+
+      if (lastRunText) {
+        if (d.lastRun) {
+          const lrDate = new Date(d.lastRun);
+          const sizeMb = d.lastSize ? `(${(d.lastSize / (1024 * 1024)).toFixed(2)} MB)` : '';
+          lastRunText.innerHTML = `${lrDate.toLocaleDateString('ar-YE')} ${lrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })} ${sizeMb} ${d.lastStatus === 'success' ? '✅' : '❌'}`;
+        } else {
+          lastRunText.textContent = 'لا توجد نسخ سابقة';
+        }
+      }
+
+      if (nextRunText) {
+        if (d.nextRun && d.enabled) {
+          const nrDate = new Date(d.nextRun);
+          const nextTime = `${nrDate.toLocaleDateString('ar-YE')} ${nrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}`;
+          nextRunText.innerHTML = `${nextTime} <span style="font-size:0.8rem; color:#94a3b8;">(${d.countdownText || ''})</span>`;
+        } else {
+          nextRunText.textContent = d.enabled ? 'جاري الحساب...' : 'الجدولة متوقفة';
+        }
+      }
+
+      if (pathStatus) {
+        if (d.storagePathExists && d.storagePathWritable) {
+          pathStatus.innerHTML = '<span style="color:#4ade80;">(مسار صالح ومؤكد ✅)</span>';
+        } else if (d.storagePathExists) {
+          pathStatus.innerHTML = '<span style="color:#facc15;">(المسار موجود - يتطلب فحص الصلاحيات)</span>';
+        } else {
+          pathStatus.innerHTML = '<span style="color:#38bdf8;">(سيتم إنشاء المجلد تلقائياً)</span>';
+        }
+      }
+    } catch (e) {
+      console.error('Error loading auto backup schedule:', e);
+    }
+  },
+
+  toggleAutoBackupFields() {
+    const enabled = document.getElementById('cfgAutoBackupEnabled')?.value === 'true';
+    const interval = document.getElementById('cfgAutoBackupInterval')?.value;
+    const dayGroup = document.getElementById('cfgAutoBackupDayGroup');
+
+    if (dayGroup) {
+      dayGroup.style.display = (enabled && interval === 'weekly') ? 'block' : 'none';
+    }
+  },
+
+  async saveAutoBackupSchedule(event) {
+    if (event) event.preventDefault();
+    const btn = document.getElementById('btnSaveAutoBackupConfig');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>جاري الحفظ... ⏳</span>';
+    }
+
+    const payload = {
+      enabled: document.getElementById('cfgAutoBackupEnabled')?.value === 'true',
+      interval: document.getElementById('cfgAutoBackupInterval')?.value || 'daily',
+      dayOfWeek: Number(document.getElementById('cfgAutoBackupDayOfWeek')?.value || 5),
+      time: document.getElementById('cfgAutoBackupTime')?.value || '02:00',
+      maxFiles: Number(document.getElementById('cfgAutoBackupMaxFiles')?.value || 14),
+      storagePath: document.getElementById('cfgAutoBackupPath')?.value?.trim() || ''
+    };
+
+    try {
+      const res = await fetch('/api/settings/auto-backup/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم حفظ إعدادات الجدولة التلقائية بنجاح 🛡️', 'success');
+        await this.loadAutoBackupSchedule();
+        if (typeof App !== 'undefined' && App.fetchAutoBackupStatus) {
+          App.fetchAutoBackupStatus();
+        }
+      } else {
+        App.showToast(json.message || 'فشل حفظ الإعدادات', 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء حفظ إعدادات الجدولة', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  async runAutoBackupNow() {
+    const btn = document.getElementById('btnSettingsRunBackupNow');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>جاري التنفيذ... ⏳</span>';
+    }
+
+    try {
+      const res = await fetch('/api/settings/auto-backup/run-now', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم إنشاء النسخة التلقائية المجدولة بنجاح وحفظها 🛡️', 'success');
+        await this.loadAutoBackupSchedule();
+        if (typeof App !== 'undefined' && App.fetchAutoBackupStatus) {
+          App.fetchAutoBackupStatus();
+        }
+      } else {
+        App.showToast(json.message || 'فشل تنفيذ النسخ التلقائي', 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء تشغيل النسخ التلقائي', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  async testStoragePath() {
+    const pathInp = document.getElementById('cfgAutoBackupPath');
+    const resultBox = document.getElementById('autoBackupTestResultBox');
+    const pathStatus = document.getElementById('cfgAutoBackupPathStatus');
+    const pathVal = pathInp?.value?.trim();
+
+    if (!pathVal) {
+      App.showToast('يرجى إدخال مسار التخزين أولاً', 'warning');
+      return;
+    }
+
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.style.background = 'rgba(255,255,255,0.05)';
+      resultBox.style.color = '#94a3b8';
+      resultBox.innerHTML = 'جاري اختبار المسار وصلاحيات الكتابة... ⏳';
+    }
+
+    try {
+      const res = await fetch('/api/settings/auto-backup/test-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: pathVal })
+      });
+      const json = await res.json();
+      if (resultBox) {
+        if (json.success) {
+          resultBox.style.background = 'rgba(34, 197, 94, 0.15)';
+          resultBox.style.color = '#4ade80';
+          resultBox.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+          resultBox.innerHTML = `<strong>${json.message}</strong><br><small style="direction:ltr; display:block; color:#f8fafc; font-family:monospace;">${json.resolvedPath}</small>`;
+          if (pathStatus) pathStatus.innerHTML = '<span style="color:#4ade80;">(مسار صالح ومؤكد ✅)</span>';
+        } else {
+          resultBox.style.background = 'rgba(239, 68, 68, 0.15)';
+          resultBox.style.color = '#f87171';
+          resultBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          resultBox.innerHTML = `<strong>⚠️ ${json.message}</strong>`;
+          if (pathStatus) pathStatus.innerHTML = '<span style="color:#f87171;">(تعذر استخدام المسار ❌)</span>';
+        }
+      }
+    } catch (err) {
+      if (resultBox) {
+        resultBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        resultBox.style.color = '#f87171';
+        resultBox.innerHTML = 'خطأ أثناء الاتصال بالخادم لاختبار المسار';
+      }
+    }
+  },
+
+  resetDefaultStoragePath() {
+    const pathInp = document.getElementById('cfgAutoBackupPath');
+    if (pathInp) {
+      pathInp.value = pathInp.dataset.defaultPath || 'server/database/backups';
+      App.showToast('تم استعادة المسار الافتراضي للنسخ الاحتياطية', 'info');
+      this.testStoragePath();
+    }
+  },
+
   // ================== إدارة ومزامنة خادم MySQL ==================
   async loadMysqlStatus() {
     try {
@@ -2725,6 +3199,551 @@ const Settings = {
         btn.innerHTML = 'بدء ترحيل البيانات الآن (Migrate SQLite to MySQL) 🚀';
       }
     }
+  },
+
+  // ================== محرك الأرشفة الشاملة والمزامنة السحابية المشفرة ==================
+  _cloudVaultItems: [],
+  _selectedVaultRestoreFile: null,
+  _selectedVaultArchiveName: null,
+
+  async loadCloudBackupStatus() {
+    try {
+      const res = await fetch('/api/settings/cloud-backup/status');
+      const json = await res.json();
+      if (!json.success) return;
+
+      const { config, vaultItems, systemStats } = json;
+      this._cloudVaultItems = vaultItems || [];
+
+      // تحديث شارات وبطاقات الحالة
+      const badge = document.getElementById('cloudStatusBadge');
+      if (badge) {
+        if (config.lastSyncStatus === 'success') {
+          badge.innerHTML = '<span style="color: #34d399;">🟢 متزامن ومحمي سحابياً</span>';
+        } else if (config.lastSyncStatus === 'failed') {
+          badge.innerHTML = '<span style="color: #f87171;">⚠️ تعثرت آخر مزامنة</span>';
+        } else {
+          badge.innerHTML = '<span style="color: #38bdf8;">☁️ جاهز للمزامنة</span>';
+        }
+      }
+
+      const lastSyncEl = document.getElementById('cloudLastSyncTimeText');
+      if (lastSyncEl) {
+        lastSyncEl.textContent = config.lastSyncTime 
+          ? new Date(config.lastSyncTime).toLocaleString('ar-YE')
+          : 'لا توجد مزامنة سابقة';
+      }
+
+      const countEl = document.getElementById('cloudVaultFilesCountText');
+      if (countEl) {
+        countEl.textContent = `${this._cloudVaultItems.length} أرشيف محفوظ`;
+      }
+
+      // تعبئة نموذج إعدادات السحابة
+      const pSelect = document.getElementById('cfgCloudProvider');
+      if (pSelect && config.provider) pSelect.value = config.provider;
+
+      const endInp = document.getElementById('cfgCloudEndpoint');
+      if (endInp) endInp.value = config.endpointUrl || '';
+
+      const tokInp = document.getElementById('cfgCloudToken');
+      if (tokInp) tokInp.value = config.authToken || '';
+
+      const fldInp = document.getElementById('cfgCloudFolder');
+      if (fldInp) fldInp.value = config.syncedFolder || '';
+
+      const autoSyncCheck = document.getElementById('cfgCloudAutoSync');
+      if (autoSyncCheck) autoSyncCheck.checked = Boolean(config.autoSyncAfterBackup);
+
+      this.toggleCloudProviderFields();
+      this.renderCloudVaultTable();
+    } catch (err) {
+      console.warn('⚠️ [Settings] خطأ أثناء جلب حالة الخزنة السحابية:', err.message);
+    }
+  },
+
+  toggleArchiveCryptoFields() {
+    const chk = document.getElementById('cfgArchiveEncrypt');
+    const grp = document.getElementById('archivePassphraseGroup');
+    if (grp) {
+      grp.style.display = (chk && chk.checked) ? 'block' : 'none';
+    }
+  },
+
+  async generatePassphraseForArchive() {
+    try {
+      const res = await fetch('/api/settings/cloud-backup/generate-key');
+      const json = await res.json();
+      if (json.success && json.key) {
+        const inp = document.getElementById('cfgArchivePassphrase');
+        if (inp) {
+          inp.value = json.key;
+          inp.type = 'text';
+          App.showToast('تم توليد مفتاح أمان تشفير فائق القوة 🔑', 'success');
+        }
+      }
+    } catch (e) {
+      // توليد محلي في حال الانقطاع
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*';
+      let k = '';
+      for (let i = 0; i < 24; i++) k += chars[Math.floor(Math.random() * chars.length)];
+      const inp = document.getElementById('cfgArchivePassphrase');
+      if (inp) inp.value = k;
+      App.showToast('تم توليد مفتاح أمان عشوائي محلي 🔑', 'info');
+    }
+  },
+
+  toggleCloudProviderFields() {
+    const pVal = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const endGrp = document.getElementById('grpCloudEndpoint');
+    const tokGrp = document.getElementById('grpCloudToken');
+    const fldGrp = document.getElementById('grpCloudFolder');
+
+    if (endGrp) endGrp.style.display = (pVal === 's3_webhook') ? 'block' : 'none';
+    if (tokGrp) tokGrp.style.display = (pVal === 's3_webhook') ? 'block' : 'none';
+    if (fldGrp) fldGrp.style.display = (pVal === 'local_cloud_folder') ? 'block' : 'none';
+  },
+
+  async saveCloudSyncConfig(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const provider = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const endpointUrl = document.getElementById('cfgCloudEndpoint')?.value?.trim() || '';
+    const authToken = document.getElementById('cfgCloudToken')?.value?.trim() || '';
+    const syncedFolder = document.getElementById('cfgCloudFolder')?.value?.trim() || '';
+    const autoSyncAfterBackup = Boolean(document.getElementById('cfgCloudAutoSync')?.checked);
+
+    try {
+      App.showToast('جاري حفظ وتطبيق إعدادات السحابة...', 'info');
+      const res = await fetch('/api/settings/cloud-backup/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: true,
+          provider,
+          endpointUrl,
+          authToken,
+          syncedFolder,
+          autoSyncAfterBackup
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message, 'success');
+        this.loadCloudBackupStatus();
+      } else {
+        App.showToast('فشل الحفظ: ' + json.message, 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء حفظ إعدادات السحابة', 'error');
+    }
+  },
+
+  async testCloudConnection() {
+    const btn = document.getElementById('btnTestCloudConn');
+    const resBox = document.getElementById('cloudConnectionTestResult');
+    const provider = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const endpointUrl = document.getElementById('cfgCloudEndpoint')?.value?.trim() || '';
+    const authToken = document.getElementById('cfgCloudToken')?.value?.trim() || '';
+    const syncedFolder = document.getElementById('cfgCloudFolder')?.value?.trim() || '';
+
+    if (btn) btn.disabled = true;
+    if (resBox) {
+      resBox.style.display = 'block';
+      resBox.style.background = 'rgba(255,255,255,0.05)';
+      resBox.style.color = '#94a3b8';
+      resBox.textContent = 'جاري اختبار الاتصال واستجابة السحابة... ⏳';
+    }
+
+    try {
+      const res = await fetch('/api/settings/cloud-backup/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, endpointUrl, authToken, syncedFolder })
+      });
+      const json = await res.json();
+      if (resBox) {
+        if (json.success) {
+          resBox.style.background = 'rgba(16, 185, 129, 0.15)';
+          resBox.style.color = '#34d399';
+          resBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+          resBox.innerHTML = `<strong>✅ ${json.message}</strong>${json.latencyMs ? ` <span style="font-size:0.75rem;">(${json.latencyMs} ms)</span>` : ''}`;
+        } else {
+          resBox.style.background = 'rgba(239, 68, 68, 0.15)';
+          resBox.style.color = '#f87171';
+          resBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          resBox.innerHTML = `<strong>❌ ${json.message}</strong>`;
+        }
+      }
+    } catch (e) {
+      if (resBox) {
+        resBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        resBox.style.color = '#f87171';
+        resBox.textContent = 'تعذر الاتصال بالخادم لاختبار السحابة: ' + e.message;
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  async createFullSystemArchive() {
+    const btn = document.getElementById('btnCreateArchiveNow');
+    const encrypt = Boolean(document.getElementById('cfgArchiveEncrypt')?.checked);
+    const passphrase = document.getElementById('cfgArchivePassphrase')?.value?.trim() || '';
+    const includeProjectsFiles = Boolean(document.getElementById('cfgArchiveIncludeFiles')?.checked);
+
+    if (encrypt && (!passphrase || passphrase.length < 4)) {
+      App.showToast('يرجى إدخال كلمة مرور أو مفتاح أمان لا يقل عن 4 خانات لتشفير الأرشيف', 'warning');
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '⏳ جاري حزم وتشفير النظام بالكامل...';
+    }
+
+    App.showToast('جاري إنشاء الأرشيف الشامل وحزم قاعدة البيانات والمشاريع...', 'info');
+
+    try {
+      const res = await fetch('/api/settings/cloud-backup/create-archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encrypt, passphrase, includeProjectsFiles })
+      });
+      const json = await res.json();
+
+      if (json.success && json.data) {
+        App.showToast(json.message, 'success');
+        // بدء التنزيل المباشر للأرشيف إلى جهاز المستخدم
+        const downloadUrl = `/api/settings/cloud-backup/download/${encodeURIComponent(json.data.fileName)}`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = json.data.fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        await this.loadCloudBackupStatus();
+      } else {
+        App.showToast('فشل إنشاء الأرشيف: ' + json.message, 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء إنشاء الأرشيف: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>📦🔒 إنشاء وتنزيل الأرشيف الشامل فوراً</span>';
+      }
+    }
+  },
+
+  async syncToCloudNow(fileName = null) {
+    const btn = document.getElementById('btnQuickCloudSync');
+    if (btn) btn.disabled = true;
+    App.showToast('جاري رفع ومزامنة الأرشيف إلى السحابة... ☁️', 'info');
+
+    try {
+      const res = await fetch('/api/settings/cloud-backup/sync-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message, 'success');
+        await this.loadCloudBackupStatus();
+      } else {
+        App.showToast('تعذر إتمام المزامنة السحابية: ' + json.message, 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء المزامنة السحابية: ' + err.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  renderCloudVaultTable() {
+    const tbody = document.getElementById('cloudVaultTableBody');
+    if (!tbody) return;
+
+    if (!this._cloudVaultItems || this._cloudVaultItems.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 24px; color: var(--text-secondary);">
+            خزنة الأرشيفات السحابية فارغة حالياً. يمكنك إنشاء أول أرشيف شامل ومشفر عبر الزر أعلاه 📦
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = this._cloudVaultItems.map(item => {
+      const isEnc = item.encrypted;
+      const sizeMB = (item.size / (1024 * 1024)).toFixed(2);
+      const dateStr = new Date(item.createdAt).toLocaleString('ar-YE');
+      const isBundle = item.includeProjectsFiles || item.fileName.includes('bundle');
+
+      const encBadge = isEnc
+        ? '<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.75rem;">🔒 مشفر AES-256</span>'
+        : '<span style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">🔓 قياسي (غير مشفر)</span>';
+
+      const typeBadge = isBundle
+        ? '<span style="color: var(--gold-light); font-weight: 600;">📦 أرشيف نظام شامل</span>'
+        : '<span style="color: var(--accent-blue);">🗄️ قاعدة بيانات فقط</span>';
+
+      const cloudBadge = item.cloudSynced
+        ? '<span style="color: #38bdf8; display: inline-flex; align-items: center; gap: 4px;">☁️ مرفوع سحابياً</span>'
+        : '<span style="color: var(--text-secondary); display: inline-flex; align-items: center; gap: 4px;">💻 محلي بالخزنة</span>';
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight: 600; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">${item.fileName}</div>
+            ${item.sha256 ? `<small style="color: var(--text-secondary); font-size: 0.68rem; font-family: monospace;">SHA: ${item.sha256.substring(0, 16)}...</small>` : ''}
+          </td>
+          <td>${typeBadge}</td>
+          <td>${encBadge}</td>
+          <td style="font-weight: 600; font-family: monospace;">${sizeMB} MB</td>
+          <td>${cloudBadge}</td>
+          <td style="font-size: 0.8rem; color: var(--text-secondary);">${dateStr}</td>
+          <td style="text-align: center;">
+            <div style="display: inline-flex; gap: 6px;">
+              <a href="/api/settings/cloud-backup/download/${encodeURIComponent(item.fileName)}" class="btn btn-secondary btn-sm" title="تنزيل الأرشيف إلى جهازك" style="padding: 4px 8px;">
+                📥 تنزيل
+              </a>
+              ${!item.cloudSynced ? `
+                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.syncToCloudNow('${item.fileName}')" title="رفع إلى السحابة" style="padding: 4px 8px; color: #38bdf8;">
+                  ☁️ رفع
+                </button>
+              ` : ''}
+              <button type="button" class="btn btn-primary btn-sm" onclick="Settings.openEncryptedRestoreModal('${item.fileName}')" title="فحص واستعادة هذه النسخة" style="padding: 4px 8px; background: #059669; border-color: #059669;">
+                ↩️ استعادة
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  // ================== نافذة استعادة الأرشيف المشفر ==================
+  openEncryptedRestoreModal(preselectedFileName = null) {
+    this._selectedVaultRestoreFile = null;
+    this._selectedVaultArchiveName = preselectedFileName || null;
+
+    const fileInp = document.getElementById('vaultRestoreFileInput');
+    if (fileInp) fileInp.value = '';
+
+    const passInp = document.getElementById('vaultRestorePassphrase');
+    if (passInp) passInp.value = '';
+
+    const inspectBox = document.getElementById('vaultRestoreInspectionBox');
+    if (inspectBox) {
+      inspectBox.style.display = 'none';
+      inspectBox.innerHTML = '';
+    }
+
+    const confirmBtn = document.getElementById('btnConfirmEncryptedRestore');
+    if (confirmBtn) confirmBtn.disabled = true;
+
+    const dropHeader = document.getElementById('vaultRestoreFileHeader');
+    const dropName = document.getElementById('vaultRestoreFileName');
+
+    if (preselectedFileName) {
+      if (dropHeader) dropHeader.textContent = 'تم اختيار نسخة من الخزنة السحابية:';
+      if (dropName) dropName.innerHTML = `<strong style="color: #38bdf8;">${preselectedFileName}</strong>`;
+    } else {
+      if (dropHeader) dropHeader.textContent = 'اضغط هنا لاختيار ملف الأرشيف (.rawasi.enc / .zip / .db)';
+      if (dropName) dropName.textContent = 'أو اسحب وأفلت الملف هنا مباشرة';
+    }
+
+    App.openModal('encryptedRestoreModal');
+  },
+
+  handleVaultRestoreFileSelected(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    this._selectedVaultRestoreFile = file;
+    this._selectedVaultArchiveName = null;
+
+    const dropHeader = document.getElementById('vaultRestoreFileHeader');
+    const dropName = document.getElementById('vaultRestoreFileName');
+    const sizeKB = (file.size / 1024).toFixed(1);
+
+    if (dropHeader) dropHeader.textContent = 'الملف المحدد للاستعادة:';
+    if (dropName) dropName.innerHTML = `<strong style="color: var(--gold-light);">${file.name}</strong> (${sizeKB} KB)`;
+
+    const confirmBtn = document.getElementById('btnConfirmEncryptedRestore');
+    if (confirmBtn) confirmBtn.disabled = true; // يتطلب فحص أولاً
+
+    const inspectBox = document.getElementById('vaultRestoreInspectionBox');
+    if (inspectBox) inspectBox.style.display = 'none';
+
+    App.showToast('تم تحديد الملف، يرجى الضغط على "فحص سلامة الأرشيف ومعاينته"', 'info');
+  },
+
+  async inspectSelectedArchive() {
+    const btn = document.getElementById('btnInspectArchive');
+    const inspectBox = document.getElementById('vaultRestoreInspectionBox');
+    const passphrase = document.getElementById('vaultRestorePassphrase')?.value?.trim() || '';
+
+    if (!this._selectedVaultRestoreFile && !this._selectedVaultArchiveName) {
+      App.showToast('يرجى اختيار ملف أرشيف خارجي أو تحديد نسخة من الخزنة أولاً', 'warning');
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (inspectBox) {
+      inspectBox.style.display = 'block';
+      inspectBox.style.background = 'rgba(255,255,255,0.05)';
+      inspectBox.style.color = '#94a3b8';
+      inspectBox.textContent = 'جاري فحص التشفير والنزاهة وقراءة بيان الأرشيف... ⏳';
+    }
+
+    try {
+      let bodyData = null;
+      const headers = {};
+      if (passphrase) {
+        headers['x-passphrase'] = encodeURIComponent(passphrase);
+      }
+
+      if (this._selectedVaultRestoreFile) {
+        bodyData = this._selectedVaultRestoreFile;
+        headers['Content-Type'] = 'application/octet-stream';
+      } else if (this._selectedVaultArchiveName) {
+        headers['x-vault-filename'] = this._selectedVaultArchiveName;
+      }
+
+      const res = await fetch('/api/settings/cloud-backup/inspect', {
+        method: 'POST',
+        headers,
+        body: bodyData
+      });
+      const json = await res.json();
+
+      if (json.success && json.data) {
+        const d = json.data;
+        if (d.requiresPassphrase) {
+          inspectBox.style.background = 'rgba(245, 158, 11, 0.15)';
+          inspectBox.style.color = '#fbbf24';
+          inspectBox.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+          inspectBox.innerHTML = `
+            <strong>🔒 هذا الأرشيف مشفر بنظام AES-256-GCM</strong>
+            <p style="margin: 4px 0 0 0; font-size: 0.8rem;">يرجى كتابة كلمة مرور فك التشفير في الحقل أعلاه ثم إعادة الضغط على زر الفحص.</p>
+          `;
+          document.getElementById('vaultRestorePassphrase')?.focus();
+          return;
+        }
+
+        inspectBox.style.background = 'rgba(16, 185, 129, 0.15)';
+        inspectBox.style.color = '#34d399';
+        inspectBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+
+        const m = d.manifest;
+        let detailsHtml = '';
+        if (m) {
+          detailsHtml = `
+            <div style="margin-top: 6px; font-size: 0.8rem; color: #f8fafc; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
+              <div><strong>تاريخ إنشاء الأرشيف:</strong> ${new Date(m.timestamp).toLocaleString('ar-YE')}</div>
+              <div><strong>نوع الحزمة:</strong> ${m.archive_type} | <strong>المشاريع المرفقة:</strong> ${d.projectFilesCount} ملف</div>
+              ${m.stats ? `<div><strong>الإحصائيات:</strong> ${m.stats.projectsCount || 0} مشروع | ${m.stats.contractsCount || 0} عقد | ${m.stats.vouchersCount || 0} سند مالي</div>` : ''}
+            </div>
+          `;
+        }
+
+        inspectBox.innerHTML = `
+          <div style="font-weight: 700;">✅ الأرشيف سليم وصالح للاستعادة بنجاح!</div>
+          <div style="font-size: 0.8rem;">التشفير: ${d.encrypted ? '🔒 مفكوك ومؤكد' : '🔓 غير مشفر'} | قاعدة البيانات متطابقة بنسبة 100%</div>
+          ${detailsHtml}
+        `;
+
+        const confirmBtn = document.getElementById('btnConfirmEncryptedRestore');
+        if (confirmBtn) confirmBtn.disabled = false;
+        App.showToast('تم فحص سلامة الأرشيف بنجاح وهو جاهز للاستعادة ✅', 'success');
+      } else {
+        inspectBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        inspectBox.style.color = '#f87171';
+        inspectBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        inspectBox.innerHTML = `<strong>❌ خطأ أثناء الفحص:</strong> ${json.message}`;
+      }
+    } catch (err) {
+      if (inspectBox) {
+        inspectBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        inspectBox.style.color = '#f87171';
+        inspectBox.innerHTML = `<strong>خطأ في فحص الملف:</strong> ${err.message}`;
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  async executeEncryptedRestore() {
+    const confirmBtn = document.getElementById('btnConfirmEncryptedRestore');
+    const passphrase = document.getElementById('vaultRestorePassphrase')?.value?.trim() || '';
+    const restoreFiles = Boolean(document.getElementById('vaultRestoreFilesCheck')?.checked);
+
+    if (!confirm('تحذير نهائي: هل أنت متأكد من استعادة هذا الأرشيف وتحديث بيانات النظام والمشاريع؟\nسيقوم النظام بحفظ نسخة أمان طارئة تلقائياً.')) {
+      return;
+    }
+
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '⏳ جاري استعادة النظام وقاعدة البيانات...';
+    }
+
+    App.showToast('جاري تنفيذ الاستعادة الشاملة...', 'info');
+
+    try {
+      let bodyData = null;
+      const headers = {
+        'x-restore-files': String(restoreFiles)
+      };
+      if (passphrase) {
+        headers['x-passphrase'] = encodeURIComponent(passphrase);
+      }
+
+      if (this._selectedVaultRestoreFile) {
+        bodyData = this._selectedVaultRestoreFile;
+        headers['Content-Type'] = 'application/octet-stream';
+      } else if (this._selectedVaultArchiveName) {
+        headers['x-vault-filename'] = this._selectedVaultArchiveName;
+      }
+
+      const res = await fetch('/api/settings/cloud-backup/restore', {
+        method: 'POST',
+        headers,
+        body: bodyData
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        App.showToast(json.message, 'success');
+        App.closeModal('encryptedRestoreModal');
+        setTimeout(() => {
+          App.showToast('جاري تحديث واجهة النظام وتنشيط الجداول المحدثة...', 'info');
+          setTimeout(() => window.location.reload(), 1500);
+        }, 1000);
+      } else {
+        App.showToast('فشلت الاستعادة: ' + json.message, 'error');
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = '<span>🛡️ تأكيد وتنفيذ الاستعادة الشاملة</span>';
+        }
+      }
+    } catch (err) {
+      App.showToast('خطأ أثناء تنفيذ الاستعادة: ' + err.message, 'error');
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<span>🛡️ تأكيد وتنفيذ الاستعادة الشاملة</span>';
+      }
+    }
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.Settings = Settings;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Settings;
+}
 

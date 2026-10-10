@@ -284,38 +284,6 @@ async function initMysql() {
 
     await checkAndAddCol('payroll', 'journal_entry_id', 'INT NULL');
 
-    // توحيد 2026-10 (MySQL): نفس أعمدة فرع الرواتب الشاملة/السندات أعلاه
-    await checkAndAddCol('accounts', 'status', "VARCHAR(20) DEFAULT 'active'");
-    await checkAndAddCol('accounts', 'level', 'INT DEFAULT 3');
-    await checkAndAddCol('payments', 'exchange_rate', 'DECIMAL(12,6) DEFAULT 1.0');
-    await checkAndAddCol('payments', 'local_amount', 'DECIMAL(14,2) DEFAULT 0');
-    await checkAndAddCol('payments', 'client_name', 'VARCHAR(200) NULL');
-    await checkAndAddCol('expenses', 'exchange_rate', 'DECIMAL(12,6) DEFAULT 1.0');
-    await checkAndAddCol('expenses', 'local_amount', 'DECIMAL(14,2) DEFAULT 0');
-    await checkAndAddCol('expenses', 'supplier_name', 'VARCHAR(200) NULL');
-    await checkAndAddCol('cost_centers', 'status', "VARCHAR(50) DEFAULT 'active'");
-    await checkAndAddCol('custodies', 'account_id', 'INT NULL');
-    await checkAndAddCol('custodies', 'account_code', 'VARCHAR(50) NULL');
-    await checkAndAddCol('custodies', 'account_name', 'VARCHAR(200) NULL');
-    await checkAndAddCol('custodies', 'payment_method', "VARCHAR(50) DEFAULT 'نقدي'");
-    await checkAndAddCol('cash_movements', 'movement_type', "VARCHAR(20) DEFAULT 'نقدي'");
-    await checkAndAddCol('cash_movements', 'payment_method', "VARCHAR(50) DEFAULT 'نقدي'");
-    await checkAndAddCol('cash_movements', 'reference_no', 'VARCHAR(100) NULL');
-    await checkAndAddCol('cash_movements', 'account_id', 'INT NULL');
-    for (const c of ['earned_basic', 'transport_allowance', 'appearance_allowance', 'nature_of_work_allowance', 'living_allowance', 'health_insurance_allowance', 'gross_salary', 'insurance_employee', 'insurance_employer', 'absence_penalty_deductions', 'loan_installments', 'taxable_base', 'tax_amount', 'skills_fund', 'unpaid_leave_deduction', 'total_net_salary']) {
-      await checkAndAddCol('payroll', c, 'DECIMAL(14,2) DEFAULT 0');
-    }
-    await checkAndAddCol('payroll', 'working_days', 'INT DEFAULT 31');
-    await checkAndAddCol('payroll', 'month_days', 'INT DEFAULT 31');
-    await checkAndAddCol('payroll', 'cost_center', "VARCHAR(150) DEFAULT 'الإدارة العامة'");
-    await checkAndAddCol('payroll', 'bank_account', 'VARCHAR(100) NULL');
-    await checkAndAddCol('employees', 'transport_pct', 'DECIMAL(5,2) DEFAULT 20');
-    await checkAndAddCol('employees', 'appearance_pct', 'DECIMAL(5,2) DEFAULT 25');
-    await checkAndAddCol('employees', 'nature_of_work_pct', 'DECIMAL(5,2) DEFAULT 30');
-    await checkAndAddCol('employees', 'living_allowance', 'DECIMAL(14,2) DEFAULT 90000');
-    await checkAndAddCol('employees', 'health_insurance_allowance', 'DECIMAL(14,2) DEFAULT 30000');
-    await checkAndAddCol('employees', 'cost_center', "VARCHAR(150) DEFAULT 'الإدارة العامة'");
-
     await mysqlPool.query(`
       CREATE TABLE IF NOT EXISTS currencies (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -373,6 +341,98 @@ async function initMysql() {
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    // جداول بوابة وتطبيق العملاء في MySQL
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id INT NOT NULL,
+        email VARCHAR(191) NOT NULL UNIQUE,
+        phone VARCHAR(50) NULL,
+        password_hash TEXT NOT NULL,
+        full_name VARCHAR(150) NOT NULL,
+        role VARCHAR(30) DEFAULT 'viewer',
+        permissions TEXT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        two_factor_enabled TINYINT(1) DEFAULT 1,
+        two_factor_pin VARCHAR(20) DEFAULT '123456',
+        otp_code VARCHAR(10) NULL,
+        otp_expires_at DATETIME NULL,
+        last_login_at DATETIME NULL,
+        last_login_ip VARCHAR(50) NULL,
+        device_token TEXT NULL,
+        device_platform VARCHAR(20) NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_project_access (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_user_id INT NOT NULL,
+        project_id INT NOT NULL,
+        can_view_progress TINYINT(1) DEFAULT 1,
+        can_view_invoices TINYINT(1) DEFAULT 1,
+        can_view_payments TINYINT(1) DEFAULT 1,
+        can_view_reports TINYINT(1) DEFAULT 1,
+        can_view_drawings TINYINT(1) DEFAULT 1,
+        can_view_correspondence TINYINT(1) DEFAULT 1,
+        can_approve_invoices TINYINT(1) DEFAULT 0,
+        can_send_messages TINYINT(1) DEFAULT 1,
+        granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        granted_by INT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_client_proj (client_user_id, project_id),
+        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_user_id INT NOT NULL,
+        project_id INT NULL,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        body TEXT NOT NULL,
+        reference_type VARCHAR(50) NULL,
+        reference_id INT NULL,
+        is_read TINYINT(1) DEFAULT 0,
+        sent_via_push TINYINT(1) DEFAULT 0,
+        sent_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS client_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_user_id INT NOT NULL,
+        project_id INT NULL,
+        direction VARCHAR(20) DEFAULT 'outgoing',
+        subject VARCHAR(200) NOT NULL,
+        body TEXT NOT NULL,
+        attachment_url TEXT NULL,
+        priority VARCHAR(20) DEFAULT 'normal',
+        status VARCHAR(20) DEFAULT 'open',
+        replied_by INT NULL,
+        reply_body TEXT NULL,
+        replied_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await checkAndAddCol('bills', 'client_approval_status', "VARCHAR(30) DEFAULT 'pending'");
+    await checkAndAddCol('bills', 'client_approved_at', 'DATETIME NULL');
+    await checkAndAddCol('bills', 'client_approval_notes', 'TEXT NULL');
+    await checkAndAddCol('bills', 'client_approved_by_id', 'INT NULL');
   } catch (err) {
     console.warn('Accounting migration note (MySQL):', err.message);
   }
@@ -386,6 +446,39 @@ async function initMysql() {
  */
 function initSqlite() {
   initSqliteInstance();
+
+  // فحص استباقي للأعمدة المحدثة في الجداول الموجودة قبل تطبيق مخطط schema.sql
+  try {
+    const tableList = sqliteDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
+    
+    if (tableList.includes('project_contracts')) {
+      const pcCols = sqliteDb.prepare("PRAGMA table_info(project_contracts)").all().map(c => c.name);
+      if (!pcCols.includes('client_id')) sqliteDb.exec("ALTER TABLE project_contracts ADD COLUMN client_id INTEGER;");
+    }
+
+    if (tableList.includes('bills')) {
+      const bCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
+      if (!bCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN contract_id INTEGER;");
+      if (!bCols.includes('paid_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN paid_amount REAL DEFAULT 0;");
+      if (!bCols.includes('remaining_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN remaining_amount REAL DEFAULT 0;");
+      if (!bCols.includes('payment_status')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN payment_status TEXT DEFAULT 'unpaid';");
+      if (!bCols.includes('gross_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN gross_amount REAL DEFAULT 0;");
+      if (!bCols.includes('advance_deduction')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN advance_deduction REAL DEFAULT 0;");
+      if (!bCols.includes('retention_deduction')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN retention_deduction REAL DEFAULT 0;");
+    }
+
+    if (tableList.includes('payments')) {
+      const pCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
+      if (!pCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN contract_id INTEGER;");
+      if (!pCols.includes('bill_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bill_id INTEGER;");
+      if (!pCols.includes('receipt_category')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN receipt_category TEXT DEFAULT 'general';");
+      if (!pCols.includes('exchange_rate')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN exchange_rate REAL DEFAULT 1.0;");
+      if (!pCols.includes('local_amount')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN local_amount REAL DEFAULT 0;");
+    }
+  } catch (e) {
+    console.warn('Pre-schema check note:', e.message);
+  }
+
   const schemaPath = path.join(__dirname, 'schema.sql');
   if (fs.existsSync(schemaPath)) {
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
@@ -414,6 +507,12 @@ function initSqlite() {
     if (!colNames.includes('allowed_projects')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_projects TEXT DEFAULT '*';");
     if (!colNames.includes('allowed_branches')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_branches TEXT DEFAULT '*';");
     if (!colNames.includes('allowed_departments')) sqliteDb.exec("ALTER TABLE users ADD COLUMN allowed_departments TEXT DEFAULT '*';");
+
+    try {
+      const cmCols = sqliteDb.prepare("PRAGMA table_info(cash_movements)").all();
+      const cmNames = cmCols.map(c => c.name);
+      if (!cmNames.includes('project_id')) sqliteDb.exec("ALTER TABLE cash_movements ADD COLUMN project_id INTEGER;");
+    } catch {}
 
     // ترقية جداول الفروع والأقسام المؤسسية
     sqliteDb.exec(`
@@ -534,12 +633,16 @@ function initSqlite() {
     if (!expCols.includes('reversed_at')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversed_at DATETIME;");
     if (!expCols.includes('reversal_reason')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversal_reason TEXT;");
     if (!expCols.includes('reversal_ref_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN reversal_ref_id INTEGER;");
+    if (!expCols.includes('journal_entry_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
+    if (!expCols.includes('bank_account_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN bank_account_id INTEGER REFERENCES bank_accounts(id);");
 
     const payCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
     if (!payCols.includes('account_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
     if (!payCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
     if (!payCols.includes('check_no')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN check_no TEXT;");
     if (!payCols.includes('bank_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bank_name TEXT;");
+    if (!payCols.includes('bank_account_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bank_account_id INTEGER REFERENCES bank_accounts(id);");
+    if (!payCols.includes('journal_entry_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
     // أعمدة دورة المستند المالي لسندات القبض والصرف
     if (!payCols.includes('status')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN status TEXT DEFAULT 'posted';");
     if (!payCols.includes('created_by')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN created_by INTEGER REFERENCES users(id);");
@@ -669,63 +772,14 @@ function initSqlite() {
       sqliteDb.exec("ALTER TABLE payroll ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
     }
 
-    // 4.ب توحيد 2026-10: طيّ مخطط فرع الرواتب الشاملة/السندات في الإقلاع (نفس أعمدة
-    // migrate_chart_of_accounts_and_vouchers + migrate_vouchers_custodies_periods + migrate_comprehensive_payroll —
-    // البيانات التأسيسية تبقى يدوية عبر `npm run migrate`، والمخطط فقط يُضمن هنا)
-    const unifiedCols = [
-      ['accounts', 'status', "TEXT DEFAULT 'active'"],
-      ['accounts', 'level', 'INTEGER DEFAULT 3'],
-      ['payments', 'exchange_rate', 'REAL DEFAULT 1.0'],
-      ['payments', 'local_amount', 'REAL DEFAULT 0'],
-      ['payments', 'client_name', 'TEXT'],
-      ['expenses', 'exchange_rate', 'REAL DEFAULT 1.0'],
-      ['expenses', 'local_amount', 'REAL DEFAULT 0'],
-      ['expenses', 'supplier_name', 'TEXT'],
-      ['cost_centers', 'status', "TEXT DEFAULT 'active'"],
-      ['custodies', 'account_id', 'INTEGER'],
-      ['custodies', 'account_code', 'TEXT'],
-      ['custodies', 'account_name', 'TEXT'],
-      ['custodies', 'payment_method', "TEXT DEFAULT 'نقدي'"],
-      ['cash_movements', 'movement_type', "TEXT DEFAULT 'نقدي'"],
-      ['cash_movements', 'payment_method', "TEXT DEFAULT 'نقدي'"],
-      ['cash_movements', 'reference_no', 'TEXT'],
-      ['cash_movements', 'account_id', 'INTEGER'],
-      ['payroll', 'earned_basic', 'REAL DEFAULT 0'],
-      ['payroll', 'transport_allowance', 'REAL DEFAULT 0'],
-      ['payroll', 'appearance_allowance', 'REAL DEFAULT 0'],
-      ['payroll', 'nature_of_work_allowance', 'REAL DEFAULT 0'],
-      ['payroll', 'living_allowance', 'REAL DEFAULT 0'],
-      ['payroll', 'health_insurance_allowance', 'REAL DEFAULT 0'],
-      ['payroll', 'gross_salary', 'REAL DEFAULT 0'],
-      ['payroll', 'insurance_employee', 'REAL DEFAULT 0'],
-      ['payroll', 'insurance_employer', 'REAL DEFAULT 0'],
-      ['payroll', 'absence_penalty_deductions', 'REAL DEFAULT 0'],
-      ['payroll', 'loan_installments', 'REAL DEFAULT 0'],
-      ['payroll', 'taxable_base', 'REAL DEFAULT 0'],
-      ['payroll', 'tax_amount', 'REAL DEFAULT 0'],
-      ['payroll', 'skills_fund', 'REAL DEFAULT 0'],
-      ['payroll', 'unpaid_leave_deduction', 'REAL DEFAULT 0'],
-      ['payroll', 'total_net_salary', 'REAL DEFAULT 0'],
-      ['payroll', 'working_days', 'INTEGER DEFAULT 31'],
-      ['payroll', 'month_days', 'INTEGER DEFAULT 31'],
-      ['payroll', 'cost_center', "TEXT DEFAULT 'الإدارة العامة'"],
-      ['payroll', 'bank_account', 'TEXT'],
-      ['employees', 'transport_pct', 'REAL DEFAULT 20'],
-      ['employees', 'appearance_pct', 'REAL DEFAULT 25'],
-      ['employees', 'nature_of_work_pct', 'REAL DEFAULT 30'],
-      ['employees', 'living_allowance', 'REAL DEFAULT 90000'],
-      ['employees', 'health_insurance_allowance', 'REAL DEFAULT 30000'],
-      ['employees', 'cost_center', "TEXT DEFAULT 'الإدارة العامة'"]
-    ];
-    for (const [tbl, col, def] of unifiedCols) {
-      const names = sqliteDb.prepare(`PRAGMA table_info(${tbl})`).all().map(c => c.name);
-      if (!names.includes(col)) {
-        sqliteDb.exec(`ALTER TABLE ${tbl} ADD COLUMN ${col} ${def};`);
-      }
+    // 5. تهيئة عينة لمشاريع تحت الدراسة إن لم تكن موجودة
+    const studyProj = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM projects WHERE status = 'under_study'").get();
+    if (!studyProj || studyProj.cnt === 0) {
+      sqliteDb.exec(`
+        INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status, notes)
+        VALUES ('مشروع مجمع خورمكسر الطبي (قيد الدراسة والتسعير)', 1, 65000000, 52000000, 0, 0, 'under_study', 'مشروع قيد إعداد جدول الكميات BOQ والتسعير الهندسي للعطاء المنافس');
+      `);
     }
-
-    // 5. (نُقلت عينة مشروع الدراسة إلى seed.js — بيانات العرض لا تنتمي للإقلاع،
-    // وكانت تُسقط الإقلاع على قاعدة جديدة بخطأ FOREIGN KEY لعدم وجود العميل 1)
 
     // 6. إضافة أعمدة تصنيف المستخلصات ودورة المستند والفصل المحاسبي للمقاولات
     const billCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
@@ -805,48 +859,8 @@ function initSqlite() {
       END;
     `);
 
-    // 6b. دليل الحسابات الأساسي (1-10) + حسابات الرواتب والتأمينات النظامية (11-15).
-    // يجب أن تُزرع هنا (بأرصدة صفرية) لأن حسابات المقاولات (16+) تشير إليها كمجلدات أب —
-    // بدونها يفشل الإقلاع على قاعدة جديدة بخطأ FOREIGN KEY ويُجهض باقي المخطط.
-    // البيانات التجريبية بالأرصدة الدفترية تبقى في seed.js (يمسح ويعيد البذر بأرصدة العرض).
-    try {
-      sqliteDb.exec(`
-        INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
-        (1, '1', 'الأصول', 'أصول', NULL, 0),
-        (2, '11', 'الأصول المتداولة', 'أصول', 1, 0),
-        (3, '111', 'الصندوق الرئيسي والبنك', 'أصول', 2, 0),
-        (4, '112', 'العملاء (الذمم المدينة)', 'أصول', 2, 0),
-        (5, '113', 'المخزون السلعي', 'أصول', 2, 0),
-        (6, '2', 'الخصوم', 'خصوم', NULL, 0),
-        (7, '21', 'الموردون', 'خصوم', 6, 0),
-        (8, '3', 'حقوق الملكية', 'حقوق ملكية', NULL, 0),
-        (9, '4', 'الإيرادات', 'إيرادات', NULL, 0),
-        (10, '5', 'المصروفات وتكاليف المشاريع', 'مصروفات', NULL, 0),
-        (11, '114', 'سلف وعهد الموظفين', 'أصول', 2, 0),
-        (12, '213', 'أمانات مصلحة الضرائب (ضريبة كسب العمل)', 'خصوم', 6, 0),
-        (13, '214', 'الهيئة العامة للتأمينات والمعاشات', 'خصوم', 6, 0),
-        (14, '511', 'مصروف الرواتب والأجور الأساسية والبدلات', 'مصروفات', 10, 0),
-        (15, '512', 'مصروف مساهمة الشركة في التأمينات الاجتماعية', 'مصروفات', 10, 0);
-      `);
-    } catch (err) {
-      console.warn('Base accounts seed note (SQLite):', err.message);
-    }
+    // 7. إدارة دليل الحسابات الشجري تتم مركزياً عبر seed_chart_of_accounts.js لمنع تضارب البنية الهرمية المعيارية
 
-    // 7. إنشاء دليل حسابات المقاولات المعياري (IFRS 15 Construction Accounts)
-    // (مغلّف ذاتياً: فشل البذر يجب ألا يُجهض إنشاء المخطط)
-    try {
-      sqliteDb.exec(`
-      INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
-      (16, '1125', 'محتجزات ضمان لدى العملاء (Retention Receivables)', 'أصول', 2, 0),
-      (17, '1128', 'أصول تعاقدية - أعمال منجزة غير مفوترة (Contract Assets / WIP)', 'أصول', 2, 0),
-      (18, '2105', 'التزامات تعاقدية - دفعات مقدمة من العملاء (Customer Advances)', 'خصوم', 6, 0),
-      (19, '2115', 'التزامات تعاقدية - فواتير تزيد عن التكلفة والإنجاز (Contract Liabilities)', 'خصوم', 6, 0),
-      (20, '4101', 'إيرادات عقود المقاولات المعترف بها (Recognized Contract Revenue)', 'إيرادات', 9, 0),
-      (21, '4102', 'إيرادات أوامر التغيير المعتمدة (Approved Variation Orders)', 'إيرادات', 9, 0);
-      `);
-    } catch (err) {
-      console.warn('Contracting accounts seed note (SQLite):', err.message);
-    }
 
     // 8. جدول إثبات وتسجيل الإيرادات التعاقدية ونسب الإنجاز (Contract Revenue Recognitions)
     sqliteDb.exec(`
@@ -885,6 +899,13 @@ function initSqlite() {
     if (!billColsExt.includes('tax_wht_rate')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN tax_wht_rate REAL DEFAULT 0;");
     if (!billColsExt.includes('tax_wht_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN tax_wht_amount REAL DEFAULT 0;");
 
+    const prjInvCols = sqliteDb.prepare("PRAGMA table_info(project_invoices)").all().map(c => c.name);
+    if (!prjInvCols.includes('items_json')) sqliteDb.exec("ALTER TABLE project_invoices ADD COLUMN items_json TEXT;");
+    if (!prjInvCols.includes('advance_pct')) sqliteDb.exec("ALTER TABLE project_invoices ADD COLUMN advance_pct REAL DEFAULT 10;");
+    if (!prjInvCols.includes('retention_pct')) sqliteDb.exec("ALTER TABLE project_invoices ADD COLUMN retention_pct REAL DEFAULT 10;");
+    if (!prjInvCols.includes('tax_wht_pct')) sqliteDb.exec("ALTER TABLE project_invoices ADD COLUMN tax_wht_pct REAL DEFAULT 0;");
+    if (!prjInvCols.includes('tax_wht_amount')) sqliteDb.exec("ALTER TABLE project_invoices ADD COLUMN tax_wht_amount REAL DEFAULT 0;");
+
     const clientCols = sqliteDb.prepare("PRAGMA table_info(clients)").all().map(c => c.name);
     if (!clientCols.includes('tax_number')) sqliteDb.exec("ALTER TABLE clients ADD COLUMN tax_number TEXT;");
 
@@ -903,22 +924,8 @@ function initSqlite() {
     if (!invTxCols.includes('batch_number')) sqliteDb.exec("ALTER TABLE inventory_transactions ADD COLUMN batch_number TEXT;");
     if (!invTxCols.includes('serial_number')) sqliteDb.exec("ALTER TABLE inventory_transactions ADD COLUMN serial_number TEXT;");
 
-    // 10. حسابات الضرائب والضمانات وعجز/فائض المخزون في شجرة الحسابات
-    // (مغلّف ذاتياً: فشل البذر يجب ألا يُجهض إنشاء المخطط)
-    try {
-      sqliteDb.exec(`
-        INSERT OR IGNORE INTO accounts (id, code, name, type, parent_id, balance) VALUES
-      (22, '1115', 'غطاء خطابات ضمان لدى البنوك (Restricted Cash Collateral)', 'أصول', 3, 0),
-      (23, '1130', 'أرصدة ضريبية مدينة - ضرائب مخصومة من المنبع (WHT Receivable)', 'أصول', 2, 0),
-      (24, '2130', 'ضرائب مستحقة الدفع - مصلحة الضرائب (WHT Payable)', 'خصوم', 6, 0),
-      (25, '5205', 'رسوم وعمولات خطابات الضمان البنكية (Bank Guarantee Fees)', 'مصروفات', 10, 0),
-      (26, '5210', 'عمولات ومصاريف بنكية عامة (Bank Charges & Commissions)', 'مصروفات', 10, 0),
-      (27, '5105', 'خسائر عجز وتسويات المخزون (Inventory Shrinkage & Losses)', 'مصروفات', 10, 0),
-        (28, '4205', 'أرباح وفائض تسويات المخزون (Inventory Gain & Surpluses)', 'إيرادات', 9, 0);
-      `);
-    } catch (err) {
-      console.warn('Tax/inventory accounts seed note (SQLite):', err.message);
-    }
+    // 10. حسابات الضرائب والضمانات وعجز/فائض المخزون تدار معيارياً عبر seed_chart_of_accounts.js
+
 
     // 11. جداول دورة المشتريات المتقدمة (PR -> RFQ -> PO -> GRN -> 3-Way Match)
     sqliteDb.exec(`
@@ -1154,9 +1161,230 @@ function initSqlite() {
         expiry_date DATE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+
+      -- جناح إدارة المواد المتقدم، الجرد والتسويات، الحجر والتوالف، وتحويلات المشاريع (DDD Material Management)
+      CREATE TABLE IF NOT EXISTS inventory_audits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        audit_no TEXT UNIQUE NOT NULL,
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        audit_type TEXT NOT NULL,
+        status TEXT DEFAULT 'draft',
+        scheduled_at DATETIME,
+        executed_at DATETIME,
+        snapshot_taken_at DATETIME,
+        initiated_by INTEGER REFERENCES users(id),
+        auditor_id INTEGER REFERENCES users(id),
+        auditor_name TEXT NOT NULL,
+        witness_name TEXT,
+        category_filter TEXT,
+        total_items_audited INTEGER DEFAULT 0,
+        total_overage_qty REAL DEFAULT 0,
+        total_shortage_qty REAL DEFAULT 0,
+        total_overage_amount REAL DEFAULT 0,
+        total_shortage_amount REAL DEFAULT 0,
+        net_variance_amount REAL DEFAULT 0,
+        digital_signature TEXT,
+        hash_signature TEXT,
+        minutes_doc TEXT,
+        reconciled_at DATETIME,
+        reconciled_by INTEGER REFERENCES users(id),
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_audit_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        audit_id INTEGER NOT NULL REFERENCES inventory_audits(id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        system_qty REAL NOT NULL,
+        physical_qty REAL DEFAULT 0,
+        diff_qty REAL DEFAULT 0,
+        unit_cost REAL NOT NULL,
+        diff_amount REAL DEFAULT 0,
+        discrepancy_type TEXT DEFAULT 'match',
+        condition_status TEXT DEFAULT 'good',
+        auditor_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS material_quarantine_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        quarantine_no TEXT UNIQUE NOT NULL,
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        project_id INTEGER REFERENCES projects(id),
+        quantity REAL NOT NULL,
+        unit_cost REAL NOT NULL,
+        total_loss_amount REAL NOT NULL,
+        reason TEXT NOT NULL,
+        inspection_notes TEXT,
+        bin_location TEXT DEFAULT 'QUARANTINE_BIN_01',
+        status TEXT DEFAULT 'quarantined',
+        quarantined_by INTEGER REFERENCES users(id),
+        quarantined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        resolution_date DATETIME,
+        resolution_notes TEXT,
+        resolved_by INTEGER REFERENCES users(id),
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS site_material_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_no TEXT UNIQUE NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        quantity REAL NOT NULL,
+        unit_price REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        condition_status TEXT NOT NULL,
+        qc_inspector_id INTEGER REFERENCES users(id),
+        qc_inspector_name TEXT NOT NULL,
+        qc_notes TEXT,
+        qc_passed INTEGER DEFAULT 1,
+        salvage_percentage REAL DEFAULT 100,
+        credited_amount REAL NOT NULL,
+        scrap_loss_amount REAL DEFAULT 0,
+        return_date DATE NOT NULL,
+        status TEXT DEFAULT 'inspected',
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        quarantine_id INTEGER REFERENCES material_quarantine_items(id),
+        created_by INTEGER REFERENCES users(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS inter_project_material_transfers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transfer_no TEXT UNIQUE NOT NULL,
+        from_project_id INTEGER NOT NULL REFERENCES projects(id),
+        to_project_id INTEGER NOT NULL REFERENCES projects(id),
+        from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        quantity REAL NOT NULL,
+        unit_cost REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        from_boq_item_id INTEGER REFERENCES project_boq(id),
+        to_boq_item_id INTEGER REFERENCES project_boq(id),
+        routing_rules_applied TEXT,
+        status TEXT DEFAULT 'requested',
+        requested_by INTEGER REFERENCES users(id),
+        requested_by_name TEXT,
+        approved_by INTEGER REFERENCES users(id),
+        approved_by_name TEXT,
+        received_by INTEGER REFERENCES users(id),
+        received_by_name TEXT,
+        rejection_reason TEXT,
+        transfer_date DATE NOT NULL,
+        journal_entry_id INTEGER REFERENCES journal_entries(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS material_domain_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT UNIQUE NOT NULL,
+        event_name TEXT NOT NULL,
+        aggregate_type TEXT NOT NULL,
+        aggregate_id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        user_id INTEGER,
+        user_name TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        prev_hash TEXT NOT NULL,
+        event_hash TEXT NOT NULL
+      );
+
+      -- 13. جداول إغلاق المشروع وتقارير التحليلات بنمط CQRS
+      CREATE TABLE IF NOT EXISTS project_closeouts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        closeout_no TEXT UNIQUE NOT NULL,
+        closeout_date DATE NOT NULL,
+        closed_by INTEGER REFERENCES users(id),
+        closed_by_name TEXT,
+        status TEXT DEFAULT 'closed',
+        total_contract_value REAL DEFAULT 0,
+        total_billed_amount REAL DEFAULT 0,
+        total_actual_cost REAL DEFAULT 0,
+        gross_profit REAL DEFAULT 0,
+        profit_margin_percent REAL DEFAULT 0,
+        total_wastage_cost REAL DEFAULT 0,
+        site_stock_value REAL DEFAULT 0,
+        retention_amount REAL DEFAULT 0,
+        net_client_payable REAL DEFAULT 0,
+        notes TEXT,
+        hash_signature TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- نموذج قراءة مستخلص العميل الخارجي (Client-Facing BoQ Read Model DTO)
+      CREATE TABLE IF NOT EXISTS project_closeout_client_boq (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        closeout_id INTEGER NOT NULL REFERENCES project_closeouts(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        item_no TEXT NOT NULL,
+        description TEXT NOT NULL,
+        category TEXT,
+        unit TEXT NOT NULL,
+        contract_qty REAL NOT NULL,
+        billed_qty REAL NOT NULL,
+        contract_unit_rate REAL NOT NULL,
+        billable_amount REAL NOT NULL,
+        previous_billed_amount REAL DEFAULT 0,
+        current_billed_amount REAL DEFAULT 0,
+        retention_percent REAL DEFAULT 5.0,
+        retention_amount REAL DEFAULT 0,
+        net_payable REAL NOT NULL,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- نموذج قراءة مستخلص الرقابة والتدقيق الداخلي (Internal Audit BoQ Read Model)
+      CREATE TABLE IF NOT EXISTS project_closeout_internal_audit_boq (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        closeout_id INTEGER NOT NULL REFERENCES project_closeouts(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        boq_item_id INTEGER REFERENCES project_boq(id),
+        item_no TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        category TEXT,
+        unit TEXT NOT NULL,
+        baseline_qty REAL NOT NULL,
+        purchased_qty REAL DEFAULT 0,
+        received_qty REAL DEFAULT 0,
+        issued_qty REAL DEFAULT 0,
+        consumed_qty REAL DEFAULT 0,
+        site_stock_balance REAL DEFAULT 0,
+        remaining_baseline REAL DEFAULT 0,
+        returned_qty REAL DEFAULT 0,
+        damaged_qty REAL DEFAULT 0,
+        wastage_qty REAL DEFAULT 0,
+        wastage_percent REAL DEFAULT 0,
+        budgeted_unit_cost REAL DEFAULT 0,
+        budgeted_cost REAL DEFAULT 0,
+        actual_unit_cost REAL DEFAULT 0,
+        total_actual_cost REAL DEFAULT 0,
+        cost_variance REAL DEFAULT 0,
+        contract_unit_rate REAL DEFAULT 0,
+        contract_revenue REAL DEFAULT 0,
+        gross_profit REAL DEFAULT 0,
+        profit_margin_percent REAL DEFAULT 0,
+        variance_status TEXT DEFAULT 'NORMAL',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_closeouts_proj ON project_closeouts(project_id);
+      CREATE INDEX IF NOT EXISTS idx_client_boq_closeout ON project_closeout_client_boq(closeout_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_boq_closeout ON project_closeout_internal_audit_boq(closeout_id);
     `);
 
-    // 13. جداول الحسابات البنكية والتسويات ومحفظة الشيكات
+    // 14. جداول الحسابات البنكية والتسويات ومحفظة الشيكات
     sqliteDb.exec(`
       CREATE TABLE IF NOT EXISTS bank_accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1307,38 +1535,21 @@ function initSqlite() {
     `);
 
     // 15. تهيئة بذور البيانات الافتراضية للمستودعات والحساب البنكي وإعدادات الضرائب اليمنية
-    // (مغلّفة ذاتياً: فشل البذر يجب ألا يُجهض إنشاء المخطط)
-    try {
-      sqliteDb.exec(`
+    sqliteDb.exec(`
       INSERT OR IGNORE INTO warehouses (id, code, name, type, location, manager_name) VALUES
       (1, 'WH-MAIN', 'المستودع المركزي الرئيسي - خورمكسر', 'central', 'عدن - خورمكسر', 'أمين المستودع العام'),
       (2, 'WH-SITE-1', 'مستودع موقع مشروع برج الصالح', 'site', 'عدن - المعلا', 'مهندس الموقع');
 
-      INSERT OR IGNORE INTO bank_accounts (id, account_id, bank_name, account_number, iban, currency, current_balance) VALUES
-      (1, 3, 'البنك الأهلي اليمني', '1023456789', 'YE98NBYE0000001023456789', 'ر.ي', 50000000),
-      (2, 3, 'بنك التضامن الإسلامي', '2034567890', 'YE98TDBE0000002034567890', 'ر.ي', 25000000);
+      INSERT OR IGNORE INTO bank_accounts (id, account_id, bank_name, account_number, iban, currency, current_balance)
+      SELECT 1, id, 'البنك الأهلي اليمني', '1023456789', 'YE98NBYE0000001023456789', 'ر.ي', 50000000 FROM accounts WHERE code = '12201001';
+      INSERT OR IGNORE INTO bank_accounts (id, account_id, bank_name, account_number, iban, currency, current_balance)
+      SELECT 2, id, 'بنك التضامن الإسلامي', '2034567890', 'YE98TDBE0000002034567890', 'ر.ي', 25000000 FROM accounts WHERE code = '12201001';
 
       INSERT OR IGNORE INTO tax_configs (id, tax_code, tax_name, rate_percentage, type, law_reference, legal_disclaimer) VALUES
       (1, 'WHT-CONT-3', 'ضريبة أرباح تجارية وصناعية - مقاولات (3%)', 3.0, 'wht_contracting', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
       (2, 'WHT-SUPP-1', 'ضريبة خصم من المنبع - توريدات ومشتريات (1%)', 1.0, 'wht_supplies', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
-        (3, 'VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية', 'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
-      `);
-    } catch (err) {
-      console.warn('Warehouses/bank/tax seed note (SQLite):', err.message);
-    }
-
-    // 15b. مصالحة الانحراف التاريخي: أعمدة أُضيفت لقاعدة التطوير يدوياً ولم تدخل المخطط —
-    // بدونها يفشل الإقلاع على قاعدة جديدة (no such column) رغم نجاح القديمة.
-    for (const t of ['bills', 'cash_movements', 'clients', 'items', 'projects', 'purchases', 'suppliers']) {
-      const cols = sqliteDb.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
-      if (!cols.includes('currency')) sqliteDb.exec(`ALTER TABLE ${t} ADD COLUMN currency TEXT DEFAULT 'ر.ي';`);
-    }
-    {
-      const cols = sqliteDb.prepare('PRAGMA table_info(payroll)').all().map(c => c.name);
-      for (const [name, def] of [['allowances', 'REAL DEFAULT 0'], ['insurance_employee', 'REAL DEFAULT 0'], ['insurance_employer', 'REAL DEFAULT 0'], ['tax_amount', 'REAL DEFAULT 0'], ['gross_salary', 'REAL DEFAULT 0']]) {
-        if (!cols.includes(name)) sqliteDb.exec(`ALTER TABLE payroll ADD COLUMN ${name} ${def};`);
-      }
-    }
+      (3, 'VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية', 'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
+    `);
   } catch (err) {
     console.warn('Accounting migration note (SQLite):', err.message);
   }
@@ -1473,6 +1684,741 @@ function initSqlite() {
       );
     `);
     console.log('✅ [Rawasi DB] Advanced Project Control tables initialized');
+
+    // ترقية أعمدة التقارير اليومية للموقع (Daily Site Diary Migration)
+    try {
+      const dailyCols = sqliteDb.prepare("PRAGMA table_info(project_daily_reports)").all().map(c => c.name);
+      if (!dailyCols.includes('manpower_details')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN manpower_details TEXT;");
+      if (!dailyCols.includes('equipment_details')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN equipment_details TEXT;");
+      if (!dailyCols.includes('materials_details')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN materials_details TEXT;");
+      if (!dailyCols.includes('photos')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN photos TEXT;");
+      if (!dailyCols.includes('gps_lat')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN gps_lat REAL;");
+      if (!dailyCols.includes('gps_lng')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN gps_lng REAL;");
+      if (!dailyCols.includes('temperature')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN temperature TEXT;");
+      if (!dailyCols.includes('status')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN status TEXT DEFAULT 'معتمد';");
+      if (!dailyCols.includes('approved_by')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN approved_by TEXT;");
+      if (!dailyCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN approved_at DATETIME;");
+    } catch (e) {
+      console.warn('Daily reports migration note (SQLite):', e.message);
+    }
+
+    // ترقية وتطوير وحدة علاقات الموردين (SRM / Vendor Profile Migration)
+    try {
+      // 1. جداول التعداد والجداول المرجعية (Lookup Tables)
+      sqliteDb.exec(`
+        CREATE TABLE IF NOT EXISTS vendor_industry_categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          name_ar TEXT NOT NULL,
+          name_en TEXT,
+          icon TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS vendor_payment_document_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          name_ar TEXT NOT NULL,
+          description TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // زرع البيانات المرجعية الأساسية إذا لم تكن موجودة
+      const catCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM vendor_industry_categories").get().c;
+      if (catCount === 0) {
+        const insertCat = sqliteDb.prepare("INSERT INTO vendor_industry_categories (code, name_ar, name_en, icon) VALUES (?, ?, ?, ?)");
+        insertCat.run('ELEC', 'كهرباء وإنارة', 'Electrical & Lighting', '⚡');
+        insertCat.run('PLUMB', 'سباكة وصحي', 'Plumbing & Sanitary', '🚰');
+        insertCat.run('BLD_MAT', 'مواد بناء وأسمنت وحديد', 'Building Materials & Steel', '🧱');
+        insertCat.run('ELECTRONICS', 'إلكترونيات وأنظمة أمان', 'Electronics & Security', '🔌');
+        insertCat.run('PAINT', 'دهانات وتشطيبات', 'Paints & Finishing', '🎨');
+        insertCat.run('HVAC', 'تكييف وتهوية', 'HVAC & Ventilation', '❄️');
+        insertCat.run('HEAVY_EQ', 'معدات وآليات ثقيلة', 'Heavy Equipment', '🚜');
+        insertCat.run('CARPENTRY', 'نجارة وأخشاب', 'Carpentry & Woodwork', '🪚');
+        insertCat.run('GENERAL', 'مقاولات عامة وتوريدات', 'General Contracting & Supplies', '🏢');
+        insertCat.run('OTHER', 'أخرى', 'Other Categories', '📦');
+      }
+
+      const docTypeCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM vendor_payment_document_types").get().c;
+      if (docTypeCount === 0) {
+        const insertDocType = sqliteDb.prepare("INSERT INTO vendor_payment_document_types (code, name_ar, description) VALUES (?, ?, ?)");
+        insertDocType.run('STANDARD_RECEIPT', 'إيصال عادي', 'سند صرف نقدي أو شيك بنكي مباشر');
+        insertDocType.run('SUPPLY_CONTRACT', 'عقد توريد', 'عقد توريد رسمي بدفعات مجدولة وربط عقدي');
+        insertDocType.run('LC', 'اعتماد مستندي LC', 'خطاب اعتماد بنكي مستندي للاستيراد الخارجي');
+        insertDocType.run('PROMISSORY_NOTE', 'سند لأمر', 'سند إذني معتمد ومضمون الدفع');
+        insertDocType.run('DEFERRED_INVOICE', 'فاتورة مؤجلة', 'شراء آجل مع فترة سماح محددة (Credit terms)');
+      }
+
+      // 2. تحديث وتوسيع جدول الموردين (Suppliers / Vendors Master Data)
+      const suppCols = sqliteDb.prepare("PRAGMA table_info(suppliers)").all().map(c => c.name);
+      if (!suppCols.includes('company_name')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN company_name TEXT;");
+      if (!suppCols.includes('industry_category')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN industry_category TEXT DEFAULT 'مواد بناء';");
+      if (!suppCols.includes('contact_person')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN contact_person TEXT;");
+      if (!suppCols.includes('phone_number')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN phone_number TEXT;");
+      if (!suppCols.includes('bank_name')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_name TEXT;");
+      if (!suppCols.includes('bank_account_no')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_account_no TEXT;");
+      if (!suppCols.includes('bank_iban')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_iban TEXT;");
+      if (!suppCols.includes('bank_details_encrypted')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN bank_details_encrypted TEXT;");
+      if (!suppCols.includes('default_currency')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN default_currency TEXT DEFAULT 'YER';");
+      if (!suppCols.includes('supply_lead_time_days')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN supply_lead_time_days INTEGER DEFAULT 3;");
+      if (!suppCols.includes('payment_document_type')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN payment_document_type TEXT DEFAULT 'إيصال عادي';");
+      if (!suppCols.includes('status')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN status TEXT DEFAULT 'active';");
+      if (!suppCols.includes('tax_id')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN tax_id TEXT;");
+      if (!suppCols.includes('commercial_reg_no')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN commercial_reg_no TEXT;");
+      if (!suppCols.includes('credit_limit')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN credit_limit REAL DEFAULT 0;");
+      if (!suppCols.includes('invoice_attachment')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN invoice_attachment TEXT;");
+      if (!suppCols.includes('updated_at')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN updated_at DATETIME;");
+
+      // مزامنة البيانات السابقة
+      sqliteDb.exec(`
+        UPDATE suppliers SET company_name = name WHERE company_name IS NULL OR company_name = '';
+        UPDATE suppliers SET phone_number = phone WHERE (phone_number IS NULL OR phone_number = '') AND phone IS NOT NULL;
+        UPDATE suppliers SET industry_category = category WHERE (industry_category IS NULL OR industry_category = '') AND category IS NOT NULL;
+        UPDATE suppliers SET default_currency = CASE WHEN currency IS NOT NULL AND currency != '' THEN currency ELSE 'YER' END WHERE default_currency IS NULL OR default_currency = '';
+      `);
+
+      // 3. إنشاء فهارس الأداء (Performance Indexes for Real-Time Zero N+1)
+      sqliteDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_purchases_supplier_status ON purchases (supplier_id, status);
+        CREATE INDEX IF NOT EXISTS idx_payments_supplier_type_status ON payments (supplier_id, type, status);
+        CREATE INDEX IF NOT EXISTS idx_suppliers_industry_status ON suppliers (industry_category, status);
+      `);
+
+      // 4. بناء العرض المجمع في الوقت الفعلي (SQL Aggregation View)
+      sqliteDb.exec(`
+        DROP VIEW IF EXISTS view_vendor_financial_profiles;
+        CREATE VIEW view_vendor_financial_profiles AS
+        SELECT 
+            v.id AS id,
+            v.id AS vendor_id,
+            COALESCE(v.company_name, v.name) AS company_name,
+            COALESCE(v.industry_category, v.category, 'مواد بناء') AS industry_category,
+            v.contact_person,
+            COALESCE(v.phone_number, v.phone) AS phone_number,
+            v.email,
+            v.address,
+            v.bank_name,
+            v.bank_account_no,
+            v.bank_iban,
+            v.bank_details_encrypted,
+            COALESCE(v.default_currency, v.currency, 'YER') AS default_currency,
+            COALESCE(v.supply_lead_time_days, 3) AS supply_lead_time_days,
+            COALESCE(v.payment_document_type, 'إيصال عادي') AS payment_document_type,
+            COALESCE(v.status, 'active') AS status,
+            COALESCE(v.tax_id, v.tax_number) AS tax_id,
+            v.commercial_reg_no,
+            COALESCE(v.balance, 0.0) AS balance,
+            COALESCE(v.balance, 0.0) AS opening_balance,
+            v.invoice_attachment,
+            v.notes,
+            v.created_at,
+            v.updated_at,
+            
+            -- التجميعات المالية الديناميكية المحسوبة في الوقت الفعلي (غير مخزنة ثابتاً)
+            CASE 
+                WHEN COALESCE(inv.total_invoices_count, 0) > 0 THEN inv.total_invoices_count
+                WHEN v.invoice_attachment IS NOT NULL AND v.invoice_attachment != '' AND v.invoice_attachment != '[]' THEN 1
+                ELSE 0
+            END AS total_purchase_invoices_count,
+            ROUND(COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0), 2) AS total_invoiced_amount,
+            ROUND(COALESCE(pay.total_amount_paid, 0.0), 2) AS total_amount_paid,
+            ROUND((COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0)) - COALESCE(pay.total_amount_paid, 0.0), 2) AS outstanding_balance
+        FROM suppliers v
+        LEFT JOIN (
+            SELECT 
+                supplier_id,
+                COUNT(id) AS total_invoices_count,
+                SUM(COALESCE(total_amount, 0.0)) AS total_invoiced_amount
+            FROM purchases
+            WHERE status != 'cancelled' OR status IS NULL
+            GROUP BY supplier_id
+        ) inv ON inv.supplier_id = v.id
+        LEFT JOIN (
+            SELECT 
+                supplier_id,
+                SUM(amount) AS total_amount_paid
+            FROM (
+                -- 1. صروفات الموردين من جدول سندات الصرف
+                SELECT supplier_id, COALESCE(amount, 0.0) AS amount
+                FROM payments 
+                WHERE supplier_id IS NOT NULL 
+                  AND type = 'صرف' 
+                  AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
+                UNION ALL
+                -- 2. المدفوعات المسجلة مباشرة على الفاتورة عند إنشائها
+                SELECT supplier_id, COALESCE(paid_amount, 0.0) AS amount
+                FROM purchases
+                WHERE supplier_id IS NOT NULL 
+                  AND paid_amount > 0 
+                  AND (status != 'cancelled' OR status IS NULL)
+                UNION ALL
+                -- 3. المصروفات المباشرة غير المكررة في جدول payments
+                SELECT supplier_id, COALESCE(amount, 0.0) AS amount
+                FROM expenses
+                WHERE supplier_id IS NOT NULL
+                  AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
+                  AND (receipt_no IS NULL OR receipt_no NOT IN (SELECT receipt_no FROM payments WHERE receipt_no IS NOT NULL))
+            )
+            GROUP BY supplier_id
+        ) pay ON pay.supplier_id = v.id;
+      `);
+      console.log('✅ [Rawasi DB] SRM & Vendor Financial Profiles view & tables initialized');
+    } catch (e) {
+      console.warn('SRM vendor migration note (SQLite):', e.message);
+    }
+
+    // ترقية وتطوير دورة حياة العميل والربط الهرمي التلقائي (Client Lifecycle & Hierarchy Migration)
+    try {
+      // 1. أعمدة العقود
+      const contractCols = sqliteDb.prepare("PRAGMA table_info(project_contracts)").all().map(c => c.name);
+      if (!contractCols.includes('client_id')) sqliteDb.exec("ALTER TABLE project_contracts ADD COLUMN client_id INTEGER REFERENCES clients(id);");
+
+      // تحديث العقود القديمة لربطها بالعميل من المشروع
+      sqliteDb.exec(`
+        UPDATE project_contracts 
+        SET client_id = (SELECT client_id FROM projects WHERE projects.id = project_contracts.project_id) 
+        WHERE client_id IS NULL;
+      `);
+
+      // 2. أعمدة المستخلصات
+      const billCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
+      if (!billCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN contract_id INTEGER REFERENCES project_contracts(id);");
+      if (!billCols.includes('paid_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN paid_amount REAL DEFAULT 0;");
+      if (!billCols.includes('remaining_amount')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN remaining_amount REAL DEFAULT 0;");
+      if (!billCols.includes('payment_status')) sqliteDb.exec("ALTER TABLE bills ADD COLUMN payment_status TEXT DEFAULT 'unpaid';");
+
+      // تحديث المستخلصات القديمة لربطها بالعقد وتعيين المتبقي
+      sqliteDb.exec(`
+        UPDATE bills 
+        SET contract_id = (SELECT id FROM project_contracts WHERE project_contracts.project_id = bills.project_id LIMIT 1) 
+        WHERE contract_id IS NULL;
+
+        UPDATE bills 
+        SET remaining_amount = MAX(0, net_amount - COALESCE(paid_amount, 0))
+        WHERE remaining_amount IS NULL OR remaining_amount = 0;
+      `);
+
+      // 3. أعمدة السندات والمدفوعات
+      const payCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
+      if (!payCols.includes('contract_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN contract_id INTEGER REFERENCES project_contracts(id);");
+      if (!payCols.includes('bill_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN bill_id INTEGER REFERENCES bills(id);");
+      if (!payCols.includes('receipt_category')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN receipt_category TEXT DEFAULT 'general';");
+
+      // 4. إنشاء فهارس الأداء للسلسلة الهرمية
+      sqliteDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_project_contracts_client ON project_contracts (client_id);
+        CREATE INDEX IF NOT EXISTS idx_bills_client_project_status ON bills (client_id, project_id, status);
+        CREATE INDEX IF NOT EXISTS idx_bills_contract_status ON bills (contract_id, status);
+        CREATE INDEX IF NOT EXISTS idx_payments_client_bill_type ON payments (client_id, bill_id, type, status);
+        CREATE INDEX IF NOT EXISTS idx_payments_contract_type ON payments (contract_id, type, status);
+      `);
+
+      // 5. بناء العرض المجمع في الوقت الفعلي للعملاء (Real-Time Zero N+1 View)
+      sqliteDb.exec(`
+        DROP VIEW IF EXISTS view_client_financial_profiles;
+        CREATE VIEW view_client_financial_profiles AS
+        SELECT
+            c.id,
+            c.id AS client_id,
+            c.name,
+            c.company,
+            c.phone,
+            c.email,
+            c.address,
+            COALESCE(c.currency, 'ر.ي') AS currency,
+            COALESCE(c.previous_balance, 0.0) AS previous_balance,
+            COALESCE(cnt.total_contracts_count, 0) AS total_contracts_count,
+            ROUND(COALESCE(cnt.total_contracts_value, 0.0), 2) AS total_contracts_value,
+            COALESCE(prj.total_projects_count, 0) AS total_projects_count,
+            COALESCE(b.total_bills_count, 0) AS total_bills_count,
+            ROUND(COALESCE(b.total_gross_billed, 0.0), 2) AS total_gross_billed,
+            ROUND(COALESCE(b.total_net_billed, 0.0), 2) AS total_net_billed,
+            ROUND(COALESCE(b.total_advance_deductions, 0.0), 2) AS total_advance_deductions,
+            ROUND(COALESCE(b.total_retention_deductions, 0.0), 2) AS total_retention_deductions,
+            ROUND(COALESCE(pay_adv.total_advance_received, 0.0), 2) AS total_advance_received,
+            ROUND(MAX(0.0, COALESCE(pay_adv.total_advance_received, 0.0) - COALESCE(b.total_advance_deductions, 0.0)), 2) AS remaining_advance_balance,
+            ROUND(COALESCE(pay_ret.total_retention_released, 0.0), 2) AS total_retention_released,
+            ROUND(MAX(0.0, COALESCE(b.total_retention_deductions, 0.0) - COALESCE(pay_ret.total_retention_released, 0.0)), 2) AS active_retention_balance,
+            ROUND(COALESCE(pay.total_collected, 0.0), 2) AS total_collected,
+            ROUND((COALESCE(c.previous_balance, 0.0) + COALESCE(b.total_net_billed, 0.0)) - COALESCE(pay.total_collected, 0.0), 2) AS outstanding_balance
+        FROM clients c
+        LEFT JOIN (
+            SELECT client_id, COUNT(id) AS total_projects_count
+            FROM projects
+            GROUP BY client_id
+        ) prj ON prj.client_id = c.id
+        LEFT JOIN (
+            SELECT 
+                COALESCE(pc.client_id, p.client_id) AS client_id,
+                COUNT(pc.id) AS total_contracts_count,
+                SUM(COALESCE(pc.contract_value, 0.0)) AS total_contracts_value
+            FROM project_contracts pc
+            LEFT JOIN projects p ON pc.project_id = p.id
+            WHERE pc.status != 'ملغي'
+            GROUP BY COALESCE(pc.client_id, p.client_id)
+        ) cnt ON cnt.client_id = c.id
+        LEFT JOIN (
+            SELECT 
+                client_id,
+                COUNT(id) AS total_bills_count,
+                SUM(COALESCE(gross_amount, amount, 0.0)) AS total_gross_billed,
+                SUM(COALESCE(net_amount, amount, 0.0)) AS total_net_billed,
+                SUM(COALESCE(advance_deduction, 0.0)) AS total_advance_deductions,
+                SUM(COALESCE(retention_deduction, 0.0)) AS total_retention_deductions
+            FROM bills
+            WHERE status NOT IN ('draft', 'reversed', 'cancelled')
+            GROUP BY client_id
+        ) b ON b.client_id = c.id
+        LEFT JOIN (
+            SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_collected
+            FROM payments
+            WHERE type = 'قبض' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+            GROUP BY client_id
+        ) pay ON pay.client_id = c.id
+        LEFT JOIN (
+            SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_advance_received
+            FROM payments
+            WHERE type = 'قبض' AND receipt_category = 'advance_payment' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+            GROUP BY client_id
+        ) pay_adv ON pay_adv.client_id = c.id
+        LEFT JOIN (
+            SELECT client_id, SUM(COALESCE(amount, 0.0)) AS total_retention_released
+            FROM payments
+            WHERE type = 'قبض' AND receipt_category = 'retention_release' AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+            GROUP BY client_id
+        ) pay_ret ON pay_ret.client_id = c.id;
+
+        CREATE TABLE IF NOT EXISTS project_variations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          contract_id INTEGER,
+          vo_no TEXT NOT NULL,
+          title TEXT NOT NULL,
+          type TEXT DEFAULT 'addition',
+          amount REAL NOT NULL DEFAULT 0,
+          time_extension_days INTEGER DEFAULT 0,
+          reason TEXT,
+          approved_by TEXT,
+          status TEXT DEFAULT 'approved',
+          date DATE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS project_progress_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          previous_percentage REAL NOT NULL DEFAULT 0,
+          new_percentage REAL NOT NULL DEFAULT 0,
+          notes TEXT,
+          recorded_by TEXT,
+          date DATE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+        );
+
+        -- جداول بوابة وتطبيق العملاء المخصص (Client Portal & Mobile App)
+        CREATE TABLE IF NOT EXISTS client_users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id INTEGER NOT NULL,
+          email VARCHAR(191) NOT NULL UNIQUE,
+          phone VARCHAR(50),
+          password_hash TEXT NOT NULL,
+          full_name VARCHAR(150) NOT NULL,
+          role VARCHAR(30) DEFAULT 'viewer',
+          permissions TEXT DEFAULT '{"view_projects":true,"view_invoices":true,"view_payments":true,"approve_invoices":false,"send_messages":true}',
+          status VARCHAR(20) DEFAULT 'active',
+          two_factor_enabled INTEGER DEFAULT 1,
+          two_factor_pin VARCHAR(20) DEFAULT '123456',
+          otp_code VARCHAR(10),
+          otp_expires_at DATETIME,
+          last_login_at DATETIME,
+          last_login_ip VARCHAR(50),
+          device_token TEXT,
+          device_platform VARCHAR(20),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS client_project_access (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_user_id INTEGER NOT NULL,
+          project_id INTEGER NOT NULL,
+          can_view_progress INTEGER DEFAULT 1,
+          can_view_invoices INTEGER DEFAULT 1,
+          can_view_payments INTEGER DEFAULT 1,
+          can_view_reports INTEGER DEFAULT 1,
+          can_view_drawings INTEGER DEFAULT 1,
+          can_view_correspondence INTEGER DEFAULT 1,
+          can_approve_invoices INTEGER DEFAULT 0,
+          can_send_messages INTEGER DEFAULT 1,
+          granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          granted_by INTEGER,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(client_user_id, project_id),
+          FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS client_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_user_id INTEGER NOT NULL,
+          project_id INTEGER,
+          type VARCHAR(50) NOT NULL,
+          title VARCHAR(200) NOT NULL,
+          body TEXT NOT NULL,
+          reference_type VARCHAR(50),
+          reference_id INTEGER,
+          is_read INTEGER DEFAULT 0,
+          sent_via_push INTEGER DEFAULT 0,
+          sent_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS client_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_user_id INTEGER NOT NULL,
+          project_id INTEGER,
+          direction VARCHAR(20) DEFAULT 'outgoing',
+          subject VARCHAR(200) NOT NULL,
+          body TEXT NOT NULL,
+          attachment_url TEXT,
+          priority VARCHAR(20) DEFAULT 'normal',
+          status VARCHAR(20) DEFAULT 'open',
+          replied_by INTEGER,
+          reply_body TEXT,
+          replied_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_cu_client_id ON client_users(client_id);
+        CREATE INDEX IF NOT EXISTS idx_cu_email ON client_users(email);
+        CREATE INDEX IF NOT EXISTS idx_cpa_user_proj ON client_project_access(client_user_id, project_id);
+        CREATE INDEX IF NOT EXISTS idx_cn_user_read ON client_notifications(client_user_id, is_read);
+        CREATE INDEX IF NOT EXISTS idx_cm_user ON client_messages(client_user_id);
+      `);
+
+      // إضافة أعمدة اعتماد المستخلصات في جدول bills إذا لم تكن موجودة
+      try {
+        const billsInfo = sqliteDb.prepare("PRAGMA table_info(bills)").all();
+        const hasApprovalStatus = billsInfo.some(c => c.name === 'client_approval_status');
+        if (!hasApprovalStatus) {
+          sqliteDb.exec(`
+            ALTER TABLE bills ADD COLUMN client_approval_status VARCHAR(30) DEFAULT 'pending';
+            ALTER TABLE bills ADD COLUMN client_approved_at DATETIME;
+            ALTER TABLE bills ADD COLUMN client_approval_notes TEXT;
+            ALTER TABLE bills ADD COLUMN client_approved_by_id INTEGER;
+          `);
+        }
+      } catch (colErr) {
+        // أعمدة موجودة مسبقاً
+      }
+
+      console.log('✅ [Rawasi DB] Client Lifecycle & Portal tables initialized');
+    } catch (e) {
+      console.warn('Client hierarchy migration note (SQLite):', e.message);
+    }
+
+    // =========================================================================
+    // ترقية وتطوير منظومة المدفوعات المتقدمة (Enterprise Payment System Architecture)
+    // =========================================================================
+    try {
+      // 1. جدول طرق الدفع القابل للإدارة والتوسع (Payment Methods)
+      sqliteDb.exec(`
+        CREATE TABLE IF NOT EXISTS payment_methods (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          is_active INTEGER DEFAULT 1,
+          requires_financial_account INTEGER DEFAULT 1,
+          requires_reference INTEGER DEFAULT 0,
+          requires_gateway INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME
+        );
+      `);
+
+      const pmCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM payment_methods").get().c;
+      if (pmCount === 0) {
+        const insPm = sqliteDb.prepare(`
+          INSERT INTO payment_methods (code, name, type, is_active, requires_financial_account, requires_reference, requires_gateway)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        insPm.run('CASH', 'نقداً', 'cash', 1, 1, 0, 0);
+        insPm.run('BANK_TRANSFER', 'تحويل بنكي', 'bank', 1, 1, 1, 0);
+        insPm.run('CREDIT_CARD', 'بطاقة ائتمانية', 'card', 1, 1, 1, 1);
+        insPm.run('DEBIT_CARD', 'بطاقة خصم مباشر', 'card', 1, 1, 1, 1);
+        insPm.run('WALLET', 'محفظة إلكترونية', 'wallet', 1, 1, 1, 0);
+        insPm.run('ONLINE_GATEWAY', 'بوابة دفع إلكترونية', 'gateway', 1, 1, 1, 1);
+        insPm.run('CHEQUE', 'شيك بنكي', 'cheque', 1, 1, 1, 0);
+        insPm.run('POS', 'نقطة بيع POS', 'pos', 1, 1, 1, 1);
+        insPm.run('COD', 'دفع عند الاستلام COD', 'cod', 1, 1, 0, 0);
+        insPm.run('CREDIT', 'آجل', 'credit', 1, 0, 0, 0);
+        insPm.run('INSTALLMENT', 'أقساط مجدولة', 'installment', 1, 0, 0, 0);
+      }
+
+      // 2. جدول الحسابات المالية (Financial Accounts) المرتبطة حصراً بحسابات نهائية (Leaf Accounts)
+      sqliteDb.exec(`
+        CREATE TABLE IF NOT EXISTS financial_accounts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL REFERENCES accounts(id),
+          code TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          currency TEXT DEFAULT 'ر.ي',
+          current_balance REAL DEFAULT 0,
+          bank_name TEXT,
+          account_number TEXT,
+          iban TEXT,
+          gateway_provider TEXT,
+          is_active INTEGER DEFAULT 1,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME
+        );
+      `);
+
+      const faCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM financial_accounts").get().c;
+      if (faCount === 0) {
+        // العثور على الحسابات النهائية النقدية والبنكية في شجرة الحسابات
+        const cashLeaf = sqliteDb.prepare("SELECT id FROM accounts WHERE code = '12101001' OR code LIKE '121%' AND is_posting = 1 ORDER BY CASE WHEN code = '12101001' THEN 0 ELSE 1 END LIMIT 1").get();
+        const bankLeaf = sqliteDb.prepare("SELECT id FROM accounts WHERE code = '12201001' OR code LIKE '122%' AND is_posting = 1 ORDER BY CASE WHEN code = '12201001' THEN 0 ELSE 1 END LIMIT 1").get();
+        
+        const cashAccId = cashLeaf ? cashLeaf.id : 105;
+        const bankAccId = bankLeaf ? bankLeaf.id : 106;
+
+        const insFa = sqliteDb.prepare(`
+          INSERT INTO financial_accounts (account_id, code, name, type, currency, bank_name, account_number, iban, gateway_provider)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        insFa.run(cashAccId, 'FA-CASH-MAIN', 'صندوق الإدارة الرئيسي', 'cash', 'ر.ي', null, null, null, null);
+        insFa.run(bankAccId, 'FA-BANK-NBY-01', 'البنك الأهلي اليمني - حساب جاري', 'bank', 'ر.ي', 'البنك الأهلي اليمني', '1023456789', 'YE98NBYE0000001023456789', null);
+        insFa.run(bankAccId, 'FA-BANK-TADB-01', 'بنك التضامن الإسلامي - حساب رئيسي', 'bank', 'ر.ي', 'بنك التضامن الإسلامي', '2034567890', 'YE98TDBE0000002034567890', null);
+        insFa.run(cashAccId, 'FA-WALLET-JAWWAL', 'محفظة جوال بي (Jawwal Pay)', 'wallet', 'ر.ي', null, '772332164', null, 'jawwal_pay');
+        insFa.run(bankAccId, 'FA-GW-ONLINE', 'بوابة الدفع الإلكتروني المباشر', 'gateway', 'ر.ي', 'حساب وسيط البوابة', 'GW-99482', null, 'stripe');
+      }
+
+      // 3. ترقية جدول payments بإضافة أعمدة دورة الدفع الحديثة ومنع التكرار (Idempotency)
+      const paymentsInfo = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
+      if (!paymentsInfo.includes('payment_no')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN payment_no TEXT;");
+      if (!paymentsInfo.includes('payment_method_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN payment_method_id INTEGER REFERENCES payment_methods(id);");
+      if (!paymentsInfo.includes('financial_account_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN financial_account_id INTEGER REFERENCES financial_accounts(id);");
+      if (!paymentsInfo.includes('idempotency_key')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN idempotency_key TEXT;");
+      if (!paymentsInfo.includes('external_transaction_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN external_transaction_id TEXT;");
+      if (!paymentsInfo.includes('gateway_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN gateway_name TEXT;");
+      if (!paymentsInfo.includes('fee_amount')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN fee_amount REAL DEFAULT 0;");
+      if (!paymentsInfo.includes('net_amount')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN net_amount REAL DEFAULT 0;");
+      if (!paymentsInfo.includes('source_type')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN source_type TEXT DEFAULT 'RECEIPT_VOUCHER';");
+      if (!paymentsInfo.includes('source_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN source_id INTEGER;");
+      if (!paymentsInfo.includes('refunded_amount')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN refunded_amount REAL DEFAULT 0;");
+      if (!paymentsInfo.includes('supplier_name')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN supplier_name TEXT;");
+      if (!paymentsInfo.includes('updated_at')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN updated_at DATETIME;");
+
+      // مزامنة أرقام الدفع وحسابات الصافي للمدفوعات السابقة
+      sqliteDb.exec(`
+        UPDATE payments SET payment_no = receipt_no WHERE payment_no IS NULL OR payment_no = '';
+        UPDATE payments SET net_amount = amount - COALESCE(fee_amount, 0) WHERE net_amount IS NULL OR net_amount = 0;
+      `);
+
+      // 4. جدول التسويات المالية للعمليات والبوابات (Payment Settlements)
+      sqliteDb.exec(`
+        CREATE TABLE IF NOT EXISTS payment_settlements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          settlement_no TEXT UNIQUE NOT NULL,
+          payment_id INTEGER NOT NULL REFERENCES payments(id),
+          financial_account_id INTEGER NOT NULL REFERENCES financial_accounts(id),
+          gross_amount REAL NOT NULL,
+          fee_amount REAL NOT NULL DEFAULT 0,
+          net_amount REAL NOT NULL,
+          settlement_date DATE NOT NULL,
+          status TEXT DEFAULT 'settled',
+          reference TEXT,
+          journal_entry_id INTEGER REFERENCES journal_entries(id),
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // 5. جدول الاسترداد المالي الكامل والجزئي (Payment Refunds)
+      sqliteDb.exec(`
+        CREATE TABLE IF NOT EXISTS payment_refunds (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          refund_no TEXT UNIQUE NOT NULL,
+          payment_id INTEGER NOT NULL REFERENCES payments(id),
+          amount REAL NOT NULL,
+          reason TEXT NOT NULL,
+          refund_type TEXT NOT NULL,
+          status TEXT DEFAULT 'completed',
+          reference TEXT,
+          journal_entry_id INTEGER REFERENCES journal_entries(id),
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // 6. فهارس الأداء والحماية
+      sqliteDb.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_idempotency ON payments(idempotency_key) WHERE idempotency_key IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_payments_method_id ON payments(payment_method_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_fin_acc ON payments(financial_account_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_ext_txn ON payments(external_transaction_id);
+        CREATE INDEX IF NOT EXISTS idx_settlements_payment ON payment_settlements(payment_id);
+        CREATE INDEX IF NOT EXISTS idx_refunds_payment ON payment_refunds(payment_id);
+      `);
+
+      console.log('✅ [Rawasi DB] Modern Payment Lifecycle, Methods & Financial Accounts initialized');
+    } catch (e) {
+      console.warn('Payment architecture migration note (SQLite):', e.message);
+    }
+
+    // =========================================================================
+    // ترقية وضمانات سلامة دفتر الأستاذ العام والتقارير المالية (General Ledger Integrity)
+    // =========================================================================
+    try {
+      // 1. جداول الربط المحاسبي للتدفقات النقدية والذمم
+      sqliteDb.exec(`
+        CREATE TABLE IF NOT EXISTS cash_flow_account_mappings (
+          account_id INTEGER PRIMARY KEY REFERENCES accounts(id),
+          activity TEXT NOT NULL CHECK (activity IN ('operating','investing','financing','excluded')),
+          is_active INTEGER DEFAULT 1,
+          notes TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS party_account_mappings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          party_type TEXT NOT NULL CHECK (party_type IN ('client','supplier')),
+          party_id INTEGER NOT NULL,
+          account_id INTEGER NOT NULL REFERENCES accounts(id),
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(party_type, party_id)
+        );
+      `);
+
+      // 2. الفهارس المحاسبية الرقابية المتقدمة
+      sqliteDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_je_status_date ON journal_entries(status, date);
+        CREATE INDEX IF NOT EXISTS idx_jel_entry_account ON journal_entry_lines(entry_id, account_id);
+        CREATE INDEX IF NOT EXISTS idx_jel_account ON journal_entry_lines(account_id);
+        CREATE INDEX IF NOT EXISTS idx_jel_project ON journal_entry_lines(project_id);
+        CREATE INDEX IF NOT EXISTS idx_jel_cost_center ON journal_entry_lines(cost_center_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_date_type_status ON payments(date, type, status);
+        CREATE INDEX IF NOT EXISTS idx_expenses_date_status ON expenses(date, status);
+      `);
+
+      // 3. تصحيح أي قيود قديمة مسجلة على حسابات تجميعية غير ورقية للحفاظ على سلامة التقرير
+      sqliteDb.exec(`
+        UPDATE journal_entry_lines SET account_id = 103 WHERE account_id = 3;
+        UPDATE journal_entry_lines SET account_id = 133 WHERE account_id = 8;
+      `);
+
+      // 4. قوادح الحماية الصارمة للحسابات الفرعية الأخيرة (Leaf Account Triggers)
+      sqliteDb.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_journal_line_leaf_insert
+        BEFORE INSERT ON journal_entry_lines
+        FOR EACH ROW
+        WHEN EXISTS (
+            SELECT 1
+            FROM accounts a
+            WHERE a.id = NEW.account_id
+              AND EXISTS (
+                  SELECT 1
+                  FROM accounts c
+                  WHERE c.parent_id = a.id
+              )
+        )
+        BEGIN
+            SELECT RAISE(
+                ABORT,
+                'لا يمكن تسجيل العملية على حساب أب. يجب اختيار الحساب الفرعي الأخير.'
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_journal_line_leaf_update
+        BEFORE UPDATE OF account_id ON journal_entry_lines
+        FOR EACH ROW
+        WHEN EXISTS (
+            SELECT 1
+            FROM accounts a
+            WHERE a.id = NEW.account_id
+              AND EXISTS (
+                  SELECT 1
+                  FROM accounts c
+                  WHERE c.parent_id = a.id
+              )
+        )
+        BEGIN
+            SELECT RAISE(
+                ABORT,
+                'لا يمكن تحديث القيد إلى حساب أب. يجب اختيار الحساب الفرعي الأخير.'
+            );
+        END;
+
+        -- قوادح التحقق من صحة مبالغ أسطر القيد (مدين أو دائن فقط أكبر من الصفر)
+        CREATE TRIGGER IF NOT EXISTS trg_journal_line_values_insert
+        BEFORE INSERT ON journal_entry_lines
+        FOR EACH ROW
+        WHEN (NEW.debit <= 0 AND NEW.credit <= 0)
+          OR (NEW.debit > 0 AND NEW.credit > 0)
+          OR (NEW.debit < 0 OR NEW.credit < 0)
+        BEGIN
+            SELECT RAISE(
+                ABORT,
+                'سطر القيد غير صالح: يجب أن يكون إما مدين أكبر من الصفر فقط أو دائن أكبر من الصفر فقط.'
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_journal_line_values_update
+        BEFORE UPDATE OF debit, credit ON journal_entry_lines
+        FOR EACH ROW
+        WHEN (NEW.debit <= 0 AND NEW.credit <= 0)
+          OR (NEW.debit > 0 AND NEW.credit > 0)
+          OR (NEW.debit < 0 OR NEW.credit < 0)
+        BEGIN
+            SELECT RAISE(
+                ABORT,
+                'سطر القيد غير صالح: يجب أن يكون إما مدين أكبر من الصفر فقط أو دائن أكبر من الصفر فقط.'
+            );
+        END;
+      `);
+
+      // 5. التعيين التلقائي لخريطة التدفقات النقدية
+      const mappingCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM cash_flow_account_mappings").get().c;
+      if (mappingCount === 0) {
+        sqliteDb.exec(`
+          INSERT OR IGNORE INTO cash_flow_account_mappings (account_id, activity, notes)
+          SELECT id, 'operating', 'أنشطة تشغيلية - عملاء وموردين ومصروفات'
+          FROM accounts 
+          WHERE (code LIKE '123%' OR code LIKE '211%' OR code LIKE '3%' OR code LIKE '4%' OR code LIKE '5%')
+            AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = accounts.id);
+
+          INSERT OR IGNORE INTO cash_flow_account_mappings (account_id, activity, notes)
+          SELECT id, 'investing', 'أنشطة استثمارية - أصول ثابتة ومعدات'
+          FROM accounts 
+          WHERE code LIKE '111%'
+            AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = accounts.id);
+
+          INSERT OR IGNORE INTO cash_flow_account_mappings (account_id, activity, notes)
+          SELECT id, 'financing', 'أنشطة تمويلية - رأس المال والقروض'
+          FROM accounts 
+          WHERE (code LIKE '22%' OR code LIKE '212%')
+            AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = accounts.id);
+        `);
+      }
+
+      console.log('✅ [Rawasi DB] General Ledger Integrity Rules, Leaf Triggers & Mappings initialized');
+    } catch (e) {
+      console.warn('Ledger integrity migration note (SQLite):', e.message);
+    }
   } catch (err) {
     console.warn('Project control migration note (SQLite):', err.message);
   }
@@ -1486,26 +2432,6 @@ function initSqlite() {
  */
 async function initializeDatabase() {
   appConfig = loadConfig();
-
-  // اختيار المحرك الصريح عبر DB_ENGINE: sqlite | mysql | auto (الافتراضي = السلوك التاريخي).
-  // - sqlite: محلي مباشرة بلا محاولة MySQL (إقلاع أنظف).
-  // - mysql: يفشل بصوت عالٍ عند تعذر الاتصال (للإنتاج — لا سقوط صامت على المحرك الخطأ).
-  // - auto: يجرب MySQL ثم يسقط لمحلي مع تحذير (للتوافق الخلفي).
-  const enginePref = (process.env.DB_ENGINE || 'auto').toLowerCase().trim();
-  if (!['auto', 'sqlite', 'mysql'].includes(enginePref)) {
-    throw new Error(`FATAL: invalid DB_ENGINE='${process.env.DB_ENGINE}' (expected sqlite|mysql|auto).`);
-  }
-  if (enginePref === 'sqlite') {
-    initSqlite();
-    return;
-  }
-  if (enginePref === 'mysql') {
-    await initMysql();
-    return;
-  }
-  if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
-    console.warn('⚠️  [Rawasi DB] DB_ENGINE is not set in production — using auto (MySQL first, silent SQLite fallback). Set DB_ENGINE explicitly.');
-  }
 
   if (appConfig.dbEngine === 'mysql') {
     try {
@@ -1609,6 +2535,7 @@ async function run(sql, params = []) {
   initSqliteInstance();
   const res = sqliteDb.prepare(targetSql).run(...params);
   return {
+    id: res.lastInsertRowid,
     lastInsertRowid: res.lastInsertRowid,
     insertId: res.lastInsertRowid,
     lastID: res.lastInsertRowid,
@@ -1836,8 +2763,7 @@ function getMysqlConfig() {
 }
 
 module.exports = {
-  // مقبض حي (getter) بدل القيمة الملتقطة null — كان `db` دائماً null بعد جعل التهيئة لاإقفالية
-  get db() { initSqliteInstance(); return sqliteDb; },
+  db: sqliteDb,
   mysqlPool,
   query,
   get,

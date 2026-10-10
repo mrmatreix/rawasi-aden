@@ -1,10 +1,7 @@
 const bcrypt = require('bcryptjs');
-const { initializeDatabase } = require('./db');
-const dbModule = require('./db');
+const { db, query, run } = require('./db');
 
-async function seedDatabase() {
-  await initializeDatabase(); // المخطط أولاً (كان البذر يسبق التهيئة اللاإقفالية فينهار)
-  const db = dbModule.db;
+function seedDatabase() {
   console.log('🚀 فحص حالة قاعدة البيانات قبل بذر البيانات...');
 
   const isForce = process.argv.includes('--force');
@@ -118,7 +115,6 @@ async function seedDatabase() {
   insertProj.run(13, 'PRJ-013', 'مشروع محطة توليد طاقة شمسية', 1, 900000, 650000, 640000, 100, 250000, 260000, 'completed', '2023-05-01', '2023-12-30', 'تم التسليم');
   insertProj.run(14, 'PRJ-014', 'مشروع شبكة مياه خور مكسر', 3, 620000, 480000, 470000, 100, 140000, 150000, 'completed', '2023-06-01', '2023-11-30', 'تم التسليم');
   insertProj.run(15, 'PRJ-015', 'مشروع مجمع المعلا التجاري', 4, 1800000, 1400000, 1380000, 100, 400000, 420000, 'completed', '2022-09-01', '2023-08-15', 'تم التسليم');
-  insertProj.run(16, 'PRJ-016', 'مشروع مجمع خورمكسر الطبي (قيد الدراسة والتسعير)', 1, 65000000, 52000000, 0, 0, 13000000, 0, 'under_study', '2026-01-01', '2027-12-31', 'مشروع قيد إعداد جدول الكميات BOQ والتسعير الهندسي للعطاء المنافس');
 
   // 7. Recent Operations & Expenses
   const insertExpense = db.prepare('INSERT INTO expenses (receipt_no, expense_type, project_id, supplier_id, amount, payment_method, date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
@@ -434,5 +430,5 @@ async function seedDatabase() {
   console.log('✅ تم بذر البيانات الأولية بنجاح وتطابق كامل مع كافة متطلبات إدارة المشاريع الـ 14!');
 }
 
-seedDatabase().catch(e => { console.error('Seed failed:', e.message); process.exit(1); });
+seedDatabase();
 

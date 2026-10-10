@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إدارة حسابات بوابة وتطبيق العملاء - شركة رواسي عدن للهندسة والمقاولات</title>
+  
+  <!-- Google Fonts: Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            rawasi: {
+              gold: '#d4af37',
+              goldLight: '#f59e0b',
+              emerald: '#10b981',
+              dark: '#0b1329',
+              card: '#15203e',
+              border: '#203058',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #080e1e;
+      color: #f1f5f9;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(212, 175, 55, 0.05) 0%, transparent 20%),
+        radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 20%);
+    }
+
+    .portal-badge {
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge-owner { background: rgba(212, 175, 55, 0.18); color: #fbbf24; border: 1px solid rgba(212, 175, 55, 0.35); }
+    .badge-manager { background: rgba(59, 130, 246, 0.18); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); }
+    .badge-viewer { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.35); }
+    .badge-active { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-inactive { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+
+    .glass-card {
+      background: rgba(21, 32, 62, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .custom-input {
+      background: #0d162c;
+      border: 1px solid #203058;
+      color: #ffffff;
+      transition: all 0.2s ease;
+    }
+    .custom-input:focus {
+      border-color: #d4af37;
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+      outline: none;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080e1e;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #203058;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #d4af37;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-12">
+
+  <!-- Alert Toast Notification Area -->
+  <div id="toastNotification" class="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] hidden transition-all duration-300">
+    <div id="toastContent" class="glass-card px-6 py-3.5 rounded-2xl border flex items-center gap-3 shadow-2xl text-sm font-bold">
+      <i id="toastIcon" class="fa-solid fa-circle-check text-lg"></i>
+      <span id="toastMessage"></span>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+
+    <!-- Top Header Navigation / Title -->
+    <div class="glass-card rounded-2xl p-6 mb-8 border-t-2 border-t-amber-500/80 shadow-2xl">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        
+        <div class="flex items-center gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 to-emerald-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-2xl shadow-lg shadow-amber-500/10 shrink-0">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-3 mb-1">
+              <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-wide">إدارة حسابات بوابة وتطبيق العملاء</h1>
+              <span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold">Client Portal</span>
+            </div>
+            <p class="text-sm text-slate-400">إدارة حسابات أندرويد والبوابة الخاصة بالعملاء، ربطها بدليل العملاء وتحديد صلاحيات المشاريع</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <button onclick="openCreateUserModal()" class="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg shadow-amber-500/25 active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-user-plus text-base"></i>
+            <span>إضافة حساب عميل جديد</span>
+          </button>
+          
+          <button onclick="loadClientUsers()" class="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition flex items-center gap-2 active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-rotate text-slate-400"></i>
+            <span>تحديث</span>
+          </button>
+
+          <a href="/client-app/" target="_blank" class="px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-xl border border-emerald-400/40 transition flex items-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95 cursor-pointer" title="فتح واجهة تطبيق العملاء في نافذة جديدة">
+            <i class="fa-solid fa-mobile-screen text-amber-300"></i>
+            <span>فتح واجهة التطبيق (Client App)</span>
+          </a>
+
+          <a href="/" class="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl border border-slate-700 transition flex items-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-house"></i>
+            <span>العودة للنظام الرئيسي</span>
+          </a>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Statistics KPIs Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      
+      <!-- Card 1 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-amber-500 hover:border-amber-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">إجمالي حسابات العملاء</div>
+            <div id="statTotalUsers" class="text-3xl font-black text-white">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-users"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-shield text-amber-500"></i>
+          <span>حسابات بوابة العملاء والتطبيق</span>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-emerald-500 hover:border-emerald-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">الحسابات النشطة</div>
+            <div id="statActiveUsers" class="text-3xl font-black text-emerald-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-user-check"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-circle-check text-emerald-400"></i>
+          <span>تمتلك صلاحية دخول فعالة</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-blue-500 hover:border-blue-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">مصادقة 2FA (OTP)</div>
+            <div id="stat2faUsers" class="text-3xl font-black text-blue-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-key text-blue-400"></i>
+          <span>حماية معززة بالرمز السري</span>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-purple-500 hover:border-purple-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">الأجهزة المسجلة (Android)</div>
+            <div id="statDevices" class="text-3xl font-black text-purple-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-mobile-retro"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-brands fa-android text-purple-400"></i>
+          <span>تطبيقات أندرويد النشطة</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Filter & Table Main Card -->
+    <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-slate-700/80 mb-10">
+      
+      <!-- Search & Filters Toolbar -->
+      <div class="p-5 border-b border-slate-700/80 bg-slate-900/60 flex flex-col sm:flex-row justify-between items-center gap-4">
+        
+        <div class="relative w-full sm:w-96">
+          <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+          <input id="searchInput" oninput="filterUsers()" type="text" placeholder="بحث بالاسم، البريد، أو شركة العميل..." class="w-full custom-input rounded-xl pr-10 pl-4 py-2.5 text-sm font-medium placeholder-slate-500 focus:outline-none">
+        </div>
+
+        <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-700">
+          <i class="fa-solid fa-lock text-emerald-400"></i>
+          <span>نظام الحماية: <strong>Deny by Default</strong> (تحديد وصول العميل لمشاريعه فقط)</span>
+        </div>
+
+      </div>
+
+      <!-- Users Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-sm border-collapse">
+          <thead class="bg-slate-950/80 text-amber-400 uppercase text-xs border-b border-slate-700/80 tracking-wider">
+            <tr>
+              <th class="px-6 py-4 font-bold">مستخدم العميل</th>
+              <th class="px-6 py-4 font-bold">الشركة / العميل المرتبط</th>
+              <th class="px-6 py-4 font-bold">الدور والصلاحية</th>
+              <th class="px-6 py-4 font-bold">المشاريع المسموحة</th>
+              <th class="px-6 py-4 font-bold">الأمان والـ 2FA</th>
+              <th class="px-6 py-4 font-bold">آخر دخول</th>
+              <th class="px-6 py-4 font-bold">الحالة</th>
+              <th class="px-6 py-4 font-bold text-center">الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody" class="divide-y divide-slate-800/80">
+            <tr>
+              <td colspan="8" class="text-center py-12 text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-2xl text-amber-500 mb-2"></i>
+                <div>جاري تحميل حسابات العملاء...</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Create / Edit User Modal Dialog -->
+  <div id="userModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
+        <h3 id="modalTitle" class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-user-plus text-amber-400"></i>
+          <span>إضافة مستخدم عميل جديد</span>
+        </h3>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Form Body -->
+      <form id="userForm" onsubmit="saveClientUser(event)" class="space-y-4">
+        <input type="hidden" id="userId">
+
+        <!-- In-Modal Alert Box for Error Messages -->
+        <div id="modalErrorAlert" class="hidden p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-150">
+          <i class="fa-solid fa-circle-exclamation text-base shrink-0 text-rose-400"></i>
+          <span id="modalErrorText"></span>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">العميل التابع له في قاعدة البيانات *</label>
+          <select id="userClientId" onchange="onClientSelected()" required class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+            <option value="">اختر العميل من الدليل...</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">الاسم الكامل للمستخدم *</label>
+          <input id="userFullName" type="text" required placeholder="مثال: م. أحمد صالح بن محفوظ" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">البريد الإلكتروني *</label>
+            <input id="userEmail" type="email" required placeholder="client@example.com" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">رقم الهاتف</label>
+            <input id="userPhone" type="tel" placeholder="77xxxxxxx" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+          </div>
+        </div>
+
+        <div id="passwordFieldGroup">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور *</label>
+          <input id="userPassword" type="password" placeholder="6 أحرف أو أرقام كحد أدنى" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">الدور الوظيفي والصلاحية</label>
+            <select id="userRole" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+              <option value="owner">مالك (صلاحية كاملة واعتماد)</option>
+              <option value="manager">مدير ممثل (اطلاع واعتماد)</option>
+              <option value="viewer" selected>مطلع فقط (عرض ومتابعة)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">حالة الحساب</label>
+            <select id="userStatus" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+              <option value="active" selected>نشط (Active)</option>
+              <option value="inactive">معطل (Inactive)</option>
+              <option value="suspended">موقوف (Suspended)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Section for Client's Projects Selection -->
+        <div id="clientProjectsSection" class="hidden">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>المشاريع المسموح بها لهذا العميل</span>
+            <span class="text-[0.7rem] text-amber-400 font-normal">يتم التعيين التلقائي لجميع مشاريع العميل إذا تُرك فارغاً</span>
+          </label>
+          <div id="clientProjectsContainer" class="p-3 bg-slate-900/90 rounded-xl border border-slate-700/80 max-h-36 overflow-y-auto space-y-1.5 text-xs">
+            <div class="text-slate-500 italic">اختر العميل أعلاه لعرض مشاريعه...</div>
+          </div>
+        </div>
+
+        <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80 flex items-center justify-between mt-2">
+          <div>
+            <div class="text-xs font-bold text-white">تفعيل التحقق بخطوتين (2FA / OTP)</div>
+            <div class="text-[0.75rem] text-slate-400">إرسال رمز أمان OTP لحساب العميل عند تسجيل الدخول</div>
+          </div>
+          <input id="user2fa" type="checkbox" checked class="w-5 h-5 accent-amber-500 rounded cursor-pointer">
+        </div>
+
+        <!-- Form Buttons -->
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/80 mt-6">
+          <button type="button" onclick="closeModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+            إلغاء
+          </button>
+          <button type="submit" class="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-extrabold transition shadow-lg shadow-amber-500/20 cursor-pointer">
+            حفظ التغييرات
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- Detailed Client & Account View Modal -->
+  <div id="clientDetailsModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-4xl w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
+        <div>
+          <h3 id="detailsModalTitle" class="text-xl font-extrabold text-white flex items-center gap-2">
+            <i class="fa-solid fa-building-user text-amber-400"></i>
+            <span>تفاصيل حساب العميل والصلاحيات</span>
+          </h3>
+          <div id="detailsModalSubtitle" class="text-xs text-slate-400 mt-1">جاري التحميل...</div>
+        </div>
+        <button onclick="closeDetailsModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Tab Navigation Bar -->
+      <div class="flex items-center gap-2 border-b border-slate-700/80 pb-3 mb-5 overflow-x-auto text-xs font-bold">
+        <button id="tabBtnInfo" onclick="switchDetailsTab('info')" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 border border-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-circle-info ml-1"></i> معلومات العميل
+        </button>
+        <button id="tabBtnUsers" onclick="switchDetailsTab('users')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-users ml-1"></i> الحسابات المرتبطة (<span id="detailsUsersCount">0</span>)
+        </button>
+        <button id="tabBtnPermissions" onclick="switchDetailsTab('permissions')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-shield-halved ml-1"></i> الصلاحيات والمشاريع
+        </button>
+        <button id="tabBtnModules" onclick="switchDetailsTab('modules')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-cubes ml-1"></i> وحدات Client App
+        </button>
+        <button id="tabBtnAudit" onclick="switchDetailsTab('audit')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-clock-rotate-left ml-1"></i> سجل النشاط والتدقيق
+        </button>
+      </div>
+
+      <!-- Tab 1: General Info -->
+      <div id="tabContentInfo" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">العميل التجاري المرتبط:</div>
+            <div id="infoClientName" class="text-base font-extrabold text-amber-400">—</div>
+            <div id="infoClientCompany" class="text-slate-300 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">بيانات مستخدم الحساب:</div>
+            <div id="infoUserName" class="text-base font-extrabold text-white">—</div>
+            <div id="infoUserEmail" class="text-slate-400 font-mono mt-1">—</div>
+            <div id="infoUserPhone" class="text-slate-400 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">حالة الحساب والأمان:</div>
+            <div id="infoUserStatus" class="font-bold text-emerald-400 mt-1">—</div>
+            <div id="infoUser2fa" class="text-slate-300 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">آخر تسجيل دخول والجهاز:</div>
+            <div id="infoLastLogin" class="font-bold text-white mt-1">—</div>
+            <div id="infoLastIp" class="text-slate-400 font-mono mt-1">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Linked Users -->
+      <div id="tabContentUsers" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-2">قائمة بجميع حسابات المستخدمين المرتبطين بالعميل نفسه في قاعدة البيانات:</div>
+        <div id="linkedUsersContainer" class="space-y-2">
+          <div class="text-slate-500 italic text-xs">جاري جلب الحسابات...</div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Permissions & Projects -->
+      <div id="tabContentPermissions" class="hidden space-y-4">
+        <div class="text-xs font-bold text-amber-400 mb-2">المشاريع المصرح بها ومصفوفة الصلاحيات المخصصة:</div>
+        <div id="projectPermissionsContainer" class="space-y-3">
+          <div class="text-slate-500 italic text-xs">جاري جلب المشاريع والصلاحيات...</div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Client App Modules Control -->
+      <div id="tabContentModules" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-3">التحكم في المكونات والوحدات المتاحة للعميل في تطبيق الهاتف (Client App):</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-chart-line text-amber-400 ml-1.5"></i> لوحة الإنجاز ونسب العمل</div>
+              <div class="text-[0.7rem] text-slate-400">استعراض مؤشرات إنجاز المشاريع</div>
+            </div>
+            <span class="text-emerald-400 font-bold">متاح تلقائياً</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-file-invoice-dollar text-emerald-400 ml-1.5"></i> المستخلصات والاعتماد</div>
+              <div class="text-[0.7rem] text-slate-400">عرض فواتير المستخلصات وزر الاعتماد</div>
+            </div>
+            <span class="text-emerald-400 font-bold">مُفعل حسب الصلاحية</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-receipt text-blue-400 ml-1.5"></i> كشف الحساب والقيود</div>
+              <div class="text-[0.7rem] text-slate-400">كشف حساب العميل التحليلي والدفعات</div>
+            </div>
+            <span class="text-emerald-400 font-bold">مربوط بالمحاسبة</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-comments text-purple-400 ml-1.5"></i> المحادثات والاستفسارات</div>
+              <div class="text-[0.7rem] text-slate-400">إرسال واستقبال رسائل المشروع</div>
+            </div>
+            <span class="text-emerald-400 font-bold">متاح</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 5: Real Audit Log Feed -->
+      <div id="tabContentAudit" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-2">سجل الأمان والنشاط الفعلي المسجل لهذا الحساب من واقع قاعدة البيانات (`audit_logs`):</div>
+        <div id="auditLogsContainer" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+          <div class="text-slate-500 italic text-xs">جاري تحميل سجل التدقيق...</div>
+        </div>
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/80 mt-6">
+        <button type="button" onclick="closeDetailsModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+          إغلاق
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Page Logic Script -->
+  <script>
+    let allUsers = [];
+
+    // Unified Authentication & CSRF Token Headers Resolver
+    function getAuthToken() {
+      return localStorage.getItem('rawasi_token') || 
+             sessionStorage.getItem('rawasi_token') || 
+             localStorage.getItem('token') || 
+             sessionStorage.getItem('token') || '';
+    }
+
+    function getAuthHeaders(extraHeaders = {}) {
+      const token = getAuthToken();
+      const csrf = (window.Auth && window.Auth.csrfToken) || sessionStorage.getItem('rawasi_csrf_token') || 'rawasi_security_token_32bytes_v2';
+      const headers = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': csrf,
+        ...extraHeaders
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      return headers;
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toastNotification');
+      const toastContent = document.getElementById('toastContent');
+      const toastIcon = document.getElementById('toastIcon');
+      const toastMsg = document.getElementById('toastMessage');
+
+      toastMsg.textContent = message;
+      if (type === 'success') {
+        toastContent.className = 'glass-card px-6 py-3.5 rounded-2xl border border-emerald-500/40 text-emerald-400 flex items-center gap-3 shadow-2xl text-sm font-bold bg-slate-900/90';
+        toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+      } else {
+        toastContent.className = 'glass-card px-6 py-3.5 rounded-2xl border border-rose-500/40 text-rose-400 flex items-center gap-3 shadow-2xl text-sm font-bold bg-slate-900/90';
+        toastIcon.className = 'fa-solid fa-circle-exclamation text-rose-400 text-lg';
+      }
+
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 4000);
+    }
+
+    async function loadClientUsers() {
+      const tbody = document.getElementById('usersTableBody');
+      try {
+        const headers = getAuthHeaders();
+        const res = await fetch('/api/admin/client-users', { headers });
+        const data = await res.json();
+
+        if (data.success) {
+          allUsers = data.users || [];
+          renderUsers(allUsers);
+          updateStats(allUsers);
+        } else {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="text-center py-12 text-slate-400">
+                <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-400 mb-2"></i>
+                <div class="font-bold text-white mb-1">${data.message || 'تعذر تحميل حسابات العملاء'}</div>
+                <div class="text-xs text-slate-500 mb-4">يرجى التأكد من تسجيل الدخول بالنظام الرئيسي أولاً</div>
+                <button onclick="loadClientUsers()" class="px-4 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold">إعادة المحاولة</button>
+              </td>
+            </tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading client users:', err);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-wifi-slash text-3xl text-rose-400 mb-2"></i>
+              <div class="font-bold text-white mb-1">حدث خطأ في الاتصال بالخادم</div>
+              <button onclick="loadClientUsers()" class="px-4 py-2 bg-slate-800 text-amber-400 rounded-xl text-xs font-bold mt-2">إعادة المحاولة</button>
+            </td>
+          </tr>`;
+      }
+    }
+
+    function renderUsers(users) {
+      const tbody = document.getElementById('usersTableBody');
+      if (!users || users.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-folder-open text-3xl text-slate-600 mb-2"></i>
+              <div>لا توجد حسابات عملاء مسجلة حالياً</div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = users.map(u => {
+        const roleBadge = u.role === 'owner' ? 'badge-owner' : (u.role === 'manager' ? 'badge-manager' : 'badge-viewer');
+        const roleLabel = u.role === 'owner' ? 'مالك' : (u.role === 'manager' ? 'مدير ممثل' : 'مطلع فقط');
+        const statusBadge = u.status === 'active' ? 'badge-active' : 'badge-inactive';
+        const statusLabel = u.status === 'active' ? 'نشط' : (u.status === 'suspended' ? 'موقوف' : 'معطل');
+
+        return `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="px-6 py-4">
+              <div class="font-bold text-white text-sm">${u.full_name}</div>
+              <div class="text-xs text-slate-400 font-mono">${u.email}</div>
+              ${u.phone ? `<div class="text-xs text-slate-500">${u.phone}</div>` : ''}
+            </td>
+            <td class="px-6 py-4">
+              <div class="font-bold text-slate-200 text-sm">${u.client_name || '—'}</div>
+              <div class="text-xs text-slate-400">${u.client_company || ''}</div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="portal-badge ${roleBadge}">
+                <i class="fa-solid fa-user-shield text-[0.7rem]"></i>
+                ${roleLabel}
+              </span>
+            </td>
+            <td class="px-6 py-4">
+              <span class="text-xs bg-slate-900/90 text-amber-300 font-bold px-2.5 py-1 rounded-lg border border-slate-700">
+                ${u.role === 'owner' ? 'جميع المشاريع' : `${u.assigned_projects_count || 0} مشاريع`}
+              </span>
+            </td>
+            <td class="px-6 py-4">
+              ${u.two_factor_enabled 
+                ? '<span class="text-xs text-emerald-400 font-bold flex items-center gap-1.5"><i class="fa-solid fa-shield-halved"></i> مفعّل (OTP)</span>' 
+                : '<span class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-regular fa-circle"></i> معطل</span>'}
+            </td>
+            <td class="px-6 py-4 text-xs text-slate-400">
+              ${u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('ar-YE') : 'لم يدخل بعد'}
+            </td>
+            <td class="px-6 py-4">
+              <span class="portal-badge ${statusBadge}">
+                <i class="fa-solid fa-circle text-[0.4rem]"></i>
+                ${statusLabel}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-center">
+              <div class="flex items-center justify-center gap-2">
+                <button onclick="viewClientDetails(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="عرض التفاصيل الكاملة، الصلاحيات وسجل النشاط">
+                  <i class="fa-solid fa-eye text-xs"></i>
+                </button>
+                <button onclick="sendInvite(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-emerald-600 hover:text-white text-emerald-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إرسال دعوة تفعيل وبيانات الدخول المؤقتة">
+                  <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+                <button onclick="revokeSessions(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-rose-700 hover:text-white text-rose-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إبطال جميع الجلسات وتجميد الحساب فوراً">
+                  <i class="fa-solid fa-user-slash text-xs"></i>
+                </button>
+                <button onclick="editUser(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="تعديل الحساب">
+                  <i class="fa-solid fa-pen text-xs"></i>
+                </button>
+                <button onclick="resetPassword(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إعادة تعيين كلمة المرور">
+                  <i class="fa-solid fa-key text-xs"></i>
+                </button>
+                <button onclick="deleteUser(${u.id}, '${(u.full_name || '').replace(/'/g, "\\'")}')" class="w-8 h-8 bg-slate-800 hover:bg-rose-600 hover:text-white text-rose-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="حذف حساب العميل">
+                  <i class="fa-solid fa-trash text-xs"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateStats(users) {
+      document.getElementById('statTotalUsers').innerText = users.length;
+      document.getElementById('statActiveUsers').innerText = users.filter(u => u.status === 'active').length;
+      document.getElementById('stat2faUsers').innerText = users.filter(u => u.two_factor_enabled).length;
+      document.getElementById('statDevices').innerText = users.filter(u => u.device_platform === 'android').length;
+    }
+
+    function filterUsers() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = allUsers.filter(u => 
+        (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.client_name && u.client_name.toLowerCase().includes(q))
+      );
+      renderUsers(filtered);
+    }
+
+    async function loadClientsList() {
+      try {
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch('/api/clients', { headers });
+        const data = await res.json();
+        const select = document.getElementById('userClientId');
+        select.innerHTML = '<option value="">اختر العميل من الدليل...</option>';
+
+        const clientsList = Array.isArray(data) ? data : (data.data || data.clients || []);
+        clientsList.forEach(c => {
+          select.innerHTML += `<option value="${c.id}">${c.name} ${c.company ? `(${c.company})` : ''}</option>`;
+        });
+      } catch (e) {
+        console.error('Error loading clients list:', e);
+      }
+    }
+
+    async function onClientSelected() {
+      const clientId = document.getElementById('userClientId').value;
+      const section = document.getElementById('clientProjectsSection');
+      const container = document.getElementById('clientProjectsContainer');
+
+      if (!clientId) {
+        section.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+      }
+
+      try {
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch(`/api/admin/client-users/client-projects/${clientId}`, { headers });
+        const data = await res.json();
+
+        section.classList.remove('hidden');
+        if (data.success && data.projects && data.projects.length > 0) {
+          container.innerHTML = data.projects.map(p => `
+            <label class="flex items-center justify-between p-2 rounded bg-slate-800/80 hover:bg-slate-700/80 cursor-pointer">
+              <span class="font-bold text-white">${p.name} <small class="text-slate-400">(${p.code || ''})</small></span>
+              <input type="checkbox" name="selected_project_ids" value="${p.id}" checked class="accent-amber-500 w-4 h-4">
+            </label>
+          `).join('');
+        } else {
+          container.innerHTML = '<div class="text-amber-400 p-2">لا توجد مشاريع مسجلة مباشرة لهذا العميل حالياً (سيتم منح الوصول التلقائي لجميع العقود المبرمة لاحقاً).</div>';
+        }
+      } catch (e) {
+        console.error('Error fetching client projects:', e);
+      }
+    }
+
+    function showModalError(msg) {
+      const box = document.getElementById('modalErrorAlert');
+      const text = document.getElementById('modalErrorText');
+      if (box && text) {
+        text.textContent = msg;
+        box.classList.remove('hidden');
+      }
+      showToast(msg, 'error');
+    }
+
+    function hideModalError() {
+      const box = document.getElementById('modalErrorAlert');
+      if (box) box.classList.add('hidden');
+    }
+
+    function openCreateUserModal() {
+      hideModalError();
+      document.getElementById('userId').value = '';
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-amber-400"></i><span>إضافة مستخدم عميل جديد</span>';
+      document.getElementById('passwordFieldGroup').style.display = 'block';
+      document.getElementById('userPassword').required = true;
+      document.getElementById('userForm').reset();
+      document.getElementById('clientProjectsSection').classList.add('hidden');
+      loadClientsList();
+      document.getElementById('userModal').classList.remove('hidden');
+    }
+
+    function editUser(id) {
+      hideModalError();
+      const user = allUsers.find(u => u.id === id);
+      if (!user) return;
+      document.getElementById('userId').value = user.id;
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-pen text-amber-400"></i><span>تعديل حساب العميل</span>';
+      document.getElementById('passwordFieldGroup').style.display = 'none';
+      document.getElementById('userPassword').required = false;
+
+      loadClientsList().then(() => {
+        document.getElementById('userClientId').value = user.client_id || '';
+        document.getElementById('userFullName').value = user.full_name || '';
+        document.getElementById('userEmail').value = user.email || '';
+        document.getElementById('userPhone').value = user.phone || '';
+        document.getElementById('userRole').value = user.role || 'viewer';
+        document.getElementById('userStatus').value = user.status || 'active';
+        document.getElementById('user2fa').checked = !!user.two_factor_enabled;
+        onClientSelected();
+        document.getElementById('userModal').classList.remove('hidden');
+      });
+    }
+
+    function closeModal() {
+      hideModalError();
+      document.getElementById('userModal').classList.add('hidden');
+    }
+
+    async function saveClientUser(e) {
+      e.preventDefault();
+      hideModalError();
+
+      const id = document.getElementById('userId').value;
+      const token = getAuthToken();
+
+      const clientId = document.getElementById('userClientId').value;
+      const fullName = document.getElementById('userFullName').value.trim();
+      const email = document.getElementById('userEmail').value.trim();
+      const phone = document.getElementById('userPhone').value.trim();
+      const password = document.getElementById('userPassword').value;
+      const role = document.getElementById('userRole').value;
+      const status = document.getElementById('userStatus').value;
+      const twoFactor = document.getElementById('user2fa').checked;
+
+      if (!clientId) {
+        showModalError('يرجى اختيار العميل التابع له في قاعدة البيانات من القائمة');
+        return;
+      }
+      if (!fullName) {
+        showModalError('يرجى إدخال الاسم الكامل للمستخدم');
+        return;
+      }
+      if (!email) {
+        showModalError('يرجى إدخال البريد الإلكتروني');
+        return;
+      }
+      if (!id && (!password || password.length < 6)) {
+        showModalError('كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل');
+        return;
+      }
+
+      const selectedProjects = Array.from(document.querySelectorAll('input[name="selected_project_ids"]:checked')).map(cb => parseInt(cb.value, 10));
+
+      const payload = {
+        client_id: parseInt(clientId, 10),
+        full_name: fullName,
+        email: email,
+        phone: phone,
+        role: role,
+        status: status,
+        two_factor_enabled: twoFactor,
+        project_ids: selectedProjects
+      };
+
+      if (!id) {
+        payload.password = password;
+      }
+
+      const url = id ? `/api/admin/client-users/${id}` : '/api/admin/client-users';
+      const method = id ? 'PUT' : 'POST';
+
+      const btnSubmit = e.target.querySelector('button[type="submit"]');
+      const originalText = btnSubmit ? btnSubmit.innerHTML : 'حفظ التغييرات';
+
+      try {
+        if (btnSubmit) {
+          btnSubmit.disabled = true;
+          btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+        }
+
+        const res = await fetch(url, {
+          method,
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeModal();
+          showToast(data.message || 'تم حفظ حساب العميل بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showModalError(data.message || 'خطأ أثناء الحفظ');
+        }
+      } catch (err) {
+        showModalError('خطأ في الاتصال بالخادم أثناء الحفظ');
+      } finally {
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalText;
+        }
+      }
+    }
+
+    async function resetPassword(id) {
+      const newPass = prompt('أدخل كلمة المرور الجديدة للحساب (6 أحرف على الأقل):');
+      if (!newPass) return;
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/reset-password`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ new_password: newPass })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تمت إعادة تعيين كلمة المرور بنجاح', 'success');
+        } else {
+          showToast(data.message || 'خطأ في إعادة تعيين كلمة المرور', 'error');
+        }
+      } catch (e) {
+        showToast('خطأ في الاتصال أثناء إعادة التعيين', 'error');
+      }
+    }
+
+    async function sendInvite(id) {
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/send-invite`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' })
+        });
+        const data = await res.json();
+        if (data.success && data.invite_details) {
+          const inv = data.invite_details;
+          const waUrl = `https://wa.me/${inv.phone ? inv.phone.replace(/[^0-9]/g, '') : ''}?text=${encodeURIComponent(inv.whatsapp_share_text)}`;
+          alert(`✅ تم إصدار بيانات تفعيل الحساب بنجاح!\n\nاسم المستلم: ${inv.full_name}\nالبريد: ${inv.email}\nكلمة المرور المؤقتة: ${inv.temp_password}\nرمز الـ OTP: ${inv.otp_code}\n\nيمكنك نُسخ الرسالة أو المشاركة فوراً عبر واتساب.`);
+          window.open(waUrl, '_blank');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'تعذر إصدار رمز الدعوة', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال أثناء إصدار الدعوة', 'error');
+      }
+    }
+
+    async function revokeSessions(id) {
+      if (!confirm('هل أنت متأكد من رغبتك في إبطال جميع جلسات الدخول الحالية وتجميد الحساب فوراً؟')) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/revoke-sessions`, {
+          method: 'POST',
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تم إبطال الجلسات وتجميد الحساب بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'خطأ أثناء إبطال الجلسات', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء إبطال الجلسات', 'error');
+      }
+    }
+
+    function closeDetailsModal() {
+      document.getElementById('clientDetailsModal').classList.add('hidden');
+    }
+
+    function switchDetailsTab(tabName) {
+      const tabs = ['info', 'users', 'permissions', 'modules', 'audit'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const content = document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (btn && content) {
+          if (t === tabName) {
+            btn.className = 'px-4 py-2 rounded-xl bg-amber-500 text-slate-950 border border-amber-400 transition cursor-pointer font-bold';
+            content.classList.remove('hidden');
+          } else {
+            btn.className = 'px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer font-bold';
+            content.classList.add('hidden');
+          }
+        }
+      });
+    }
+
+    async function viewClientDetails(id) {
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/details`, {
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (!data.success || !data.user) {
+          showToast(data.message || 'تعذر تحميل تفاصيل حساب العميل', 'error');
+          return;
+        }
+
+        const u = data.user;
+        document.getElementById('detailsModalTitle').innerHTML = `<i class="fa-solid fa-building-user text-amber-400"></i><span>${u.full_name}</span>`;
+        document.getElementById('detailsModalSubtitle').innerText = `${u.client_name || 'عميل محدد'} ${u.client_company ? `(${u.client_company})` : ''} - ${u.email}`;
+
+        // 1. Tab Info
+        document.getElementById('infoClientName').innerText = u.client_name || '—';
+        document.getElementById('infoClientCompany').innerText = u.client_company || 'سجل تجاري مسجل في النظام';
+        document.getElementById('infoUserName').innerText = u.full_name || '—';
+        document.getElementById('infoUserEmail').innerText = u.email || '—';
+        document.getElementById('infoUserPhone').innerText = u.phone || '—';
+        document.getElementById('infoUserStatus').innerText = u.status === 'active' ? '🟢 نشط (Active)' : (u.status === 'suspended' ? '🔴 موقوف (Suspended)' : '⚪ معطل');
+        document.getElementById('infoUser2fa').innerText = u.two_factor_enabled ? '🛡️ مفعّل بالرمز السري OTP' : 'معطل';
+        document.getElementById('infoLastLogin').innerText = u.last_login_at ? new Date(u.last_login_at).toLocaleString('ar-YE') : 'لم يسجل دخول بعد';
+        document.getElementById('infoLastIp').innerText = u.last_login_ip ? `IP: ${u.last_login_ip}` : '—';
+
+        // 2. Tab Users
+        const linkedUsers = data.linked_users || [];
+        document.getElementById('detailsUsersCount').innerText = linkedUsers.length;
+        const usersContainer = document.getElementById('linkedUsersContainer');
+        if (linkedUsers.length === 0) {
+          usersContainer.innerHTML = '<div class="text-slate-500 italic text-xs">لا يوجد مستخدمون آخرون مرتبكون بهذا العميل</div>';
+        } else {
+          usersContainer.innerHTML = linkedUsers.map(lu => `
+            <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-700/80 flex items-center justify-between text-xs">
+              <div>
+                <div class="font-bold text-white">${lu.full_name}</div>
+                <div class="text-slate-400 font-mono">${lu.email}</div>
+              </div>
+              <div class="text-right">
+                <span class="portal-badge ${lu.role === 'owner' ? 'badge-owner' : 'badge-viewer'}">${lu.role === 'owner' ? 'مالك' : 'مطلع'}</span>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // 3. Tab Permissions & Projects
+        const projs = data.project_access || [];
+        const projsContainer = document.getElementById('projectPermissionsContainer');
+        if (projs.length === 0) {
+          projsContainer.innerHTML = '<div class="p-4 bg-slate-900/80 rounded-xl text-amber-400 text-xs">متاح الوصول التلقائي لجميع مشاريع العميل (مالك الحساب)</div>';
+        } else {
+          projsContainer.innerHTML = projs.map(p => `
+            <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-700/80 space-y-2 text-xs">
+              <div class="flex items-center justify-between font-bold text-white border-b border-slate-800 pb-2">
+                <span>🏗️ ${p.project_name} <small class="text-slate-400">(${p.project_code || ''})</small></span>
+                <span class="text-amber-400 font-mono">${Number(p.contract_value || 0).toLocaleString()} ر.ي</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[0.75rem]">
+                <span class="${p.can_view_progress ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> نسبة الإنجاز</span>
+                <span class="${p.can_view_invoices ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> المستخلصات</span>
+                <span class="${p.can_approve_invoices ? 'text-amber-400 font-bold' : 'text-slate-500'}"><i class="fa-solid fa-signature ml-1"></i> اعتماد المستخلص</span>
+                <span class="${p.can_view_payments ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> الدفعات السابقة</span>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // 4. Tab Audit Logs
+        const logs = data.audit_logs || [];
+        const logsContainer = document.getElementById('auditLogsContainer');
+        if (logs.length === 0) {
+          logsContainer.innerHTML = '<div class="text-slate-500 italic text-xs">لا يوجد نشاط مسجل مؤخراً لهذا الحساب</div>';
+        } else {
+          logsContainer.innerHTML = logs.map(l => `
+            <div class="p-2.5 bg-slate-900/80 rounded-lg border border-slate-800 text-xs flex items-center justify-between">
+              <div>
+                <div class="font-bold text-slate-200">${l.action}</div>
+                <div class="text-slate-400 text-[0.72rem]">${l.details || '—'}</div>
+              </div>
+              <div class="text-slate-500 text-[0.7rem] text-right font-mono">
+                ${new Date(l.created_at).toLocaleString('ar-YE')}
+              </div>
+            </div>
+          `).join('');
+        }
+
+        switchDetailsTab('info');
+        document.getElementById('clientDetailsModal').classList.remove('hidden');
+      } catch (err) {
+        console.error('viewClientDetails Error:', err);
+        showToast('خطأ في تحميل تفاصيل العميل', 'error');
+      }
+    }
+
+    async function deleteUser(id, fullName) {
+      if (!confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تم حذف حساب العميل بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'خطأ أثناء حذف الحساب', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء الحذف', 'error');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadClientUsers();
+    });
+  </script>
+</body>
+</html>

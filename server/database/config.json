@@ -1,1 +1,16 @@
-{"database":"rawasi_aden","dbEngine":"sqlite","dbPath":"server/database/rawasi_aden.db","mysql":{"connectionLimit":20,"database":"rawasi_aden","host":"localhost","password":"","port":3306,"queueLimit":0,"user":"root","waitForConnections":true},"port":5500,"systemName":"رواسي عدن للهندسة والمقاولات"}
+{
+  "dbEngine": "sqlite",
+  "mysql": {
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "",
+    "database": "rawasi_aden",
+    "waitForConnections": true,
+    "connectionLimit": 20,
+    "queueLimit": 0
+  },
+  "dbPath": "server/database/rawasi_aden.db",
+  "port": 3000,
+  "systemName": "رواسي عدن للهندسة والمقاولات"
+}

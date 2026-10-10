@@ -25,13 +25,6 @@ test('Financial Control & Document Lifecycle - Complete Integrity Suite', async 
       await db.run("DELETE FROM journal_entries WHERE created_by IN (?, ?) OR created_by_name IN ('maker_accountant', 'checker_auditor')", [makerId, checkerId]);
       await db.run("DELETE FROM expenses WHERE created_by IN (?, ?) OR created_by_name IN ('maker_accountant', 'checker_auditor')", [makerId, checkerId]);
       await db.run("DELETE FROM payments WHERE created_by IN (?, ?) OR created_by_name IN ('maker_accountant', 'checker_auditor')", [makerId, checkerId]);
-      try {
-        if (typeof fclProjectId !== 'undefined' && fclProjectId) {
-          await db.run('DELETE FROM cash_movements WHERE project_id = ?', [fclProjectId]);
-        }
-      } catch {}
-      await db.run("DELETE FROM projects WHERE code = 'FCL-TEST-001'", []);
-      await db.run("DELETE FROM clients WHERE name = 'عميل اختبار دورة الرقابة'", []);
       await db.run("DELETE FROM users WHERE id IN (?, ?) OR username IN ('maker_accountant', 'checker_auditor')", [makerId, checkerId]);
     } catch {}
   };
@@ -47,18 +40,6 @@ test('Financial Control & Document Lifecycle - Complete Integrity Suite', async 
      VALUES (?, 'checker_auditor', ?, 'auditor', 'المراجع المالي المعتمد', 'active', '["expenses:view","expenses:approve","expenses:post","expenses:cancel","accounting:view","accounting:approve","accounting:post"]')`,
     [checkerId, hashedPass]
   );
-
-  await db.run(
-    `INSERT OR IGNORE INTO clients (name, company, phone) VALUES ('عميل اختبار دورة الرقابة', 'اختبار', '700000001')`
-  );
-  const fclClient = await db.get(`SELECT id FROM clients WHERE name = 'عميل اختبار دورة الرقابة'`);
-  await db.run(
-    `INSERT OR IGNORE INTO projects (code, name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status)
-     VALUES ('FCL-TEST-001', 'مشروع اختبار دورة الرقابة', ?, 1000000, 800000, 0, 0, 'active')`,
-    [fclClient.id]
-  );
-  const fclProject = await db.get(`SELECT id FROM projects WHERE code = 'FCL-TEST-001'`);
-  const fclProjectId = fclProject.id;
 
   const getHeaders = (user) => {
     const token = jwt.sign(
@@ -92,19 +73,18 @@ test('Financial Control & Document Lifecycle - Complete Integrity Suite', async 
     if (server.closeAllConnections) server.closeAllConnections();
     server.close();
   });
-  t.after(() => cleanupTestData().catch(() => {}));
 
   try {
     // 1. دورة حياة المستند: إنشاء مسودة والتحقق من عدم التأثير المالي على الدفاتر في مرحلة المسودة
     const initialCash = await db.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 100000 };
-    const initialProj = await db.get('SELECT actual_cost FROM projects WHERE id = ?', [fclProjectId]) || { actual_cost: 0 };
+    const initialProj = await db.get('SELECT actual_cost FROM projects WHERE id = 1') || { actual_cost: 0 };
 
   const resDraft = await fetch(`${baseUrl}/api/expenses`, {
     method: 'POST',
     headers: makerHeaders,
     body: JSON.stringify({
       expense_type: 'مواد بناء',
-      project_id: fclProjectId,
+      project_id: 1,
       amount: 50000,
       recipient: 'مقاول الخرسانة',
       notes: 'مسودة صرف للاختبار',
@@ -119,7 +99,7 @@ test('Financial Control & Document Lifecycle - Complete Integrity Suite', async 
   const createdReceiptNo = draftJson.receipt_no;
 
   const afterDraftCash = await db.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 100000 };
-  const afterDraftProj = await db.get('SELECT actual_cost FROM projects WHERE id = ?', [fclProjectId]) || { actual_cost: 0 };
+  const afterDraftProj = await db.get('SELECT actual_cost FROM projects WHERE id = 1') || { actual_cost: 0 };
   assert.strictEqual(Number(afterDraftCash.current_balance), Number(initialCash.current_balance), 'Cash balance must not change on draft');
   assert.strictEqual(Number(afterDraftProj.actual_cost), Number(initialProj.actual_cost), 'Project actual cost must not change on draft');
 

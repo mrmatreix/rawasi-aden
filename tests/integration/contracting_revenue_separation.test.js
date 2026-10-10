@@ -29,31 +29,13 @@ test('Contracting Accounting Engine - IFRS 15 Revenue Recognition & 8-Pillars Se
     // تنظيف بيانات الاختبار المعزولة
     if (testProjectId) {
       try {
-        const _je = await query(
-          `SELECT DISTINCT j.id FROM journal_entries j
-           LEFT JOIN journal_entry_lines l ON l.entry_id = j.id AND l.project_id = ?
-           LEFT JOIN contract_revenue_recognitions r ON r.journal_entry_id = j.id AND r.project_id = ?
-           LEFT JOIN bills b ON b.journal_entry_id = j.id AND b.project_id = ?
-           WHERE l.id IS NOT NULL OR r.id IS NOT NULL OR b.id IS NOT NULL`,
-          [testProjectId, testProjectId, testProjectId]
-        );
-        const _jeIds = _je.map(r => r.id);
         await run('DELETE FROM journal_entry_lines WHERE project_id = ?', [testProjectId]);
-        if (_jeIds.length > 0) {
-          const _ph = _jeIds.map(() => '?').join(',');
-          await run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${_ph})`, _jeIds);
-        }
         await run('DELETE FROM contract_revenue_recognitions WHERE project_id = ?', [testProjectId]);
         await run('DELETE FROM project_change_orders WHERE project_id = ?', [testProjectId]);
         await run('DELETE FROM project_contracts WHERE project_id = ?', [testProjectId]);
         await run('DELETE FROM bills WHERE project_id = ?', [testProjectId]);
         await run('DELETE FROM payments WHERE project_id = ?', [testProjectId]);
         await run('DELETE FROM expenses WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM cash_movements WHERE project_id = ?', [testProjectId]);
-        if (_jeIds.length > 0) {
-          const _ph = _jeIds.map(() => '?').join(',');
-          await run(`DELETE FROM journal_entries WHERE id IN (${_ph})`, _jeIds);
-        }
         await run('DELETE FROM cost_centers WHERE project_id = ?', [testProjectId]);
         await run('DELETE FROM projects WHERE id = ?', [testProjectId]);
       } catch (e) {
@@ -93,31 +75,13 @@ test('Contracting Accounting Engine - IFRS 15 Revenue Recognition & 8-Pillars Se
   const existingOldProjects = await query("SELECT id FROM projects WHERE code LIKE 'PRJ-IFRS%'");
   for (const op of existingOldProjects) {
     try {
-      const _je = await query(
-        `SELECT DISTINCT j.id FROM journal_entries j
-         LEFT JOIN journal_entry_lines l ON l.entry_id = j.id AND l.project_id = ?
-         LEFT JOIN contract_revenue_recognitions r ON r.journal_entry_id = j.id AND r.project_id = ?
-         LEFT JOIN bills b ON b.journal_entry_id = j.id AND b.project_id = ?
-         WHERE l.id IS NOT NULL OR r.id IS NOT NULL OR b.id IS NOT NULL`,
-        [op.id, op.id, op.id]
-      );
-      const _jeIds = _je.map(r => r.id);
       await run('DELETE FROM journal_entry_lines WHERE project_id = ?', [op.id]);
-      if (_jeIds.length > 0) {
-        const _ph = _jeIds.map(() => '?').join(',');
-        await run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${_ph})`, _jeIds);
-      }
       await run('DELETE FROM contract_revenue_recognitions WHERE project_id = ?', [op.id]);
       await run('DELETE FROM project_change_orders WHERE project_id = ?', [op.id]);
       await run('DELETE FROM project_contracts WHERE project_id = ?', [op.id]);
       await run('DELETE FROM bills WHERE project_id = ?', [op.id]);
       await run('DELETE FROM payments WHERE project_id = ?', [op.id]);
       await run('DELETE FROM expenses WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM cash_movements WHERE project_id = ?', [op.id]);
-      if (_jeIds.length > 0) {
-        const _ph = _jeIds.map(() => '?').join(',');
-        await run(`DELETE FROM journal_entries WHERE id IN (${_ph})`, _jeIds);
-      }
       await run('DELETE FROM cost_centers WHERE project_id = ?', [op.id]);
       await run('DELETE FROM projects WHERE id = ?', [op.id]);
     } catch {}

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>المستخلصات - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div id="appHeader"></div>
+
+  <div class="app-container">
+    <div style="margin-bottom: 16px;">
+      <h2 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;">المستخلصات والمطالبات (IPCs)</h2>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">مراجعة واعتماد مستخلصات الأعمال وإرسال ملاحظاتك الهندسية</p>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 16px; scrollbar-width: none;">
+      <button class="tab-btn active" onclick="setFilter('all', this)">الكل</button>
+      <button class="tab-btn" onclick="setFilter('pending', this)">بانتظار الاعتماد</button>
+      <button class="tab-btn" onclick="setFilter('approved', this)">المعتمدة</button>
+      <button class="tab-btn" onclick="setFilter('rejected', this)">المرفوضة</button>
+    </div>
+
+    <!-- Invoices List -->
+    <div id="invoicesContainer">
+      <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--gold); margin-bottom: 10px;"></i>
+        <p>جاري تحميل المستخلصات...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approve / Reject Modal -->
+  <div id="decisionModal" class="modal-overlay">
+    <div class="modal-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3 id="modalTitle" style="font-size: 1.1rem; font-weight: bold; color: #FFFFFF;">قرار العميل بشأن المستخلص</h3>
+        <button onclick="closeDecisionModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <p id="modalSub" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px;"></p>
+
+      <form id="decisionForm" onsubmit="submitDecision(event)">
+        <input type="hidden" id="selectedBillId">
+        <input type="hidden" id="selectedDecision">
+
+        <div class="form-group">
+          <label class="form-label">ملاحظات أو تعليق العميل (اختياري عند الاعتماد، ومطلوب عند طلب التعديل):</label>
+          <textarea id="decisionNotes" class="form-textarea" rows="4" placeholder="أدخل أي ملاحظات هندسية أو استفسارات بخصوص بنود هذا المستخلص..."></textarea>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 20px;">
+          <button type="submit" id="confirmDecisionBtn" class="btn btn-primary" style="flex: 2;">
+            تأكيد القرار
+          </button>
+          <button type="button" onclick="closeDecisionModal()" class="btn btn-secondary" style="flex: 1;">
+            إلغاء
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="bottomNav"></div>
+
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    let allInvoices = [];
+    let currentFilter = 'all';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('invoices');
+      const isAuth = await ClientAuth.requireAuth();
+      if (!isAuth) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectId = urlParams.get('project_id');
+
+      loadInvoices(projectId);
+    });
+
+    async function loadInvoices(projectId = null) {
+      try {
+        const query = projectId ? `?project_id=${projectId}` : '';
+        const data = await ClientAPI.get(`/invoices${query}`);
+        if (!data.success) throw new Error(data.message);
+
+        allInvoices = data.invoices || [];
+        renderFilteredInvoices();
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل تحميل المستخلصات', 'error');
+      }
+    }
+
+    function setFilter(status, btn) {
+      currentFilter = status;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      renderFilteredInvoices();
+    }
+
+    function renderFilteredInvoices() {
+      let filtered = allInvoices;
+      if (currentFilter === 'pending') {
+        filtered = allInvoices.filter(i => !i.client_approval_status || i.client_approval_status === 'pending');
+      } else if (currentFilter === 'approved') {
+        filtered = allInvoices.filter(i => i.client_approval_status === 'approved');
+      } else if (currentFilter === 'rejected') {
+        filtered = allInvoices.filter(i => i.client_approval_status === 'rejected');
+      }
+
+      const container = document.getElementById('invoicesContainer');
+      if (!filtered || filtered.length === 0) {
+        container.innerHTML = `
+          <div class="card" style="text-align: center; padding: 40px 20px;">
+            <i class="fa-solid fa-file-invoice" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
+            <h3 style="font-size: 1rem; color: #FFFFFF; font-weight: bold;">لا توجد مستخلصات مطابقة</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">لم يتم العثور على مستخلصات في هذا القسم</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(inv => {
+        const isApproved = inv.client_approval_status === 'approved';
+        const isRejected = inv.client_approval_status === 'rejected';
+        const isPending = !isApproved && !isRejected;
+
+        return `
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+              <div>
+                <span style="font-size: 0.72rem; color: var(--gold); font-weight: bold;">${inv.project_name || 'مشروع'}</span>
+                <h3 style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF; margin: 2px 0;">${inv.bill_no}</h3>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">${ClientApp.formatDate(inv.date)} - ${inv.bill_type || 'مستخلص جاري'}</div>
+              </div>
+              <span class="badge ${isApproved ? 'badge-approved' : (isRejected ? 'badge-rejected' : 'badge-pending')}">
+                ${isApproved ? '<i class="fa-solid fa-check-double"></i> معتمد منك' : (isRejected ? '<i class="fa-solid fa-xmark"></i> طلب تعديل' : '<i class="fa-solid fa-hourglass-half"></i> بانتظار قرارك')}
+              </span>
+            </div>
+
+            <div style="background: var(--bg-input); padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); margin: 12px 0; font-size: 0.85rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span style="color: var(--text-muted);">إجمالي قيمة الأعمال المنجزة:</span>
+                <span style="color: #FFFFFF; font-weight: bold;">${ClientApp.formatMoney(inv.gross_amount || inv.amount)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span style="color: var(--text-muted);">الاستقطاعات والضمان (Deductions):</span>
+                <span style="color: #EF4444;">- ${ClientApp.formatMoney(inv.deduction)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px dashed var(--border);">
+                <span style="color: var(--gold); font-weight: bold;">صافي المستحق للمستخلص:</span>
+                <span style="color: var(--gold); font-weight: bold; font-size: 1rem;">${ClientApp.formatMoney(inv.net_amount)}</span>
+              </div>
+            </div>
+
+            ${inv.client_approval_notes ? `
+              <div style="padding: 8px 12px; background: rgba(21, 34, 56, 0.6); border-radius: 10px; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px; border: 1px solid var(--border);">
+                <b style="color: #FFFFFF;">ملاحظتك المسجلة:</b> ${inv.client_approval_notes}
+              </div>
+            ` : ''}
+
+            <div style="display: flex; gap: 8px;">
+              ${isPending ? `
+                <button onclick="openDecisionModal(${inv.id}, '${inv.bill_no}', 'approved')" class="btn btn-primary btn-sm" style="flex: 1;">
+                  <i class="fa-solid fa-check"></i> اعتماد المستخلص
+                </button>
+                <button onclick="openDecisionModal(${inv.id}, '${inv.bill_no}', 'rejected')" class="btn btn-danger btn-sm" style="flex: 1;">
+                  <i class="fa-solid fa-rotate-left"></i> طلب تعديل
+                </button>
+              ` : `
+                <button onclick="openDecisionModal(${inv.id}, '${inv.bill_no}', '${inv.client_approval_status}')" class="btn btn-secondary btn-sm" style="width: 100%;">
+                  <i class="fa-solid fa-pen"></i> تعديل القرار أو الملاحظة
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openDecisionModal(billId, billNo, decision) {
+      document.getElementById('selectedBillId').value = billId;
+      document.getElementById('selectedDecision').value = decision;
+      document.getElementById('decisionNotes').value = '';
+
+      const isApprove = decision === 'approved';
+      document.getElementById('modalTitle').innerText = isApprove ? `اعتماد المستخلص: ${billNo}` : `طلب تعديل / رفض: ${billNo}`;
+      document.getElementById('modalSub').innerText = isApprove 
+        ? 'باعتمادك لهذا المستخلص يتم تأكيد صحة بنود الأعمال وحسابات الصرف الهندسية.'
+        : 'يرجى تدوين أسباب طلب التعديل أو الملاحظات الهندسية ليتم مراجعتها من قِبل إدارة المشاريع.';
+
+      const btn = document.getElementById('confirmDecisionBtn');
+      if (isApprove) {
+        btn.className = 'btn btn-primary';
+        btn.innerText = 'تأكيد اعتماد المستخلص';
+      } else {
+        btn.className = 'btn btn-danger';
+        btn.innerText = 'إرسال طلب التعديل';
+      }
+
+      document.getElementById('decisionModal').classList.add('active');
+    }
+
+    function closeDecisionModal() {
+      document.getElementById('decisionModal').classList.remove('active');
+    }
+
+    async function submitDecision(e) {
+      e.preventDefault();
+      const billId = document.getElementById('selectedBillId').value;
+      const decision = document.getElementById('selectedDecision').value;
+      const notes = document.getElementById('decisionNotes').value.trim();
+      const btn = document.getElementById('confirmDecisionBtn');
+
+      if (decision === 'rejected' && !notes) {
+        ClientApp.showToast('يرجى تدوين سبب طلب التعديل أو الرفض في الملاحظات', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+
+      try {
+        const res = await ClientAPI.post(`/invoices/${billId}/approve`, {
+          decision,
+          notes
+        });
+
+        if (!res.success) throw new Error(res.message);
+
+        ClientApp.showToast(res.message || 'تم تسجيل قرارك بنجاح', 'success');
+        closeDecisionModal();
+        loadInvoices();
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل حفظ القرار', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
