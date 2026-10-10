@@ -373,6 +373,139 @@
     </div>
   </div>
 
+  <!-- Detailed Client & Account View Modal -->
+  <div id="clientDetailsModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-4xl w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
+        <div>
+          <h3 id="detailsModalTitle" class="text-xl font-extrabold text-white flex items-center gap-2">
+            <i class="fa-solid fa-building-user text-amber-400"></i>
+            <span>تفاصيل حساب العميل والصلاحيات</span>
+          </h3>
+          <div id="detailsModalSubtitle" class="text-xs text-slate-400 mt-1">جاري التحميل...</div>
+        </div>
+        <button onclick="closeDetailsModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Tab Navigation Bar -->
+      <div class="flex items-center gap-2 border-b border-slate-700/80 pb-3 mb-5 overflow-x-auto text-xs font-bold">
+        <button id="tabBtnInfo" onclick="switchDetailsTab('info')" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 border border-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-circle-info ml-1"></i> معلومات العميل
+        </button>
+        <button id="tabBtnUsers" onclick="switchDetailsTab('users')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-users ml-1"></i> الحسابات المرتبطة (<span id="detailsUsersCount">0</span>)
+        </button>
+        <button id="tabBtnPermissions" onclick="switchDetailsTab('permissions')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-shield-halved ml-1"></i> الصلاحيات والمشاريع
+        </button>
+        <button id="tabBtnModules" onclick="switchDetailsTab('modules')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-cubes ml-1"></i> وحدات Client App
+        </button>
+        <button id="tabBtnAudit" onclick="switchDetailsTab('audit')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-clock-rotate-left ml-1"></i> سجل النشاط والتدقيق
+        </button>
+      </div>
+
+      <!-- Tab 1: General Info -->
+      <div id="tabContentInfo" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">العميل التجاري المرتبط:</div>
+            <div id="infoClientName" class="text-base font-extrabold text-amber-400">—</div>
+            <div id="infoClientCompany" class="text-slate-300 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">بيانات مستخدم الحساب:</div>
+            <div id="infoUserName" class="text-base font-extrabold text-white">—</div>
+            <div id="infoUserEmail" class="text-slate-400 font-mono mt-1">—</div>
+            <div id="infoUserPhone" class="text-slate-400 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">حالة الحساب والأمان:</div>
+            <div id="infoUserStatus" class="font-bold text-emerald-400 mt-1">—</div>
+            <div id="infoUser2fa" class="text-slate-300 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">آخر تسجيل دخول والجهاز:</div>
+            <div id="infoLastLogin" class="font-bold text-white mt-1">—</div>
+            <div id="infoLastIp" class="text-slate-400 font-mono mt-1">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Linked Users -->
+      <div id="tabContentUsers" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-2">قائمة بجميع حسابات المستخدمين المرتبطين بالعميل نفسه في قاعدة البيانات:</div>
+        <div id="linkedUsersContainer" class="space-y-2">
+          <div class="text-slate-500 italic text-xs">جاري جلب الحسابات...</div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Permissions & Projects -->
+      <div id="tabContentPermissions" class="hidden space-y-4">
+        <div class="text-xs font-bold text-amber-400 mb-2">المشاريع المصرح بها ومصفوفة الصلاحيات المخصصة:</div>
+        <div id="projectPermissionsContainer" class="space-y-3">
+          <div class="text-slate-500 italic text-xs">جاري جلب المشاريع والصلاحيات...</div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Client App Modules Control -->
+      <div id="tabContentModules" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-3">التحكم في المكونات والوحدات المتاحة للعميل في تطبيق الهاتف (Client App):</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-chart-line text-amber-400 ml-1.5"></i> لوحة الإنجاز ونسب العمل</div>
+              <div class="text-[0.7rem] text-slate-400">استعراض مؤشرات إنجاز المشاريع</div>
+            </div>
+            <span class="text-emerald-400 font-bold">متاح تلقائياً</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-file-invoice-dollar text-emerald-400 ml-1.5"></i> المستخلصات والاعتماد</div>
+              <div class="text-[0.7rem] text-slate-400">عرض فواتير المستخلصات وزر الاعتماد</div>
+            </div>
+            <span class="text-emerald-400 font-bold">مُفعل حسب الصلاحية</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-receipt text-blue-400 ml-1.5"></i> كشف الحساب والقيود</div>
+              <div class="text-[0.7rem] text-slate-400">كشف حساب العميل التحليلي والدفعات</div>
+            </div>
+            <span class="text-emerald-400 font-bold">مربوط بالمحاسبة</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-comments text-purple-400 ml-1.5"></i> المحادثات والاستفسارات</div>
+              <div class="text-[0.7rem] text-slate-400">إرسال واستقبال رسائل المشروع</div>
+            </div>
+            <span class="text-emerald-400 font-bold">متاح</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 5: Real Audit Log Feed -->
+      <div id="tabContentAudit" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-2">سجل الأمان والنشاط الفعلي المسجل لهذا الحساب من واقع قاعدة البيانات (`audit_logs`):</div>
+        <div id="auditLogsContainer" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+          <div class="text-slate-500 italic text-xs">جاري تحميل سجل التدقيق...</div>
+        </div>
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/80 mt-6">
+        <button type="button" onclick="closeDetailsModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+          إغلاق
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Page Logic Script -->
   <script>
     let allUsers = [];
@@ -512,6 +645,9 @@
             </td>
             <td class="px-6 py-4 text-center">
               <div class="flex items-center justify-center gap-2">
+                <button onclick="viewClientDetails(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="عرض التفاصيل الكاملة، الصلاحيات وسجل النشاط">
+                  <i class="fa-solid fa-eye text-xs"></i>
+                </button>
                 <button onclick="sendInvite(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-emerald-600 hover:text-white text-emerald-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إرسال دعوة تفعيل وبيانات الدخول المؤقتة">
                   <i class="fa-solid fa-paper-plane text-xs"></i>
                 </button>
@@ -800,6 +936,122 @@
         }
       } catch (err) {
         showToast('خطأ في الاتصال بالخادم أثناء إبطال الجلسات', 'error');
+      }
+    }
+
+    function closeDetailsModal() {
+      document.getElementById('clientDetailsModal').classList.add('hidden');
+    }
+
+    function switchDetailsTab(tabName) {
+      const tabs = ['info', 'users', 'permissions', 'modules', 'audit'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const content = document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (btn && content) {
+          if (t === tabName) {
+            btn.className = 'px-4 py-2 rounded-xl bg-amber-500 text-slate-950 border border-amber-400 transition cursor-pointer font-bold';
+            content.classList.remove('hidden');
+          } else {
+            btn.className = 'px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer font-bold';
+            content.classList.add('hidden');
+          }
+        }
+      });
+    }
+
+    async function viewClientDetails(id) {
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/details`, {
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (!data.success || !data.user) {
+          showToast(data.message || 'تعذر تحميل تفاصيل حساب العميل', 'error');
+          return;
+        }
+
+        const u = data.user;
+        document.getElementById('detailsModalTitle').innerHTML = `<i class="fa-solid fa-building-user text-amber-400"></i><span>${u.full_name}</span>`;
+        document.getElementById('detailsModalSubtitle').innerText = `${u.client_name || 'عميل محدد'} ${u.client_company ? `(${u.client_company})` : ''} - ${u.email}`;
+
+        // 1. Tab Info
+        document.getElementById('infoClientName').innerText = u.client_name || '—';
+        document.getElementById('infoClientCompany').innerText = u.client_company || 'سجل تجاري مسجل في النظام';
+        document.getElementById('infoUserName').innerText = u.full_name || '—';
+        document.getElementById('infoUserEmail').innerText = u.email || '—';
+        document.getElementById('infoUserPhone').innerText = u.phone || '—';
+        document.getElementById('infoUserStatus').innerText = u.status === 'active' ? '🟢 نشط (Active)' : (u.status === 'suspended' ? '🔴 موقوف (Suspended)' : '⚪ معطل');
+        document.getElementById('infoUser2fa').innerText = u.two_factor_enabled ? '🛡️ مفعّل بالرمز السري OTP' : 'معطل';
+        document.getElementById('infoLastLogin').innerText = u.last_login_at ? new Date(u.last_login_at).toLocaleString('ar-YE') : 'لم يسجل دخول بعد';
+        document.getElementById('infoLastIp').innerText = u.last_login_ip ? `IP: ${u.last_login_ip}` : '—';
+
+        // 2. Tab Users
+        const linkedUsers = data.linked_users || [];
+        document.getElementById('detailsUsersCount').innerText = linkedUsers.length;
+        const usersContainer = document.getElementById('linkedUsersContainer');
+        if (linkedUsers.length === 0) {
+          usersContainer.innerHTML = '<div class="text-slate-500 italic text-xs">لا يوجد مستخدمون آخرون مرتبكون بهذا العميل</div>';
+        } else {
+          usersContainer.innerHTML = linkedUsers.map(lu => `
+            <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-700/80 flex items-center justify-between text-xs">
+              <div>
+                <div class="font-bold text-white">${lu.full_name}</div>
+                <div class="text-slate-400 font-mono">${lu.email}</div>
+              </div>
+              <div class="text-right">
+                <span class="portal-badge ${lu.role === 'owner' ? 'badge-owner' : 'badge-viewer'}">${lu.role === 'owner' ? 'مالك' : 'مطلع'}</span>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // 3. Tab Permissions & Projects
+        const projs = data.project_access || [];
+        const projsContainer = document.getElementById('projectPermissionsContainer');
+        if (projs.length === 0) {
+          projsContainer.innerHTML = '<div class="p-4 bg-slate-900/80 rounded-xl text-amber-400 text-xs">متاح الوصول التلقائي لجميع مشاريع العميل (مالك الحساب)</div>';
+        } else {
+          projsContainer.innerHTML = projs.map(p => `
+            <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-700/80 space-y-2 text-xs">
+              <div class="flex items-center justify-between font-bold text-white border-b border-slate-800 pb-2">
+                <span>🏗️ ${p.project_name} <small class="text-slate-400">(${p.project_code || ''})</small></span>
+                <span class="text-amber-400 font-mono">${Number(p.contract_value || 0).toLocaleString()} ر.ي</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[0.75rem]">
+                <span class="${p.can_view_progress ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> نسبة الإنجاز</span>
+                <span class="${p.can_view_invoices ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> المستخلصات</span>
+                <span class="${p.can_approve_invoices ? 'text-amber-400 font-bold' : 'text-slate-500'}"><i class="fa-solid fa-signature ml-1"></i> اعتماد المستخلص</span>
+                <span class="${p.can_view_payments ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> الدفعات السابقة</span>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // 4. Tab Audit Logs
+        const logs = data.audit_logs || [];
+        const logsContainer = document.getElementById('auditLogsContainer');
+        if (logs.length === 0) {
+          logsContainer.innerHTML = '<div class="text-slate-500 italic text-xs">لا يوجد نشاط مسجل مؤخراً لهذا الحساب</div>';
+        } else {
+          logsContainer.innerHTML = logs.map(l => `
+            <div class="p-2.5 bg-slate-900/80 rounded-lg border border-slate-800 text-xs flex items-center justify-between">
+              <div>
+                <div class="font-bold text-slate-200">${l.action}</div>
+                <div class="text-slate-400 text-[0.72rem]">${l.details || '—'}</div>
+              </div>
+              <div class="text-slate-500 text-[0.7rem] text-right font-mono">
+                ${new Date(l.created_at).toLocaleString('ar-YE')}
+              </div>
+            </div>
+          `).join('');
+        }
+
+        switchDetailsTab('info');
+        document.getElementById('clientDetailsModal').classList.remove('hidden');
+      } catch (err) {
+        console.error('viewClientDetails Error:', err);
+        showToast('خطأ في تحميل تفاصيل العميل', 'error');
       }
     }
 

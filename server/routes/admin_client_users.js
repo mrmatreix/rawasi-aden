@@ -51,6 +51,103 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/client-users/stats
+ * إحصائيات لوحة الإدارة (إجمالي العملاء، المستخدمين، المعلقة، والتطبيقات)
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    const clientsCount = await db.get(`SELECT COUNT(id) AS total FROM clients`);
+    const usersCount = await db.get(`SELECT COUNT(id) AS total FROM client_users`);
+    const suspendedCount = await db.get(`SELECT COUNT(id) AS total FROM client_users WHERE status != 'active'`);
+    const activeAppsCount = await db.get(`SELECT COUNT(id) AS total FROM client_users WHERE status = 'active' AND (device_token IS NOT NULL OR last_login_at IS NOT NULL)`);
+
+    res.json({
+      success: true,
+      stats: {
+        total_clients: Number(clientsCount?.total || 0),
+        total_users: Number(usersCount?.total || 0),
+        suspended_users: Number(suspendedCount?.total || 0),
+        active_apps: Number(activeAppsCount?.total || 0)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب إحصائيات الإدارة' });
+  }
+});
+
+/**
+ * GET /api/admin/client-users/:id/details
+ * جلب التفاصيل الشاملة للعميل ومستخدميه وصلاحياته ومشاريعه وسجل النشاط
+ */
+router.get('/:id/details', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const user = await db.get(`
+      SELECT 
+        cu.*,
+        c.name AS client_name,
+        c.company AS client_company,
+        c.phone AS client_phone,
+        c.email AS client_email,
+        c.address AS client_address
+      FROM client_users cu
+      LEFT JOIN clients c ON c.id = cu.client_id
+      WHERE cu.id = ?
+    `, [userId]);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'مستخدم العميل غير موجود' });
+    }
+
+    // المستخدمون المرتبطون بنفس العميل التجاري
+    const linkedUsers = await db.query(`
+      SELECT id, full_name, email, phone, role, status, last_login_at, created_at
+      FROM client_users
+      WHERE client_id = ?
+      ORDER BY id DESC
+    `, [user.client_id]);
+
+    // الصلاحيات والمشاريع المصرح بها
+    const projectAccess = await db.query(`
+      SELECT 
+        cpa.*,
+        p.name AS project_name,
+        p.code AS project_code,
+        p.status AS project_status,
+        p.contract_value
+      FROM client_project_access cpa
+      INNER JOIN projects p ON p.id = cpa.project_id
+      WHERE cpa.client_user_id = ?
+    `, [userId]);
+
+    // سجل النشاط والتدقيق الخاص بهذا الحساب
+    let auditLogs = [];
+    try {
+      auditLogs = await db.query(`
+        SELECT id, action, details, ip_address, created_at
+        FROM audit_logs
+        WHERE entity_type = 'client_users' AND (entity_id = ? OR details LIKE ?)
+        ORDER BY id DESC
+        LIMIT 25
+      `, [userId, `%${user.email}%`]);
+    } catch {
+      auditLogs = [];
+    }
+
+    res.json({
+      success: true,
+      user,
+      linked_users: linkedUsers,
+      project_access: projectAccess,
+      audit_logs: auditLogs
+    });
+  } catch (err) {
+    console.error('Fetch client user details error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ في تحميل تفاصيل الحساب' });
+  }
+});
+
+/**
  * POST /api/admin/client-users
  * إنشاء حساب جديد لمستخدم عميل
  */
