@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>تفاصيل المشروع - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .tabs-nav {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 16px;
+      scrollbar-width: none;
+    }
+    .tabs-nav::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      padding: 9px 16px;
+      border-radius: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active {
+      background: var(--gold-glow);
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+  </style>
+</head>
+<body>
+  <div id="appHeader"></div>
+
+  <div class="app-container">
+    <!-- Back Header -->
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+      <a href="projects.html" class="icon-btn" title="الرجوع للمشاريع">
+        <i class="fa-solid fa-arrow-right"></i>
+      </a>
+      <span id="headerProjectCode" style="font-size: 0.8rem; color: var(--gold); font-weight: bold;"></span>
+      <a id="msgProjectBtn" href="messages.html" class="icon-btn" title="مراسلة بخصوص المشروع">
+        <i class="fa-solid fa-envelope"></i>
+      </a>
+    </div>
+
+    <!-- Project Hero Info Card -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <h2 id="projectName" style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin-bottom: 4px;">جاري التحميل...</h2>
+          <span id="projectStatusBadge" class="badge badge-active">قيد التنفيذ</span>
+        </div>
+        <div style="text-align: left;">
+          <div style="font-size: 0.7rem; color: var(--text-muted);">نسبة الإنجاز</div>
+          <div id="projectProgressNum" style="font-size: 1.25rem; font-weight: 800; color: var(--gold);">0%</div>
+        </div>
+      </div>
+
+      <div class="progress-container" style="margin: 12px 0 8px;">
+        <div id="projectProgressBar" class="progress-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="switchTab('overview')"><i class="fa-solid fa-circle-info"></i> نظرة عامة</button>
+      <button class="tab-btn" onclick="switchTab('invoices')"><i class="fa-solid fa-file-invoice-dollar"></i> المستخلصات</button>
+      <button class="tab-btn" onclick="switchTab('payments')"><i class="fa-solid fa-money-bill-wave"></i> الدفعات</button>
+      <button class="tab-btn" onclick="switchTab('drawings')"><i class="fa-solid fa-compass-drafting"></i> المخططات</button>
+      <button class="tab-btn" onclick="switchTab('reports')"><i class="fa-solid fa-clipboard-check"></i> التقارير الميدانية</button>
+    </div>
+
+    <!-- Tab 1: Overview -->
+    <div id="tab-overview" class="tab-pane active">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-file-contract"></i> بيانات العقد الهندسي</div>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-size: 0.85rem;">
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.72rem;">رقم العقد</div>
+            <div id="contractNumber" style="font-weight: bold; color: #FFFFFF;">—</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.72rem;">قيمة العقد الإجمالية</div>
+            <div id="contractValue" style="font-weight: bold; color: var(--gold);">—</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.72rem;">تاريخ توقيع العقد</div>
+            <div id="contractSigningDate" style="font-weight: bold; color: #FFFFFF;">—</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.72rem;">مدة التنفيذ المحددة</div>
+            <div id="contractDuration" style="font-weight: bold; color: #FFFFFF;">—</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.72rem;">الدفعة المقدمة</div>
+            <div id="contractAdvancePct" style="font-weight: bold; color: #FFFFFF;">—</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.72rem;">ضمان حسن التنفيذ (Retention)</div>
+            <div id="contractRetentionPct" style="font-weight: bold; color: #FFFFFF;">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-align-right"></i> ملاحظات ونطاق الأعمال</div>
+        <p id="projectNotes" style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">—</p>
+      </div>
+    </div>
+
+    <!-- Tab 2: Invoices -->
+    <div id="tab-invoices" class="tab-pane">
+      <div id="invoicesList"></div>
+    </div>
+
+    <!-- Tab 3: Payments -->
+    <div id="tab-payments" class="tab-pane">
+      <div id="paymentsList"></div>
+    </div>
+
+    <!-- Tab 4: Drawings -->
+    <div id="tab-drawings" class="tab-pane">
+      <div id="drawingsList"></div>
+    </div>
+
+    <!-- Tab 5: Reports -->
+    <div id="tab-reports" class="tab-pane">
+      <div id="reportsList"></div>
+    </div>
+  </div>
+
+  <div id="bottomNav"></div>
+
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    let currentProject = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('projects');
+      const isAuth = await ClientAuth.requireAuth();
+      if (!isAuth) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectId = urlParams.get('id');
+
+      if (!projectId) {
+        window.location.href = 'projects.html';
+        return;
+      }
+
+      loadProjectDetails(projectId);
+    });
+
+    async function loadProjectDetails(id) {
+      try {
+        const data = await ClientAPI.get(`/projects/${id}`);
+        if (!data.success) throw new Error(data.message);
+
+        currentProject = data;
+        const p = data.project;
+
+        // رأس الصفحة
+        document.getElementById('headerProjectCode').innerText = p.code || '';
+        document.getElementById('projectName').innerText = p.name;
+        document.getElementById('projectProgressNum').innerText = `${p.progress_percentage || 0}%`;
+        document.getElementById('projectProgressBar').style.width = `${Math.min(100, Math.max(0, p.progress_percentage || 0))}%`;
+        document.getElementById('msgProjectBtn').href = `messages.html?project_id=${p.id}&project_name=${encodeURIComponent(p.name)}`;
+
+        // العقد
+        document.getElementById('contractNumber').innerText = p.contract_number || 'CON-' + p.code;
+        document.getElementById('contractValue').innerText = ClientApp.formatMoney(p.contract_value);
+        document.getElementById('contractSigningDate').innerText = ClientApp.formatDate(p.signing_date || p.start_date);
+        document.getElementById('contractDuration').innerText = p.duration_days ? `${p.duration_days} يوم` : '—';
+        document.getElementById('contractAdvancePct').innerText = p.advance_payment_pct ? `${p.advance_payment_pct}%` : '10%';
+        document.getElementById('contractRetentionPct').innerText = p.retention_pct ? `${p.retention_pct}%` : '5%';
+        document.getElementById('projectNotes').innerText = p.notes || 'لا توجد ملاحظات إضافية مسجلة على نطاق أعمال المشروع.';
+
+        // القوائم
+        renderInvoices(data.invoices || []);
+        renderPayments(data.payments || []);
+        renderDrawings(data.drawings || []);
+        renderReports(data.daily_reports || []);
+      } catch (err) {
+        ClientApp.showToast(err.message || 'تعذر تحميل تفاصيل المشروع', 'error');
+      }
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      document.getElementById(`tab-${tabId}`).classList.add('active');
+    }
+
+    function renderInvoices(invoices) {
+      const container = document.getElementById('invoicesList');
+      if (!invoices || invoices.length === 0) {
+        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد مستخلصات مسجلة لهذا المشروع بعد.</div>';
+        return;
+      }
+
+      container.innerHTML = invoices.map(inv => `
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+            <div>
+              <span style="font-size: 0.7rem; color: var(--gold); font-weight: bold;">${inv.bill_type || 'مستخلص جاري'}</span>
+              <h4 style="font-size: 1rem; font-weight: bold; color: #FFFFFF;">${inv.bill_no}</h4>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">${ClientApp.formatDate(inv.date)}</div>
+            </div>
+            <span class="badge ${inv.client_approval_status === 'approved' ? 'badge-approved' : (inv.client_approval_status === 'rejected' ? 'badge-rejected' : 'badge-pending')}">
+              ${inv.client_approval_status === 'approved' ? 'معتمد منك' : (inv.client_approval_status === 'rejected' ? 'مرفوض منك' : 'بانتظار الاعتماد')}
+            </span>
+          </div>
+
+          <div style="background: var(--bg-input); padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); margin: 10px 0; font-size: 0.8rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: var(--text-muted);">القيمة الإجمالية للأعمال:</span>
+              <span style="color: #FFFFFF; font-weight: bold;">${ClientApp.formatMoney(inv.gross_amount || inv.amount)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: var(--text-muted);">إجمالي الاستقطاعات:</span>
+              <span style="color: #EF4444;">- ${ClientApp.formatMoney(inv.deduction)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding-top: 4px; border-top: 1px dashed var(--border);">
+              <span style="color: var(--gold); font-weight: bold;">صافي المستحق:</span>
+              <span style="color: var(--gold); font-weight: bold;">${ClientApp.formatMoney(inv.net_amount)}</span>
+            </div>
+          </div>
+
+          <div style="text-align: left;">
+            <a href="invoices.html?project_id=${currentProject?.project?.id}" class="btn btn-secondary btn-sm">
+              <i class="fa-solid fa-up-right-from-square"></i> معاينة والاعتماد
+            </a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderPayments(payments) {
+      const container = document.getElementById('paymentsList');
+      if (!payments || payments.length === 0) {
+        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد سندات قبض مسجلة لهذا المشروع بعد.</div>';
+        return;
+      }
+
+      container.innerHTML = payments.map(p => `
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <span style="font-size: 0.72rem; color: var(--success); font-weight: bold;"><i class="fa-solid fa-circle-check"></i> سند قبض محصل</span>
+              <h4 style="font-size: 0.95rem; font-weight: bold; color: #FFFFFF; margin: 2px 0;">${p.receipt_no || 'سند رقمي'}</h4>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">${ClientApp.formatDate(p.date)} - ${p.payment_method || 'نقدي'}</div>
+            </div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: var(--success);">
+              ${ClientApp.formatMoney(p.amount, p.currency)}
+            </div>
+          </div>
+          ${p.notes ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border);">${p.notes}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function renderDrawings(drawings) {
+      const container = document.getElementById('drawingsList');
+      if (!drawings || drawings.length === 0) {
+        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد مخططات هندسية مرفوعة حالياً.</div>';
+        return;
+      }
+
+      container.innerHTML = drawings.map(d => `
+        <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); display: flex; align-items: center; justify-content: center; color: #3B82F6;">
+              <i class="fa-solid fa-file-lines"></i>
+            </div>
+            <div>
+              <h4 style="font-size: 0.9rem; font-weight: bold; color: #FFFFFF;">${d.title || d.drawing_number}</h4>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">${d.discipline || 'معماري/إنشائي'} - مراجعة: ${d.revision || 'R0'}</div>
+            </div>
+          </div>
+          <span class="badge badge-approved">معتمد</span>
+        </div>
+      `).join('');
+    }
+
+    function renderReports(reports) {
+      const container = document.getElementById('reportsList');
+      if (!reports || reports.length === 0) {
+        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد تقارير يومية من الموقع مسجلة بعد.</div>';
+        return;
+      }
+
+      container.innerHTML = reports.map(r => `
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div style="font-weight: bold; color: var(--gold); font-size: 0.85rem;">
+              <i class="fa-solid fa-calendar-day"></i> تقرير يوم: ${ClientApp.formatDate(r.report_date)}
+            </div>
+            <span style="font-size: 0.72rem; color: var(--text-muted);"><i class="fa-solid fa-cloud-sun"></i> ${r.weather || 'معتدل'}</span>
+          </div>
+          <p style="font-size: 0.82rem; color: var(--text-main); line-height: 1.5; margin-top: 6px;">
+            ${r.work_summary || 'تم استمرار أعمال التنفيذ الإنشائية حسب المخطط.'}
+          </p>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>

@@ -10,8 +10,8 @@ import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
     private WebView webView;
-    // تم ربط التطبيق بالسيرفر الفعلي على الإنترنت
-    private static final String SERVER_URL = "https://rawasi-aden-production.up.railway.app";
+    // تم توجيه التطبيق ليفتح مسار تطبيق العميل (Client App) مباشرة
+    private static final String SERVER_URL = "https://rawasi-aden-production.up.railway.app/client-app/";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
