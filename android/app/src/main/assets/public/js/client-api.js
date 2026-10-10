@@ -17,8 +17,8 @@ const ClientAPI = {
     if (window.location.origin && !window.location.origin.startsWith('file://')) {
       return window.location.origin;
     }
-    // للعمل محلياً على محاكي أندرويد
-    return 'http://10.0.2.2:3000';
+    // ربط التطبيق بالسيرفر الفعلي على الإنترنت
+    return 'https://rawasi-aden-production.up.railway.app';
   },
 
   isOnline: navigator.onLine,
