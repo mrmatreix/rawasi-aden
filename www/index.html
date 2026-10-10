@@ -4219,6 +4219,10 @@
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">إدارة بيانات العملاء، العقود، المستحقات والمدفوعات</p>
           </div>
           <div class="page-actions">
+            <a href="/views/client_users.html" target="_blank" class="btn btn-success" style="background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+              <span>📱 حسابات وصلاحيات تطبيق العملاء (Client App) ↗</span>
+            </a>
             <button class="btn btn-primary" onclick="Accounting.openNewClientModal()">
               <svg class="icon" width="16" height="16"><use href="#icon-plus"></use></svg>
               <span>إضافة عميل جديد +</span>
@@ -4387,6 +4391,10 @@
         <div class="page-header-row">
           <h2 class="page-title">إعدادات النظام وإدارة المستخدمين والصلاحيات</h2>
           <div class="page-actions">
+            <button class="btn btn-success" onclick="Settings.switchTab('client_app')" style="background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; font-weight: bold; border-radius: 6px; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); gap: 6px; display: inline-flex; align-items: center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+              <span>📱 حسابات وصلاحيات تطبيق العملاء (Client App)</span>
+            </button>
             <button class="btn btn-primary" onclick="Settings.openNewUserModal()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
               <span>إضافة مستخدم جديد +</span>
@@ -4405,6 +4413,7 @@
         <!-- شريط تبويبات الإعدادات -->
         <div class="report-tabs-bar" style="margin-bottom: 20px;">
           <button class="report-tab-btn active" id="tabBtn_settings_users" onclick="Settings.switchTab('users')">👥 إدارة المستخدمين والصلاحيات</button>
+          <button class="report-tab-btn" id="tabBtn_settings_client_app" onclick="Settings.switchTab('client_app')" style="background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; font-weight: bold; border-radius: 6px; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);">📱 حسابات وصلاحيات تطبيق العملاء (Client App)</button>
           <button class="report-tab-btn" id="tabBtn_settings_company" onclick="Settings.switchTab('company')">🏢 بيانات ومعلومات الشركة</button>
           <button class="report-tab-btn" id="tabBtn_settings_print" onclick="Settings.switchTab('print')">🖨️ تخصيص ورقة الطباعة والتقارير</button>
           <button class="report-tab-btn" id="tabBtn_settings_backup" onclick="Settings.switchTab('backup')">🛡️ النسخ الاحتياطي والأمان</button>
@@ -4427,6 +4436,9 @@
                 <button type="button" class="btn btn-secondary btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08);" onclick="Auth.logout()" title="تسجيل الخروج مع أخذ نسخة احتياطية فورية لقاعدة البيانات">
                   🚪 تسجيل خروج (نسخ احتياطي)
                 </button>
+                <button type="button" class="btn btn-success btn-sm" onclick="Settings.switchTab('client_app')" style="background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; font-weight: bold; gap: 6px; display: inline-flex; align-items: center;">
+                  📱 حسابات وصلاحيات تطبيق العملاء
+                </button>
                 <button class="btn btn-primary btn-sm" onclick="Settings.openNewUserModal()">+ إضافة مستخدم جديد</button>
               </div>
             </div>
@@ -4446,6 +4458,69 @@
                 <tbody id="usersTableBody"></tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <!-- تبويب جديد: حسابات وصلاحيات تطبيق العملاء -->
+        <div id="pane_settings_client_app" class="settings-pane" style="display: none;">
+          <div class="panel-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); padding: 14px 18px; border-radius: 10px;">
+              <div>
+                <h3 style="color: #34d399; font-size: 1.1rem; margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
+                  <span>📱 إدارة حسابات وصلاحيات وتطبيقات العملاء (Client App)</span>
+                </h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">التحكم الكامل في وصول العملاء لتطبيق أندرويد والبوابة، وتحديد المشاريع والخصائص المسموحة</p>
+              </div>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="color: #34d399; border-color: #10b981;">
+                  ↗️ فتح صفحة إدارة العملاء الكاملة
+                </a>
+                <button type="button" class="btn btn-sm" style="background: #10b981; color: #000; font-weight: 700; border: none;" onclick="Settings.openClientUserModal()">
+                  + إضافة حساب عميل جديد للتطبيق
+                </button>
+              </div>
+            </div>
+
+            <!-- إحصائيات تطبيق العملاء -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
+              <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">إجمالي حسابات العملاء</div>
+                <div style="font-size: 1.3rem; font-weight: bold; color: #34d399;" id="statClientUsersTotal">0</div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">الحسابات النشطة</div>
+                <div style="font-size: 1.3rem; font-weight: bold; color: #10b981;" id="statClientUsersActive">0</div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">حالة الأمان وتقييد البيانات</div>
+                <div style="font-size: 0.95rem; font-weight: bold; color: #10b981;"><i class="fas fa-shield-alt"></i> Deny by Default (نشط)</div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">المصادقة بخطوتين (2FA)</div>
+                <div style="font-size: 0.95rem; font-weight: bold; color: var(--gold-light);">OTP + PIN مفعل</div>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>اسم العميل / المستعمل</th>
+                    <th>الشركة / العميل</th>
+                    <th>البريد / الهاتف</th>
+                    <th>الدور الممنوح</th>
+                    <th>المشاريع المسموحة</th>
+                    <th>2FA</th>
+                    <th>الحالة</th>
+                    <th>الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="clientUsersSettingsTableBody">
+                  <tr><td colspan="8" style="text-align: center; padding: 20px;">جاري تحميل حسابات العملاء...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
           </div>
         </div>
 
