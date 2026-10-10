@@ -7,7 +7,9 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const db = require('../database/db');
+const { logAudit } = require('../services/auditService');
 
 /**
  * GET /api/admin/client-users
@@ -82,7 +84,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // التحقق من وجود العميل
+    // التحقق من وجود العميل في سجلات العملاء
     const client = await db.get(`SELECT id, name FROM clients WHERE id = ?`, [parsedClientId]);
     if (!client) {
       return res.status(404).json({
@@ -134,6 +136,14 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // تسجيل في سجل التدقيق
+    await logAudit(req, {
+      action: 'CLIENT_USER_CREATE',
+      entity_type: 'client_users',
+      entity_id: newUserId,
+      details: `تم إنشاء حساب عميل جديد: ${full_name} (${cleanEmail}) للعميل التجاري ${client.name}`
+    });
+
     res.json({
       success: true,
       message: 'تم إنشاء حساب العميل وتخصيص المشاريع بنجاح',
@@ -181,7 +191,7 @@ router.put('/:id', async (req, res) => {
     const userId = parseInt(req.params.id, 10);
     const { full_name, phone, role, status, two_factor_enabled, two_factor_pin } = req.body;
 
-    const user = await db.get(`SELECT id FROM client_users WHERE id = ?`, [userId]);
+    const user = await db.get(`SELECT id, full_name, status, role FROM client_users WHERE id = ?`, [userId]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
@@ -192,7 +202,14 @@ router.put('/:id', async (req, res) => {
     if (full_name) { updates.push('full_name = ?'); params.push(String(full_name).trim()); }
     if (phone !== undefined) { updates.push('phone = ?'); params.push(phone ? String(phone).trim() : null); }
     if (role && ['owner', 'manager', 'viewer'].includes(role)) { updates.push('role = ?'); params.push(role); }
-    if (status && ['active', 'inactive', 'suspended'].includes(status)) { updates.push('status = ?'); params.push(status); }
+    if (status && ['active', 'inactive', 'suspended'].includes(status)) { 
+      updates.push('status = ?'); 
+      params.push(status);
+      // إذا تم تجميد الحساب، مسح التوكن فوراً للإلغاء اللحظي للجلسة
+      if (status !== 'active') {
+        updates.push('device_token = NULL');
+      }
+    }
     if (typeof two_factor_enabled === 'boolean') { updates.push('two_factor_enabled = ?'); params.push(two_factor_enabled ? 1 : 0); }
     if (two_factor_pin) { updates.push('two_factor_pin = ?'); params.push(String(two_factor_pin).trim()); }
 
@@ -201,6 +218,16 @@ router.put('/:id', async (req, res) => {
       params.push(userId);
       await db.run(`UPDATE client_users SET ${updates.join(', ')} WHERE id = ?`, params);
     }
+
+    // سجل التدقيق
+    await logAudit(req, {
+      action: 'CLIENT_USER_UPDATE',
+      entity_type: 'client_users',
+      entity_id: userId,
+      old_values: user,
+      new_values: req.body,
+      details: `تحديث بيانات حساب العميل (${user.full_name}) - الحالة الجديدة: ${status || user.status}`
+    });
 
     res.json({ success: true, message: 'تم تحديث بيانات الحساب بنجاح' });
   } catch (err) {
@@ -221,14 +248,110 @@ router.post('/:id/reset-password', async (req, res) => {
       return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل' });
     }
 
+    const user = await db.get(`SELECT id, full_name, email FROM client_users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    }
+
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(String(new_password), salt);
 
-    await db.run(`UPDATE client_users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
+    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
 
-    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور بنجاح' });
+    await logAudit(req, {
+      action: 'CLIENT_USER_PASSWORD_RESET',
+      entity_type: 'client_users',
+      entity_id: userId,
+      details: `تمت إعادة تعيين كلمة المرور لحساب العميل: ${user.full_name} (${user.email})`
+    });
+
+    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور بنجاح وإبطال الجلسات السابقة' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إعادة تعيين كلمة المرور' });
+  }
+});
+
+/**
+ * POST /api/admin/client-users/:id/send-invite
+ * توليد ودعوة العميل لتفعيل حسابه ودخوله لأول مرة (Invitation / Temp Access)
+ */
+router.post('/:id/send-invite', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const user = await db.get(`SELECT id, full_name, email, phone, status FROM client_users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
+    }
+
+    // إنشاء كلمة مرور مؤقتة وتثبيتها
+    const tempPassword = 'Rawasi#' + crypto.randomBytes(3).toString('hex').toUpperCase();
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(tempPassword, salt);
+
+    await db.run(`
+      UPDATE client_users 
+      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', '+7 days'), updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `, [hash, otpCode, userId]);
+
+    await logAudit(req, {
+      action: 'CLIENT_USER_INVITE_SENT',
+      entity_type: 'client_users',
+      entity_id: userId,
+      details: `تم إصداره وتجهيز دعوة تفعيل جديدة لحساب العميل: ${user.full_name}`
+    });
+
+    res.json({
+      success: true,
+      message: 'تمت إنشاء بيانات الدعوة ورمز التفعيل بنجاح',
+      invite_details: {
+        user_id: user.id,
+        full_name: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        temp_password: tempPassword,
+        otp_code: otpCode,
+        portal_url: `${req.protocol}://${req.get('host')}/client-app/`,
+        whatsapp_share_text: `مرحباً ${user.full_name}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.\n\nالبريد: ${user.email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${req.protocol}://${req.get('host')}/client-app/`
+      }
+    });
+  } catch (err) {
+    console.error('Send Invite Error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تجهيز دعوة التفعيل' });
+  }
+});
+
+/**
+ * POST /api/admin/client-users/:id/revoke-sessions
+ * إنهاء وإبطال جميع الجلسات الفعالة لحساب العميل عند تجميد الحساب أو الاشتباه بالسيادة الأجهزة
+ */
+router.post('/:id/revoke-sessions', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const user = await db.get(`SELECT id, full_name, email FROM client_users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
+    }
+
+    // إبطال الجلسة ومسح التوكن وحظر الدخول
+    await db.run(`
+      UPDATE client_users 
+      SET device_token = NULL, status = 'suspended', updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `, [userId]);
+
+    await logAudit(req, {
+      action: 'CLIENT_USER_SESSIONS_REVOKED',
+      entity_type: 'client_users',
+      entity_id: userId,
+      details: `تم إبطال جميع جلسات الدخول وتجميد الحساب فوراً لحساب العميل: ${user.full_name}`
+    });
+
+    res.json({ success: true, message: 'تم إبطال جميع الجلسات الفعالة وتجميد الحساب بنجاح' });
+  } catch (err) {
+    console.error('Revoke Sessions Error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء إبطال الجلسات' });
   }
 });
 
@@ -258,35 +381,54 @@ router.get('/:id/projects', async (req, res) => {
 
 /**
  * POST /api/admin/client-users/:id/projects
- * تحديث صلاحيات الوصول للمشاريع
+ * تحديث صلاحيات الوصول التفصيلية للمشاريع
  */
 router.post('/:id/projects', async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    const { projects } = req.body; // Array of { project_id, can_approve_invoices, ... }
+    const { projects } = req.body; // Array of { project_id, can_view_progress, can_view_invoices, can_view_payments, can_view_reports, can_view_drawings, can_approve_invoices, can_send_messages }
 
     if (!Array.isArray(projects)) {
       return res.status(400).json({ success: false, message: 'صيغة البيانات غير صحيحة' });
     }
 
-    // حذف الصلاحيات السابقة وإعادة الإدراج
+    const user = await db.get(`SELECT id, full_name FROM client_users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
+    }
+
+    // حذف الصلاحيات السابقة وإعادة الإدراج بتفصيل دقيق
     await db.run(`DELETE FROM client_project_access WHERE client_user_id = ?`, [userId]);
 
     for (const p of projects) {
       await db.run(`
         INSERT INTO client_project_access 
         (client_user_id, project_id, can_view_progress, can_view_invoices, can_view_payments, can_view_reports, can_view_drawings, can_approve_invoices, can_send_messages, granted_by)
-        VALUES (?, ?, 1, 1, 1, 1, 1, ?, 1, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         userId,
         p.project_id,
-        p.can_approve_invoices ? 1 : 0,
+        p.can_view_progress !== undefined ? (p.can_view_progress ? 1 : 0) : 1,
+        p.can_view_invoices !== undefined ? (p.can_view_invoices ? 1 : 0) : 1,
+        p.can_view_payments !== undefined ? (p.can_view_payments ? 1 : 0) : 1,
+        p.can_view_reports !== undefined ? (p.can_view_reports ? 1 : 0) : 1,
+        p.can_view_drawings !== undefined ? (p.can_view_drawings ? 1 : 0) : 1,
+        p.can_approve_invoices !== undefined ? (p.can_approve_invoices ? 1 : 0) : 0,
+        p.can_send_messages !== undefined ? (p.can_send_messages ? 1 : 0) : 1,
         req.user?.id || 1
       ]);
     }
 
+    await logAudit(req, {
+      action: 'CLIENT_USER_PERMISSIONS_UPDATE',
+      entity_type: 'client_users',
+      entity_id: userId,
+      details: `تم تحديث مصفوفة الصلاحيات والمشاريع لـ ${user.full_name} (${projects.length} مشروع)`
+    });
+
     res.json({ success: true, message: 'تم تحديث صلاحيات المشاريع بنجاح' });
   } catch (err) {
+    console.error('Update client projects error:', err);
     res.status(500).json({ success: false, message: 'خطأ في تحديث صلاحيات المشاريع' });
   }
 });
@@ -298,7 +440,7 @@ router.post('/:id/projects', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    const user = await db.get(`SELECT id, full_name FROM client_users WHERE id = ?`, [userId]);
+    const user = await db.get(`SELECT id, full_name, email FROM client_users WHERE id = ?`, [userId]);
     if (!user) {
       return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
     }
@@ -307,6 +449,13 @@ router.delete('/:id', async (req, res) => {
     await db.run(`DELETE FROM client_project_access WHERE client_user_id = ?`, [userId]);
     // حذف حساب العميل
     await db.run(`DELETE FROM client_users WHERE id = ?`, [userId]);
+
+    await logAudit(req, {
+      action: 'CLIENT_USER_DELETE',
+      entity_type: 'client_users',
+      entity_id: userId,
+      details: `تم حذف حساب مستخدم العميل (${user.full_name} - ${user.email}) نهائياً`
+    });
 
     res.json({ success: true, message: `تم حذف حساب العميل (${user.full_name}) بنجاح` });
   } catch (err) {

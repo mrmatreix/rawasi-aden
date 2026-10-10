@@ -512,6 +512,12 @@
             </td>
             <td class="px-6 py-4 text-center">
               <div class="flex items-center justify-center gap-2">
+                <button onclick="sendInvite(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-emerald-600 hover:text-white text-emerald-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إرسال دعوة تفعيل وبيانات الدخول المؤقتة">
+                  <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+                <button onclick="revokeSessions(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-rose-700 hover:text-white text-rose-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إبطال جميع الجلسات وتجميد الحساب فوراً">
+                  <i class="fa-solid fa-user-slash text-xs"></i>
+                </button>
                 <button onclick="editUser(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="تعديل الحساب">
                   <i class="fa-solid fa-pen text-xs"></i>
                 </button>
@@ -752,6 +758,48 @@
         }
       } catch (e) {
         showToast('خطأ في الاتصال أثناء إعادة التعيين', 'error');
+      }
+    }
+
+    async function sendInvite(id) {
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/send-invite`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' })
+        });
+        const data = await res.json();
+        if (data.success && data.invite_details) {
+          const inv = data.invite_details;
+          const waUrl = `https://wa.me/${inv.phone ? inv.phone.replace(/[^0-9]/g, '') : ''}?text=${encodeURIComponent(inv.whatsapp_share_text)}`;
+          alert(`✅ تم إصدار بيانات تفعيل الحساب بنجاح!\n\nاسم المستلم: ${inv.full_name}\nالبريد: ${inv.email}\nكلمة المرور المؤقتة: ${inv.temp_password}\nرمز الـ OTP: ${inv.otp_code}\n\nيمكنك نُسخ الرسالة أو المشاركة فوراً عبر واتساب.`);
+          window.open(waUrl, '_blank');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'تعذر إصدار رمز الدعوة', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال أثناء إصدار الدعوة', 'error');
+      }
+    }
+
+    async function revokeSessions(id) {
+      if (!confirm('هل أنت متأكد من رغبتك في إبطال جميع جلسات الدخول الحالية وتجميد الحساب فوراً؟')) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/revoke-sessions`, {
+          method: 'POST',
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تم إبطال الجلسات وتجميد الحساب بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'خطأ أثناء إبطال الجلسات', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء إبطال الجلسات', 'error');
       }
     }
 
