@@ -4,155 +4,322 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>إدارة حسابات بوابة وتطبيق العملاء - شركة رواسي عدن للهندسة والمقاولات</title>
-  <link rel="stylesheet" href="/css/style.css">
+  
+  <!-- Google Fonts: Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    .portal-badge {
-      padding: 4px 10px;
-      border-radius: 9999px;
-      font-size: 0.8rem;
-      font-weight: 600;
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            rawasi: {
+              gold: '#d4af37',
+              goldLight: '#f59e0b',
+              emerald: '#10b981',
+              dark: '#0b1329',
+              card: '#15203e',
+              border: '#203058',
+            }
+          }
+        }
+      }
     }
-    .badge-owner { background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3); }
-    .badge-manager { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
-    .badge-viewer { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
-    .badge-active { background: rgba(16, 185, 129, 0.15); color: #10b981; }
-    .badge-inactive { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #080e1e;
+      color: #f1f5f9;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(212, 175, 55, 0.05) 0%, transparent 20%),
+        radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 20%);
+    }
+
+    .portal-badge {
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge-owner { background: rgba(212, 175, 55, 0.18); color: #fbbf24; border: 1px solid rgba(212, 175, 55, 0.35); }
+    .badge-manager { background: rgba(59, 130, 246, 0.18); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); }
+    .badge-viewer { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.35); }
+    .badge-active { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-inactive { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+
+    .glass-card {
+      background: rgba(21, 32, 62, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .custom-input {
+      background: #0d162c;
+      border: 1px solid #203058;
+      color: #ffffff;
+      transition: all 0.2s ease;
+    }
+    .custom-input:focus {
+      border-color: #d4af37;
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+      outline: none;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080e1e;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #203058;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #d4af37;
+    }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen">
-  <div class="max-w-7xl mx-auto px-4 py-8">
-    <!-- Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-slate-800/80 backdrop-blur p-6 rounded-2xl border border-slate-700 shadow-xl">
-      <div>
-        <div class="flex items-center gap-3">
-          <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-2xl">
+<body class="min-h-screen pb-12">
+
+  <!-- Main Container -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+
+    <!-- Top Header Navigation / Title -->
+    <div class="glass-card rounded-2xl p-6 mb-8 border-t-2 border-t-amber-500/80 shadow-2xl">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        
+        <div class="flex items-center gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 to-emerald-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-2xl shadow-lg shadow-amber-500/10 shrink-0">
             <i class="fa-solid fa-mobile-screen-button"></i>
           </div>
           <div>
-            <h1 class="text-2xl font-bold text-white">إدارة حسابات بوابة وتطبيق العملاء (Client Portal)</h1>
-            <p class="text-sm text-slate-400">إدارة وصول العملاء لتطبيق أندرويد والبوابة، تحديد الصلاحيات والمشاريع المسموحة</p>
+            <div class="flex items-center gap-3 mb-1">
+              <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-wide">إدارة حسابات بوابة وتطبيق العملاء</h1>
+              <span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold">Client Portal</span>
+            </div>
+            <p class="text-sm text-slate-400">إدارة حسابات أندرويد والبوابة الخاصة بالعملاء، تحديد الصلاحيات والمشاريع المسموحة في نظام رواسي عدن</p>
           </div>
         </div>
-      </div>
-      <div class="flex items-center gap-3">
-        <button onclick="openCreateUserModal()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl transition flex items-center gap-2 shadow-lg shadow-amber-500/20">
-          <i class="fa-solid fa-user-plus"></i> إضافة حساب عميل جديد
-        </button>
-        <button onclick="loadClientUsers()" class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition flex items-center gap-2">
-          <i class="fa-solid fa-rotate"></i> تحديث
-        </button>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <button onclick="openCreateUserModal()" class="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg shadow-amber-500/25 active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-user-plus text-base"></i>
+            <span>إضافة حساب عميل جديد</span>
+          </button>
+          
+          <button onclick="loadClientUsers()" class="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition flex items-center gap-2 active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-rotate text-slate-400"></i>
+            <span>تحديث</span>
+          </button>
+
+          <a href="/#settings" class="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-emerald-400 font-semibold rounded-xl border border-emerald-500/30 transition flex items-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-gear"></i>
+            <span>العودة للإعدادات</span>
+          </a>
+        </div>
+
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-      <div class="bg-slate-800/60 p-5 rounded-2xl border border-slate-700">
-        <div class="text-slate-400 text-sm mb-1">إجمالي الحسابات</div>
-        <div id="statTotalUsers" class="text-3xl font-bold text-white">0</div>
-      </div>
-      <div class="bg-slate-800/60 p-5 rounded-2xl border border-slate-700">
-        <div class="text-slate-400 text-sm mb-1">الحسابات النشطة</div>
-        <div id="statActiveUsers" class="text-3xl font-bold text-emerald-400">0</div>
-      </div>
-      <div class="bg-slate-800/60 p-5 rounded-2xl border border-slate-700">
-        <div class="text-slate-400 text-sm mb-1">مفعل 2FA (التحقق بخطوتين)</div>
-        <div id="stat2faUsers" class="text-3xl font-bold text-amber-400">0</div>
-      </div>
-      <div class="bg-slate-800/60 p-5 rounded-2xl border border-slate-700">
-        <div class="text-slate-400 text-sm mb-1">الأجهزة المسجلة (Android)</div>
-        <div id="statDevices" class="text-3xl font-bold text-blue-400">0</div>
-      </div>
-    </div>
-
-    <!-- Table Container -->
-    <div class="bg-slate-800/80 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
-      <div class="p-5 border-b border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div class="flex items-center gap-3 w-full md:w-auto">
-          <div class="relative flex-1 md:w-80">
-            <i class="fa-solid fa-magnifying-glass absolute right-3 top-3.5 text-slate-400"></i>
-            <input id="searchInput" oninput="filterUsers()" type="text" placeholder="بحث بالاسم أو البريد أو العميل..." class="w-full bg-slate-900 border border-slate-700 rounded-xl pr-10 pl-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+    <!-- Statistics KPIs Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      
+      <!-- Card 1 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-amber-500 hover:border-amber-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">إجمالي حسابات العملاء</div>
+            <div id="statTotalUsers" class="text-3xl font-black text-white">0</div>
           </div>
+          <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-users"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-shield text-amber-500"></i>
+          <span>حسابات بوابة العملاء والتطبيق</span>
         </div>
       </div>
 
+      <!-- Card 2 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-emerald-500 hover:border-emerald-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">الحسابات النشطة</div>
+            <div id="statActiveUsers" class="text-3xl font-black text-emerald-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-user-check"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-circle-check text-emerald-400"></i>
+          <span>تمتلك صلاحية دخول فعالة</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-blue-500 hover:border-blue-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">مصادقة 2FA (OTP)</div>
+            <div id="stat2faUsers" class="text-3xl font-black text-blue-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-key text-blue-400"></i>
+          <span>حماية معززة بالرمز السري</span>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-purple-500 hover:border-purple-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">الأجهزة المسجلة (Android)</div>
+            <div id="statDevices" class="text-3xl font-black text-purple-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-mobile-retro"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-brands fa-android text-purple-400"></i>
+          <span>تطبيقات أندرويد النشطة</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Filter & Table Main Card -->
+    <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-slate-700/80 mb-10">
+      
+      <!-- Search & Filters Toolbar -->
+      <div class="p-5 border-b border-slate-700/80 bg-slate-900/60 flex flex-col sm:flex-row justify-between items-center gap-4">
+        
+        <div class="relative w-full sm:w-96">
+          <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+          <input id="searchInput" oninput="filterUsers()" type="text" placeholder="بحث بالاسم، البريد، أو شركة العميل..." class="w-full custom-input rounded-xl pr-10 pl-4 py-2.5 text-sm font-medium placeholder-slate-500 focus:outline-none">
+        </div>
+
+        <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-700">
+          <i class="fa-solid fa-lock text-emerald-400"></i>
+          <span>نظام الحماية: <strong>Deny by Default</strong> (الصلاحية المباشرة فقط)</span>
+        </div>
+
+      </div>
+
+      <!-- Users Table -->
       <div class="overflow-x-auto">
-        <table class="w-full text-right text-sm">
-          <thead class="bg-slate-900/60 text-slate-400 uppercase text-xs border-b border-slate-700">
+        <table class="w-full text-right text-sm border-collapse">
+          <thead class="bg-slate-950/80 text-amber-400 uppercase text-xs border-b border-slate-700/80 tracking-wider">
             <tr>
-              <th class="px-6 py-4">مستخدم العميل</th>
-              <th class="px-6 py-4">الشركة / العميل</th>
-              <th class="px-6 py-4">الدور والصلاحية</th>
-              <th class="px-6 py-4">المشاريع المسموحة</th>
-              <th class="px-6 py-4">الأمان والـ 2FA</th>
-              <th class="px-6 py-4">آخر دخول</th>
-              <th class="px-6 py-4">الحالة</th>
-              <th class="px-6 py-4 text-center">الإجراءات</th>
+              <th class="px-6 py-4 font-bold">مستخدم العميل</th>
+              <th class="px-6 py-4 font-bold">الشركة / العميل</th>
+              <th class="px-6 py-4 font-bold">الدور والصلاحية</th>
+              <th class="px-6 py-4 font-bold">المشاريع المسموحة</th>
+              <th class="px-6 py-4 font-bold">الأمان والـ 2FA</th>
+              <th class="px-6 py-4 font-bold">آخر دخول</th>
+              <th class="px-6 py-4 font-bold">الحالة</th>
+              <th class="px-6 py-4 font-bold text-center">الإجراءات</th>
             </tr>
           </thead>
-          <tbody id="usersTableBody" class="divide-y divide-slate-700/60">
+          <tbody id="usersTableBody" class="divide-y divide-slate-800/80">
             <tr>
-              <td colspan="8" class="text-center py-8 text-slate-400">جاري تحميل حسابات العملاء...</td>
+              <td colspan="8" class="text-center py-12 text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-2xl text-amber-500 mb-2"></i>
+                <div>جاري تحميل حسابات العملاء...</div>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
+
     </div>
+
   </div>
 
-  <!-- Create / Edit User Modal -->
-  <div id="userModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-      <div class="flex items-center justify-between border-b border-slate-700 pb-4 mb-5">
+  <!-- Create / Edit User Modal Dialog -->
+  <div id="userModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
         <h3 id="modalTitle" class="text-lg font-bold text-white flex items-center gap-2">
-          <i class="fa-solid fa-user-plus text-amber-400"></i> إضافة مستخدم عميل جديد
+          <i class="fa-solid fa-user-plus text-amber-400"></i>
+          <span>إضافة مستخدم عميل جديد</span>
         </h3>
-        <button onclick="closeModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
       </div>
 
+      <!-- Form Body -->
       <form id="userForm" onsubmit="saveClientUser(event)" class="space-y-4">
         <input type="hidden" id="userId">
 
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">العميل التابع له *</label>
-          <select id="userClientId" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">العميل التابع له في النظام *</label>
+          <select id="userClientId" required class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
             <option value="">اختر العميل...</option>
           </select>
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">الاسم الكامل *</label>
-          <input id="userFullName" type="text" required placeholder="مثال: م. أحمد صالح بن محفوظ" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">الاسم الكامل للمستخدم *</label>
+          <input id="userFullName" type="text" required placeholder="مثال: م. أحمد صالح بن محفوظ" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-medium text-slate-300 mb-1">البريد الإلكتروني *</label>
-            <input id="userEmail" type="email" required placeholder="client@example.com" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">البريد الإلكتروني *</label>
+            <input id="userEmail" type="email" required placeholder="client@example.com" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
           </div>
           <div>
-            <label class="block text-xs font-medium text-slate-300 mb-1">رقم الهاتف</label>
-            <input id="userPhone" type="tel" placeholder="77xxxxxxx" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">رقم الهاتف</label>
+            <input id="userPhone" type="tel" placeholder="77xxxxxxx" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
           </div>
         </div>
 
         <div id="passwordFieldGroup">
-          <label class="block text-xs font-medium text-slate-300 mb-1">كلمة المرور *</label>
-          <input id="userPassword" type="password" placeholder="6 أحرف أو أرقام كحد أدنى" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور *</label>
+          <input id="userPassword" type="password" placeholder="6 أحرف أو أرقام كحد أدنى" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-medium text-slate-300 mb-1">الدور الوظيفي</label>
-            <select id="userRole" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">الدور الوظيفي والصلاحية</label>
+            <select id="userRole" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
               <option value="owner">مالك (صلاحية كاملة واعتماد)</option>
               <option value="manager">مدير ممثل (اطلاع واعتماد)</option>
               <option value="viewer" selected>مطلع فقط (عرض ومتابعة)</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-medium text-slate-300 mb-1">حالة الحساب</label>
-            <select id="userStatus" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500">
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">حالة الحساب</label>
+            <select id="userStatus" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
               <option value="active" selected>نشط (Active)</option>
               <option value="inactive">معطل (Inactive)</option>
               <option value="suspended">موقوف (Suspended)</option>
@@ -160,22 +327,29 @@
           </div>
         </div>
 
-        <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-700 flex items-center justify-between">
+        <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80 flex items-center justify-between mt-2">
           <div>
-            <div class="text-sm font-semibold text-white">تفعيل التحقق بخطوتين (2FA / OTP)</div>
-            <div class="text-xs text-slate-400">إرسال رمز أمان OTP عند تسجيل الدخول</div>
+            <div class="text-xs font-bold text-white">تفعيل التحقق بخطوتين (2FA / OTP)</div>
+            <div class="text-[0.75rem] text-slate-400">إرسال رمز أمان OTP لحساب العميل عند تسجيل الدخول</div>
           </div>
-          <input id="user2fa" type="checkbox" checked class="w-5 h-5 accent-amber-500 rounded">
+          <input id="user2fa" type="checkbox" checked class="w-5 h-5 accent-amber-500 rounded cursor-pointer">
         </div>
 
-        <div class="flex justify-end gap-3 pt-4 border-t border-slate-700">
-          <button type="button" onclick="closeModal()" class="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-sm font-semibold transition">إلغاء</button>
-          <button type="submit" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-sm font-bold transition">حفظ التغييرات</button>
+        <!-- Form Buttons -->
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/80 mt-6">
+          <button type="button" onclick="closeModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+            إلغاء
+          </button>
+          <button type="submit" class="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-extrabold transition shadow-lg shadow-amber-500/20 cursor-pointer">
+            حفظ التغييرات
+          </button>
         </div>
       </form>
+
     </div>
   </div>
 
+  <!-- Page Logic Script -->
   <script>
     let allUsers = [];
 
@@ -199,7 +373,13 @@
     function renderUsers(users) {
       const tbody = document.getElementById('usersTableBody');
       if (!users || users.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">لا توجد حسابات عملاء مسجلة حالياً</td></tr>`;
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-folder-open text-3xl text-slate-600 mb-2"></i>
+              <div>لا توجد حسابات عملاء مسجلة حالياً</div>
+            </td>
+          </tr>`;
         return;
       }
 
@@ -210,37 +390,49 @@
         const statusLabel = u.status === 'active' ? 'نشط' : (u.status === 'suspended' ? 'موقوف' : 'معطل');
 
         return `
-          <tr class="hover:bg-slate-700/30 transition">
+          <tr class="hover:bg-slate-800/50 transition">
             <td class="px-6 py-4">
-              <div class="font-bold text-white">${u.full_name}</div>
-              <div class="text-xs text-slate-400">${u.email}</div>
+              <div class="font-bold text-white text-sm">${u.full_name}</div>
+              <div class="text-xs text-slate-400 font-mono">${u.email}</div>
               ${u.phone ? `<div class="text-xs text-slate-500">${u.phone}</div>` : ''}
             </td>
             <td class="px-6 py-4">
-              <div class="font-semibold text-slate-200">${u.client_name || '—'}</div>
+              <div class="font-bold text-slate-200 text-sm">${u.client_name || '—'}</div>
               <div class="text-xs text-slate-400">${u.client_company || ''}</div>
             </td>
             <td class="px-6 py-4">
-              <span class="portal-badge ${roleBadge}">${roleLabel}</span>
+              <span class="portal-badge ${roleBadge}">
+                <i class="fa-solid fa-user-shield text-[0.7rem]"></i>
+                ${roleLabel}
+              </span>
             </td>
             <td class="px-6 py-4">
-              <span class="text-xs bg-slate-800 px-2 py-1 rounded border border-slate-700">
+              <span class="text-xs bg-slate-900/90 text-amber-300 font-bold px-2.5 py-1 rounded-lg border border-slate-700">
                 ${u.role === 'owner' ? 'جميع المشاريع' : `${u.assigned_projects_count || 0} مشاريع`}
               </span>
             </td>
             <td class="px-6 py-4">
-              ${u.two_factor_enabled ? '<span class="text-xs text-emerald-400"><i class="fa-solid fa-shield-halved"></i> مفعّل</span>' : '<span class="text-xs text-slate-500">معطل</span>'}
+              ${u.two_factor_enabled 
+                ? '<span class="text-xs text-emerald-400 font-bold flex items-center gap-1.5"><i class="fa-solid fa-shield-halved"></i> مفعّل (OTP)</span>' 
+                : '<span class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-regular fa-circle"></i> معطل</span>'}
             </td>
             <td class="px-6 py-4 text-xs text-slate-400">
               ${u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('ar-YE') : 'لم يدخل بعد'}
             </td>
             <td class="px-6 py-4">
-              <span class="portal-badge ${statusBadge}">${statusLabel}</span>
+              <span class="portal-badge ${statusBadge}">
+                <i class="fa-solid fa-circle text-[0.4rem]"></i>
+                ${statusLabel}
+              </span>
             </td>
             <td class="px-6 py-4 text-center">
               <div class="flex items-center justify-center gap-2">
-                <button onclick="editUser(${u.id})" class="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition" title="تعديل"><i class="fa-solid fa-pen"></i></button>
-                <button onclick="resetPassword(${u.id})" class="p-2 bg-slate-700 hover:bg-amber-600 hover:text-slate-950 text-slate-200 rounded-lg transition" title="إعادة تعيين كلمة المرور"><i class="fa-solid fa-key"></i></button>
+                <button onclick="editUser(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="تعديل الحساب">
+                  <i class="fa-solid fa-pen text-xs"></i>
+                </button>
+                <button onclick="resetPassword(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إعادة تعيين كلمة المرور">
+                  <i class="fa-solid fa-key text-xs"></i>
+                </button>
               </div>
             </td>
           </tr>
@@ -287,12 +479,32 @@
 
     function openCreateUserModal() {
       document.getElementById('userId').value = '';
-      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-amber-400"></i> إضافة مستخدم عميل جديد';
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-amber-400"></i><span>إضافة مستخدم عميل جديد</span>';
       document.getElementById('passwordFieldGroup').style.display = 'block';
       document.getElementById('userPassword').required = true;
       document.getElementById('userForm').reset();
       loadClientsList();
       document.getElementById('userModal').classList.remove('hidden');
+    }
+
+    function editUser(id) {
+      const user = allUsers.find(u => u.id === id);
+      if (!user) return;
+      document.getElementById('userId').value = user.id;
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-pen text-amber-400"></i><span>تعديل حساب العميل</span>';
+      document.getElementById('passwordFieldGroup').style.display = 'none';
+      document.getElementById('userPassword').required = false;
+
+      loadClientsList().then(() => {
+        document.getElementById('userClientId').value = user.client_id || '';
+        document.getElementById('userFullName').value = user.full_name || '';
+        document.getElementById('userEmail').value = user.email || '';
+        document.getElementById('userPhone').value = user.phone || '';
+        document.getElementById('userRole').value = user.role || 'viewer';
+        document.getElementById('userStatus').value = user.status || 'active';
+        document.getElementById('user2fa').checked = !!user.two_factor_enabled;
+        document.getElementById('userModal').classList.remove('hidden');
+      });
     }
 
     function closeModal() {
