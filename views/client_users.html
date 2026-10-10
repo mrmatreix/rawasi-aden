@@ -100,7 +100,7 @@
 <body class="min-h-screen pb-12">
 
   <!-- Alert Toast Notification Area -->
-  <div id="toastNotification" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 hidden transition-all duration-300">
+  <div id="toastNotification" class="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] hidden transition-all duration-300">
     <div id="toastContent" class="glass-card px-6 py-3.5 rounded-2xl border flex items-center gap-3 shadow-2xl text-sm font-bold">
       <i id="toastIcon" class="fa-solid fa-circle-check text-lg"></i>
       <span id="toastMessage"></span>
@@ -286,6 +286,12 @@
       <!-- Form Body -->
       <form id="userForm" onsubmit="saveClientUser(event)" class="space-y-4">
         <input type="hidden" id="userId">
+
+        <!-- In-Modal Alert Box for Error Messages -->
+        <div id="modalErrorAlert" class="hidden p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-150">
+          <i class="fa-solid fa-circle-exclamation text-base shrink-0 text-rose-400"></i>
+          <span id="modalErrorText"></span>
+        </div>
 
         <div>
           <label class="block text-xs font-bold text-slate-300 mb-1.5">العميل التابع له في قاعدة البيانات *</label>
@@ -575,7 +581,23 @@
       }
     }
 
+    function showModalError(msg) {
+      const box = document.getElementById('modalErrorAlert');
+      const text = document.getElementById('modalErrorText');
+      if (box && text) {
+        text.textContent = msg;
+        box.classList.remove('hidden');
+      }
+      showToast(msg, 'error');
+    }
+
+    function hideModalError() {
+      const box = document.getElementById('modalErrorAlert');
+      if (box) box.classList.add('hidden');
+    }
+
     function openCreateUserModal() {
+      hideModalError();
       document.getElementById('userId').value = '';
       document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-amber-400"></i><span>إضافة مستخدم عميل جديد</span>';
       document.getElementById('passwordFieldGroup').style.display = 'block';
@@ -587,6 +609,7 @@
     }
 
     function editUser(id) {
+      hideModalError();
       const user = allUsers.find(u => u.id === id);
       if (!user) return;
       document.getElementById('userId').value = user.id;
@@ -608,11 +631,14 @@
     }
 
     function closeModal() {
+      hideModalError();
       document.getElementById('userModal').classList.add('hidden');
     }
 
     async function saveClientUser(e) {
       e.preventDefault();
+      hideModalError();
+
       const id = document.getElementById('userId').value;
       const token = getAuthToken();
 
@@ -626,19 +652,19 @@
       const twoFactor = document.getElementById('user2fa').checked;
 
       if (!clientId) {
-        showToast('يرجى اختيار العميل التابع له من القائمة', 'error');
+        showModalError('يرجى اختيار العميل التابع له في قاعدة البيانات من القائمة');
         return;
       }
       if (!fullName) {
-        showToast('يرجى إدخال الاسم الكامل للمستخدم', 'error');
+        showModalError('يرجى إدخال الاسم الكامل للمستخدم');
         return;
       }
       if (!email) {
-        showToast('يرجى إدخال البريد الإلكتروني', 'error');
+        showModalError('يرجى إدخال البريد الإلكتروني');
         return;
       }
       if (!id && (!password || password.length < 6)) {
-        showToast('كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل', 'error');
+        showModalError('كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل');
         return;
       }
 
@@ -685,10 +711,10 @@
           showToast(data.message || 'تم حفظ حساب العميل بنجاح', 'success');
           loadClientUsers();
         } else {
-          showToast(data.message || 'خطأ أثناء الحفظ', 'error');
+          showModalError(data.message || 'خطأ أثناء الحفظ');
         }
       } catch (err) {
-        showToast('خطأ في الاتصال بالخادم أثناء الحفظ', 'error');
+        showModalError('خطأ في الاتصال بالخادم أثناء الحفظ');
       } finally {
         if (btnSubmit) {
           btnSubmit.disabled = false;
