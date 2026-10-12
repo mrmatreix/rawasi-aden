@@ -22,7 +22,7 @@ const ClientApp = {
       <div class="top-header">
         <div class="brand-wrapper">
           <div class="brand-logo">
-            <i class="fa-solid fa-helmet-safety"></i>
+            <img src="images/logo_clean.png" onerror="this.onerror=null; this.src='images/logo.png';" alt="رواسي عدن" style="width: 100%; height: 100%; object-fit: contain;">
           </div>
           <div class="brand-info">
             <h1>رواسي عدن</h1>

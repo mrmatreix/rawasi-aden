@@ -12,32 +12,246 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
+      align-items: center;
       min-height: 100vh;
-      background: radial-gradient(circle at 50% 20%, #152238 0%, #0B1329 100%);
+      min-height: 100dvh;
+      background: radial-gradient(ellipse at 50% 12%, #182a48 0%, #0c162c 55%, #060b16 100%);
+      padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)) 16px;
+      margin: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
     }
     .login-container {
       width: 100%;
-      max-width: 420px;
-      margin: 0 auto;
-      padding: 24px;
+      max-width: 410px;
+      margin: auto;
+      padding: 10px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
     .logo-hero {
       text-align: center;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
+      position: relative;
     }
-    .logo-icon-large {
-      width: 72px;
-      height: 72px;
-      margin: 0 auto 16px;
-      border-radius: 20px;
-      background: rgba(212, 175, 55, 0.12);
-      border: 1px solid var(--gold);
+    .logo-badge-wrapper {
+      position: relative;
+      display: inline-block;
+      margin-bottom: 14px;
+    }
+    .logo-badge-glow {
+      position: absolute;
+      inset: -6px;
+      border-radius: 28px;
+      background: radial-gradient(circle, rgba(212, 175, 55, 0.45) 0%, rgba(212, 175, 55, 0) 70%);
+      filter: blur(14px);
+      z-index: 0;
+      opacity: 0.85;
+      animation: pulseGlow 4s ease-in-out infinite alternate;
+    }
+    @keyframes pulseGlow {
+      0% { transform: scale(0.96); opacity: 0.6; }
+      100% { transform: scale(1.04); opacity: 0.95; }
+    }
+    .logo-badge {
+      position: relative;
+      z-index: 1;
+      width: 88px;
+      height: 88px;
+      margin: 0 auto;
+      border-radius: 26px;
+      background: radial-gradient(circle at 35% 30%, #1e3355 0%, #13223b 65%, #0b1426 100%);
+      border: 1.5px solid rgba(212, 175, 55, 0.55);
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 28px rgba(212, 175, 55, 0.22);
+      padding: 10px;
+    }
+    .company-logo-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
+    }
+    .hero-title {
+      font-size: 1.45rem;
+      font-weight: 900;
+      color: #FFFFFF;
+      margin: 0 0 4px;
+      letter-spacing: -0.3px;
+    }
+    .hero-subtitle {
+      font-size: 0.86rem;
       color: var(--gold);
-      font-size: 2.2rem;
-      box-shadow: 0 10px 25px rgba(212, 175, 55, 0.2);
+      font-weight: 700;
+      margin: 0 0 4px;
+    }
+    .hero-tagline {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.4;
+    }
+    .card-login {
+      background: rgba(21, 34, 56, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      border-radius: 24px;
+      padding: 24px 20px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5), 0 0 35px rgba(212, 175, 55, 0.06);
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-input-login {
+      width: 100%;
+      height: 50px;
+      background: rgba(11, 19, 41, 0.85);
+      border: 1px solid rgba(212, 175, 55, 0.22);
+      color: #ffffff;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 16px !important; /* Prevents auto-zoom on iOS */
+      outline: none;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+      direction: rtl;
+    }
+    .form-input-login:focus {
+      border-color: var(--gold);
+      background: rgba(15, 23, 42, 0.95);
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.28);
+    }
+    .password-wrapper {
+      position: relative;
+    }
+    .password-toggle-btn {
+      position: absolute;
+      left: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 42px;
+      height: 42px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      font-size: 1.05rem;
+      transition: color 0.2s ease;
+    }
+    .password-toggle-btn:active {
+      color: var(--gold);
+    }
+    .forgot-link {
+      color: var(--gold);
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 4px;
+      transition: color 0.2s ease;
+    }
+    .forgot-link:hover, .forgot-link:active {
+      color: #f59e0b;
+      text-decoration: underline;
+    }
+    .btn-submit-login {
+      width: 100%;
+      height: 52px;
+      background: linear-gradient(135deg, #F59E0B 0%, #D4AF37 55%, #B89628 100%);
+      color: #0b1329;
+      font-size: 1.05rem;
+      font-weight: 800;
+      border-radius: 14px;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 22px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(212, 175, 55, 0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-submit-login:active {
+      transform: scale(0.98);
+      box-shadow: 0 4px 14px rgba(212, 175, 55, 0.25);
+    }
+    .guest-login-divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 18px 0 14px;
+      color: #64748b;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+    .guest-login-divider::before,
+    .guest-login-divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px dashed rgba(212, 175, 55, 0.25);
+    }
+    .guest-login-divider span {
+      padding: 0 12px;
+      color: #94a3b8;
+    }
+    .btn-guest-login {
+      width: 100%;
+      height: 48px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1.5px solid rgba(212, 175, 55, 0.45);
+      color: #f1f5f9;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-decoration: none;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+    .btn-guest-login:hover {
+      background: rgba(212, 175, 55, 0.15);
+      border-color: var(--gold);
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(212, 175, 55, 0.2);
+    }
+    .btn-guest-login:active {
+      transform: scale(0.98);
+    }
+    .security-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-radius: 999px;
+      background: rgba(21, 34, 56, 0.65);
+      border: 1px solid rgba(212, 175, 55, 0.2);
+      color: #94a3b8;
+      font-size: 0.76rem;
     }
     .otp-inputs {
       display: flex;
@@ -62,6 +276,55 @@
       border-color: var(--gold);
       box-shadow: 0 0 0 3px var(--gold-glow);
     }
+    @media (max-width: 380px) {
+      .logo-badge {
+        width: 76px;
+        height: 76px;
+        border-radius: 22px;
+      }
+      .hero-title {
+        font-size: 1.3rem;
+      }
+      .card-login {
+        padding: 20px 16px;
+        border-radius: 20px;
+      }
+      .form-input-login {
+        height: 46px;
+      }
+      .btn-submit-login {
+        height: 48px;
+      }
+      .otp-digit {
+        width: 38px;
+        height: 46px;
+        font-size: 1.3rem;
+      }
+    }
+    @media (max-height: 670px) {
+      .logo-hero {
+        margin-bottom: 14px;
+      }
+      .logo-badge-wrapper {
+        margin-bottom: 8px;
+      }
+      .logo-badge {
+        width: 70px;
+        height: 70px;
+      }
+      .hero-title {
+        font-size: 1.25rem;
+      }
+      .hero-tagline {
+        display: none;
+      }
+      .form-group {
+        margin-bottom: 12px;
+      }
+      .btn-submit-login {
+        margin-top: 14px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -69,51 +332,93 @@
 
   <div class="login-container">
     <div class="logo-hero">
-      <div class="logo-icon-large">
-        <i class="fa-solid fa-helmet-safety"></i>
+      <div class="logo-badge-wrapper">
+        <div class="logo-badge-glow"></div>
+        <div class="logo-badge">
+          <img src="images/logo_clean.png" onerror="this.onerror=null; this.src='images/logo.png';" alt="شعار شركة رواسي عدن" class="company-logo-img">
+        </div>
       </div>
-      <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin-bottom: 6px;">شركة رواسي عدن</h1>
-      <p style="font-size: 0.85rem; color: var(--gold); font-weight: 600;">بوابة وتطبيق العملاء المخصص</p>
-      <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">متابعة المشاريع، المستخلصات، والدفعات الهندسية</p>
+      <h1 class="hero-title">شركة رواسي عدن</h1>
+      <p class="hero-subtitle">بوابة وتطبيق العملاء المخصص</p>
+      <p class="hero-tagline">متابعة المشاريع، المستخلصات، والدفعات الهندسية</p>
     </div>
 
-    <div class="card" style="padding: 24px;">
+    <div class="card card-login">
       <!-- Inline Error Alert -->
-      <div id="loginErrorAlert" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 12px; padding: 12px; margin-bottom: 16px; color: #f87171; font-size: 0.85rem; font-weight: bold; text-align: center;">
-        <i class="fa-solid fa-circle-exclamation"></i> <span id="loginErrorAlertText"></span>
+      <div id="loginErrorAlert" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.45); border-radius: 14px; padding: 12px 14px; margin-bottom: 18px; color: #fca5a5; font-size: 0.84rem; font-weight: 700; text-align: center;">
+        <i class="fa-solid fa-circle-exclamation text-red-400"></i> <span id="loginErrorAlertText"></span>
       </div>
 
       <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="form-group">
-          <label class="form-label" for="emailInput"><i class="fa-solid fa-envelope text-gold"></i> البريد الإلكتروني المسجل</label>
-          <input type="email" id="emailInput" name="email" class="form-input" required placeholder="client@example.com" autocomplete="email" oninput="hideLoginError()">
+          <label class="form-label" for="emailInput">
+            <i class="fa-solid fa-envelope text-gold"></i>
+            <span>البريد الإلكتروني المسجل</span>
+          </label>
+          <input type="email" id="emailInput" name="email" class="form-input form-input-login" required placeholder="client@example.com" autocomplete="email" inputmode="email" autocapitalize="none" oninput="hideLoginError()">
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="passwordInput"><i class="fa-solid fa-lock text-gold"></i> كلمة المرور</label>
-          <div style="position: relative;">
-            <input type="password" id="passwordInput" name="password" class="form-input" required placeholder="••••••••" autocomplete="current-password" style="padding-left: 42px;" oninput="hideLoginError()">
-            <button type="button" onclick="togglePassword()" style="position: absolute; left: 12px; top: 12px; background: none; border: none; color: var(--text-muted); cursor: pointer;">
+          <label class="form-label" for="passwordInput">
+            <i class="fa-solid fa-lock text-gold"></i>
+            <span>كلمة المرور</span>
+          </label>
+          <div class="password-wrapper">
+            <input type="password" id="passwordInput" name="password" class="form-input form-input-login" required placeholder="••••••••" autocomplete="current-password" oninput="hideLoginError()" style="padding-left: 48px;">
+            <button type="button" onclick="togglePassword()" class="password-toggle-btn" aria-label="إظهار أو إخفاء كلمة المرور">
               <i id="eyeIcon" class="fa-solid fa-eye"></i>
             </button>
           </div>
         </div>
 
-        <div style="text-align: left; margin-top: 8px;">
-          <a href="javascript:void(0)" onclick="openForgotModal()" style="color: var(--gold); font-size: 0.8rem; font-weight: 600; text-decoration: none;">نسيت كلمة المرور؟</a>
+        <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
+          <a href="javascript:void(0)" onclick="openForgotModal()" class="forgot-link">نسيت كلمة المرور؟</a>
         </div>
 
-        <button type="submit" id="submitBtn" class="btn btn-primary" style="margin-top: 20px;">
+        <button type="submit" id="submitBtn" class="btn btn-primary btn-submit-login">
           <span>تسجيل الدخول</span>
           <i class="fa-solid fa-arrow-left"></i>
         </button>
       </form>
+
+      <!-- فاصل الدخول كزائر -->
+      <div class="guest-login-divider">
+        <span>أو للاطلاع وطلب الخدمات الهندسية</span>
+      </div>
+
+      <!-- زر الدخول كزائر -->
+      <a href="services.html" class="btn btn-guest-login" id="btnGuestLogin" title="استعراض الخدمات وتقديم طلب مباشرة">
+        <i class="fa-solid fa-compass-drafting text-gold"></i>
+        <span>الدخول كزائر</span>
+        <i class="fa-solid fa-angle-left text-gold" style="font-size: 0.85rem;"></i>
+      </a>
     </div>
 
-    <div style="text-align: center; margin-top: 20px;">
-      <p style="font-size: 0.78rem; color: var(--text-muted);">
-        <i class="fa-solid fa-shield-halved text-gold"></i> نظام مشفّر وآمن متوافق مع معايير الحماية الهندسية
+    <div style="text-align: center; margin-top: 18px;">
+      <div class="security-badge">
+        <i class="fa-solid fa-shield-halved text-gold"></i>
+        <span>نظام مشفّر وآمن متوافق مع معايير الحماية الهندسية</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forgot Password Modal -->
+  <div id="forgotModal" class="modal-overlay">
+    <div class="modal-box text-center" style="max-width: 380px;">
+      <div style="width: 58px; height: 58px; margin: 0 auto 14px; border-radius: 18px; background: rgba(212, 175, 55, 0.15); border: 1.5px solid var(--gold); display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 1.6rem; box-shadow: 0 8px 20px rgba(212, 175, 55, 0.2);">
+        <i class="fa-solid fa-key"></i>
+      </div>
+      <h3 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin-bottom: 8px;">استعادة كلمة المرور</h3>
+      <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px;">
+        لأسباب أمنية وهندسية، يتم تعيين وتحديث كلمات المرور حصرياً عبر إدارة تقنية المعلومات وإدارة المشاريع في شركة رواسي عدن.
       </p>
+      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 20px; text-align: right; font-size: 0.8rem;">
+        <div style="color: var(--gold); font-weight: 700; margin-bottom: 6px;"><i class="fa-solid fa-circle-info"></i> خطوات الاستعادة:</div>
+        <div style="color: #cbd5e1; line-height: 1.6;">تواصل مع المهندس المسؤول عن مشروعك أو إدارة النظام لتزويدك بكلمة مرور مؤقتة فورية.</div>
+      </div>
+      <button type="button" onclick="closeForgotModal()" class="btn btn-primary" style="width: 100%;">
+        <span>حسناً، فهمت ذلك</span>
+      </button>
     </div>
   </div>
 
@@ -129,12 +434,12 @@
       </p>
 
       <div class="otp-inputs">
-        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 0)">
-        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 1)">
-        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 2)">
-        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 3)">
-        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 4)">
-        <input type="tel" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 5)">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 0)">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 1)">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 2)">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 3)">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 4)">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 5)">
       </div>
 
       <button id="verifyOtpBtn" onclick="submitOtp()" class="btn btn-primary" style="margin-bottom: 10px;">
@@ -187,6 +492,14 @@
     function hideLoginError() {
       const box = document.getElementById('loginErrorAlert');
       if (box) box.style.display = 'none';
+    }
+
+    function openForgotModal() {
+      document.getElementById('forgotModal').classList.add('active');
+    }
+
+    function closeForgotModal() {
+      document.getElementById('forgotModal').classList.remove('active');
     }
 
     async function handleLogin(e) {

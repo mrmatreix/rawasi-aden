@@ -1088,12 +1088,14 @@ router.get('/custodies', requirePermission('custody:view'), async (req, res) => 
              COALESCE(c.account_code, a.code) as account_code,
              COALESCE(c.account_name, a.name) as account_name,
              COALESCE(c.payment_method, 'نقدي') as payment_method,
+             p.name as project_name,
              e.employee_no as emp_code, 
              e.full_name as emp_full_name, 
              e.job_title as emp_job_title
       FROM custodies c
       LEFT JOIN accounts a ON c.account_id = a.id
       LEFT JOIN employees e ON c.employee_id = e.id
+      LEFT JOIN projects p ON c.project_id = p.id
       ORDER BY c.date DESC, c.id DESC
     `);
     res.json({ success: true, data: custodies });
@@ -1109,6 +1111,7 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       operation_type = 'صرف عهدة',
       employee_id,
       employee_name,
+      project_id,
       related_custody_id,
       total_amount,
       spent_amount = 0,
@@ -1120,6 +1123,8 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       account_name,
       payment_method = 'نقدي'
     } = req.body;
+
+    const validProjectId = project_id && project_id !== '' ? Number(project_id) : null;
 
     // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ العهدة
     const periodCheck = await checkPeriodOpen(date);
@@ -1208,13 +1213,13 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
         const result = await tx.run(`
           INSERT INTO custodies (
             custody_no, operation_type, related_custody_id, related_custody_no,
-            employee_id, employee_no, employee_name,
+            employee_id, employee_no, employee_name, project_id,
             total_amount, spent_amount, remaining_amount, currency, status, date, notes,
             account_id, account_code, account_name, payment_method
-          ) VALUES (?, 'تصفية عهدة', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'تمت التصفية', ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, 'تصفية عهدة', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'تمت التصفية', ?, ?, ?, ?, ?, ?)
         `, [
           custody_no, origCustody.id, origCustody.custody_no,
-          empId || origCustody.employee_id, empNo || origCustody.employee_no, empName || origCustody.employee_name,
+          empId || origCustody.employee_id, empNo || origCustody.employee_no, empName || origCustody.employee_name, validProjectId || origCustody.project_id || null,
           settleAmount, settleAmount, 0, selectedCurrency, date, notes || `تصفية للعهدة رقم ${origCustody.custody_no}`,
           accId || origCustody.account_id, accCode || origCustody.account_code, accName || origCustody.account_name, payment_method || 'نقدي'
         ]);
@@ -1257,12 +1262,12 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
 
     const result = await run(`
       INSERT INTO custodies (
-        custody_no, operation_type, employee_id, employee_no, employee_name,
+        custody_no, operation_type, employee_id, employee_no, employee_name, project_id,
         total_amount, spent_amount, remaining_amount, currency, status, date, notes,
         account_id, account_code, account_name, payment_method
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?, ?, ?, ?, ?)
     `, [
-      custody_no, operation_type, empId, empNo, empName,
+      custody_no, operation_type, empId, empNo, empName, validProjectId,
       parsedAmount, parsedSpent, remaining, selectedCurrency, date, notes || '',
       accId, accCode, accName, payment_method || 'نقدي'
     ]);

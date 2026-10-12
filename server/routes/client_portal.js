@@ -9,6 +9,8 @@
 
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../database/db');
@@ -325,6 +327,285 @@ router.post('/auth/forgot-password', async (req, res) => {
   } catch (err) {
     console.error('Forgot password error:', err);
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء طلب استعادة كلمة المرور' });
+  }
+});
+
+// =========================================================================
+// 1.1 خدمات مكتب الهندسة والمقاولات وطلبات الزوار والعملاء (Services & Guest Requests)
+// متاحة للزوار والعملاء دون الحاجة لحساب مسبق
+// =========================================================================
+
+/**
+ * GET /api/client-portal/services
+ * جلب قائمة الخدمات الهندسية النشطة المسموح بطلبها
+ */
+router.get('/services', async (req, res) => {
+  try {
+    const services = await db.query(`
+      SELECT id, code, title, category, description, icon, display_order
+      FROM engineering_services
+      WHERE is_active = 1
+      ORDER BY display_order ASC, id ASC
+    `);
+
+    res.json({
+      success: true,
+      services: services || []
+    });
+  } catch (err) {
+    console.error('Fetch engineering services error:', err);
+    res.status(500).json({ success: false, message: 'خطأ أثناء جلب قائمة الخدمات' });
+  }
+});
+
+/**
+ * POST /api/client-portal/services/requests
+ * تقديم طلب خدمات جديد (سواء كان زائر أو عميل مسجل)
+ */
+router.post('/services/requests', async (req, res) => {
+  try {
+    const {
+      client_name,
+      phone,
+      email,
+      project_name,
+      project_type,
+      location,
+      description,
+      estimated_budget,
+      currency = 'YER',
+      expected_start_date,
+      notes,
+      service_ids,
+      attachments = []
+    } = req.body;
+
+    // 1. التحقق من البيانات الإلزامية
+    if (!client_name || !String(client_name).trim()) {
+      return res.status(400).json({ success: false, message: 'اسم العميل / الزائر مطلوب' });
+    }
+    if (!phone || !String(phone).trim()) {
+      return res.status(400).json({ success: false, message: 'رقم الهاتف مطلوب' });
+    }
+
+    // التحقق من الخدمات المختارة
+    let parsedServiceIds = [];
+    if (Array.isArray(service_ids)) {
+      parsedServiceIds = service_ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id) && id > 0);
+    } else if (typeof service_ids === 'string') {
+      parsedServiceIds = service_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id) && id > 0);
+    }
+
+    if (parsedServiceIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'يرجى اختيار خدمة هندسية واحدة على الأقل' });
+    }
+
+    // جلب الخدمات المختارة للتأكد من وجودها ونشاطها
+    const placeholders = parsedServiceIds.map(() => '?').join(',');
+    const activeServices = await db.query(`
+      SELECT id, title FROM engineering_services
+      WHERE id IN (${placeholders}) AND is_active = 1
+    `, parsedServiceIds);
+
+    if (!activeServices || activeServices.length === 0) {
+      return res.status(400).json({ success: false, message: 'الخدمات المختارة غير صالحة أو غير نشطة حالياً' });
+    }
+
+    // 2. التحقق من هوية المرسل (زائر أم عميل مسجل)
+    let clientUserId = null;
+    let source = 'guest';
+
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, CLIENT_JWT_SECRET);
+        if (decoded && decoded.id) {
+          const userCheck = await db.get(`SELECT id FROM client_users WHERE id = ? AND status = 'active'`, [decoded.id]);
+          if (userCheck) {
+            clientUserId = userCheck.id;
+            source = 'registered_client';
+          }
+        }
+      } catch (tokenErr) {
+        // إذا كان التوكن غير صالح، يستمر كزائر
+      }
+    }
+
+    // 3. توليد رقم طلب فريد SR-YYYY-XXXX
+    const currentYear = new Date().getFullYear();
+    const countRow = await db.get(`
+      SELECT COUNT(id) as total FROM service_requests
+      WHERE request_no LIKE ?
+    `, [`SR-${currentYear}-%`]);
+    const nextSeq = (Number(countRow?.total || 0) + 1).toString().padStart(4, '0');
+    const requestNo = `SR-${currentYear}-${nextSeq}`;
+
+    // توليد كود تحقق آمن
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // 4. معالجة وحفظ المرفقات المرفوعة بأمان
+    const savedAttachments = [];
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      const uploadDir = path.join(__dirname, '../../uploads/service_requests');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      for (let i = 0; i < Math.min(attachments.length, 10); i++) {
+        const att = attachments[i];
+        if (!att || !att.contentBase64 || !att.fileName) continue;
+
+        const allowedExts = ['.pdf', '.dwg', '.dxf', '.doc', '.docx', '.xls', '.xlsx', '.png', '.jpg', '.jpeg', '.webp', '.zip', '.rar'];
+        const fileExt = path.extname(att.fileName).toLowerCase();
+        if (!allowedExts.includes(fileExt)) continue;
+
+        const base64Clean = String(att.contentBase64).replace(/^data:[^;]+;base64,/, '');
+        const fileBuf = Buffer.from(base64Clean, 'base64');
+        if (fileBuf.length > 25 * 1024 * 1024) continue; // أقصى حجم 25MB
+
+        const safeOriginalName = path.basename(att.fileName).replace(/[^\w\u0600-\u06FF.-]/g, '_');
+        const diskFileName = `${requestNo}_${Date.now()}_${i + 1}${fileExt}`;
+        const diskPath = path.join(uploadDir, diskFileName);
+
+        fs.writeFileSync(diskPath, fileBuf);
+        savedAttachments.push({
+          fileName: safeOriginalName,
+          diskFileName,
+          url: `/uploads/service_requests/${diskFileName}`,
+          size: fileBuf.length,
+          type: att.type || 'application/octet-stream',
+          uploadedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    // 5. حفظ الطلب الرئيسي في قاعدة البيانات
+    const cleanClientName = String(client_name).trim();
+    const cleanPhone = normalizeDigits(String(phone).trim());
+    const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+    const cleanProjName = project_name ? String(project_name).trim() : null;
+    const cleanProjType = project_type ? String(project_type).trim() : null;
+    const cleanLocation = location ? String(location).trim() : null;
+    const cleanDesc = description ? String(description).trim() : null;
+    const cleanNotes = notes ? String(notes).trim() : null;
+    const budgetNum = estimated_budget ? parseFloat(estimated_budget) : null;
+
+    const insertResult = await db.run(`
+      INSERT INTO service_requests (
+        request_no, client_user_id, source, client_name, phone, email,
+        project_name, project_type, location, description,
+        estimated_budget, currency, expected_start_date, notes,
+        attachments, status, verification_code, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [
+      requestNo,
+      clientUserId,
+      source,
+      cleanClientName,
+      cleanPhone,
+      cleanEmail,
+      cleanProjName,
+      cleanProjType,
+      cleanLocation,
+      cleanDesc,
+      budgetNum,
+      currency || 'YER',
+      expected_start_date || null,
+      cleanNotes,
+      JSON.stringify(savedAttachments),
+      verificationCode
+    ]);
+
+    const requestId = insertResult.lastID || insertResult.insertId;
+
+    // 6. حفظ عناصر الخدمات المختارة ضمن الطلب الرئيسي الواحد
+    for (const s of activeServices) {
+      await db.run(`
+        INSERT INTO service_request_items (request_id, service_id, service_title, created_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      `, [requestId, s.id, s.title]);
+    }
+
+    // 7. إرسال إشعار داخلي في لوحة التحكم / التدقيق
+    try {
+      const servicesListStr = activeServices.map(s => s.title).join('، ');
+      await db.run(`
+        INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, ip_address, created_at)
+        VALUES (1, 'NEW_SERVICE_REQUEST', 'service_requests', ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [
+        requestId,
+        `طلب خدمات جديد (${requestNo}) من ${source === 'guest' ? 'الزائر' : 'العميل'}: ${cleanClientName} - الخدمات: [${servicesListStr}]`,
+        req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1'
+      ]);
+    } catch (auditErr) {
+      console.warn('Could not insert audit log for service request:', auditErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'تم إرسال طلبكم بنجاح إلى إدارة مكتب رواسي عدن. سيقوم مهندسونا بالتواصل معكم في أقرب وقت.',
+      data: {
+        request_id: requestId,
+        request_no: requestNo,
+        verification_code: verificationCode,
+        client_name: cleanClientName,
+        phone: cleanPhone,
+        source,
+        services_count: activeServices.length,
+        services: activeServices.map(s => s.title),
+        created_at: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('Submit service request error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم أثناء تقديم الطلب' });
+  }
+});
+
+/**
+ * GET /api/client-portal/services/requests/track
+ * متابعة حالة الطلب للزائر باستخدام رقم الطلب ورمز التحقق
+ */
+router.get('/services/requests/track', async (req, res) => {
+  try {
+    const { request_no, verification_code } = req.query;
+    if (!request_no || !verification_code) {
+      return res.status(400).json({
+        success: false,
+        message: 'رقم الطلب ورمز التحقق مطلوبان للمتابعة'
+      });
+    }
+
+    const request = await db.get(`
+      SELECT 
+        sr.id, sr.request_no, sr.client_name, sr.project_name, sr.project_type,
+        sr.location, sr.status, sr.admin_notes, sr.quoted_amount, sr.currency,
+        sr.created_at, sr.updated_at
+      FROM service_requests sr
+      WHERE UPPER(sr.request_no) = UPPER(?) AND sr.verification_code = ?
+    `, [String(request_no).trim(), String(verification_code).trim()]);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: 'لم يتم العثور على طلب يطابق البيانات المدخلة. يرجى التحقق من رقم الطلب ورمز التحقق.'
+      });
+    }
+
+    const items = await db.query(`
+      SELECT service_title FROM service_request_items WHERE request_id = ?
+    `, [request.id]);
+
+    res.json({
+      success: true,
+      request: {
+        ...request,
+        services: (items || []).map(i => i.service_title)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب بيانات متابعة الطلب' });
   }
 });
 

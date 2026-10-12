@@ -952,90 +952,6 @@
           </div>
         </div>
 
-        <!-- لوحة مصفوفة الفصل المالي لقطاع المقاولات (IFRS 15 Contracting Separation Banner) -->
-        <div class="panel-card" style="margin-bottom: 22px; border: 1px solid var(--border-color); background: linear-gradient(135deg, rgba(20, 32, 48, 0.95), rgba(15, 23, 42, 0.95)); border-radius: 12px; padding: 18px;">
-          <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div style="background: linear-gradient(135deg, #0284c7, #0ea5e9); padding: 10px; border-radius: 10px; color: white; display: flex; align-items: center; justify-content: center;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-              </div>
-              <div>
-                <h3 class="panel-title" style="margin: 0; font-size: 1.1rem; color: #f8fafc; font-weight: 700;">مصفوفة الفصل المالي لقطاع المقاولات (IFRS 15 / POC)</h3>
-                <span style="font-size: 0.8rem; color: #94a3b8;">الفصل الصارم بين المقبوضات النقدية، الإيرادات المعترف بها، المستخلصات، الدفعات المقدمة، ومحتجز الضمان</span>
-              </div>
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button type="button" class="btn btn-sm btn-primary" onclick="Reports.openRevenueRecognitionModal()" style="display: flex; align-items: center; gap: 6px; background: #0284c7; border-color: #0284c7;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                <span>إثبات إيراد دوري (POC)</span>
-              </button>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="Reports.openContractingSeparationModal()" style="display: flex; align-items: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3v18h18V3H3zm16 16H5V5h14v14zM11 7h2v6h-2zm0 8h2v2h-2z"/></svg>
-                <span>عرض مصفوفة المشاريع</span>
-              </button>
-            </div>
-          </div>
-          
-          <!-- شبكة ركائز المقاولات الـ 8 المفصولة بدقة -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;">
-            <!-- 1. المقبوضات النقدية -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #38bdf8; display: block; font-weight: 600; margin-bottom: 6px;">1. المقبوضات النقدية (السيولة)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixTotalReceipts">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">نقد متوفر بالخزينة (ليس إيراداً)</span>
-            </div>
-
-            <!-- 2. الإيرادات المعترف بها -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(74, 222, 128, 0.25); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #4ade80; display: block; font-weight: 600; margin-bottom: 6px;">2. الإيرادات المعترف بها</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixRecognizedRevenue">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إنجاز مكتسب وفق نسبة POC (IFRS 15)</span>
-            </div>
-
-            <!-- 3. المستخلصات المعتمدة -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #fbbf24; display: block; font-weight: 600; margin-bottom: 6px;">3. المستخلصات المعتمدة</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixGrossBillings">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إجمالي الأعمال المفوترة للعملاء</span>
-            </div>
-
-            <!-- 4. الدفعات المقدمة -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(248, 113, 113, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #f87171; display: block; font-weight: 600; margin-bottom: 6px;">4. الدفعات المقدمة (التزام)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixAdvanceLiability">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">التزام تعاقدي متداول غير مستهلك</span>
-            </div>
-
-            <!-- 5. محتجز الضمان -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(192, 132, 252, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #c084fc; display: block; font-weight: 600; margin-bottom: 6px;">5. محتجز الضمان (Retention)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixActiveRetention">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">أصل مؤجل يسترد بعد التسليم النهائي</span>
-            </div>
-
-            <!-- 6. الأعمال تحت التنفيذ WIP -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(45, 212, 191, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #2dd4bf; display: block; font-weight: 600; margin-bottom: 6px;">6. أعمال تحت التنفيذ (WIP)</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixContractAssetWIP">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إيراد منجز غير مفوتر (أصل عقد)</span>
-            </div>
-
-            <!-- 7. أوامر التغيير المعتمدة -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(232, 121, 249, 0.2); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #e879f9; display: block; font-weight: 600; margin-bottom: 6px;">7. أوامر التغيير المعتمدة</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixApprovedVariations">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">إضافات معتمدة لقيمة العقد</span>
-            </div>
-
-            <!-- 8. صافي الأرباح الحقيقية -->
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 10px; padding: 14px; position: relative;">
-              <span style="font-size: 0.78rem; color: #34d399; display: block; font-weight: 600; margin-bottom: 6px;">8. صافي الأرباح المحاسبية</span>
-              <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;" id="matrixTrueNetProfit">0</span>
-              <span style="font-size: 0.72rem; color: #94a3b8; display: block; margin-top: 4px;">الإيراد المعترف به - التكاليف الفعلية</span>
-            </div>
-          </div>
-        </div>
-
         <!-- شبكة الرسوم البيانية الوسطى -->
         <div class="charts-grid">
           <!-- رسم المصروفات الدائري -->
@@ -1094,7 +1010,7 @@
           <div class="quick-form-card">
             <div class="panel-header">
               <h4 class="panel-title" style="font-size: 0.88rem;">سند قبض (الإيرادات)</h4>
-              <span style="font-size: 0.75rem; color: var(--gold-light);">RC-2024-0001</span>
+              <span id="quickRcReceiptNoBadge" style="font-size: 0.75rem; color: var(--gold-light); font-weight: bold;">RC-2026-XXXX</span>
             </div>
             <form id="quickReceiptForm" onsubmit="Accounting.submitReceiptVoucher(event)">
               <div class="form-group">
@@ -1102,15 +1018,16 @@
                   <label style="margin-bottom: 0;">العميل</label>
                   <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('rcClientSelect')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ عميل جديد</a>
                 </div>
-                <select id="rcClientSelect" class="form-control" required>
+                <select id="rcClientSelect" class="form-control" required onchange="Accounting.onQuickClientChange(this.value)">
                   <option value="">اختر العميل...</option>
                 </select>
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('rcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
                 </div>
-                <select id="rcAccountSelect" class="form-control">
+                <select id="rcAccountSelect" class="form-control" required>
                   <option value="">اختر الحساب (افتراضي: العملاء 112)...</option>
                 </select>
               </div>
@@ -1125,7 +1042,7 @@
                   <label style="margin-bottom: 0;">المشروع</label>
                   <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
-                <select id="rcProjectSelect" class="form-control">
+                <select id="rcProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('rc', this.value)">
                   <option value="">اختر المشروع...</option>
                 </select>
               </div>
@@ -1141,18 +1058,18 @@
                   <option value="شيك">شيك</option>
                 </select>
               </div>
-              <!-- حقول التحويل البنكي والشيك الشرطية -->
-              <div id="rcCheckFieldsRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+              <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
+              <div id="rcCheckFieldsRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: #38bdf8; font-weight: bold; font-size: 0.78rem;">حساب البنك <span style="color: var(--accent-red);">*</span></label>
+                    <label style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">حساب البنك / الخزينة</label>
                     <select id="rcBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
                       <option value="">اختر حساب البنك...</option>
                     </select>
                   </div>
-                  <div class="form-group" id="rcCheckNoGroup" style="margin-bottom: 0; display: none;">
-                    <label style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
-                    <input type="text" id="rcCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+                  <div class="form-group" id="rcCheckNoGroup" style="margin-bottom: 0;">
+                    <label id="rcCheckLabel" style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">رقم الشيك / المرجع</label>
+                    <input type="text" id="rcCheckNo" class="form-control" placeholder="رقم الشيك أو الحوالة">
                     <input type="hidden" id="rcBankName" value="">
                   </div>
                 </div>
@@ -1186,12 +1103,12 @@
           <div class="quick-form-card">
             <div class="panel-header">
               <h4 class="panel-title" style="font-size: 0.88rem;">سند صرف (المصروفات)</h4>
-              <span style="font-size: 0.75rem; color: var(--accent-red);">EP-2024-0001</span>
+              <span id="quickExpReceiptNoBadge" style="font-size: 0.75rem; color: var(--accent-red); font-weight: bold;">EP-2026-XXXX</span>
             </div>
             <form id="quickExpenseForm" onsubmit="Accounting.submitExpenseVoucher(event)">
               <div class="form-group">
                 <label>نوع المصروف</label>
-                <select id="expTypeSelect" class="form-control" required>
+                <select id="expTypeSelect" class="form-control" required onchange="Accounting.onQuickExpenseTypeChange(this.value)">
                   <option value="مواد بناء">مواد بناء</option>
                   <option value="أجور عمالة">أجور عمالة</option>
                   <option value="معدات">معدات</option>
@@ -1201,8 +1118,11 @@
                 </select>
               </div>
               <div class="form-group">
-                <label>الحساب المالي (دليل الحسابات)</label>
-                <select id="expAccountSelect" class="form-control">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('expAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
+                </div>
+                <select id="expAccountSelect" class="form-control" required>
                   <option value="">اختر الحساب (تلقائي: تكاليف ومصروفات 5)...</option>
                 </select>
               </div>
@@ -1217,7 +1137,7 @@
                   <label style="margin-bottom: 0;">المشروع</label>
                   <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
-                <select id="expProjectSelect" class="form-control">
+                <select id="expProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('exp', this.value)">
                   <option value="">اختر المشروع...</option>
                 </select>
               </div>
@@ -1256,17 +1176,17 @@
                   <option value="شيك">شيك</option>
                 </select>
               </div>
-              <!-- حقول الصرف البنكي والشيك -->
-              <div id="expCheckFieldsRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+              <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
+              <div id="expCheckFieldsRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: #38bdf8; font-weight: bold; font-size: 0.78rem;">حساب البنك <span style="color: var(--accent-red);">*</span></label>
+                    <label style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">حساب البنك / الخزينة</label>
                     <select id="expBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
                       <option value="">اختر حساب البنك...</option>
                     </select>
                   </div>
-                  <div class="form-group" id="expCheckNoGroup" style="margin-bottom: 0; display: none;">
-                    <label style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
+                  <div class="form-group" id="expCheckNoGroup" style="margin-bottom: 0;">
+                    <label id="expCheckLabel" style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">رقم الشيك / المرجع</label>
                     <input type="text" id="expCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
                     <input type="hidden" id="expBankName" value="">
                   </div>
@@ -1311,9 +1231,21 @@
                 </select>
               </div>
               <div class="form-group">
-                <label>الحساب المالي (العهد / الصندوق)</label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="margin-bottom: 0;">الحساب المالي (العهدة / الصندوق)</label>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('quickCustodyAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب</a>
+                </div>
                 <select id="quickCustodyAccountSelect" class="form-control">
                   <option value="">اختر الحساب الفرعي...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="margin-bottom: 0;">المشروع المرتبط (اختياري)</label>
+                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
+                </div>
+                <select id="custodyProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('custody', this.value)">
+                  <option value="">عام / بدون مشروع محدد...</option>
                 </select>
               </div>
               <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">

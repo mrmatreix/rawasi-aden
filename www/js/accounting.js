@@ -19,6 +19,7 @@ const Accounting = {
 
   async init() {
     await this.loadDropdowns();
+    await this.fetchNextNumbers();
     await this.loadCashMovement();
     await this.loadRecentCustodySummary();
   },
@@ -65,6 +66,7 @@ const Accounting = {
         this.populateSelect('rcProjectSelect', pRes.data, 'name');
         this.populateSelect('modalRcProjectSelect', pRes.data, 'name');
         this.populateSelect('expProjectSelect', pRes.data, 'name');
+        this.populateSelect('custodyProjectSelect', pRes.data, 'name');
       }
       if (currRes.success) {
         this.currencies = currRes.data || [];
@@ -113,6 +115,25 @@ const Accounting = {
       this.populateSelectCustom('modalExpAccountSelect', this.accounts, formatLeafAcc);
       this.populateSelectCustom('modalCustodyAccountSelect', this.accounts, formatLeafAcc);
       this.populateSelectCustom('quickCustodyAccountSelect', this.accounts, formatLeafAcc);
+
+      // تعيين الحسابات الافتراضية الذكية للشاشات السريعة إن لم تكن محددة
+      const rcAcc = document.getElementById('rcAccountSelect');
+      if (rcAcc && (!rcAcc.value || rcAcc.value === '')) {
+        const defClientAcc = this.accounts.find(a => (a.code && a.code.startsWith('123')) || (a.name && a.name.includes('عملاء')));
+        if (defClientAcc) rcAcc.value = defClientAcc.id;
+      }
+
+      const expAcc = document.getElementById('expAccountSelect');
+      if (expAcc && (!expAcc.value || expAcc.value === '')) {
+        const defExpAcc = this.accounts.find(a => a.type === 'expense' || (a.code && (a.code.startsWith('3') || a.code.startsWith('5'))));
+        if (defExpAcc) expAcc.value = defExpAcc.id;
+      }
+
+      const custAcc = document.getElementById('quickCustodyAccountSelect');
+      if (custAcc && (!custAcc.value || custAcc.value === '')) {
+        const defCustAcc = this.accounts.find(a => (a.code && a.code.startsWith('127')) || (a.name && a.name.includes('عهد')));
+        if (defCustAcc) custAcc.value = defCustAcc.id;
+      }
 
       // تحديث أي حقول أسطر قيد يومية مفتوحة حالياً إذا كانت خالية من الخيارات
       const jeAccSelects = document.querySelectorAll('#journalLinesTableBody .je-line-account');
@@ -257,6 +278,160 @@ const Accounting = {
       if (notes && !notes.value) notes.value = 'إفراج عن محتجز ضمان أعمال';
     } else {
       if (billRow) billRow.style.display = 'block';
+    }
+  },
+
+  // مزامنة حقول الشاشات السريعة في لوحة التحكم عند اختيار المشروع
+  async onQuickProjectChange(type, projectId) {
+    if (!projectId) return;
+    const project = (this.projects || []).find(p => String(p.id) === String(projectId));
+    if (!project) return;
+
+    if (type === 'rc') {
+      // 1. مزامنة العميل التابع للمشروع تلقائياً
+      if (project.client_id) {
+        const clSelect = document.getElementById('rcClientSelect');
+        if (clSelect) {
+          clSelect.value = project.client_id;
+        }
+      }
+      // 2. مزامنة مركز التكلفة التابع للمشروع
+      const ccSelect = document.getElementById('rcCostCenterSelect');
+      if (ccSelect) {
+        const cc = (this.costCenters || []).find(c => 
+          (c.project_id && String(c.project_id) === String(project.id)) ||
+          (c.name && project.name && (c.name.includes(project.name) || project.name.includes(c.name)))
+        );
+        if (cc) ccSelect.value = cc.id;
+      }
+      // 3. مزامنة العملة
+      if (project.currency) {
+        const curSelect = document.getElementById('rcCurrency');
+        if (curSelect) curSelect.value = project.currency;
+      }
+      // 4. الحساب المالي (العملاء) الافتراضي
+      const accSelect = document.getElementById('rcAccountSelect');
+      if (accSelect && (!accSelect.value || accSelect.value === '')) {
+        const defAcc = (this.accounts || []).find(a => (a.code && a.code.startsWith('123')) || (a.name && a.name.includes('عملاء')));
+        if (defAcc) accSelect.value = defAcc.id;
+      }
+      // 5. تحديث البيان / الملاحظات
+      const notesEl = document.getElementById('rcNotes');
+      if (notesEl && (!notesEl.value || notesEl.value.includes('المستخلص') || notesEl.value.includes('مشروع'))) {
+        notesEl.value = `دفعة من مستخلص مشروع: ${project.name}`;
+      }
+
+      // 6. ربط مستخلصات المشروع وجلب رصيد المستخلص المتبقي إن وجد
+      try {
+        const billsRes = await fetch(`/api/billing?project_id=${projectId}`).then(r => r.json()).catch(() => ({ success: false }));
+        if (billsRes.success && Array.isArray(billsRes.data) && billsRes.data.length > 0) {
+          const unpaid = billsRes.data.filter(b => b.status !== 'ملغي' && (b.payment_status !== 'paid' || (Number(b.remaining_amount || 0) > 0)));
+          if (unpaid.length > 0) {
+            const firstBill = unpaid[0];
+            const amtEl = document.getElementById('rcAmount');
+            if (amtEl && (!amtEl.value || Number(amtEl.value) <= 0 || amtEl.value === '150000')) {
+              const rem = Number(firstBill.remaining_amount !== undefined ? firstBill.remaining_amount : (firstBill.net_amount - (firstBill.paid_amount || 0)));
+              if (rem > 0) amtEl.value = rem;
+            }
+            if (notesEl) {
+              notesEl.value = `سداد مستخلص أعمال رقم ${firstBill.bill_no || firstBill.id} - مشروع: ${project.name}`;
+            }
+          }
+        }
+      } catch (e) {}
+    } else if (type === 'exp') {
+      // 1. مزامنة مركز التكلفة التابع للمشروع
+      const ccSelect = document.getElementById('expCostCenterSelect');
+      if (ccSelect) {
+        const cc = (this.costCenters || []).find(c => 
+          (c.project_id && String(c.project_id) === String(project.id)) ||
+          (c.name && project.name && (c.name.includes(project.name) || project.name.includes(c.name)))
+        );
+        if (cc) ccSelect.value = cc.id;
+      }
+      // 2. مزامنة العملة
+      if (project.currency) {
+        const curSelect = document.getElementById('expCurrency');
+        if (curSelect) curSelect.value = project.currency;
+      }
+      // 3. اقتراح البيان
+      const notesEl = document.getElementById('expNotes');
+      if (notesEl && (!notesEl.value || notesEl.value.includes('إسمنت') || notesEl.value.includes('مشروع'))) {
+        notesEl.value = `مصروف تشغيلي لمشروع: ${project.name}`;
+      }
+    } else if (type === 'custody') {
+      // 1. مزامنة العملة
+      if (project.currency) {
+        const curSelect = document.getElementById('custodyCurrency');
+        if (curSelect) curSelect.value = project.currency;
+      }
+      // 2. اقتراح البيان
+      const notesEl = document.getElementById('custodyNotes');
+      if (notesEl && (!notesEl.value || notesEl.value.includes('قرطاسية') || notesEl.value.includes('مشروع'))) {
+        notesEl.value = `عهدة موقع ونثريات لمشروع: ${project.name}`;
+      }
+    }
+  },
+
+  // عند اختيار العميل في سند القبض السريع
+  onQuickClientChange(clientId) {
+    if (!clientId) return;
+    const prjSelect = document.getElementById('rcProjectSelect');
+    if (!prjSelect) return;
+
+    const clientProjects = (this.projects || []).filter(p => String(p.client_id) === String(clientId));
+    if (clientProjects.length === 1) {
+      prjSelect.value = clientProjects[0].id;
+      this.onQuickProjectChange('rc', clientProjects[0].id);
+    } else if (clientProjects.length > 1) {
+      const currVal = prjSelect.value;
+      const otherProjects = (this.projects || []).filter(p => String(p.client_id) !== String(clientId));
+      prjSelect.innerHTML = '<option value="">اختر المشروع...</option>' +
+        `<optgroup label="مشاريع هذا العميل (${clientProjects.length})">` +
+        clientProjects.map(p => `<option value="${p.id}" ${currVal == p.id ? 'selected' : ''}>${p.name}</option>`).join('') +
+        '</optgroup>' +
+        '<optgroup label="باقي المشاريع">' +
+        otherProjects.map(p => `<option value="${p.id}" ${currVal == p.id ? 'selected' : ''}>${p.name}</option>`).join('') +
+        '</optgroup>';
+      if (!currVal || !clientProjects.some(p => p.id == currVal)) {
+        prjSelect.value = clientProjects[0].id;
+        this.onQuickProjectChange('rc', clientProjects[0].id);
+      }
+    }
+
+    const accSelect = document.getElementById('rcAccountSelect');
+    if (accSelect && (!accSelect.value || accSelect.value === '')) {
+      const defAcc = (this.accounts || []).find(a => (a.code && a.code.startsWith('123')) || (a.name && a.name.includes('عملاء')));
+      if (defAcc) accSelect.value = defAcc.id;
+    }
+  },
+
+  // عند تغيير نوع المصروف في سند الصرف السريع
+  onQuickExpenseTypeChange(typeVal) {
+    const accSelect = document.getElementById('expAccountSelect');
+    if (!accSelect || !this.accounts || this.accounts.length === 0) return;
+
+    let match = null;
+    const accounts = this.accounts;
+
+    if (typeVal === 'مواد بناء') {
+      match = accounts.find(a => (a.name && (a.name.includes('مواد') || a.name.includes('بناء') || a.name.includes('مشتريات'))) || (a.code && (a.code.startsWith('31') || a.code.startsWith('51'))));
+    } else if (typeVal === 'أجور عمالة') {
+      match = accounts.find(a => (a.name && (a.name.includes('أجور') || a.name.includes('مرتبات') || a.name.includes('عمال'))) || (a.code && a.code.startsWith('32101')));
+    } else if (typeVal === 'معدات') {
+      match = accounts.find(a => (a.name && (a.name.includes('معدات') || a.name.includes('آليات') || a.name.includes('صيانة'))));
+    } else if (typeVal === 'نقل ومواصلات') {
+      match = accounts.find(a => (a.name && (a.name.includes('انتقال') || a.name.includes('نقل') || a.name.includes('مواصلات'))));
+    } else if (typeVal === 'مصروفات إدارية') {
+      match = accounts.find(a => (a.name && (a.name.includes('إدارية') || a.name.includes('نثريات') || a.name.includes('كهرباء') || a.name.includes('مكتبية'))));
+    }
+
+    if (!match) {
+      match = accounts.find(a => a.type === 'expense' || (a.code && (a.code.startsWith('3') || a.code.startsWith('5'))));
+    }
+
+    if (match) {
+      accSelect.value = match.id;
     }
   },
 
@@ -571,32 +746,59 @@ const Accounting = {
     const row = document.getElementById(targetRowId);
     if (!el || !row) return;
     const val = el.value;
-    const isRc = targetRowId.includes('Rc');
-    const faSelectId = isRc ? 'modalRcFinancialAccountSelect' : 'modalExpFinancialAccountSelect';
-    const faHintId = isRc ? 'modalRcFaHint' : 'modalExpFaHint';
-    const checkNoInput = isRc ? document.getElementById('modalRcCheckNo') : document.getElementById('modalExpCheckNo');
-    const refLabel = isRc ? document.getElementById('modalRcRefLabel') : document.getElementById('modalExpRefLabel');
+    const isModal = targetRowId.startsWith('modal');
+    const isRc = targetRowId.toLowerCase().includes('rc');
 
-    // تحديث قائمة الحسابات المالية المناسبة لطريقة الدفع
-    this.updateFinancialAccountsDropdown(faSelectId, val, faHintId);
-
-    // ضبط حقل المرجع والشيك
     const isCheck = val === 'شيك' || val === 'CHEQUE';
     const isBank = val === 'تحويل بنكي' || val === 'BANK_TRANSFER';
     const isCard = val === 'CREDIT_CARD' || val === 'DEBIT_CARD' || val === 'ONLINE_GATEWAY' || val === 'POS';
 
-    if (refLabel) {
-      if (isCheck) refLabel.innerHTML = 'رقم الشيك البنكي <span style="color: var(--accent-red);">*</span>';
-      else if (isBank) refLabel.innerHTML = 'المرجع / رقم الحوالة البنكية <span style="color: var(--accent-red);">*</span>';
-      else if (isCard) refLabel.innerHTML = 'رقم المعاملة / التفويض (Txn Ref)';
-      else refLabel.innerHTML = 'المرجع / رقم السند الورقي (اختياري)';
+    // إظهار أو إخفاء الحقول الشرطية
+    if (isCheck || isBank || isCard) {
+      row.style.display = 'block';
+    } else {
+      row.style.display = 'none';
     }
 
-    if (checkNoInput) {
-      if (isCheck) checkNoInput.placeholder = 'أدخل رقم الشيك الصادر/الوارد';
-      else if (isBank) checkNoInput.placeholder = 'رقم الحوالة البنكية أو الإشعار';
-      else if (isCard) checkNoInput.placeholder = 'رقم تفويض أو مرجع بوابة الدفع';
-      else checkNoInput.placeholder = 'رقم الإشعار أو المرجع إن وجد';
+    if (isModal) {
+      const faSelectId = isRc ? 'modalRcFinancialAccountSelect' : 'modalExpFinancialAccountSelect';
+      const faHintId = isRc ? 'modalRcFaHint' : 'modalExpFaHint';
+      const checkNoInput = isRc ? document.getElementById('modalRcCheckNo') : document.getElementById('modalExpCheckNo');
+      const refLabel = isRc ? document.getElementById('modalRcRefLabel') : document.getElementById('modalExpRefLabel');
+
+      // تحديث قائمة الحسابات المالية المناسبة لطريقة الدفع
+      this.updateFinancialAccountsDropdown(faSelectId, val, faHintId);
+
+      // ضبط حقل المرجع والشيك
+      if (refLabel) {
+        if (isCheck) refLabel.innerHTML = 'رقم الشيك البنكي <span style="color: var(--accent-red);">*</span>';
+        else if (isBank) refLabel.innerHTML = 'المرجع / رقم الحوالة البنكية <span style="color: var(--accent-red);">*</span>';
+        else if (isCard) refLabel.innerHTML = 'رقم المعاملة / التفويض (Txn Ref)';
+        else refLabel.innerHTML = 'المرجع / رقم السند الورقي (اختياري)';
+      }
+
+      if (checkNoInput) {
+        if (isCheck) checkNoInput.placeholder = 'أدخل رقم الشيك الصادر/الوارد';
+        else if (isBank) checkNoInput.placeholder = 'رقم الحوالة البنكية أو الإشعار';
+        else if (isCard) checkNoInput.placeholder = 'رقم تفويض أو مرجع بوابة الدفع';
+        else checkNoInput.placeholder = 'رقم الإشعار أو المرجع إن وجد';
+      }
+    } else {
+      // للشاشات السريعة في لوحة التحكم (rcCheckFieldsRow / expCheckFieldsRow)
+      const prefix = isRc ? 'rc' : 'exp';
+      const checkNoInput = document.getElementById(`${prefix}CheckNo`);
+      const refLabel = document.getElementById(`${prefix}CheckLabel`);
+
+      if (refLabel) {
+        if (isCheck) refLabel.innerHTML = 'رقم الشيك <span style="color: var(--accent-red);">*</span>';
+        else if (isBank) refLabel.innerHTML = 'رقم الحوالة / الإشعار البنكي';
+        else refLabel.innerHTML = 'المرجع';
+      }
+
+      if (checkNoInput) {
+        if (isCheck) checkNoInput.placeholder = 'أدخل رقم الشيك';
+        else if (isBank) checkNoInput.placeholder = 'رقم الحوالة البنكية';
+      }
     }
   },
 
@@ -662,6 +864,18 @@ const Accounting = {
     const relSelectId = isQuick ? 'custodyRelatedSelect' : 'modalCustodyRelatedSelect';
     if (isLiquidation) {
       this.onCustodyEmployeeChange(empSelectId, relSelectId);
+    }
+
+    // ضبط الحساب الافتراضي تلقائياً حسب نوع العملية
+    const accSelect = document.getElementById(isQuick ? 'quickCustodyAccountSelect' : 'modalCustodyAccountSelect');
+    if (accSelect && this.accounts && this.accounts.length) {
+      if (el.value === 'صرف عهدة') {
+        const custodyAcc = this.accounts.find(a => (a.code && a.code.startsWith('127')) || (a.name && a.name.includes('عهد')));
+        if (custodyAcc) accSelect.value = custodyAcc.id;
+      } else if (el.value === 'نثريات') {
+        const pettyAcc = this.accounts.find(a => (a.code && a.code.startsWith('121')) || (a.name && (a.name.includes('نثريات') || a.name.includes('صندوق'))));
+        if (pettyAcc) accSelect.value = pettyAcc.id;
+      }
     }
   },
 
@@ -740,9 +954,13 @@ const Accounting = {
         this.nextNumbers = json.data;
         const rcBadge = document.getElementById('modalRcReceiptNoBadge');
         if (rcBadge && json.data.receipt_voucher) rcBadge.textContent = json.data.receipt_voucher;
+        const quickRcBadge = document.getElementById('quickRcReceiptNoBadge');
+        if (quickRcBadge && json.data.receipt_voucher) quickRcBadge.textContent = json.data.receipt_voucher;
 
         const expBadge = document.getElementById('modalExpReceiptNoBadge');
         if (expBadge && json.data.expense_voucher) expBadge.textContent = json.data.expense_voucher;
+        const quickExpBadge = document.getElementById('quickExpReceiptNoBadge');
+        if (quickExpBadge && json.data.expense_voucher) quickExpBadge.textContent = json.data.expense_voucher;
 
         const jeBadge = document.getElementById('modalJeEntryNoBadge');
         if (jeBadge && json.data.journal_entry) jeBadge.textContent = json.data.journal_entry;
@@ -1159,6 +1377,7 @@ const Accounting = {
       if (data.success) {
         App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no})`, 'success');
         this.resetReceiptForm();
+        this.fetchNextNumbers();
         App.loadRevenuesTable();
         if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         this.loadCashMovement();
@@ -1267,6 +1486,7 @@ const Accounting = {
       if (data.success) {
         App.showToast(`تم حفظ سند الصرف بنجاح (${data.receipt_no})`, 'success');
         this.resetExpenseForm();
+        this.fetchNextNumbers();
         if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         Projects.loadProjects();
         this.loadCashMovement();
@@ -1295,6 +1515,7 @@ const Accounting = {
     const employee_id = empSelect ? empSelect.value : null;
     const employee_name = empSelect?.options[empSelect.selectedIndex]?.text?.split('(')[0]?.trim() || document.getElementById('custodyEmpName')?.value?.trim();
     const related_custody_id = document.getElementById('custodyRelatedSelect')?.value || null;
+    const project_id = document.getElementById('custodyProjectSelect')?.value || null;
     const total_amount = document.getElementById('custodyTotalAmount').value;
     const currency = document.getElementById('custodyCurrency')?.value || 'ر.ي';
     const spent_amount = document.getElementById('custodySpentAmount')?.value || 0;
@@ -1321,6 +1542,7 @@ const Accounting = {
           operation_type,
           employee_id,
           employee_name,
+          project_id,
           related_custody_id,
           account_id,
           total_amount,

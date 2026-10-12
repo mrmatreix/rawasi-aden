@@ -30,6 +30,7 @@ app.use('/client-app', express.static(path.join(__dirname, '../client-app/www'))
 // خدمة الملفات الثابتة للواجهة الأمامية النظام الرئيسي (HTML, CSS, JS, Images)
 const publicDir = path.join(__dirname, '..');
 app.use(express.static(publicDir));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // حماية مسارات الـ API بـ CSRF Token
 app.use('/api', verifyCsrfToken);

@@ -17,11 +17,23 @@
     </div>
 
     <!-- Filter Buttons -->
-    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 16px; scrollbar-width: none;">
-      <button class="tab-btn active" onclick="setFilter('all', this)">الكل</button>
-      <button class="tab-btn" onclick="setFilter('pending', this)">بانتظار الاعتماد</button>
-      <button class="tab-btn" onclick="setFilter('approved', this)">المعتمدة</button>
-      <button class="tab-btn" onclick="setFilter('rejected', this)">المرفوضة</button>
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="setFilter('all', this)">
+        <i class="fa-solid fa-layer-group text-gold"></i>
+        <span>الكل</span>
+      </button>
+      <button class="tab-btn" onclick="setFilter('pending', this)">
+        <i class="fa-solid fa-clock text-warning"></i>
+        <span>بانتظار الاعتماد</span>
+      </button>
+      <button class="tab-btn" onclick="setFilter('approved', this)">
+        <i class="fa-solid fa-circle-check text-success"></i>
+        <span>المعتمدة</span>
+      </button>
+      <button class="tab-btn" onclick="setFilter('rejected', this)">
+        <i class="fa-solid fa-circle-xmark text-danger"></i>
+        <span>المرفوضة</span>
+      </button>
     </div>
 
     <!-- Invoices List -->

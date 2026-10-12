@@ -2104,6 +2104,62 @@ function initSqlite() {
         CREATE INDEX IF NOT EXISTS idx_cpa_user_proj ON client_project_access(client_user_id, project_id);
         CREATE INDEX IF NOT EXISTS idx_cn_user_read ON client_notifications(client_user_id, is_read);
         CREATE INDEX IF NOT EXISTS idx_cm_user ON client_messages(client_user_id);
+
+        CREATE TABLE IF NOT EXISTS engineering_services (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code VARCHAR(50) UNIQUE,
+          title VARCHAR(200) NOT NULL,
+          category VARCHAR(100) DEFAULT 'general',
+          description TEXT,
+          icon VARCHAR(100) DEFAULT 'fa-solid fa-compass-drafting',
+          is_active INTEGER DEFAULT 1,
+          display_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS service_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          request_no VARCHAR(50) UNIQUE NOT NULL,
+          client_user_id INTEGER,
+          source VARCHAR(30) DEFAULT 'guest',
+          client_name VARCHAR(200) NOT NULL,
+          phone VARCHAR(50) NOT NULL,
+          email VARCHAR(100),
+          project_name VARCHAR(200),
+          project_type VARCHAR(100),
+          location VARCHAR(255),
+          description TEXT,
+          estimated_budget DECIMAL(15,2),
+          currency VARCHAR(10) DEFAULT 'YER',
+          expected_start_date DATE,
+          notes TEXT,
+          attachments TEXT,
+          status VARCHAR(50) DEFAULT 'new',
+          assigned_to INTEGER,
+          admin_notes TEXT,
+          quoted_amount DECIMAL(15,2),
+          verification_code VARCHAR(30),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE SET NULL,
+          FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS service_request_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          request_id INTEGER NOT NULL,
+          service_id INTEGER NOT NULL,
+          service_title VARCHAR(200) NOT NULL,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (request_id) REFERENCES service_requests(id) ON DELETE CASCADE,
+          FOREIGN KEY (service_id) REFERENCES engineering_services(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sr_request_no ON service_requests(request_no);
+        CREATE INDEX IF NOT EXISTS idx_sr_status ON service_requests(status);
+        CREATE INDEX IF NOT EXISTS idx_sr_source ON service_requests(source);
+        CREATE INDEX IF NOT EXISTS idx_sri_request ON service_request_items(request_id);
       `);
 
       // إضافة أعمدة اعتماد المستخلصات في جدول bills إذا لم تكن موجودة
