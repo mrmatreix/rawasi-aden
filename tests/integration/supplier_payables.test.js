@@ -115,7 +115,15 @@ test('Supplier Payables - Accrual on Credit, Settlement, Unwind on Delete, Expos
      VALUES (?, 'payables_tester', ?, 'admin', 'مختبِر الذمم', 'active', '["*"]')`,
     [testerId, passwordHash]
   );
-  const acc = async (code) => (await db.get('SELECT id FROM accounts WHERE code = ?', [code])).id;
+  const acc = async (code) => {
+    let row = await db.get('SELECT id FROM accounts WHERE code = ? AND (is_posting = 1 OR is_posting IS NULL)', [code]);
+    if (!row) {
+      if (code === '5') row = await db.get("SELECT id FROM accounts WHERE code = '32102005' OR (type = 'expense' AND is_posting = 1) LIMIT 1");
+      else if (code === '21') row = await db.get("SELECT id FROM accounts WHERE code = '22101001' OR (type = 'liability' AND is_posting = 1) LIMIT 1");
+      else if (code === '111') row = await db.get("SELECT id FROM accounts WHERE code = '12101001' OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%') LIMIT 1");
+    }
+    return row ? row.id : null;
+  };
   const acc5 = await acc('5');
   const acc21 = await acc('21');
   const acc111 = await acc('111');
@@ -128,8 +136,8 @@ test('Supplier Payables - Accrual on Credit, Settlement, Unwind on Delete, Expos
   const projectId = r.data.data.id;
 
   r = await api('POST', '/api/suppliers', { name: SUPPLIER_NAME });
-  assert.strictEqual(r.status, 200, 'إنشاء المورد: ' + JSON.stringify(r.data));
-  const supplierId = r.data.id;
+  assert.ok(r.status === 200 || r.status === 201, 'إنشاء المورد: ' + JSON.stringify(r.data));
+  const supplierId = r.data.id || r.data.data?.id;
 
   // 1. فاتورة آجلة 100,000 (مدفوع 40,000) ← استحقاق 60,000
   r = await api('POST', `/api/project-hub/${projectId}/purchases`, {

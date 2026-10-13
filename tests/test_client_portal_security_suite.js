@@ -7,9 +7,15 @@ const assert = require('assert');
 const http = require('http');
 const jwt = require('jsonwebtoken');
 const db = require('../server/database/db');
+const app = require('../server/server');
 const { CLIENT_JWT_SECRET } = require('../server/middleware/client_auth');
 
+let testPort = 3000;
+let server = null;
+
 function apiRequest(options, bodyData = null) {
+  options.hostname = '127.0.0.1';
+  options.port = testPort;
   return new Promise((resolve, reject) => {
     const req = http.request(options, (res) => {
       let body = '';
@@ -32,6 +38,10 @@ async function runSecurityTestSuite() {
   console.log('===========================================================');
   console.log('🧪 بدء تشغيل حزمة اختبارات الأمان والتكامل لبوابة العملاء');
   console.log('===========================================================');
+
+  server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  testPort = server.address().port;
 
   let passedCount = 0;
   let failedCount = 0;
@@ -214,6 +224,10 @@ async function runSecurityTestSuite() {
 
   // 8. تنظيف مستخدمي الاختبار من قاعدة البيانات
   await db.run(`DELETE FROM client_users WHERE id IN (9991, 9992, 9993)`);
+  if (server) {
+    if (server.closeAllConnections) server.closeAllConnections();
+    server.close();
+  }
 
   console.log('===========================================================');
   console.log(`📊 نتيجة الحزمة: [نجاح: ${passedCount}] | [فشل: ${failedCount}] | [الإجمالي: ${passedCount + failedCount}]`);

@@ -7,9 +7,10 @@
  * 
  * المبادئ المطبقة:
  * 1. مسارات خفيفة جداً: التحقق من الصلاحيات والمدخلات، استدعاء ReportingService، وإرجاع بنية موحدة.
- * 2. الاعتماد الكامل على دفتر الأستاذ العام (General Ledger) كمصدر وحيد وأصيل.
- * 3. بنية استجابة موحدة: { success, data, meta, warnings, reconciliation }.
- * 4. خلو تام من أي أرقام افتراضية أو Demo Values.
+ * 2. التحقق التقويمي الصارم من التواريخ ورفض التواريخ المستحيلة أو المعكوسة برمز HTTP 400.
+ * 3. حماية أمنية لمعالجة الأخطاء ومنع تسريب استثناءات SQL للعميل مع توثيق رمز تتبع داخلي Trace ID.
+ * 4. الاعتماد الكامل على دفتر الأستاذ العام (General Ledger) كمصدر وحيد وأصيل.
+ * 5. بنية استجابة موحدة: { success, data, meta, warnings, reconciliation }.
  */
 
 const express = require('express');
@@ -18,12 +19,83 @@ const reportingService = require('../services/reportingService');
 const contractingService = require('../services/contractingAccountingService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
-// مساعد التحقق من صيغة التاريخ YYYY-MM-DD
-function sanitizeDate(dateStr) {
-  if (!dateStr || typeof dateStr !== 'string') return null;
+/**
+ * التحقق التقويمي الصارم من التاريخ بصيغة YYYY-MM-DD
+ * يرفض التواريخ المستحيلة كـ 2026-99-99 أو 2026-02-31
+ */
+function validateDate(dateStr, fieldName = 'التاريخ') {
+  if (dateStr === undefined || dateStr === null || dateStr === '') return null;
+  if (typeof dateStr !== 'string') {
+    const err = new Error(`قيمة ${fieldName} غير صالحة`);
+    err.statusCode = 400;
+    throw err;
+  }
   const trimmed = dateStr.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) {
+    const err = new Error(`صيغة ${fieldName} غير صالحة، يجب أن تكون YYYY-MM-DD`);
+    err.statusCode = 400;
+    throw err;
+  }
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  if (month < 1 || month > 12) {
+    const err = new Error(`الشهر في ${fieldName} غير صالح (${month})`);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (year < 1900 || year > 2100) {
+    const err = new Error(`السنة في ${fieldName} خارج النطاق المقبول (${year})`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day < 1 || day > daysInMonth) {
+    const err = new Error(`اليوم في ${fieldName} غير صالح لهذا الشهر (${day})`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return trimmed;
+}
+
+/**
+ * التحقق من نطاق التواريخ ومنع التاريخ المعكوس
+ */
+function parseAndValidateDates(query) {
+  const from_date = validateDate(query.from_date, 'تاريخ البداية (from_date)');
+  const to_date = validateDate(query.to_date, 'تاريخ النهاية (to_date)');
+  if (from_date && to_date && from_date > to_date) {
+    const err = new Error('تاريخ البداية يجب ألا يتجاوز تاريخ النهاية');
+    err.statusCode = 400;
+    throw err;
+  }
+  return { from_date, to_date };
+}
+
+/**
+ * معالج الأخطاء الموحد والآمن لمنع تسريب تفاصيل SQL
+ */
+function handleReportError(err, res, contextName) {
+  if (err.statusCode === 400 || err.message?.includes('غير صالح') || err.message?.includes('يجب ألا يتجاوز') || err.message?.includes('صيغة')) {
+    return res.status(400).json({
+      success: false,
+      code: 'INVALID_INPUT',
+      message: err.message
+    });
+  }
+
+  const traceId = 'ERR-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+  console.error(`❌ [Reports API] [${traceId}] خطأ في ${contextName}:`, err);
+  return res.status(500).json({
+    success: false,
+    code: 'REPORT_ERROR',
+    message: `حدث خطأ داخلي أثناء إعداد ${contextName}. يرجى تزويد الدعم برمز التتبع`,
+    trace_id: traceId
+  });
 }
 
 /**
@@ -40,13 +112,7 @@ router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async
     const report = await reportingService.getDashboard({ allowedProjects });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في لوحة التحكم:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب بيانات لوحة التحكم: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'لوحة التحكم المركزية');
   }
 });
 
@@ -56,106 +122,68 @@ router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async
  */
 router.get('/trial-balance', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
-
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const report = await reportingService.getTrialBalance({ from_date, to_date });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في ميزان المراجعة:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب ميزان المراجعة: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'ميزان المراجعة');
   }
 });
 
 /**
- * 3. تقرير قائمة الدخل المعيارية (Revenues - Cost of Revenues = Gross Profit, Gross Profit - OpEx = Net Income)
+ * 3. تقرير قائمة الدخل المعيارية
  * GET /api/reports/income-statement?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
  */
 router.get('/income-statement', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
-
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const report = await reportingService.getIncomeStatement({ from_date, to_date });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في قائمة الدخل:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في إعداد قائمة الدخل: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'قائمة الدخل المعيارية');
   }
 });
 
 /**
- * 4. تقرير الأرباح والخسائر المعياري (مطابق 100% مع قائمة الدخل)
+ * 4. تقرير الأرباح والخسائر المعياري
  * GET /api/reports/profit-loss?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
  */
 router.get('/profit-loss', requirePermission('reports:view,accounting:view'), async (req, res) => {
   try {
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
-
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const report = await reportingService.getProfitLoss({ from_date, to_date });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في تقرير الأرباح والخسائر:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في توليد تقرير الأرباح والخسائر: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'تقرير الأرباح والخسائر');
   }
 });
 
 /**
- * 5. تقرير المركز المالي / الميزانية العمومية (Assets = Liabilities + Equity)
+ * 5. تقرير المركز المالي / الميزانية العمومية
  * GET /api/reports/balance-sheet?as_of_date=YYYY-MM-DD
  */
 router.get('/balance-sheet', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
-    const as_of_date = sanitizeDate(req.query.as_of_date || req.query.to_date);
-
+    const rawDate = req.query.as_of_date || req.query.to_date;
+    const as_of_date = validateDate(rawDate, 'تاريخ الميزانية (as_of_date)');
     const report = await reportingService.getBalanceSheet({ as_of_date });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في الميزانية العمومية:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب الميزانية العمومية: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'الميزانية العمومية والمركز المالي');
   }
 });
 
 /**
- * 6. تقرير التدفقات النقدية المحاسبي (General Ledger Direct Cash Flow)
+ * 6. تقرير التدفقات النقدية المحاسبي
  * GET /api/reports/cash-flow?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
  */
 router.get('/cash-flow', requirePermission('accounting:view,reports:view,cash:view'), async (req, res) => {
   try {
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
-
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const report = await reportingService.getCashFlow({ from_date, to_date });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في التدفقات النقدية:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب تقرير التدفقات النقدية: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'تقرير التدفقات النقدية');
   }
 });
 
@@ -165,8 +193,7 @@ router.get('/cash-flow', requirePermission('accounting:view,reports:view,cash:vi
  */
 router.get('/projects-profitability', requirePermission('projects:view,reports:view'), async (req, res) => {
   try {
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const project_id = req.query.project_id ? Number(req.query.project_id) : null;
 
     let allowedProjects = ['*'];
@@ -182,24 +209,17 @@ router.get('/projects-profitability', requirePermission('projects:view,reports:v
     });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في ربحية المشاريع:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب تقرير ربحية المشاريع: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'تقرير ربحية المشاريع');
   }
 });
 
 /**
- * 8. تقرير ربحية مراكز التكلفة المحاسبية (خالي من الازدواجية والحسابات الوهمية)
+ * 8. تقرير ربحية مراكز التكلفة المحاسبية
  * GET /api/reports/cost-centers-profitability?from_date=...&to_date=...&cost_center_id=...
  */
 router.get('/cost-centers-profitability', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const cost_center_id = req.query.cost_center_id ? Number(req.query.cost_center_id) : null;
 
     const report = await reportingService.getCostCentersProfitability({
@@ -209,13 +229,7 @@ router.get('/cost-centers-profitability', requirePermission('accounting:view,rep
     });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في ربحية مراكز التكلفة:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في إعداد تقرير ربحية مراكز التكلفة: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'تقرير ربحية مراكز التكلفة');
   }
 });
 
@@ -227,22 +241,14 @@ router.get('/client-statement/:id', requirePermission('clients:view,reports:view
   try {
     const clientId = Number(req.params.id);
     if (!clientId) {
-      return res.status(400).json({ success: false, message: 'معرف العميل غير صالح' });
+      return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'معرف العميل غير صالح' });
     }
 
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
-
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const report = await reportingService.getClientStatement(clientId, { from_date, to_date });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في كشف حساب العميل:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب كشف حساب العميل: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'كشف حساب العميل');
   }
 });
 
@@ -254,19 +260,13 @@ router.get('/client-profile/:id', requirePermission('clients:view,reports:view,a
   try {
     const clientId = Number(req.params.id);
     if (!clientId) {
-      return res.status(400).json({ success: false, message: 'معرف العميل غير صالح' });
+      return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'معرف العميل غير صالح' });
     }
 
     const statementReport = await reportingService.getClientStatement(clientId, {});
     res.json(statementReport);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في ملف العميل:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب ملف العميل: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'ملف العميل الشامل');
   }
 });
 
@@ -278,22 +278,14 @@ router.get('/supplier-statement/:id', requirePermission('suppliers:view,reports:
   try {
     const supplierId = Number(req.params.id);
     if (!supplierId) {
-      return res.status(400).json({ success: false, message: 'معرف المورد غير صالح' });
+      return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'معرف المورد غير صالح' });
     }
 
-    const from_date = sanitizeDate(req.query.from_date);
-    const to_date = sanitizeDate(req.query.to_date);
-
+    const { from_date, to_date } = parseAndValidateDates(req.query);
     const report = await reportingService.getSupplierStatement(supplierId, { from_date, to_date });
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في كشف حساب المورد:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في جلب كشف حساب المورد: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'كشف حساب المورد');
   }
 });
 
@@ -312,6 +304,8 @@ router.get('/contracting-financial-separation', requirePermission('reports:view,
       allowedProjectIds: allowedProjects
     });
 
+    const isMatrixBalanced = matrix?.totals ? matrix.totals.cost_plus_profit === matrix.totals.recognized_revenue : true;
+
     res.json({
       success: true,
       data: matrix,
@@ -321,16 +315,10 @@ router.get('/contracting-financial-separation', requirePermission('reports:view,
         generated_at: new Date().toISOString()
       },
       warnings: [],
-      reconciliation: { is_balanced: true }
+      reconciliation: { is_balanced: isMatrixBalanced }
     });
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في مصفوفة المقاولات:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ في توليد مصفوفة المقاولات: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'مصفوفة المقاولات');
   }
 });
 
@@ -344,13 +332,7 @@ router.get('/integrity-check', requirePermission('reports:view,accounting:view')
     const report = await reportingService.getIntegrityCheck();
     res.json(report);
   } catch (err) {
-    console.error('❌ [Reports API] خطأ في الفحص الشامل لسلامة الدفاتر:', err);
-    res.status(500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'خطأ أثناء فحص سلامة الدفاتر والأستاذ العام: ' + err.message,
-      error: err.message
-    });
+    handleReportError(err, res, 'فحص السلامة المحاسبية');
   }
 });
 

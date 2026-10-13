@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query, get, run } = require('../database/db');
 const clientChainService = require('../services/clientChainService');
+const ProjectCostService = require('../services/projectCostService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 // جلب جميع المشاريع مع اسم العميل وتطبيق نطاق الصلاحيات
@@ -88,6 +89,11 @@ router.get('/:id', requirePermission('projects:view', { projectParam: 'id' }), a
       ORDER BY it.date DESC
     `, [req.params.id]);
 
+    let cost_breakdown = null;
+    try {
+      cost_breakdown = await ProjectCostService.getCostBreakdown(req.params.id);
+    } catch (_) {}
+
     res.json({
       success: true,
       data: {
@@ -95,11 +101,53 @@ router.get('/:id', requirePermission('projects:view', { projectParam: 'id' }), a
         expenses,
         bills,
         payments,
-        inventory
+        inventory,
+        cost_breakdown
       }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب تفاصيل المشروع', error: err.message });
+  }
+});
+
+// تفصيل التكلفة الفعلية الموحدة للمشروع من مصادرها الأربعة مع كشف أي انحراف
+router.get('/:id/cost-breakdown', requirePermission('projects:view', { projectParam: 'id' }), async (req, res) => {
+  try {
+    const project = await get('SELECT id, code, name, actual_cost FROM projects WHERE id = ?', [req.params.id]);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
+    }
+    const breakdown = await ProjectCostService.getCostBreakdown(req.params.id);
+    const stored = Number(project.actual_cost) || 0;
+    // البنود الفرعية الممتصة بسندات رسمية (لشفافية منع الازدواج)
+    const linkedItems = await query(`
+      SELECT 'labor' as kind, l.id, l.total_amount, l.date as record_date, l.linked_expense_id,
+             e.receipt_no as expense_receipt_no, e.status as expense_status, e.amount as expense_amount
+      FROM project_labor_expenses l LEFT JOIN expenses e ON e.id = l.linked_expense_id
+      WHERE l.project_id = ? AND l.linked_expense_id IS NOT NULL
+      UNION ALL
+      SELECT 'purchase' as kind, p.id, p.total_amount, p.date as record_date, p.linked_expense_id,
+             e.receipt_no, e.status, e.amount
+      FROM project_purchases p LEFT JOIN expenses e ON e.id = p.linked_expense_id
+      WHERE p.project_id = ? AND p.linked_expense_id IS NOT NULL
+      ORDER BY record_date DESC
+    `, [req.params.id, req.params.id]);
+    res.json({
+      success: true,
+      data: {
+        project_id: project.id,
+        project_code: project.code,
+        project_name: project.name,
+        stored_actual_cost: stored,
+        unified_total: breakdown.total,
+        drift: Math.round((breakdown.total - stored) * 100) / 100,
+        is_consistent: Math.abs(breakdown.total - stored) < 0.01,
+        breakdown,
+        linked_items: linkedItems || []
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في احتساب تفصيل التكلفة: ' + err.message });
   }
 });
 
@@ -141,7 +189,7 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       code, trimmedName, client_id ? Number(client_id) : null, Number(contract_value) || 0, Number(estimated_cost) || 0,
-      Number(actual_cost) || 0, selectedCurrency, Number(progress_percentage) || 0, Number(expected_profit) || 0, Number(actual_profit) || 0,
+      0, selectedCurrency, Number(progress_percentage) || 0, Number(expected_profit) || 0, Number(actual_profit) || 0,
       status || 'active', start_date || null, end_date || null, notes ? notes.trim() : ''
     ]);
 
@@ -154,8 +202,8 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
       await run(`
         INSERT INTO project_contracts (
           project_id, client_id, contract_no, contract_value, currency,
-          advance_payment_pct, retention_pct, signing_date, status, notes
-        ) VALUES (?, ?, ?, ?, ?, 10, 10, date('now'), 'معتمد', ?)
+          advance_payment_pct, retention_pct, signing_date, contract_date, status, notes
+        ) VALUES (?, ?, ?, ?, ?, 10, 10, date('now'), date('now'), 'معتمد', ?)
       `, [newId, client_id ? Number(client_id) : null, contractNo, Number(contract_value) || 0, selectedCurrency, `عقد مشروع ${trimmedName}`]);
 
       // مزامنة الأثر المالي اللحظي في حساب العميل
@@ -208,7 +256,6 @@ router.put('/:id', requirePermission('projects:edit', { projectParam: 'id' }), a
         client_id = COALESCE(?, client_id),
         contract_value = COALESCE(?, contract_value),
         estimated_cost = COALESCE(?, estimated_cost),
-        actual_cost = COALESCE(?, actual_cost),
         currency = COALESCE(?, currency),
         progress_percentage = COALESCE(?, progress_percentage),
         expected_profit = COALESCE(?, expected_profit),
@@ -219,9 +266,9 @@ router.put('/:id', requirePermission('projects:edit', { projectParam: 'id' }), a
         notes = COALESCE(?, notes)
       WHERE id = ?
     `, [
-      name, client_id, contract_value, estimated_cost, actual_cost,
-      currency, progress_percentage, expected_profit, actual_profit, status,
-      start_date, end_date, notes, req.params.id
+      name ?? null, client_id ?? null, contract_value ?? null, estimated_cost ?? null,
+      currency ?? null, progress_percentage ?? null, expected_profit ?? null, actual_profit ?? null, status ?? null,
+      start_date ?? null, end_date ?? null, notes ?? null, req.params.id
     ]);
 
     // تحديث العقد المرتبط بالعميل إن وجد

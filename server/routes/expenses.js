@@ -5,6 +5,8 @@ const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 const AccountingService = require('../services/accountingService');
+const ProjectCostService = require('../services/projectCostService');
+const CashBoxService = require('../services/cashBoxService');
 const FinancialControlService = {
   ...require('../services/financialControlService')
 };
@@ -96,7 +98,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       expense_type,
       project_id,
       supplier_id,
-      account_id,
+      account_id: rawAccountId,
       cost_center_id,
       amount,
       currency = 'ر.ي',
@@ -107,7 +109,9 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       date = new Date().toISOString().split('T')[0],
       notes,
       recipient,
-      status: requestedStatus // 'draft' أو 'posted'
+      status: requestedStatus, // 'draft' أو 'posted'
+      link_labor_id,
+      link_purchase_id
     } = req.body;
 
     // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ السند
@@ -118,6 +122,27 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
 
     if (!amount || Number(amount) <= 0) {
       return res.status(400).json({ success: false, message: 'المبلغ مطلوب ويجب أن يكون أكبر من الصفر' });
+    }
+
+    if (link_labor_id && link_purchase_id) {
+      return res.status(400).json({ success: false, message: 'لا يمكن ربط السند ببندين معاً — اختر بنداً واحداً' });
+    }
+    if ((link_labor_id || link_purchase_id) && !project_id) {
+      return res.status(400).json({ success: false, message: 'ربط السند ببند فرعي يتطلب تحديد المشروع' });
+    }
+
+    let account_id = rawAccountId && rawAccountId !== '' ? Number(rawAccountId) : null;
+    if (!account_id) {
+      if (link_purchase_id) {
+        const apRow = await get("SELECT id FROM accounts WHERE (code = '21' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22101001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '21' AND is_posting = 1) DESC, (code = '22101001') DESC LIMIT 1");
+        account_id = apRow ? apRow.id : null;
+      } else if (link_labor_id) {
+        const wpRow = await get("SELECT id FROM accounts WHERE (code = '215' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22401001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '215' AND is_posting = 1) DESC, (code = '22401001') DESC LIMIT 1");
+        account_id = wpRow ? wpRow.id : null;
+      } else {
+        const defRow = await get("SELECT id FROM accounts WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '32102005' OR (type = 'expense' AND is_posting = 1) ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC LIMIT 1");
+        account_id = defRow ? defRow.id : null;
+      }
     }
 
     if (!account_id) {
@@ -238,16 +263,75 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
 
       const expenseId = result.lastInsertRowid || result.insertId;
 
+      // ربط البند الفرعي وامتصاصه في التكلفة إن وجد
+      let linkNote = null;
+      if (link_labor_id || link_purchase_id) {
+        const linkTable = link_labor_id ? 'project_labor_expenses' : 'project_purchases';
+        const linkRes = await ProjectCostService.linkSubRecordToExpense(
+          linkTable, link_labor_id || link_purchase_id, expenseId, pId, tx
+        );
+        linkNote = linkRes.note;
+      }
+
       // 2. إذا كانت مسودة، لا يتم التأثير المالي على الدفاتر العامة أو الصندوق حتى المراجعة والاعتماد
       if (finalStatus === 'posted') {
-        // تحديث التكلفة الفعلية للمشروع إن وجد
-        if (pId) {
-          await tx.run(`UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?`, [finalLocalAmount, pId]);
+        let settlePurchase = null;
+        if (link_purchase_id) {
+          const lp = await tx.get('SELECT * FROM project_purchases WHERE id = ?', [Number(link_purchase_id)]);
+          if (lp && lp.supplier_id) {
+            if (sId && Number(sId) !== Number(lp.supplier_id)) {
+              throw new Error('لا يمكن ترحيل السند: المورد المحدد لا يطابق مورد الفاتورة المرتبطة');
+            }
+            settlePurchase = lp;
+          }
         }
 
-        // تحديث رصيد المورد إن كان مسجلاً برقم معرف
-        if (sId) {
-          await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [finalLocalAmount, sId]);
+        let settleLabor = null;
+        let linkedLaborRow = null;
+        if (link_labor_id) {
+          linkedLaborRow = await tx.get('SELECT * FROM project_labor_expenses WHERE id = ?', [Number(link_labor_id)]);
+          if (linkedLaborRow) {
+            const labAccJe = await ProjectCostService.getWageAccrualJournal(tx, linkedLaborRow.id);
+            if (labAccJe) {
+              if (sId) {
+                throw new Error('لا يمكن ترحيل السند: مستحقات الأجور الآجلة ليس لها مورد تجاري');
+              }
+              settleLabor = linkedLaborRow;
+            }
+          }
+        }
+
+        if (settlePurchase) {
+          const newPaid = (Number(settlePurchase.paid_amount) || 0) + finalLocalAmount;
+          const newRemaining = Number(settlePurchase.total_amount) - newPaid;
+          const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+          await tx.run(
+            'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+            [newPaid, newStatus, settlePurchase.id]
+          );
+          await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [finalLocalAmount, settlePurchase.supplier_id]);
+        } else {
+          if (linkedLaborRow) {
+            const newPaid = (Number(linkedLaborRow.paid_amount) || 0) + finalLocalAmount;
+            const newRemaining = Number(linkedLaborRow.total_amount) - newPaid;
+            const newStatus = newRemaining <= 0.005 ? 'مدفوع' : 'جزئي';
+            await tx.run(
+              'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
+              [newPaid, newStatus, linkedLaborRow.id]
+            );
+          }
+          if (sId && !settleLabor) {
+            await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [finalLocalAmount, sId]);
+          }
+        }
+
+        // تحديث التكلفة الفعلية للمشروع إن وجد
+        if (pId) {
+          if (link_labor_id || link_purchase_id) {
+            await ProjectCostService.recalculateProjectCost(pId, tx);
+          } else {
+            await tx.run(`UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?`, [finalLocalAmount, pId]);
+          }
         }
 
         // تحديث حركة الصندوق والبنك وتحديد نوع الحركة (نقدي / بنك)
@@ -262,7 +346,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         await tx.run(`
           INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
           VALUES (?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [prevBal, finalLocalAmount, newBal, 'ر.ي', date, moveDesc, moveType, payment_method, receipt_no, accId]);
+        `, [prevBal, finalLocalAmount, newBal, 'ر.ي', date, moveDesc, moveType, payment_method, receipt_no, leafAccount.id]);
 
         // تسجيل قيد يومي تلقائي متزن بدقة عبر الخدمة المحاسبية الموحدة
         createdJe = await AccountingService.createVoucherJournalEntry({
@@ -271,7 +355,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
           receiptNo: receipt_no,
           date,
           amount: finalLocalAmount,
-          accountId: accId,
+          accountId: leafAccount.id,
           paymentMethod: payment_method,
           bankAccountId: validBankAccId,
           bankName: cleanBankName || resolvedBank?.bankRecord?.bank_name || null,
@@ -283,7 +367,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         }, tx);
       }
 
-      return result;
+      return { ...result, linkNote };
     });
 
     await logAudit(req, {
@@ -302,6 +386,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       receipt_no,
       status: finalStatus,
       id: txResult.lastInsertRowid || txResult.insertId,
+      link_note: txResult.linkNote || null,
       journal_entry_id: createdJe?.id || null,
       entry_no: createdJe?.entry_no || null
     });
@@ -500,8 +585,31 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
 
     await FinancialControlService.assertPeriodOpen(exp.date);
 
-    const { expense_type, amount, recipient, notes, date } = req.body;
+    const { expense_type, amount, recipient, notes, date, link_labor_id, link_purchase_id, unlink } = req.body;
     const targetDate = date || exp.date;
+
+    // منع الازدواج: ربط/فك البند الفرعي (للمسودات فقط — آمن لأن المسودة بلا أثر)
+    if (link_labor_id && link_purchase_id) {
+      return res.status(400).json({ success: false, message: 'لا يمكن ربط السند ببندين معاً — اختر بنداً واحداً' });
+    }
+    let linkNote = null;
+    if (unlink) {
+      await ProjectCostService.clearLinksToExpense(id);
+      linkNote = 'تم فك ربط السند عن أي بند فرعي — البنود تعود للاحتساب الكامل';
+    } else if (link_labor_id || link_purchase_id) {
+      if (!exp.project_id) {
+        return res.status(400).json({ success: false, message: 'ربط السند ببند فرعي يتطلب أن يكون السند مربوطاً بمشروع' });
+      }
+      try {
+        const linkTable = link_labor_id ? 'project_labor_expenses' : 'project_purchases';
+        const linkRes = await ProjectCostService.linkSubRecordToExpense(
+          linkTable, link_labor_id || link_purchase_id, id, exp.project_id
+        );
+        linkNote = linkRes.note;
+      } catch (linkErr) {
+        return res.status(400).json({ success: false, message: linkErr.message });
+      }
+    }
     await FinancialControlService.assertPeriodOpen(targetDate);
 
     const oldVals = { expense_type: exp.expense_type, amount: exp.amount, notes: exp.notes, date: exp.date };
@@ -528,7 +636,7 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
       reason: req.body.reason || 'تعديل مسودة سند صرف'
     });
 
-    res.json({ success: true, message: 'تم تعديل مسودة سند الصرف بنجاح' });
+    res.json({ success: true, message: 'تم تعديل مسودة سند الصرف بنجاح', link_note: linkNote });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -575,6 +683,8 @@ router.delete('/:id', requirePermission('expenses:cancel'), async (req, res) => 
 
     await FinancialControlService.assertPeriodOpen(exp.date);
 
+    // فك أي روابط بنود فرعية تشير لهذه المسودة قبل حذفها (حتى لا تبقى معلقة)
+    await ProjectCostService.clearLinksToExpense(req.params.id);
     await run('DELETE FROM expenses WHERE id = ?', [req.params.id]);
 
     await logAudit(req, {

@@ -75,6 +75,8 @@ function initSqliteInstance() {
   if (!sqliteDb) {
     sqliteDb = new DatabaseSync(sqlitePath);
     sqliteDb.exec('PRAGMA foreign_keys = ON;');
+    sqliteDb.exec('PRAGMA journal_mode = WAL;');
+    sqliteDb.exec('PRAGMA busy_timeout = 10000;');
   }
   return sqliteDb;
 }
@@ -284,6 +286,77 @@ async function initMysql() {
 
     await checkAndAddCol('payroll', 'journal_entry_id', 'INT NULL');
 
+    // مواءمة أعمدة القيود والسندات والمشاريع والعقود والموارد البشرية في MySQL
+    await checkAndAddCol('journal_entries', 'status', "VARCHAR(50) DEFAULT 'posted'");
+    await checkAndAddCol('journal_entries', 'created_by', 'INT NULL');
+    await checkAndAddCol('journal_entries', 'created_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('journal_entries', 'reviewed_by', 'INT NULL');
+    await checkAndAddCol('journal_entries', 'reviewed_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('journal_entries', 'reviewed_at', 'DATETIME NULL');
+    await checkAndAddCol('journal_entries', 'review_notes', 'TEXT NULL');
+    await checkAndAddCol('journal_entries', 'approved_by', 'INT NULL');
+    await checkAndAddCol('journal_entries', 'approved_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('journal_entries', 'approved_at', 'DATETIME NULL');
+    await checkAndAddCol('journal_entries', 'approval_notes', 'TEXT NULL');
+    await checkAndAddCol('journal_entries', 'posted_by', 'INT NULL');
+    await checkAndAddCol('journal_entries', 'posted_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('journal_entries', 'posted_at', 'DATETIME NULL');
+    await checkAndAddCol('journal_entries', 'reversed_by', 'INT NULL');
+    await checkAndAddCol('journal_entries', 'reversed_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('journal_entries', 'reversed_at', 'DATETIME NULL');
+    await checkAndAddCol('journal_entries', 'reversal_reason', 'TEXT NULL');
+    await checkAndAddCol('journal_entries', 'reversal_ref_id', 'INT NULL');
+
+    await checkAndAddCol('payments', 'status', "VARCHAR(50) DEFAULT 'posted'");
+    await checkAndAddCol('payments', 'contract_id', 'INT NULL');
+    await checkAndAddCol('payments', 'bill_id', 'INT NULL');
+    await checkAndAddCol('payments', 'receipt_category', "VARCHAR(50) DEFAULT 'general'");
+    await checkAndAddCol('payments', 'exchange_rate', 'DECIMAL(12,4) DEFAULT 1.0');
+    await checkAndAddCol('payments', 'local_amount', 'DECIMAL(15,2) DEFAULT 0');
+    await checkAndAddCol('payments', 'payment_no', 'VARCHAR(100) NULL');
+    await checkAndAddCol('payments', 'payment_method_id', 'INT NULL');
+    await checkAndAddCol('payments', 'financial_account_id', 'INT NULL');
+    await checkAndAddCol('payments', 'idempotency_key', 'VARCHAR(255) NULL');
+    await checkAndAddCol('payments', 'external_transaction_id', 'VARCHAR(255) NULL');
+    await checkAndAddCol('payments', 'gateway_name', 'VARCHAR(100) NULL');
+    await checkAndAddCol('payments', 'fee_amount', 'DECIMAL(15,2) DEFAULT 0');
+    await checkAndAddCol('payments', 'net_amount', 'DECIMAL(15,2) DEFAULT 0');
+    await checkAndAddCol('payments', 'source_type', "VARCHAR(50) DEFAULT 'RECEIPT_VOUCHER'");
+    await checkAndAddCol('payments', 'source_id', 'INT NULL');
+    await checkAndAddCol('payments', 'refunded_amount', 'DECIMAL(15,2) DEFAULT 0');
+    await checkAndAddCol('payments', 'supplier_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('payments', 'created_by', 'INT NULL');
+    await checkAndAddCol('payments', 'created_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('payments', 'reviewed_by', 'INT NULL');
+    await checkAndAddCol('payments', 'reviewed_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('payments', 'reviewed_at', 'DATETIME NULL');
+    await checkAndAddCol('payments', 'review_notes', 'TEXT NULL');
+    await checkAndAddCol('payments', 'approved_by', 'INT NULL');
+    await checkAndAddCol('payments', 'approved_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('payments', 'approved_at', 'DATETIME NULL');
+    await checkAndAddCol('payments', 'approval_notes', 'TEXT NULL');
+    await checkAndAddCol('payments', 'posted_by', 'INT NULL');
+    await checkAndAddCol('payments', 'posted_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('payments', 'posted_at', 'DATETIME NULL');
+    await checkAndAddCol('payments', 'reversed_by', 'INT NULL');
+    await checkAndAddCol('payments', 'reversed_by_name', 'VARCHAR(150) NULL');
+    await checkAndAddCol('payments', 'reversed_at', 'DATETIME NULL');
+    await checkAndAddCol('payments', 'reversal_reason', 'TEXT NULL');
+    await checkAndAddCol('payments', 'reversal_ref_id', 'INT NULL');
+
+    await checkAndAddCol('project_contracts', 'signing_date', 'VARCHAR(50) NULL');
+    await checkAndAddCol('projects', 'location', 'VARCHAR(255) NULL');
+    await checkAndAddCol('projects', 'description', 'TEXT NULL');
+    await checkAndAddCol('leave_types', 'days_per_year', 'INT DEFAULT 30');
+    await checkAndAddCol('leave_types', 'description', 'TEXT NULL');
+    await checkAndAddCol('employee_advances', 'request_date', 'DATE NULL');
+    await checkAndAddCol('employee_advances', 'reason', 'TEXT NULL');
+    await checkAndAddCol('employee_evaluations', 'bonuses', 'DECIMAL(15,2) DEFAULT 0');
+    await checkAndAddCol('employee_evaluations', 'deductions', 'DECIMAL(15,2) DEFAULT 0');
+    await checkAndAddCol('employee_evaluations', 'evaluator', 'VARCHAR(150) NULL');
+    await checkAndAddCol('employee_evaluations', 'comments', 'TEXT NULL');
+    await checkAndAddCol('project_labor_expenses', 'paid_amount', 'DECIMAL(15,2) DEFAULT 0');
+
     await mysqlPool.query(`
       CREATE TABLE IF NOT EXISTS currencies (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -475,6 +548,74 @@ function initSqlite() {
       if (!pCols.includes('exchange_rate')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN exchange_rate REAL DEFAULT 1.0;");
       if (!pCols.includes('local_amount')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN local_amount REAL DEFAULT 0;");
     }
+
+    if (tableList.includes('project_contracts')) {
+      const pcCols = sqliteDb.prepare("PRAGMA table_info(project_contracts)").all().map(c => c.name);
+      if (!pcCols.includes('signing_date')) {
+        sqliteDb.exec("ALTER TABLE project_contracts ADD COLUMN signing_date TEXT;");
+        sqliteDb.exec("UPDATE project_contracts SET signing_date = contract_date WHERE signing_date IS NULL;");
+      }
+    }
+
+    if (tableList.includes('projects')) {
+      const prjCols = sqliteDb.prepare("PRAGMA table_info(projects)").all().map(c => c.name);
+      if (!prjCols.includes('location')) sqliteDb.exec("ALTER TABLE projects ADD COLUMN location TEXT;");
+      if (!prjCols.includes('description')) {
+        sqliteDb.exec("ALTER TABLE projects ADD COLUMN description TEXT;");
+        sqliteDb.exec("UPDATE projects SET description = notes WHERE description IS NULL;");
+      }
+    }
+
+    if (tableList.includes('leave_types')) {
+      const ltCols = sqliteDb.prepare("PRAGMA table_info(leave_types)").all().map(c => c.name);
+      if (!ltCols.includes('days_per_year')) {
+        sqliteDb.exec("ALTER TABLE leave_types ADD COLUMN days_per_year INTEGER DEFAULT 30;");
+        sqliteDb.exec("UPDATE leave_types SET days_per_year = days_allowed WHERE days_per_year IS NULL;");
+      }
+      if (!ltCols.includes('description')) {
+        sqliteDb.exec("ALTER TABLE leave_types ADD COLUMN description TEXT;");
+        sqliteDb.exec("UPDATE leave_types SET description = notes WHERE description IS NULL;");
+      }
+    }
+
+    if (tableList.includes('employee_advances')) {
+      const eaCols = sqliteDb.prepare("PRAGMA table_info(employee_advances)").all().map(c => c.name);
+      if (!eaCols.includes('request_date')) {
+        sqliteDb.exec("ALTER TABLE employee_advances ADD COLUMN request_date DATE;");
+        sqliteDb.exec("UPDATE employee_advances SET request_date = date WHERE request_date IS NULL;");
+      }
+      if (!eaCols.includes('reason')) {
+        sqliteDb.exec("ALTER TABLE employee_advances ADD COLUMN reason TEXT;");
+        sqliteDb.exec("UPDATE employee_advances SET reason = notes WHERE reason IS NULL;");
+      }
+    }
+
+    if (tableList.includes('employee_evaluations')) {
+      const evCols = sqliteDb.prepare("PRAGMA table_info(employee_evaluations)").all().map(c => c.name);
+      if (!evCols.includes('bonuses')) sqliteDb.exec("ALTER TABLE employee_evaluations ADD COLUMN bonuses REAL DEFAULT 0;");
+      if (!evCols.includes('deductions')) sqliteDb.exec("ALTER TABLE employee_evaluations ADD COLUMN deductions REAL DEFAULT 0;");
+      if (!evCols.includes('evaluator')) {
+        sqliteDb.exec("ALTER TABLE employee_evaluations ADD COLUMN evaluator TEXT;");
+        sqliteDb.exec("UPDATE employee_evaluations SET evaluator = evaluator_name WHERE evaluator IS NULL;");
+      }
+      if (!evCols.includes('comments')) {
+        sqliteDb.exec("ALTER TABLE employee_evaluations ADD COLUMN comments TEXT;");
+        sqliteDb.exec("UPDATE employee_evaluations SET comments = notes WHERE comments IS NULL;");
+      }
+    }
+
+    if (tableList.includes('project_labor_expenses')) {
+      const plCols = sqliteDb.prepare("PRAGMA table_info(project_labor_expenses)").all().map(c => c.name);
+      if (!plCols.includes('paid_amount')) sqliteDb.exec("ALTER TABLE project_labor_expenses ADD COLUMN paid_amount REAL DEFAULT 0;");
+    }
+
+    // فهارس الأداء وتفادي القفل
+    sqliteDb.exec(`
+      CREATE INDEX IF NOT EXISTS idx_contracts_project_signing ON project_contracts (project_id, signing_date);
+      CREATE INDEX IF NOT EXISTS idx_projects_client_status ON projects (client_id, status);
+      CREATE INDEX IF NOT EXISTS idx_je_status_date ON journal_entries (status, date);
+      CREATE INDEX IF NOT EXISTS idx_payments_project_date_type ON payments (project_id, date, type, status);
+    `);
   } catch (e) {
     console.warn('Pre-schema check note:', e.message);
   }

@@ -20,7 +20,9 @@ class CashFlowReportService {
     return await query(`
       SELECT a.id, a.code, a.name, a.type
       FROM accounts a
-      WHERE (a.code LIKE '121%' OR a.code LIKE '122%' OR a.name LIKE '%صندوق%' OR a.name LIKE '%بنك%' OR a.name LIKE '%نقد%')
+      WHERE (a.type = 'asset' OR a.type = 'أصول')
+        AND (a.code LIKE '121%' OR a.code LIKE '122%' OR (a.code LIKE '1%' AND (a.name LIKE '%صندوق%' OR a.name LIKE '%بنك%')))
+        AND a.type NOT IN ('expense', 'مصروفات', 'تكاليف', 'revenue', 'إيرادات', 'liability', 'خصوم', 'equity')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
       ORDER BY a.code ASC
     `);

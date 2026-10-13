@@ -8,15 +8,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const jwt = require('jsonwebtoken');
 
 const { query, get, run, transaction } = require('../../server/database/db');
+const app = require('../../server/server');
 const ReportingService = require('../../server/services/reportingService');
 const CashFlowReportService = require('../../server/services/cashFlowReportService');
 const ContractingAccountingService = require('../../server/services/contractingAccountingService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'rawasi_aden_secret_key_2024';
-const BASE_URL = 'http://localhost:3000';
+let server = null;
+let BASE_URL = 'http://127.0.0.1:3000';
 
 // دالة مساعدة لتوليد رمز مصادقة للاختبارات
 function getAuthHeaders() {
@@ -66,6 +69,11 @@ async function cleanupTestEntries(prefix = 'TEST_') {
 }
 
 test('Setup & Account Discovery for Reporting Tests', async () => {
+  server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, resolve));
+  const port = server.address().port;
+  BASE_URL = `http://127.0.0.1:${port}`;
+
   await cleanupTestEntries('TEST_');
 
   // جلب حسابات طرفية صالحة
@@ -320,6 +328,9 @@ test('الاختبار 9: عزل الحدود الزمنية بدقة بين ا�
   const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
   const equityAcc = await get("SELECT * FROM accounts WHERE code = '21101001'");
 
+  const tbPre = await ReportingService.getTrialBalance({ from_date: '2028-02-01', to_date: '2028-02-28' });
+  const preOpening = tbPre.data.accounts.find(a => a.id === cashAcc.id)?.opening_balance || 0;
+
   // 1. قيد سابق للفترة (يدخل في Opening Balance)
   await createTestJournalEntry({
     entry_no: 'TEST_DATE_PRE',
@@ -358,7 +369,7 @@ test('الاختبار 9: عزل الحدود الزمنية بدقة بين ا�
   // الحركة داخل فبراير يجب أن تكون فقط 20,000
   assert.strictEqual(cashRow.period_debit, 20000, 'حركة مدين الفترة يجب أن تقتصر على 20,000 فقط');
   // الرصيد الافتتاحي يشمل حركة ما قبل 2028-02-01 (10,000 السابقة)
-  assert.ok(cashRow.opening_balance >= 10000, 'الرصيد الافتتاحي يجب أن يشتمل على الحركات السابقة لتاريخ البداية');
+  assert.strictEqual(cashRow.opening_balance, preOpening + 10000, 'الرصيد الافتتاحي يجب أن يشتمل على الحركات السابقة لتاريخ البداية');
 });
 
 // =========================================================================
@@ -570,4 +581,8 @@ test('الاختبار 18: فحص كافة مسارات API للتقارير و�
 // تنظيف نهائي
 test('Teardown & Cleanup', async () => {
   await cleanupTestEntries('TEST_');
+  if (server) {
+    if (server.closeAllConnections) server.closeAllConnections();
+    server.close();
+  }
 });

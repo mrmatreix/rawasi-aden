@@ -764,7 +764,7 @@ router.get('/service-requests', async (req, res) => {
         sr.created_at,
         sr.updated_at,
         u.username AS assigned_username,
-        u.name AS assigned_name,
+        COALESCE(u.full_name, u.username) AS assigned_name,
         (
           SELECT GROUP_CONCAT(service_title, ' | ') 
           FROM service_request_items 
@@ -958,17 +958,19 @@ router.post('/service-requests/:id/convert-to-project', async (req, res) => {
     const projCode = `PRJ-${Date.now().toString().slice(-4)}`;
     const contractVal = request.quoted_amount || request.estimated_budget || 0;
 
+    const projNotes = request.description || ('مشروع محول من طلب الخدمة: ' + request.request_no);
     const projInsert = await db.run(`
       INSERT INTO projects (
-        code, name, client_id, status, contract_value, location, description, created_at
-      ) VALUES (?, ?, ?, 'active', ?, ?, ?, CURRENT_TIMESTAMP)
+        code, name, client_id, status, contract_value, location, description, notes, created_at
+      ) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       projCode,
       projName,
       clientId,
       contractVal,
       request.location || 'عدن',
-      request.description || ('مشروع محول من طلب الخدمة: ' + request.request_no)
+      projNotes,
+      projNotes
     ]);
 
     const newProjectId = projInsert.lastID || projInsert.insertId;

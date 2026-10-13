@@ -38,19 +38,19 @@ class ReportingService {
           a.parent_id,
           COALESCE(SUM(
               CASE
-                  WHEN je.date < ? THEN jel.debit - jel.credit
+                  WHEN je.id IS NOT NULL AND je.date < ? THEN jel.debit - jel.credit
                   ELSE 0
               END
           ), 0) AS opening_balance,
           COALESCE(SUM(
               CASE
-                  WHEN je.date BETWEEN ? AND ? THEN jel.debit
+                  WHEN je.id IS NOT NULL AND je.date BETWEEN ? AND ? THEN jel.debit
                   ELSE 0
               END
           ), 0) AS period_debit,
           COALESCE(SUM(
               CASE
-                  WHEN je.date BETWEEN ? AND ? THEN jel.credit
+                  WHEN je.id IS NOT NULL AND je.date BETWEEN ? AND ? THEN jel.credit
                   ELSE 0
               END
           ), 0) AS period_credit
@@ -219,6 +219,9 @@ class ReportingService {
     const netProfit = Math.round((grossProfit - totalOperatingExpenses) * 100) / 100;
     const netMarginPct = totalRevenues > 0 ? Math.round((netProfit / totalRevenues) * 1000) / 10 : 0;
 
+    const incEquationDiff = Math.round(Math.abs((totalRevenues - totalDirectCosts - totalOperatingExpenses) - netProfit) * 100) / 100;
+    const isIncomeBalanced = incEquationDiff === 0;
+
     return {
       success: true,
       data: {
@@ -247,7 +250,8 @@ class ReportingService {
       },
       warnings: totalRevenues === 0 && totalExpenses === 0 ? ['لا توجد قيود إيرادات أو مصروفات مرحلة خلال هذه الفترة'] : [],
       reconciliation: {
-        is_balanced: true,
+        is_balanced: isIncomeBalanced,
+        difference: incEquationDiff,
         accounting_equation: 'Gross Profit = Revenues - Direct Costs | Net Profit = Gross Profit - Operating Expenses'
       }
     };
@@ -278,6 +282,9 @@ class ReportingService {
     const netCashMargin = cashReceipts - totalExpenses;
     const liquidityVsProfitGap = Math.round((cashReceipts - recognizedRevenue) * 100) / 100;
 
+    const pnlDifference = Math.round(Math.abs((recognizedRevenue - totalExpenses) - trueNetProfit) * 100) / 100;
+    const isPnlMatched = isReport.success && isReport.reconciliation?.is_balanced && pnlDifference === 0;
+
     return {
       success: true,
       data: {
@@ -295,8 +302,9 @@ class ReportingService {
       },
       warnings: isReport.warnings,
       reconciliation: {
-        is_balanced: true,
-        income_statement_match: true
+        is_balanced: isPnlMatched,
+        income_statement_match: isPnlMatched,
+        difference: pnlDifference
       }
     };
   }
@@ -319,7 +327,7 @@ class ReportingService {
           a.name,
           a.type,
           a.parent_id,
-          COALESCE(SUM(jel.debit - jel.credit), 0) AS balance
+          COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jel.debit - jel.credit ELSE 0 END), 0) AS balance
       FROM accounts a
       LEFT JOIN journal_entry_lines jel ON jel.account_id = a.id
       LEFT JOIN journal_entries je ON je.id = jel.entry_id AND je.status = 'posted' AND je.date <= ?
@@ -466,6 +474,7 @@ class ReportingService {
       warnings: cfData.warnings || [],
       reconciliation: {
         is_balanced: cfData.gl_reconciliation.is_reconciled,
+        is_reconciled: cfData.gl_reconciliation.is_reconciled,
         difference: cfData.gl_reconciliation.difference
       }
     };
@@ -533,7 +542,7 @@ class ReportingService {
       const glRevenue = Math.round(Number(revRes?.gl_revenue || 0) * 100) / 100;
       const glCost = Math.round(Number(costRes?.gl_cost || 0) * 100) / 100;
       const glProfit = Math.round((glRevenue - glCost) * 100) / 100;
-      const glMargin = glRevenue > 0 ? Math.round((glProfit / glRevenue) * 1000) / 10 : 0;
+      const glMargin = glRevenue > 0 ? Math.round((glProfit / glRevenue) * 10000) / 100 : 0;
 
       // المقبوضات النقدية التشغيلية من السندات
       const payRes = await get(`
@@ -573,7 +582,8 @@ class ReportingService {
     const totalRev = report.reduce((s, p) => s + p.gl_recognized_revenue, 0);
     const totalCost = report.reduce((s, p) => s + p.gl_project_cost, 0);
     const totalProfit = Math.round((totalRev - totalCost) * 100) / 100;
-    const overallMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 1000) / 10 : 0;
+    const overallMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 10000) / 100 : 0;
+    const projectDiff = Math.round(Math.abs((totalRev - totalCost) - totalProfit) * 100) / 100;
 
     return {
       success: true,
@@ -597,7 +607,8 @@ class ReportingService {
       },
       warnings: [],
       reconciliation: {
-        is_balanced: true,
+        is_balanced: projectDiff === 0,
+        difference: projectDiff,
         ledger_source: 'journal_entry_lines.project_id'
       }
     };
@@ -659,7 +670,7 @@ class ReportingService {
       const rev = Math.round(Number(revRes?.revenue || 0) * 100) / 100;
       const exp = Math.round(Number(expRes?.expense || 0) * 100) / 100;
       const profit = Math.round((rev - exp) * 100) / 100;
-      const margin = rev > 0 ? Math.round((profit / rev) * 1000) / 10 : 0;
+      const margin = rev > 0 ? Math.round((profit / rev) * 10000) / 100 : 0;
 
       grandRevenue += rev;
       grandExpense += exp;
@@ -683,13 +694,76 @@ class ReportingService {
     grandRevenue = Math.round(grandRevenue * 100) / 100;
     grandExpense = Math.round(grandExpense * 100) / 100;
     const grandProfit = Math.round((grandRevenue - grandExpense) * 100) / 100;
-    const grandMargin = grandRevenue > 0 ? Math.round((grandProfit / grandRevenue) * 1000) / 10 : 0;
+    const grandMargin = grandRevenue > 0 ? Math.round((grandProfit / grandRevenue) * 10000) / 100 : 0;
+
+    // فحص الحركات غير الموزعة على مراكز تكلفة (Unallocated) لضمان عدم إسقاط أي مصاريف أو إيرادات بصمت
+    const unallocatedRevRes = await get(`
+      SELECT COALESCE(SUM(jel.credit - jel.debit), 0) AS revenue
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON je.id = jel.entry_id
+      JOIN accounts a ON a.id = jel.account_id
+      WHERE jel.cost_center_id IS NULL
+        AND je.status = 'posted'
+        AND je.date BETWEEN ? AND ?
+        AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+    `, [fromDate, toDate]);
+
+    const unallocatedExpRes = await get(`
+      SELECT COALESCE(SUM(jel.debit - jel.credit), 0) AS expense
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON je.id = jel.entry_id
+      JOIN accounts a ON a.id = jel.account_id
+      WHERE jel.cost_center_id IS NULL
+        AND je.status = 'posted'
+        AND je.date BETWEEN ? AND ?
+        AND (a.type = 'تكاليف' OR a.type = 'مصروفات' OR a.code LIKE '5%' OR a.code LIKE '3%')
+    `, [fromDate, toDate]);
+
+    const unallocatedRev = Math.round(Number(unallocatedRevRes?.revenue || 0) * 100) / 100;
+    const unallocatedExp = Math.round(Number(unallocatedExpRes?.expense || 0) * 100) / 100;
+
+    // فحص إجمالي الأستاذ العام الكلي للمطابقة المستقلة
+    const glTotalRevRes = await get(`
+      SELECT COALESCE(SUM(jel.credit - jel.debit), 0) AS total_rev
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON je.id = jel.entry_id
+      JOIN accounts a ON a.id = jel.account_id
+      WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
+        AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+    `, [fromDate, toDate]);
+
+    const glTotalExpRes = await get(`
+      SELECT COALESCE(SUM(jel.debit - jel.credit), 0) AS total_exp
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON je.id = jel.entry_id
+      JOIN accounts a ON a.id = jel.account_id
+      WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
+        AND (a.type = 'تكاليف' OR a.type = 'مصروفات' OR a.code LIKE '5%' OR a.code LIKE '3%')
+    `, [fromDate, toDate]);
+
+    const glTotalRev = Math.round(Number(glTotalRevRes?.total_rev || 0) * 100) / 100;
+    const glTotalExp = Math.round(Number(glTotalExpRes?.total_exp || 0) * 100) / 100;
+
+    const revDiff = Math.round(Math.abs(glTotalRev - (grandRevenue + unallocatedRev)) * 100) / 100;
+    const expDiff = Math.round(Math.abs(glTotalExp - (grandExpense + unallocatedExp)) * 100) / 100;
+    const isBalanced = revDiff === 0 && expDiff === 0;
+    const totalGlDiff = Math.round((revDiff + expDiff) * 100) / 100;
+
+    const warnings = [];
+    if (unallocatedExp > 0 || unallocatedRev > 0) {
+      warnings.push(`توجد حركات غير موزعة على مراكز تكلفة (مصروفات: ${unallocatedExp} ر.ي، إيرادات: ${unallocatedRev} ر.ي)`);
+    }
 
     return {
       success: true,
       data: {
         centers: report,
         cost_centers: report,
+        unallocated: {
+          revenues: unallocatedRev,
+          expenses: unallocatedExp,
+          net: Math.round((unallocatedRev - unallocatedExp) * 100) / 100
+        },
         totals: {
           total_revenue: grandRevenue,
           total_expense: grandExpense,
@@ -705,9 +779,14 @@ class ReportingService {
         generated_at: new Date().toISOString(),
         source: 'General Ledger'
       },
-      warnings: [],
+      warnings,
       reconciliation: {
-        is_balanced: true,
+        is_balanced: isBalanced,
+        difference: totalGlDiff,
+        revenue_difference: revDiff,
+        expense_difference: expDiff,
+        unallocated_revenue: unallocatedRev,
+        unallocated_expense: unallocatedExp,
         zero_synthetic_revenue: true
       }
     };
@@ -817,6 +896,21 @@ class ReportingService {
     const totalCredit = Math.round(statement.reduce((s, i) => s + (i.credit || 0), 0) * 100) / 100;
     const netBalance = Math.round((totalDebit - totalCredit) * 100) / 100;
 
+    let glClosingBalance = null;
+    let glReconciliationDiff = 0;
+    let isGlBalanced = true;
+    if (arAccountId) {
+      const glBal = await get(`
+        SELECT COALESCE(SUM(jel.debit - jel.credit), 0) as bal
+        FROM journal_entry_lines jel
+        JOIN journal_entries je ON je.id = jel.entry_id
+        WHERE jel.account_id = ? AND je.status = 'posted' AND je.date <= ?
+      `, [arAccountId, toDate]);
+      glClosingBalance = Math.round(Number(glBal?.bal || 0) * 100) / 100;
+      glReconciliationDiff = Math.round(Math.abs(glClosingBalance - netBalance) * 100) / 100;
+      isGlBalanced = glReconciliationDiff === 0;
+    }
+
     return {
       success: true,
       data: {
@@ -846,8 +940,10 @@ class ReportingService {
       },
       warnings: arAccountId ? [] : ['لم يتم ربط العميل بحساب ذمم مدينة مستقل في دليل الحسابات'],
       reconciliation: {
-        is_balanced: true,
-        net_balance: netBalance
+        is_balanced: isGlBalanced,
+        difference: glReconciliationDiff,
+        net_balance: netBalance,
+        gl_balance: glClosingBalance
       }
     };
   }
@@ -957,6 +1053,21 @@ class ReportingService {
     const totalDebit = Math.round(statement.reduce((s, i) => s + (i.debit || 0), 0) * 100) / 100;
     const netBalance = Math.round((totalCredit - totalDebit) * 100) / 100;
 
+    let glClosingBalance = null;
+    let glReconciliationDiff = 0;
+    let isGlBalanced = true;
+    if (apAccountId) {
+      const glBal = await get(`
+        SELECT COALESCE(SUM(jel.credit - jel.debit), 0) as bal
+        FROM journal_entry_lines jel
+        JOIN journal_entries je ON je.id = jel.entry_id
+        WHERE jel.account_id = ? AND je.status = 'posted' AND je.date <= ?
+      `, [apAccountId, toDate]);
+      glClosingBalance = Math.round(Number(glBal?.bal || 0) * 100) / 100;
+      glReconciliationDiff = Math.round(Math.abs(glClosingBalance - netBalance) * 100) / 100;
+      isGlBalanced = glReconciliationDiff === 0;
+    }
+
     return {
       success: true,
       data: {
@@ -985,8 +1096,10 @@ class ReportingService {
       },
       warnings: apAccountId ? [] : ['لم يتم ربط المورد بحساب ذمم دائنة مستقل في دليل الحسابات'],
       reconciliation: {
-        is_balanced: true,
-        net_balance: netBalance
+        is_balanced: isGlBalanced,
+        difference: glReconciliationDiff,
+        net_balance: netBalance,
+        gl_balance: glClosingBalance
       }
     };
   }

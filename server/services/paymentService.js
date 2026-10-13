@@ -804,7 +804,493 @@ const PaymentService = {
       WHERE t.clearing_status = 'pending' AND t.status != 'reversed'
       ORDER BY t.transaction_date ASC
     `);
+  },
+
+  // =========================================================================
+  // 6. منظومة المدفوعات الحديثة والعمليات المالية المتقدمة (Modern Payment System)
+  // =========================================================================
+
+  PAYMENT_STATUSES: {
+    PENDING: 'PENDING',
+    PAID: 'PAID',
+    FAILED: 'FAILED',
+    REFUNDED: 'REFUNDED',
+    PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED',
+    CANCELED: 'CANCELED'
+  },
+
+  async getPaymentMethods() {
+    return await query('SELECT * FROM payment_methods WHERE is_active = 1 ORDER BY id ASC');
+  },
+
+  async getFinancialAccounts(type = null) {
+    let sql = `
+      SELECT fa.*, a.code as account_code, a.name as account_name
+      FROM financial_accounts fa
+      JOIN accounts a ON fa.account_id = a.id
+      WHERE fa.is_active = 1
+    `;
+    const params = [];
+    if (type) {
+      sql += ' AND fa.type = ?';
+      params.push(type);
+    }
+    sql += ' ORDER BY fa.id ASC';
+    return await query(sql, params);
+  },
+
+  /**
+   * إنشاء معاملة دفع حديثة مع حماية Idempotency والتحقق من الحسابات الفرعية
+   */
+  async initiatePayment(data) {
+    const {
+      paymentMethodCode,
+      paymentMethodId,
+      financialAccountId,
+      type = 'قبض',
+      amount,
+      feeAmount = 0,
+      accountId,
+      reference,
+      externalTransactionId,
+      gatewayName,
+      notes = '',
+      idempotencyKey,
+      autoCapture = true,
+      user = null,
+      date = null
+    } = data;
+
+    // 1. فحص منع التكرار المالي عبر مفتاح Idempotency
+    if (idempotencyKey) {
+      const existing = await get('SELECT * FROM payments WHERE idempotency_key = ?', [idempotencyKey]);
+      if (existing) {
+        let existingJe = null;
+        if (existing.journal_entry_id) {
+          existingJe = await get('SELECT * FROM journal_entries WHERE id = ?', [existing.journal_entry_id]);
+        }
+        return {
+          isDuplicate: true,
+          payment: existing,
+          journalEntry: existingJe
+        };
+      }
+    }
+
+    // 2. التحقق من المدخلات الأساسية
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      throw new Error('المبلغ يجب أن يكون رقماً موجباً أكبر من الصفر');
+    }
+    const numFee = Math.max(0, Number(feeAmount) || 0);
+    const txnDate = date || new Date().toISOString().split('T')[0];
+
+    // فحص الفترة المحاسبية
+    const periodCheck = await checkPeriodOpen(txnDate);
+    if (!periodCheck.isOpen) {
+      throw new Error(periodCheck.message || 'الفترة المحاسبية لهذا التاريخ مغلقة');
+    }
+
+    // 3. التحقق من طريقة الدفع
+    let pm = null;
+    if (paymentMethodCode) {
+      pm = await get('SELECT * FROM payment_methods WHERE code = ? AND is_active = 1', [paymentMethodCode]);
+    } else if (paymentMethodId) {
+      pm = await get('SELECT * FROM payment_methods WHERE id = ? AND is_active = 1', [paymentMethodId]);
+    }
+    if (!pm) {
+      throw new Error('طريقة الدفع غير صالحة أو غير نشطة');
+    }
+
+    // 4. التحقق من الحساب المالي وفصل الصلاحيات (صندوق / بنك / بوابة)
+    const fa = await get('SELECT * FROM financial_accounts WHERE id = ? AND is_active = 1', [financialAccountId]);
+    if (!fa) {
+      throw new Error('الحساب المالي غير موجود أو غير نشط');
+    }
+
+    // التحقق الرقابي الصارم: منع ربط حساب بنك بطريقة الدفع نقداً والعكس
+    if (pm.code === 'CASH' && fa.type !== 'cash') {
+      throw new Error('طريقة الدفع نقداً تتطلب صندوق نقدي وليس حساب بنكي أو بوابة دفع');
+    }
+    if (pm.code === 'BANK_TRANSFER' && fa.type !== 'bank') {
+      throw new Error('طريقة التحويل البنكي تتطلب حساب بنكي وليس صندوق نقدي');
+    }
+    if (pm.code === 'ONLINE_GATEWAY' && fa.type !== 'gateway') {
+      throw new Error('طريقة الدفع عبر البوابة تتطلب حساب بوابة دفع إلكترونية');
+    }
+
+    // 5. التحقق الصارم من الحساب المحاسبي الهدف (Deny by default على الحساب الأب)
+    if (!accountId) {
+      throw new Error('الحساب المحاسبي المقابل مطلوب');
+    }
+    const targetAccount = await AccountingService.assertLeafAccount(accountId);
+    const financialCoaAccount = await AccountingService.assertLeafAccount(fa.account_id);
+
+    // 6. حساب صافي المبلغ ورسوم البوابة/البطاقة
+    const netAmount = type === 'قبض'
+      ? Math.round((numAmount - numFee) * 100) / 100
+      : Math.round((numAmount + numFee) * 100) / 100;
+
+    const initialStatus = autoCapture ? 'PAID' : 'PENDING';
+    const paymentNo = `PAY-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+
+    // 7. إنشاء السجل في جدول payments
+    const res = await run(`
+      INSERT INTO payments (
+        payment_no, receipt_no, type, date, amount, fee_amount, net_amount,
+        payment_method_id, payment_method, financial_account_id, account_id,
+        status, idempotency_key, external_transaction_id, gateway_name, notes,
+        created_by, created_by_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      paymentNo, paymentNo, type, txnDate, numAmount, numFee, netAmount,
+      pm.id, pm.code, fa.id, targetAccount.id,
+      initialStatus, idempotencyKey || null, externalTransactionId || null, gatewayName || null, notes,
+      user?.id || 1, user?.username || 'admin'
+    ]);
+
+    const paymentId = Number(res.id || res.lastInsertRowid || res.insertId);
+    const paymentRecord = await get('SELECT * FROM payments WHERE id = ?', [paymentId]);
+
+    let journalEntry = null;
+
+    // 8. إنشاء القيد المحاسبي في حالة الاعتماد الفوري (autoCapture = true)
+    if (autoCapture) {
+      journalEntry = await this._createPaymentJournalEntry({
+        payment: paymentRecord,
+        financialCoaAccount,
+        targetAccount,
+        amount: numAmount,
+        fee: numFee,
+        net: netAmount,
+        type,
+        user,
+        date: txnDate,
+        notes
+      });
+
+      await run('UPDATE payments SET journal_entry_id = ? WHERE id = ?', [journalEntry.id, paymentId]);
+      paymentRecord.journal_entry_id = journalEntry.id;
+    }
+
+    return {
+      isDuplicate: false,
+      payment: paymentRecord,
+      journalEntry
+    };
+  },
+
+  /**
+   * مساعدة داخلية لإنشاء قيد اليومية للسند بدقة متناهية
+   */
+  async _createPaymentJournalEntry({ payment, financialCoaAccount, targetAccount, amount, fee, net, type, user, date, notes }) {
+    const entryNo = `JE-PAY-${Date.now().toString().slice(-6)}`;
+    const lines = [];
+
+    // البحث عن حساب مصروف العمولات والرسوم البنكية
+    let feeAccount = null;
+    if (fee > 0) {
+      feeAccount = await get("SELECT * FROM accounts WHERE code = '31101001' AND is_posting = 1") ||
+                         await get("SELECT * FROM accounts WHERE name LIKE '%عمولات بنكية%' AND is_posting = 1 LIMIT 1");
+      if (!feeAccount) {
+        feeAccount = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات')) LIMIT 1");
+      }
+    }
+
+    if (type === 'قبض') {
+      if (fee > 0 && feeAccount) {
+        // قيد ثلاثي متزن: مدين صافي البنك + مدين رسوم بوابة = دائن إجمالي الإيراد/العميل
+        lines.push({
+          account_id: financialCoaAccount.id,
+          debit: net,
+          credit: 0,
+          notes: `تحصيل سند رقم [${payment.payment_no}] - صافي في ${financialCoaAccount.name}`
+        });
+        lines.push({
+          account_id: feeAccount.id,
+          debit: fee,
+          credit: 0,
+          notes: `رسوم وعمولة التحصيل لسند رقم [${payment.payment_no}]`
+        });
+        lines.push({
+          account_id: targetAccount.id,
+          debit: 0,
+          credit: amount,
+          notes: notes || `تحصيل مستحق لسند [${payment.payment_no}]`
+        });
+      } else {
+        lines.push({
+          account_id: financialCoaAccount.id,
+          debit: amount,
+          credit: 0,
+          notes: `تحصيل نقدي/بنكي لسند رقم [${payment.payment_no}]`
+        });
+        lines.push({
+          account_id: targetAccount.id,
+          debit: 0,
+          credit: amount,
+          notes: notes || `تحصيل مستحق لسند [${payment.payment_no}]`
+        });
+      }
+    } else {
+      // صرف
+      if (fee > 0 && feeAccount) {
+        lines.push({
+          account_id: targetAccount.id,
+          debit: amount,
+          credit: 0,
+          notes: notes || `صرف مستحق لسند [${payment.payment_no}]`
+        });
+        lines.push({
+          account_id: feeAccount.id,
+          debit: fee,
+          credit: 0,
+          notes: `رسوم وعمولة الصرف لسند رقم [${payment.payment_no}]`
+        });
+        lines.push({
+          account_id: financialCoaAccount.id,
+          debit: 0,
+          credit: Math.round((amount + fee) * 100) / 100,
+          notes: `صرف من ${financialCoaAccount.name}`
+        });
+      } else {
+        lines.push({
+          account_id: targetAccount.id,
+          debit: amount,
+          credit: 0,
+          notes: notes || `صرف مستحق لسند [${payment.payment_no}]`
+        });
+        lines.push({
+          account_id: financialCoaAccount.id,
+          debit: 0,
+          credit: amount,
+          notes: `صرف من ${financialCoaAccount.name}`
+        });
+      }
+    }
+
+    const je = await AccountingService.createJournalEntry({
+      date: date || payment.date,
+      description: `قيد سند ${type}: ${payment.payment_no}`,
+      reference_type: 'PAYMENT',
+      reference_id: payment.id,
+      status: 'posted'
+    }, lines, { user });
+
+    return je;
+  },
+
+  /**
+   * اعتماد وترحيل عملية الدفع المعلقة (Capture Payment)
+   */
+  async capturePayment(paymentId, { externalTransactionId, feeAmount, user, req } = {}) {
+    const payment = await get('SELECT * FROM payments WHERE id = ?', [Number(paymentId)]);
+    if (!payment) {
+      throw new Error(`معاملة الدفع برقم [${paymentId}] غير موجودة`);
+    }
+    if (payment.status !== 'PENDING') {
+      throw new Error(`المعاملة بحالة [${payment.status}] وليست في حالة معلقة PENDING`);
+    }
+
+    const numAmount = Number(payment.amount);
+    const numFee = feeAmount !== undefined ? Math.max(0, Number(feeAmount)) : Number(payment.fee_amount || 0);
+    const netAmount = payment.type === 'قبض'
+      ? Math.round((numAmount - numFee) * 100) / 100
+      : Math.round((numAmount + numFee) * 100) / 100;
+
+    const fa = await get('SELECT * FROM financial_accounts WHERE id = ?', [payment.financial_account_id]);
+    const financialCoaAccount = await AccountingService.assertLeafAccount(fa.account_id);
+    const targetAccount = await AccountingService.assertLeafAccount(payment.account_id);
+
+    const journalEntry = await this._createPaymentJournalEntry({
+      payment,
+      financialCoaAccount,
+      targetAccount,
+      amount: numAmount,
+      fee: numFee,
+      net: netAmount,
+      type: payment.type,
+      user,
+      date: payment.date,
+      notes: payment.notes
+    });
+
+    await run(`
+      UPDATE payments
+      SET status = 'PAID',
+          fee_amount = ?,
+          net_amount = ?,
+          external_transaction_id = COALESCE(?, external_transaction_id),
+          journal_entry_id = ?,
+          posted_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [numFee, netAmount, externalTransactionId || null, journalEntry.id, payment.id]);
+
+    const updatedPayment = await get('SELECT * FROM payments WHERE id = ?', [payment.id]);
+    return {
+      payment: updatedPayment,
+      journalEntry
+    };
+  },
+
+  /**
+   * الاسترداد المالي (Refund) كامل أو جزئي
+   */
+  async refundPayment(paymentId, { amount, reason = '', reference = '', user, req } = {}) {
+    const payment = await get('SELECT * FROM payments WHERE id = ?', [Number(paymentId)]);
+    if (!payment) {
+      throw new Error(`معاملة الدفع برقم [${paymentId}] غير موجودة`);
+    }
+    if (payment.status !== 'PAID' && payment.status !== 'PARTIALLY_REFUNDED') {
+      throw new Error(`لا يمكن استرداد معاملة غير مدفوعة (الحالة الحالية: ${payment.status})`);
+    }
+
+    const currentRefunded = Number(payment.refunded_amount || 0);
+    const originalAmount = Number(payment.amount);
+    const remainingToRefund = Math.round((originalAmount - currentRefunded) * 100) / 100;
+
+    const refAmount = Number(amount);
+    if (isNaN(refAmount) || refAmount <= 0) {
+      throw new Error('مبلغ الاسترداد يجب أن يكون رقماً موجباً أكبر من الصفر');
+    }
+    if (refAmount > remainingToRefund) {
+      throw new Error(`المبلغ المطلوب استرداده (${refAmount}) يتجاوز المتبقي من العملية (${remainingToRefund})`);
+    }
+
+    const newRefunded = Math.round((currentRefunded + refAmount) * 100) / 100;
+    const newStatus = newRefunded >= originalAmount ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+    const refundNo = `REF-${Date.now().toString().slice(-6)}`;
+
+    const fa = await get('SELECT * FROM financial_accounts WHERE id = ?', [payment.financial_account_id]);
+    const financialCoaAccount = await AccountingService.assertLeafAccount(fa.account_id);
+    const targetAccount = await AccountingService.assertLeafAccount(payment.account_id);
+
+    // قيد عكسي للاسترداد المالي
+    const lines = [];
+
+    if (payment.type === 'قبض') {
+      // استرداد قبض: مدين الحساب الهدف (إيراد/عميل) ودائن الحساب المالي (صندوق/بنك)
+      lines.push({
+        account_id: targetAccount.id,
+        debit: refAmount,
+        credit: 0,
+        notes: `استرداد دفعة رقم [${payment.payment_no}]: ${reason}`
+      });
+      lines.push({
+        account_id: financialCoaAccount.id,
+        debit: 0,
+        credit: refAmount,
+        notes: `صرف استرداد من ${financialCoaAccount.name}`
+      });
+    } else {
+      // استرداد صرف: مدين الحساب المالي ودائن الحساب الهدف
+      lines.push({
+        account_id: financialCoaAccount.id,
+        debit: refAmount,
+        credit: 0,
+        notes: `استرداد صرف لسند رقم [${payment.payment_no}]: ${reason}`
+      });
+      lines.push({
+        account_id: targetAccount.id,
+        debit: 0,
+        credit: refAmount,
+        notes: `استرداد مصروف/مورد [${payment.payment_no}]`
+      });
+    }
+
+    const je = await AccountingService.createJournalEntry({
+      date: new Date().toISOString().split('T')[0],
+      description: `قيد استرداد مالي [${refundNo}] لسند ${payment.payment_no}`,
+      reference_type: 'PAYMENT_REFUND',
+      reference_id: payment.id,
+      status: 'posted'
+    }, lines, { user });
+
+    await run(`
+      INSERT INTO payment_refunds (
+        refund_no, payment_id, amount, reason, refund_type, status, reference, journal_entry_id, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      refundNo, payment.id, refAmount, reason,
+      newStatus === 'REFUNDED' ? 'full' : 'partial',
+      newStatus, reference, je.id, user?.id || null
+    ]);
+
+    await run(`
+      UPDATE payments
+      SET status = ?,
+          refunded_amount = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [newStatus, newRefunded, payment.id]);
+
+    const updatedPayment = await get('SELECT * FROM payments WHERE id = ?', [payment.id]);
+
+    return {
+      refund_no: refundNo,
+      status: newStatus,
+      amount: refAmount,
+      journal_entry: je,
+      payment: updatedPayment
+    };
+  },
+
+  /**
+   * معالجة إشعارات Webhook مع منع Replay و Duplicate
+   */
+  async processWebhook({ gateway, payload, signature, headers } = {}) {
+    if (!payload) {
+      throw new Error('بيانات الـ Webhook مفقودة');
+    }
+
+    const data = payload.data || payload;
+    const paymentId = data.payment_id || data.metadata?.payment_id || data.order_id;
+    const txnId = data.transaction_id || data.id || payload.event_id;
+    const fee = data.fee ? Number(data.fee) : undefined;
+
+    if (!paymentId) {
+      return { success: false, message: 'معرف المعاملة غير متوفر في الـ Webhook' };
+    }
+
+    const payment = await get('SELECT * FROM payments WHERE id = ?', [Number(paymentId)]);
+    if (!payment) {
+      throw new Error(`المعاملة رقم [${paymentId}] غير موجودة`);
+    }
+
+    // إذا كانت المعاملة قد تم اعتمادها مسبقاً، يتم تجاهل الإشعار المكرر بأمان
+    if (payment.status === 'PAID') {
+      return {
+        alreadyProcessed: true,
+        action: 'IGNORED',
+        message: 'تم ترحيل المعاملة مسبقاً، تجاهل الإشعار المكرر بأمان'
+      };
+    }
+
+    if (payload.event === 'payment.succeeded' || data.status === 'succeeded' || data.status === 'paid') {
+      await this.capturePayment(payment.id, {
+        externalTransactionId: txnId,
+        feeAmount: fee
+      });
+      return {
+        alreadyProcessed: false,
+        action: 'CAPTURED',
+        payment_id: payment.id
+      };
+    } else if (payload.event === 'payment.failed' || data.status === 'failed') {
+      await run("UPDATE payments SET status = 'FAILED' WHERE id = ?", [payment.id]);
+      return {
+        alreadyProcessed: false,
+        action: 'FAILED',
+        payment_id: payment.id
+      };
+    }
+
+    return {
+      alreadyProcessed: false,
+      action: 'UNHANDLED_EVENT'
+    };
   }
 };
 
+PaymentService.PAYMENT_STATUSES = PaymentService.PAYMENT_STATUSES;
 module.exports = PaymentService;

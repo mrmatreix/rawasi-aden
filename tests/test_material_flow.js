@@ -216,23 +216,28 @@ async function runMaterialFlowScenario() {
   // -------------------------------------------------------------
   const ctx = await transaction(async (tx) => {
     // 1. الحسابات المالية (Chart of Accounts)
-    const getOrCreateAccount = async (code, name, type, parentId) => {
+    const getOrCreateAccount = async (code, name, type, parentCode) => {
       let acc = await tx.get('SELECT id, code, name FROM accounts WHERE code = ?', [code]);
       if (!acc) {
+        let parentId = null;
+        if (parentCode) {
+          const parentRow = await tx.get('SELECT id FROM accounts WHERE code = ?', [parentCode]);
+          if (parentRow) parentId = parentRow.id;
+        }
         const res = await tx.run(`
-          INSERT INTO accounts (code, name, type, parent_id, status)
-          VALUES (?, ?, ?, ?, 'active')
+          INSERT INTO accounts (code, name, type, parent_id, status, is_posting)
+          VALUES (?, ?, ?, ?, 'active', 1)
         `, [code, name, type, parentId]);
         acc = { id: res.lastInsertRowid || res.insertId, code, name };
       }
       return acc;
     };
 
-    const inv1140 = await getOrCreateAccount('1140', 'المخزون السلعي للمواد الخام والإنشاءات', 'أصول', 2);
-    const supp2110 = await getOrCreateAccount('2110', 'الموردون - ذمم تجارية دائنة', 'خصوم', 6);
-    const cost5110 = await getOrCreateAccount('5110', 'تكلفة مواد المشاريع الإنشائية المباشرة', 'مصروفات', 10);
-    const waste5115 = await getOrCreateAccount('5115', 'خسائر عجز وتسويات وتوالف المخزون', 'مصروفات', 10);
-    const equity3101 = await getOrCreateAccount('3101', 'رأس المال وتمويل المشاريع الرأسمالية', 'حقوق ملكية', 8);
+    const inv1140 = await getOrCreateAccount('12401001', 'المخزون السلعي للمواد الخام والإنشاءات', 'asset', '12401');
+    const supp2110 = await getOrCreateAccount('22101001', 'الموردون - ذمم تجارية دائنة', 'liability', '22101');
+    const cost5110 = await getOrCreateAccount('32102005', 'تكلفة مواد المشاريع الإنشائية المباشرة', 'expense', '32102');
+    const waste5115 = await getOrCreateAccount('32102006', 'خسائر عجز وتسويات وتوالف المخزون', 'expense', '32102');
+    const equity3101 = await getOrCreateAccount('21101001', 'رأس المال وتمويل المشاريع الرأسمالية', 'equity', '21101');
 
     // 2. مستودع الاختبار
     let wh = await tx.get('SELECT id FROM warehouses LIMIT 1');

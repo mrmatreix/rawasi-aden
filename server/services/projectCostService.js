@@ -473,12 +473,30 @@ const MIRROR_JE_TYPES = {
 async function resolveMirrorAccounts(conn, sourceTable) {
   let debitAcc = null;
   if (sourceTable === 'project_labor_expenses') {
-    debitAcc = await conn.get("SELECT id FROM accounts WHERE code = '511' LIMIT 1");
+    debitAcc = await conn.get(`
+      SELECT id FROM accounts 
+      WHERE (code = '511' AND (is_posting = 1 OR is_posting IS NULL))
+         OR code = '32101008'
+         OR (type = 'expense' AND is_posting = 1)
+      ORDER BY (code = '511' AND is_posting = 1) DESC, (code = '32101008') DESC, id ASC LIMIT 1
+    `);
   }
   if (!debitAcc) {
-    debitAcc = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
+    debitAcc = await conn.get(`
+      SELECT id FROM accounts 
+      WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL))
+         OR code = '32102005'
+         OR (type = 'expense' AND is_posting = 1)
+      ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC, id ASC LIMIT 1
+    `);
   }
-  const cashAcc = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+  const cashAcc = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '12101001'
+       OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
+    ORDER BY (code = '111' AND is_posting = 1) DESC, (code = '12101001') DESC, id ASC LIMIT 1
+  `);
   if (!debitAcc || !cashAcc) {
     throw new Error('الحسابات المحاسبية للمرايا (5/111) غير موجودة في الدليل');
   }
@@ -640,7 +658,10 @@ async function backfillMirrorJEs() {
         const prjCc = await tx.get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [m.project_id]);
         if (prjCc) ccId = prjCc.id;
       }
-      if (!ccId) ccId = 1;
+      if (!ccId) {
+        const anyCc = await tx.get('SELECT id FROM cost_centers ORDER BY id ASC LIMIT 1');
+        ccId = anyCc ? anyCc.id : null;
+      }
       await createMirrorJournal(tx, {
         sourceTable: m.source_table, expenseId: m.id,
         projectId: m.project_id ?? null, costCenterId: ccId,
@@ -669,9 +690,27 @@ const AP_JE_TYPES = {
 
 /** حسابات الذمم: المصروف ← 5، الالتزام ← 21، النقد ← 111 */
 async function resolvePayableAccounts(conn) {
-  const exp = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
-  const ap = await conn.get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
-  const cash = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+  const exp = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '32102005'
+       OR (type = 'expense' AND is_posting = 1)
+    ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC, id ASC LIMIT 1
+  `);
+  const ap = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '21' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '22101001'
+       OR (type = 'liability' AND is_posting = 1)
+    ORDER BY (code = '21' AND is_posting = 1) DESC, (code = '22101001') DESC, id ASC LIMIT 1
+  `);
+  const cash = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '12101001'
+       OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
+    ORDER BY (code = '111' AND is_posting = 1) DESC, (code = '12101001') DESC, id ASC LIMIT 1
+  `);
   if (!exp || !ap || !cash) {
     throw new Error('الحسابات المحاسبية للذمم (5/21/111) غير موجودة في الدليل');
   }
@@ -918,10 +957,28 @@ const WAGE_JE_TYPES = {
 
 /** حسابات الأجور: المصروف ← 511 (فإن غاب: 5)، الالتزام ← 215، النقد ← 111 */
 async function resolveWageAccounts(conn) {
-  let exp = await conn.get("SELECT id FROM accounts WHERE code = '511' LIMIT 1");
-  if (!exp) exp = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
-  const wp = await conn.get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
-  const cash = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+  let exp = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '511' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '32101008'
+       OR (code = '5' AND (is_posting = 1 OR is_posting IS NULL))
+       OR (type = 'expense' AND is_posting = 1)
+    ORDER BY (code = '511' AND is_posting = 1) DESC, (code = '32101008') DESC, (code = '5') DESC, id ASC LIMIT 1
+  `);
+  const wp = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '215' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '22401001'
+       OR (type = 'liability' AND is_posting = 1)
+    ORDER BY (code = '215' AND is_posting = 1) DESC, (code = '22401001') DESC, id ASC LIMIT 1
+  `);
+  const cash = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '12101001'
+       OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
+    ORDER BY (code = '111' AND is_posting = 1) DESC, (code = '12101001') DESC, id ASC LIMIT 1
+  `);
   if (!exp || !wp || !cash) {
     throw new Error('الحسابات المحاسبية للأجور (511/215/111) غير موجودة في الدليل');
   }

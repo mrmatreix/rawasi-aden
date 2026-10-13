@@ -8,13 +8,25 @@
  */
 
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const jwt = require('jsonwebtoken');
+const app = require('../server/server');
+const db = require('../server/database/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'rawasi_aden_secret_key_2024';
-const BASE_URL = 'http://localhost:3000';
+let server = null;
+let BASE_URL = 'http://127.0.0.1:3000';
 
 async function runTests() {
   console.log('🚀 بدء اختبارات نظام التدفق النقدي ودورة حياة العقود والتنبيهات...');
+
+  try {
+    await fetch(`${BASE_URL}/api/auth/csrf-token`, { signal: AbortSignal.timeout(500) });
+  } catch {
+    server = http.createServer(app);
+    await new Promise(res => server.listen(0, '127.0.0.1', res));
+    BASE_URL = `http://127.0.0.1:${server.address().port}`;
+  }
 
   // 1. توليد رمز مصادقة
   const token = jwt.sign({ id: 1, username: 'admin', role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
@@ -197,6 +209,10 @@ async function runTests() {
   await db.run('DELETE FROM contract_alerts WHERE contract_id = ?', [testContractId]);
   await db.run('DELETE FROM contract_lifecycle WHERE contract_id = ?', [testContractId]);
   await db.run('DELETE FROM project_contracts WHERE id = ?', [testContractId]);
+  if (server) {
+    if (server.closeAllConnections) server.closeAllConnections();
+    server.close();
+  }
   console.log('\n🎯 اكتملت جميع اختبارات نظام التدفق النقدي ودورة حياة العقد والتنبيهات بنجاح تام 100%!');
 }
 

@@ -137,6 +137,31 @@ const FinancialControlService = {
     let reversingJeId = null;
     let reversingEntryNo = null;
 
+    let settleInfo = null;
+    const origJe = await get(
+      `SELECT id FROM journal_entries WHERE reference_type = 'سند صرف' AND reference_id = ? ORDER BY id DESC LIMIT 1`,
+      [exp.id]
+    );
+    if (origJe) {
+      const drLine = await get(
+        'SELECT account_id FROM journal_entry_lines WHERE entry_id = ? AND debit > 0 ORDER BY id ASC LIMIT 1',
+        [origJe.id]
+      );
+      const apAcc = await get("SELECT id FROM accounts WHERE (code = '21' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22101001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '21') DESC, (code = '22101001') DESC LIMIT 1");
+      const wpAcc = await get("SELECT id FROM accounts WHERE (code = '215' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22401001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '215') DESC, (code = '22401001') DESC LIMIT 1");
+      if (drLine && apAcc && Number(drLine.account_id) === Number(apAcc.id)) {
+        const pur = await get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
+        if (pur && pur.supplier_id) {
+          settleInfo = { kind: 'purchase', purchase: pur, accId: apAcc.id };
+        }
+      } else if (drLine && wpAcc && Number(drLine.account_id) === Number(wpAcc.id)) {
+        const lab = await get('SELECT * FROM project_labor_expenses WHERE linked_expense_id = ?', [exp.id]);
+        if (lab) {
+          settleInfo = { kind: 'labor', labor: lab, accId: wpAcc.id };
+        }
+      }
+    }
+
     await transaction(async (tx) => {
       // 1. إعادة رصيد الصندوق / حركة البنك بالطرف المعاكس
       const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
@@ -149,21 +174,31 @@ const FinancialControlService = {
         VALUES (?, ?, 0, 0, ?, ?, ?, ?)
       `, [prevBal, amount, newBal, exp.currency || 'ر.ي', revDate, cashNotes]);
 
-      // 2. تخفيض تكلفة المشروع إن كان مرتبطاً بمشروع
-      if (exp.project_id) {
-        await tx.run(`
-          UPDATE projects SET actual_cost = GREATEST(0, actual_cost - ?) WHERE id = ?
-        `, [amount, exp.project_id]);
-      }
-
-      // 3. تخفيض رصيد المورد إن كان محدداً
-      if (exp.supplier_id) {
+      // 2. تحديث البند الفرعي المرتبط إن وجد (استعادة مبالغ السداد)
+      if (settleInfo && settleInfo.kind === 'labor') {
+        const restoredPaid = Math.max(0, (Number(settleInfo.labor.paid_amount) || 0) - amount);
+        const restoredRemaining = Number(settleInfo.labor.total_amount) - restoredPaid;
+        const restoredStatus = restoredRemaining <= 0.005 ? 'مدفوع' : (restoredPaid > 0.005 ? 'جزئي' : 'غير مدفوع');
+        await tx.run(
+          'UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?',
+          [restoredPaid, restoredStatus, settleInfo.labor.id]
+        );
+      } else if (settleInfo && settleInfo.kind === 'purchase') {
+        await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [amount, settleInfo.purchase.supplier_id]);
+        const restoredPaid = Math.max(0, (Number(settleInfo.purchase.paid_amount) || 0) - amount);
+        const restoredRemaining = Number(settleInfo.purchase.total_amount) - restoredPaid;
+        const restoredStatus = restoredRemaining <= 0.005 ? 'مدفوع' : (restoredPaid > 0.005 ? 'جزئي' : 'غير مدفوع');
+        await tx.run(
+          'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
+          [restoredPaid, restoredStatus, settleInfo.purchase.id]
+        );
+      } else if (exp.supplier_id) {
         await tx.run(`
           UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?
         `, [amount, exp.supplier_id]);
       }
 
-      // 4. إنشاء قيد يومي عكسي متزن بالكامل (Storno Journal Entry)
+      // 3. إنشاء قيد يومي عكسي متزن بالكامل (Storno Journal Entry)
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
       let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
       reversingEntryNo = `REV-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`;
@@ -188,22 +223,22 @@ const FinancialControlService = {
       reversingJeId = jeRes.lastInsertRowid || jeRes.insertId;
 
       // أسطر القيد العكسي: يتم عكس الطرفين تماماً
-      // تحديد حساب الصندوق أو البنك بدقة
       const isBank = exp.payment_method === 'تحويل بنكي' || exp.payment_method === 'شيك' || exp.payment_method === 'bank_transfer' || exp.payment_method === 'check';
       const contraAcc = isBank
         ? await AccountingService.resolveBankAccount(exp.bank_account_id)
         : await AccountingService.resolveCashAccount();
       const contraAccId = contraAcc.id;
 
-      let expenseAccId = exp.account_id;
-      if (expenseAccId) {
+      let expenseAccId = settleInfo ? settleInfo.accId : exp.account_id;
+      if (expenseAccId && !settleInfo) {
         const vAcc = await AccountingService.assertLeafAccount(expenseAccId);
         expenseAccId = vAcc.id;
-      } else {
-        const defaultExpAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR code LIKE '4%') ORDER BY id ASC LIMIT 1");
+      } else if (!expenseAccId) {
+        const defaultExpAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR code LIKE '4%' OR code LIKE '3%') ORDER BY id ASC LIMIT 1");
         expenseAccId = defaultExpAcc ? defaultExpAcc.id : contraAccId;
       }
-      const finalCcId = exp.cost_center_id || 1;
+      const defaultCc = (await get('SELECT id FROM cost_centers ORDER BY id ASC LIMIT 1'))?.id || null;
+      const finalCcId = exp.cost_center_id || defaultCc;
 
       // المدين: الصندوق والبنك (إعادة المبلغ)
       await tx.run(`
@@ -211,13 +246,19 @@ const FinancialControlService = {
         VALUES (?, ?, ?, ?, ?, 0, ?)
       `, [reversingJeId, contraAccId, finalCcId, exp.project_id, amount, `إعادة المبلغ للصندوق/البنك بموجب قيد عكسي - ${cleanReason}`]);
 
-      // الدائن: حساب المصروف الأصلي (إلغاء قيد المصروف)
+      // الدائن: حساب المصروف أو الالتزام الأصلي (إلغاء قيد الصرف الأصلي)
+      const creditNote = settleInfo && settleInfo.kind === 'labor'
+        ? `استعادة التزام الأجور المستحقة — ${settleInfo.labor.worker_name_or_team} (#${settleInfo.labor.id}) - ${cleanReason}`
+        : settleInfo
+          ? `استعادة التزام ذمة المورد — فاتورة #${settleInfo.purchase.id} - ${cleanReason}`
+          : `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`;
+
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, ?, 0, ?, ?)
-      `, [reversingJeId, expenseAccId, finalCcId, exp.project_id, amount, `إلغاء قيد المصروف الأصلي بموجب قيد عكسي - ${cleanReason}`]);
+      `, [reversingJeId, expenseAccId, finalCcId, exp.project_id, amount, creditNote]);
 
-      // 5. تحديث حالة سند الصرف الأصلي إلى "معكوس" مع حفظ بيانات العكس
+      // 4. تحديث حالة سند الصرف الأصلي إلى "معكوس" مع حفظ بيانات العكس
       await tx.run(`
         UPDATE expenses 
         SET status = 'reversed', 
@@ -228,6 +269,12 @@ const FinancialControlService = {
             reversal_ref_id = ?
         WHERE id = ?
       `, [revUserId, revUserName, cleanReason, reversingJeId, exp.id]);
+
+      // 5. إعادة احتساب تكلفة المشروع لمنع الازدواج
+      if (exp.project_id) {
+        const ProjectCostService = require('./projectCostService');
+        await ProjectCostService.recalculateProjectCost(exp.project_id, tx);
+      }
     });
 
     // 6. تسجيل العملية بدقة في سجل التدقيق الرقابي مع بيانات القيمة السابقة والجديدة والسبب

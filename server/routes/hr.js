@@ -133,9 +133,9 @@ router.post('/leave-types', requirePermission('hr:create'), async (req, res) => 
     const { name, days_per_year = 30, is_paid = 1, description = '' } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'اسم نوع الإجازة مطلوب' });
     const result = await run(`
-      INSERT INTO leave_types (name, days_per_year, is_paid, description)
-      VALUES (?, ?, ?, ?)
-    `, [name.trim(), number(days_per_year), is_paid ? 1 : 0, description.trim()]);
+      INSERT INTO leave_types (name, days_per_year, days_allowed, is_paid, description, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [name.trim(), number(days_per_year), number(days_per_year), is_paid ? 1 : 0, description.trim(), description.trim()]);
     res.json({ success: true, message: 'تمت إضافة نوع الإجازة بنجاح', id: result.lastInsertRowid || result.insertId });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -150,8 +150,8 @@ router.get('/advances', requirePermission('hr:view'), async (_req, res) => {
 router.post('/advances', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_id, amount, request_date = today(), installment_amount, reason } = req.body;
-    await run('INSERT INTO employee_advances (employee_id,amount,request_date,installment_amount,reason) VALUES (?,?,?,?,?)',
-      [employee_id, number(amount), request_date, number(installment_amount), reason]);
+    await run('INSERT INTO employee_advances (employee_id,amount,request_date,date,installment_amount,reason,notes) VALUES (?,?,?,?,?,?,?)',
+      [employee_id, number(amount), request_date, request_date, number(installment_amount), reason, reason]);
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'advance',
@@ -316,10 +316,11 @@ router.post('/evaluations', requirePermission('hr:create'), async (req, res) => 
   try {
     const { employee_id, evaluation_date = today(), rating = 'جيد جداً', score = 85, bonuses = 0, deductions = 0, evaluator = 'مدير الموارد البشرية', comments = '' } = req.body;
     if (!employee_id) return res.status(400).json({ success: false, message: 'اختر الموظف المراد تقييمه' });
+    const evalPeriod = new Date(evaluation_date).getFullYear().toString();
     const result = await run(`
-      INSERT INTO employee_evaluations (employee_id, evaluation_date, rating, score, bonuses, deductions, evaluator, comments)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [employee_id, evaluation_date, rating, number(score), number(bonuses), number(deductions), evaluator, comments]);
+      INSERT INTO employee_evaluations (employee_id, period, evaluation_date, rating, score, bonuses, deductions, evaluator, evaluator_name, comments, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [employee_id, evalPeriod, evaluation_date, rating, number(score), number(bonuses), number(deductions), evaluator, evaluator, comments, comments]);
     res.json({ success: true, message: 'تم حفظ تقييم الموظف بنجاح', id: result.lastInsertRowid || result.insertId });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في حفظ التقييم: ' + err.message });

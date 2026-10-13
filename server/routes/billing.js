@@ -398,31 +398,46 @@ router.post('/:id/post', requirePermission('billing:post,accounting:post'), asyn
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
+      // حل الحسابات المالية آلياً من دليل الحسابات الموحد (Leaf Accounts)
+      const arAcc = await tx.get("SELECT id FROM accounts WHERE code = '12301001' AND is_posting = 1 LIMIT 1")
+        || await tx.get("SELECT id FROM accounts WHERE code LIKE '123%' AND is_posting = 1 LIMIT 1");
+      const retAcc = await tx.get("SELECT id FROM accounts WHERE code = '12601002' AND is_posting = 1 LIMIT 1")
+        || await tx.get("SELECT id FROM accounts WHERE (code LIKE '126%' OR code LIKE '12%') AND is_posting = 1 LIMIT 1");
+      const advAcc = await tx.get("SELECT id FROM accounts WHERE code = '22401002' AND is_posting = 1 LIMIT 1")
+        || await tx.get("SELECT id FROM accounts WHERE (code LIKE '224%' OR code LIKE '22%') AND is_posting = 1 LIMIT 1");
+      const revAcc = await tx.get("SELECT id FROM accounts WHERE code = '41101001' AND is_posting = 1 LIMIT 1")
+        || await tx.get("SELECT id FROM accounts WHERE code LIKE '41%' AND is_posting = 1 LIMIT 1");
+
+      const arAccountId = arAcc ? arAcc.id : 108;
+      const retAccountId = retAcc ? retAcc.id : 111;
+      const advAccountId = advAcc ? advAcc.id : 131;
+      const revAccountId = revAcc ? revAcc.id : 152;
+
       if (net_amount > 0) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 4, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, net_amount, `ذمم عملاء مستحقة - صافي ${bill.bill_type} رقم ${bill.bill_no}`]);
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, arAccountId, bill.project_id, net_amount, `ذمم عملاء مستحقة - صافي ${bill.bill_type} رقم ${bill.bill_no}`]);
       }
 
       if (parsedRetDed > 0) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 16, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, parsedRetDed, `أصل تعاقدي - محتجز ضمان مستقطع لحين التسليم النهائي`]);
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, retAccountId, bill.project_id, parsedRetDed, `أصل تعاقدي - محتجز ضمان مستقطع لحين التسليم النهائي`]);
       }
 
       if (parsedAdvDed > 0) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 18, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, parsedAdvDed, `إطفاء التزام تعاقدي - استقطاع استهلاك دفعة مقدمة`]);
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, advAccountId, bill.project_id, parsedAdvDed, `إطفاء التزام تعاقدي - استقطاع استهلاك دفعة مقدمة`]);
       }
 
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, 17, ?, 0, ?, ?)
-      `, [jeId, bill.project_id, parsedGrossAmount, `أصول تعاقدية - إجمالي الأعمال المنجزة المفوترة بالمستخلص`]);
+        VALUES (?, ?, ?, 0, ?, ?)
+      `, [jeId, revAccountId, bill.project_id, parsedGrossAmount, `أصول تعاقدية - إجمالي الأعمال المنجزة المفوترة بالمستخلص`]);
 
       await tx.run(`
         UPDATE bills 

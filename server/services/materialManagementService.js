@@ -22,7 +22,7 @@
 const crypto = require('crypto');
 const { query, get, run, transaction } = require('../database/db');
 const { assertPeriodOpen, resolveValidUserId, assertMakerChecker } = require('./financialControlService');
-const { INVENTORY_ACCOUNTS } = require('./inventoryValuationService');
+const { INVENTORY_ACCOUNTS, getInventoryAccounts } = require('./inventoryValuationService');
 const materialDomainEventBus = require('./materialDomainEventBus');
 const { logAudit } = require('./auditService');
 
@@ -573,32 +573,34 @@ const MaterialManagementService = {
 
         journalEntryId = jvRes.lastInsertRowid || jvRes.insertId;
 
-        // سطر العجز: مدين بحساب خسائر وعجز المخزون (5105 / 27)
+        const accounts = getInventoryAccounts ? await getInventoryAccounts(tx) : INVENTORY_ACCOUNTS;
+
+        // سطر العجز: مدين بحساب خسائر وعجز المخزون (5105)
         if (totalShortageAmount > 0) {
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
             VALUES (?, ?, ?, 0, ?)
-          `, [journalEntryId, INVENTORY_ACCOUNTS.INVENTORY_LOSS_SHRINKAGE, totalShortageAmount, `مدين: إثبات خسائر وعجز الجرد بموجب محضر ${audit.audit_no}`]);
+          `, [journalEntryId, accounts.INVENTORY_LOSS_SHRINKAGE, totalShortageAmount, `مدين: إثبات خسائر وعجز الجرد بموجب محضر ${audit.audit_no}`]);
 
-          // دائن بحساب المخزون (11) لتخفيض الأصل
+          // دائن بحساب المخزون لتخفيض الأصل
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
             VALUES (?, ?, 0, ?, ?)
-          `, [journalEntryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, totalShortageAmount, `دائن: تخفيض رصيد أصل المخزون بالعجز المثبت في ${audit.audit_no}`]);
+          `, [journalEntryId, accounts.INVENTORY_ASSET, totalShortageAmount, `دائن: تخفيض رصيد أصل المخزون بالعجز المثبت في ${audit.audit_no}`]);
         }
 
-        // سطر الفائض: مدين بحساب المخزون (11) لزيادة الأصل
+        // سطر الفائض: مدين بحساب المخزون لزيادة الأصل
         if (totalOverageAmount > 0) {
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
             VALUES (?, ?, ?, 0, ?)
-          `, [journalEntryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, totalOverageAmount, `مدين: زيادة رصيد أصل المخزون بالفائض المثبت في ${audit.audit_no}`]);
+          `, [journalEntryId, accounts.INVENTORY_ASSET, totalOverageAmount, `مدين: زيادة رصيد أصل المخزون بالفائض المثبت في ${audit.audit_no}`]);
 
-          // دائن بحساب أرباح وفائض المخزون (4205 / 28)
+          // دائن بحساب أرباح وفائض المخزون (4205)
           await tx.run(`
             INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
             VALUES (?, ?, 0, ?, ?)
-          `, [journalEntryId, INVENTORY_ACCOUNTS.INVENTORY_GAIN_SURPLUS, totalOverageAmount, `دائن: إثبات إيرادات وفائض الجرد بموجب ${audit.audit_no}`]);
+          `, [journalEntryId, accounts.INVENTORY_GAIN_SURPLUS, totalOverageAmount, `دائن: إثبات إيرادات وفائض الجرد بموجب ${audit.audit_no}`]);
         }
       }
 

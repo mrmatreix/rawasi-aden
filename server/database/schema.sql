@@ -216,6 +216,10 @@ CREATE TABLE IF NOT EXISTS projects (
     status TEXT DEFAULT 'active',     -- active, completed, paused
     start_date DATE,
     end_date DATE,
+    location TEXT,
+    description TEXT,
+    branch_id INTEGER DEFAULT 1,
+    department_id INTEGER DEFAULT 3,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -534,6 +538,7 @@ CREATE TABLE IF NOT EXISTS project_contracts (
     first_party TEXT,       -- المالك / العميل
     second_party TEXT,      -- المقاول: شركة رواسي عدن
     contract_date DATE,
+    signing_date DATE,
     start_date DATE,
     end_date DATE,
     duration_days INTEGER,
