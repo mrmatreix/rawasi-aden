@@ -2616,6 +2616,19 @@ function initSqlite() {
     } catch (e) {
       console.warn('Ledger integrity migration note (SQLite):', e.message);
     }
+
+    try {
+      const backupMigrationPath = path.join(__dirname, 'migration_backup_system.sql');
+      if (fs.existsSync(backupMigrationPath)) {
+        const backupSql = fs.readFileSync(backupMigrationPath, 'utf8');
+        if (sqliteDb) {
+          sqliteDb.exec(backupSql);
+          console.log('✅ [Rawasi DB] Backup, Restore & Disaster Recovery tables initialized');
+        }
+      }
+    } catch (e) {
+      console.warn('Backup system migration note (SQLite):', e.message);
+    }
   } catch (err) {
     console.warn('Project control migration note (SQLite):', err.message);
   }

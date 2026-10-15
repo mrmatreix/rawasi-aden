@@ -10,6 +10,8 @@ const {
 } = require('../database/db');
 const { runMigration } = require('../database/migrate_to_mysql');
 const { requirePermission } = require('../middleware/security');
+const unifiedBackupEngine = require('../services/unifiedBackupEngine');
+
 
 // جلب إعدادات الشركة
 router.get('/', requirePermission('settings:view,settings:company'), async (req, res) => {
@@ -50,7 +52,218 @@ router.post('/', requirePermission('settings:company'), async (req, res) => {
   }
 });
 
-// جلب قائمة النسخ الاحتياطية المحفوظة محلياً
+// =========================================================================
+// منظومة إدارة النسخ الاحتياطي واستعادة البيانات الموحدة (Disaster Recovery Engine)
+// =========================================================================
+
+// 1. استخراج حالة المنظومة ومؤشرات DR للوحة التحكم
+router.get('/backup/dr-status', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const status = await unifiedBackupEngine.getDashboardStatus();
+    res.json({ success: true, data: status });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر جلب حالة منظومة النسخ والاستعادة: ' + err.message });
+  }
+});
+
+// 2. إنشاء نسخة احتياطية فورية معتمدة وفق دورة الحياة الكاملة
+router.post('/backup/create', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { scope, encrypt, passphrase, isProtected, protectedReason } = req.body || {};
+    const result = await unifiedBackupEngine.createBackup({
+      backupType: 'manual',
+      scope: scope || 'database_only',
+      encrypt: Boolean(encrypt),
+      passphrase: passphrase || '',
+      isProtected: Boolean(isProtected),
+      protectedReason: protectedReason || '',
+      user: req.user?.username || 'admin',
+      req
+    });
+
+    res.json({
+      success: true,
+      message: result.encrypted
+        ? `تم إنشاء النسخة الاحتياطية وتشفيرها بنجاح 🔒 (${result.fileName})`
+        : `تم إنشاء النسخة الاحتياطية واعتمادها بنجاح 🛡️ (${result.fileName})`,
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'فشل إنشاء النسخة الاحتياطية: ' + err.message });
+  }
+});
+
+// 3. جلب قائمة سجلات النسخ الاحتياطية من جدول backup_records
+router.get('/backup/records', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit || 50), 200);
+    const records = await query(`
+      SELECT * FROM backup_records 
+      WHERE status != 'purged'
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `, [limit]);
+
+    res.json({ success: true, data: records });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب سجلات النسخ الاحتياطية: ' + err.message });
+  }
+});
+
+// 4. إجراء اختبار استعادة تجريبي في بيئة معزولة (Sandbox Test Restore)
+router.post('/backup/test-restore', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { backupId, passphrase } = req.body || {};
+    if (!backupId) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد النسخة المراد اختبارها' });
+    }
+
+    const testReport = await unifiedBackupEngine.runSandboxTestRestore(
+      backupId,
+      passphrase || null,
+      req.user?.username || 'admin'
+    );
+
+    res.json({
+      success: true,
+      message: `اجتازت النسخة الاحتياطية اختبار الاستعادة بنجاح في البيئة المعزولة (${testReport.fileName}) 🧪✅`,
+      data: testReport
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 5. استعادة آمنة إلى قاعدة الإنتاج مع إنشاء نقطة تراجع طارئة وتراجع تلقائي
+router.post('/backup/restore-production', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { backupId, passphrase, reason, confirmationText } = req.body || {};
+
+    if (!backupId) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد النسخة المراد استعادتها' });
+    }
+
+    // التأكيد الإلزامي لمنع الخطأ البشري
+    const cleanConfirm = String(confirmationText || '').trim();
+    if (cleanConfirm !== 'استعادة' && cleanConfirm !== 'RESTORE') {
+      return res.status(400).json({
+        success: false,
+        message: 'لتأكيد الاستعادة الإنتاجية واستبدال البيانات، يجب كتابة كلمة (استعادة) صراحة في حقل التأكيد'
+      });
+    }
+
+    const result = await unifiedBackupEngine.restoreToProduction(backupId, {
+      passphrase: passphrase || null,
+      reason: reason || 'استعادة إنتاجية بطلب من المستخدم',
+      user: req.user?.username || 'admin',
+      req
+    });
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 6. حماية نسخة معينة من التدوير والحذف التلقائي
+router.post('/backup/protect', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { backupId, isProtected, reason } = req.body || {};
+    if (!backupId) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد النسخة' });
+    }
+
+    const result = await unifiedBackupEngine.toggleProtection(
+      backupId,
+      Boolean(isProtected),
+      reason || '',
+      req.user?.username || 'admin'
+    );
+
+    res.json({
+      success: true,
+      message: isProtected ? 'تم تثبيت وحماية النسخة الاحتياطية من الحذف التلقائي 📌' : 'تم فك حماية النسخة الاحتياطية',
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 7. حذف نسخة احتياطية يدوياً
+router.delete('/backup/records/:id', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await unifiedBackupEngine.deleteBackup(id, req.user?.username || 'admin');
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 8. سجلات اختبارات الاستعادة السابقة
+router.get('/backup/test-logs', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const logs = await query(`
+      SELECT * FROM backup_test_logs 
+      ORDER BY created_at DESC 
+      LIMIT 30
+    `);
+    res.json({ success: true, data: logs });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 9. تنزيل نسخة احتياطية مسجلة بالمعرف أو الاسم مع حماية وتدقيق
+router.get('/backup/download-record/:idOrName', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { idOrName } = req.params;
+    let rec = null;
+    if (/^\d+$/.test(idOrName)) {
+      rec = await get('SELECT * FROM backup_records WHERE id = ?', [idOrName]);
+    } else {
+      rec = await get('SELECT * FROM backup_records WHERE file_name = ? OR backup_uid = ?', [idOrName, idOrName]);
+    }
+
+    let filePath = null;
+    let fileName = null;
+
+    if (rec && fs.existsSync(rec.file_path)) {
+      filePath = rec.file_path;
+      fileName = rec.file_name;
+    } else {
+      const safeName = path.basename(idOrName);
+      const candidate = path.join(unifiedBackupEngine.defaultStorageDir, safeName);
+      if (fs.existsSync(candidate)) {
+        filePath = candidate;
+        fileName = safeName;
+      }
+    }
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'ملف النسخة الاحتياطية المطلوب غير موجود على الخادم' });
+    }
+
+    await logAudit(req, {
+      action: 'BACKUP_RECORD_DOWNLOAD',
+      entity_type: 'backup_records',
+      entity_id: fileName,
+      details: { fileName, filePath }
+    });
+
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.download(filePath, fileName);
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء تنزيل النسخة: ' + err.message });
+  }
+});
+
+// جلب قائمة النسخ الاحتياطية المحفوظة محلياً (التوافق مع المسار القديم)
 router.get('/backups', requirePermission('settings:backup'), (req, res) => {
   try {
     const backups = listBackups();
@@ -62,17 +275,23 @@ router.get('/backups', requirePermission('settings:backup'), (req, res) => {
 
 const { logAudit } = require('../services/auditService');
 
-// إنشاء وتنزيل نسخة احتياطية فورية من كافة بيانات ومشاريع وحسابات النظام
+// إنشاء وتنزيل نسخة احتياطية فورية معتمدة عبر المحرك المركزي الموحد
 router.get('/backup', requirePermission('settings:backup'), async (req, res) => {
   try {
-    const backup = backupDatabase();
-    
+    // نستخدم المحرك المركزي الموحد لضمان checkpoint والتحقق من النزاهة وحساب sha256
+    const backup = await unifiedBackupEngine.createBackup({
+      backupType: 'manual',
+      scope: 'database_only',
+      user: req.user?.username || 'admin',
+      req
+    });
+
     try {
       await logAudit(req, {
         action: 'BACKUP_DOWNLOAD',
         entity_type: 'database',
         entity_id: backup.fileName,
-        details: { fileName: backup.fileName, fileSize: backup.fileSize }
+        details: { fileName: backup.fileName, fileSize: backup.fileSize, sha256: backup.sha256 }
       });
     } catch (auditErr) {
       console.warn('Audit log warning on backup download:', auditErr.message);
@@ -83,6 +302,7 @@ router.get('/backup', requirePermission('settings:backup'), async (req, res) => 
     }
 
     res.setHeader('Content-Type', 'application/x-sqlite3');
+    res.setHeader('X-Backup-SHA256', backup.sha256);
     res.download(backup.filePath, backup.fileName, (err) => {
       if (err) {
         console.error('Error sending backup file:', err);
@@ -97,12 +317,12 @@ router.get('/backup', requirePermission('settings:backup'), async (req, res) => 
   }
 });
 
-// تنزيل نسخة احتياطية محددة من مجلد النسخ الاحتياطية على الخادم
+// تنزيل نسخة احتياطية محددة من مجلد النسخ الاحتياطية على الخادم (التوافق مع المسار القديم)
 router.get('/backups/download/:fileName', requirePermission('settings:backup'), (req, res) => {
   try {
     const { fileName } = req.params;
     const safeName = path.basename(fileName);
-    const backupsDir = path.join(__dirname, '..', 'database', 'backups');
+    const backupsDir = unifiedBackupEngine.defaultStorageDir;
     const filePath = path.join(backupsDir, safeName);
 
     if (!fs.existsSync(filePath)) {
@@ -122,6 +342,7 @@ router.get('/backups/download/:fileName', requirePermission('settings:backup'), 
     res.status(500).json({ success: false, message: 'خطأ أثناء تنزيل النسخة: ' + err.message });
   }
 });
+
 
 // استعادة نسخة احتياطية من ملف محلي على السيرفر
 router.post('/restore-local', requirePermission('settings:backup'), async (req, res) => {

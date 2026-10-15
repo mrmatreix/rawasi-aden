@@ -34,6 +34,8 @@ const Settings = {
     } else if (tab === 'print') {
       this.loadPrintSettings();
     } else if (tab === 'backup') {
+      this.loadDisasterRecoveryDashboard();
+      this.loadBackupRecords();
       this.loadDbConfig();
       this.loadAutoBackupSchedule();
       this.loadLogoutBackups();
@@ -3520,6 +3522,466 @@ const Settings = {
       if (confirmBtn) {
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = originalBtnHtml;
+      }
+    }
+  },
+
+  // =========================================================================
+  // منظومة النسخ الاحتياطي واستعادة البيانات وإدارة الكوارث الموحدة (Disaster Recovery)
+  // =========================================================================
+
+  async loadDisasterRecoveryDashboard() {
+    try {
+      const res = await fetch('/api/settings/backup/dr-status');
+      const json = await res.json();
+      if (!json.success || !json.data) return;
+      const d = json.data;
+
+      // 1. آخر نسخة معتمدة
+      const lastBackupDateEl = document.getElementById('drLastBackupDate');
+      const lastBackupFileEl = document.getElementById('drLastBackupFile');
+      const lastBackupHashEl = document.getElementById('drLastBackupHash');
+      if (d.lastBackup) {
+        const dt = new Date(d.lastBackup.createdAt);
+        const sizeMb = (d.lastBackup.size / (1024 * 1024)).toFixed(2);
+        if (lastBackupDateEl) lastBackupDateEl.textContent = `${dt.toLocaleDateString('ar-YE')} ${dt.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}`;
+        if (lastBackupFileEl) lastBackupFileEl.innerHTML = `<span style="color:var(--gold-light); font-weight:600;">${d.lastBackup.fileName}</span> <span style="color:#94a3b8;">(${sizeMb} MB)</span> ${d.lastBackup.encrypted ? '🔒' : '📄'}`;
+        if (lastBackupHashEl) lastBackupHashEl.innerHTML = `<code style="font-size:0.72rem; color:#38bdf8;">SHA-256: ${d.lastBackup.sha256 ? d.lastBackup.sha256.slice(0, 16) + '...' : '-'}</code>`;
+      } else {
+        if (lastBackupDateEl) lastBackupDateEl.textContent = 'لا توجد نسخ مسجلة بعد';
+        if (lastBackupFileEl) lastBackupFileEl.textContent = '-';
+        if (lastBackupHashEl) lastBackupHashEl.textContent = '';
+      }
+
+      // 2. آخر اختبار استعادة
+      const lastTestStatusEl = document.getElementById('drLastTestStatus');
+      const lastTestDetailsEl = document.getElementById('drLastTestDetails');
+      if (d.lastTest) {
+        const testDt = new Date(d.lastTest.createdAt);
+        if (lastTestStatusEl) {
+          lastTestStatusEl.innerHTML = d.lastTest.status === 'passed' 
+            ? '🟢 مجاز وسليم (Passed)' 
+            : '🔴 فشل الفحص الأخير';
+          lastTestStatusEl.style.color = d.lastTest.status === 'passed' ? '#4ade80' : '#f87171';
+        }
+        if (lastTestDetailsEl) {
+          lastTestDetailsEl.innerHTML = `${testDt.toLocaleDateString('ar-YE')} | ${d.lastTest.tablesCount} جدول | توازن الحسابات: ${d.lastTest.isBalanced ? 'متزن ⚖️' : 'غير متزن ⚠️'} | (${d.lastTest.durationMs}ms)`;
+        }
+      } else {
+        if (lastTestStatusEl) {
+          lastTestStatusEl.innerHTML = '⚠️ لم يتم إجراء اختبار بعد';
+          lastTestStatusEl.style.color = '#facc15';
+        }
+        if (lastTestDetailsEl) lastTestDetailsEl.textContent = 'يُوصى بإجراء اختبار في بيئة معزولة Sandbox للتحقق من جاهزية الاستعادة';
+      }
+
+      // 3. مسار التخزين والديمومة
+      const storagePathEl = document.getElementById('drStoragePath');
+      const storagePersistEl = document.getElementById('drStoragePersist');
+      if (storagePathEl) storagePathEl.textContent = d.storage.path || '-';
+      if (storagePersistEl) {
+        if (d.storage.isRailwayPersistent) {
+          storagePersistEl.innerHTML = '🟢 تخزين دائم مؤكد (Railway Volume Persistent) 🛡️';
+          storagePersistEl.style.color = '#4ade80';
+        } else {
+          storagePersistEl.innerHTML = '⚠️ تخزين محلي داخل الحاوية (Ephemeral Storage) - يُنصح بربط Railway Volume';
+          storagePersistEl.style.color = '#facc15';
+        }
+      }
+
+      // 4. إجمالي النسخ والحجم
+      const totalCountEl = document.getElementById('drTotalCount');
+      const totalSizeEl = document.getElementById('drTotalSize');
+      if (totalCountEl) totalCountEl.textContent = `${d.stats.totalBackups} نسخة صالحة`;
+      if (totalSizeEl) totalSizeEl.textContent = `${d.stats.totalSizeMB} ميجابايت`;
+
+    } catch (e) {
+      console.error('Error loading DR status:', e);
+    }
+  },
+
+  async loadBackupRecords() {
+    const tbody = document.getElementById('backupRecordsTableBody');
+    if (!tbody) return;
+
+    try {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">⏳ جاري تحميل سجلات النسخ الاحتياطية...</td></tr>';
+      const res = await fetch('/api/settings/backup/records');
+      const json = await res.json();
+
+      if (!json.success || !json.data || json.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد نسخ احتياطية مسجلة حتى الآن. اضغط على (إنشاء نسخة احتياطية فورية) لبدء النسخ المعتمد.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = json.data.map(rec => {
+        const dt = new Date(rec.created_at);
+        const dateStr = `${dt.toLocaleDateString('ar-YE')} ${dt.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}`;
+        const sizeMb = (rec.file_size / (1024 * 1024)).toFixed(2);
+        
+        // نوع النسخة
+        let typeBadge = '<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">يدوي 👤</span>';
+        if (rec.backup_type === 'scheduled_daily') typeBadge = '<span class="badge" style="background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3);">مجدول يومي 📅</span>';
+        if (rec.backup_type === 'scheduled_weekly') typeBadge = '<span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3);">مجدول أسبوعي 📆</span>';
+        if (rec.backup_type === 'scheduled_monthly') typeBadge = '<span class="badge" style="background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3);">مجدول شهري 🗓️</span>';
+        if (rec.backup_type === 'logout') typeBadge = '<span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);">خروج 🚪</span>';
+        if (rec.backup_type === 'pre_migration') typeBadge = '<span class="badge" style="background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3);">أمان قبل الترقية ⚙️</span>';
+
+        // التشفير
+        const encBadge = rec.encrypted 
+          ? '<span style="color:#4ade80; font-size:0.8rem; font-weight:600;" title="مشفر عبر AES-256-GCM">🔒 مشفر</span>'
+          : '<span style="color:#94a3b8; font-size:0.8rem;">📄 غير مشفر</span>';
+
+        // حالة التحقق
+        const integrityBadge = rec.integrity_check_result === 'ok'
+          ? '<span style="color:#4ade80; font-size:0.8rem;">سليمة ✅</span>'
+          : `<span style="color:#f87171; font-size:0.8rem;">⚠️ ${rec.integrity_check_result || 'غير محدد'}</span>`;
+
+        // حالة اختبار الاستعادة
+        let testBadge = '<span style="color:#facc15; font-size:0.75rem;">لم تُختبر</span>';
+        if (rec.test_status === 'test_passed') {
+          testBadge = '<span style="color:#4ade80; font-size:0.78rem; font-weight:600;" title="تم فحص وتأكيد الاستعادة في بيئة معزولة Sandbox">🧪 مجاز بنجاح</span>';
+        } else if (rec.test_status === 'test_failed') {
+          testBadge = '<span style="color:#f87171; font-size:0.78rem; font-weight:600;">❌ فشل الاختبار</span>';
+        }
+
+        // الحماية
+        const protectIcon = rec.is_protected
+          ? `<button type="button" class="btn btn-sm" onclick="Settings.toggleBackupProtection(${rec.id}, 1)" title="نسخة محمية من الحذف التلقائي. اضغط لإلغاء التثبيت" style="background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4);">📌 مثبتة ومحمية</button>`
+          : `<button type="button" class="btn btn-sm btn-secondary" onclick="Settings.toggleBackupProtection(${rec.id}, 0)" title="تثبيت وحماية من الحذف التلقائي">📌 حماية</button>`;
+
+        const safeFileName = rec.file_name.replace(/'/g, "\\'");
+
+        return `
+          <tr>
+            <td>
+              <div style="font-weight:600; color:var(--gold-light); font-size:0.88rem; direction:ltr; text-align:right;">${rec.file_name}</div>
+              <div style="font-size:0.72rem; color:#94a3b8; font-family:monospace;">${rec.backup_uid}</div>
+            </td>
+            <td>${typeBadge}</td>
+            <td><strong>${sizeMb} MB</strong></td>
+            <td><span style="font-size:0.8rem;">${dateStr}</span></td>
+            <td>${encBadge}</td>
+            <td>${integrityBadge}</td>
+            <td>${testBadge}</td>
+            <td>${protectIcon}</td>
+            <td style="text-align: center; white-space: nowrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.downloadBackupRecord('${rec.id}', '${safeFileName}')" title="تنزيل النسخة" style="margin-left: 4px;">
+                📥
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.runSandboxTest('${rec.id}', '${safeFileName}')" title="فحص واختبار الاستعادة في بيئة معزولة Sandbox" style="border-color: #38bdf8; color: #38bdf8; margin-left: 4px;">
+                🧪 فحص Sandbox
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.openProductionRestoreModal('${rec.id}', '${safeFileName}', ${rec.encrypted ? 1 : 0})" title="استعادة إلى الإنتاج مع نسخة أمان وتراجع تلقائي" style="border-color: #f59e0b; color: #f59e0b; margin-left: 4px;">
+                ↩️ استعادة
+              </button>
+              ${rec.is_protected ? '' : `
+                <button type="button" class="btn btn-danger btn-sm" onclick="Settings.deleteBackupRecord('${rec.id}', '${safeFileName}')" title="حذف النسخة" style="padding: 4px 8px;">
+                  🗑️
+                </button>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      console.error('Error loading backup records:', e);
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--accent-red);">خطأ أثناء تحميل سجلات النسخ: ${e.message}</td></tr>`;
+    }
+  },
+
+  openCreateBackupModal() {
+    App.openModal('createBackupModal');
+  },
+
+  async executeCreateBackup(event) {
+    if (event) event.preventDefault();
+    const btn = document.getElementById('btnSubmitCreateBackup');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ جاري الإنشاء والتحقق من النزاهة وحساب البصمة...</span>';
+    }
+
+    const scope = document.getElementById('newBackupScope')?.value || 'database_only';
+    const encrypt = document.getElementById('newBackupEncrypt')?.checked || false;
+    const passphrase = document.getElementById('newBackupPassphrase')?.value || '';
+    const isProtected = document.getElementById('newBackupProtected')?.checked || false;
+    const protectedReason = document.getElementById('newBackupProtectedReason')?.value || '';
+
+    if (encrypt && (!passphrase || passphrase.trim().length < 4)) {
+      App.showToast('كلمة مرور التشفير يجب ألا تقل عن 4 خانات', 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/settings/backup/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope,
+          encrypt,
+          passphrase,
+          isProtected,
+          protectedReason
+        })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم إنشاء النسخة الاحتياطية المعتمدة بنجاح 🛡️', 'success');
+        App.closeModal('createBackupModal');
+        await this.loadDisasterRecoveryDashboard();
+        await this.loadBackupRecords();
+      } else {
+        App.showToast(json.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ في الاتصال بالخادم أثناء إنشاء النسخة', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  async runSandboxTest(backupId, fileName) {
+    let passphrase = '';
+    if (fileName && fileName.endsWith('.enc')) {
+      passphrase = prompt(`النسخة (${fileName}) مشفرة. يرجى إدخال كلمة مرور فك التشفير لإجراء الاختبار التجريبي:`);
+      if (passphrase === null) return;
+    }
+
+    App.showToast(`🧪 بدء اختبار الاستعادة في بيئة معزولة Sandbox (${fileName})...`, 'info');
+
+    const modal = document.getElementById('sandboxTestProgressModal');
+    if (modal) {
+      const targetNameEl = document.getElementById('sandboxTestTargetName');
+      if (targetNameEl) targetNameEl.textContent = fileName;
+      const resBox = document.getElementById('sandboxTestResultBox');
+      if (resBox) resBox.style.display = 'none';
+      const sp = document.getElementById('sandboxTestSpinner');
+      if (sp) sp.style.display = 'block';
+      App.openModal('sandboxTestProgressModal');
+    }
+
+    try {
+      const res = await fetch('/api/settings/backup/test-restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backupId, passphrase })
+      });
+
+      const json = await res.json();
+      const spinner = document.getElementById('sandboxTestSpinner');
+      const resultBox = document.getElementById('sandboxTestResultBox');
+      if (spinner) spinner.style.display = 'none';
+
+      if (json.success && json.data) {
+        const d = json.data;
+        if (resultBox) {
+          resultBox.style.display = 'block';
+          resultBox.className = 'alert alert-success';
+          resultBox.innerHTML = `
+            <div style="font-weight: 700; font-size: 1rem; color: #4ade80; margin-bottom: 8px;">
+              ✅ اجتازت النسخة الاحتياطية الاختبار التجريبي بنجاح تام!
+            </div>
+            <div style="font-size: 0.85rem; line-height: 1.6; color: #f8fafc;">
+              <div>• <strong>فحص بنية B-Tree و SQLite:</strong> سليم ومطابق للمواصفات (${d.integrityResult})</div>
+              <div>• <strong>إجمالي الجداول المفحوصة:</strong> ${d.stats?.total_tables || 0} جدول</div>
+              <div>• <strong>مستخدمي النظام النشطين:</strong> ${d.stats?.users_count || 0} مستخدم</div>
+              <div>• <strong>حسابات دليل الحسابات:</strong> ${d.stats?.accounts_count || 0} حساب</div>
+              <div>• <strong>القيود المحاسبية اليومية:</strong> ${d.stats?.journal_entries_count || 0} قيد</div>
+              <div>• <strong>ميزان المراجعة والاتزان:</strong> ${d.stats?.is_balanced ? '<span style="color:#4ade80;">متزن تماماً (المدين = الدائن) ⚖️</span>' : '<span style="color:#f87171;">غير متزن ⚠️</span>'}</div>
+              <div>• <strong>زمن التنفيذ والفحص:</strong> ${d.durationMs} ملي ثانية</div>
+              <div style="margin-top: 6px; font-size: 0.78rem; color: #94a3b8;">
+                * تم فحص النسخة في مجلد عمل مؤقت معزول وتم حذفه فوراً دون المساس إطلاقاً ببيانات الإنتاج الحالية.
+              </div>
+            </div>
+          `;
+        }
+        App.showToast('اجتازت النسخة اختبار الاستعادة التجريبي بنجاح! 🧪✅', 'success');
+        await this.loadDisasterRecoveryDashboard();
+        await this.loadBackupRecords();
+      } else {
+        if (resultBox) {
+          resultBox.style.display = 'block';
+          resultBox.className = 'alert alert-danger';
+          resultBox.innerHTML = `
+            <div style="font-weight: 700; color: #f87171; margin-bottom: 4px;">❌ فشل اختبار الاستعادة:</div>
+            <div style="font-size: 0.85rem; color: #fca5a5;">${json.message || 'حدث خطأ غير معروف'}</div>
+          `;
+        }
+        App.showToast(json.message || 'فشل فحص النسخة', 'error');
+        await this.loadBackupRecords();
+      }
+    } catch (e) {
+      App.showToast('خطأ أثناء تشغيل فحص Sandbox: ' + e.message, 'error');
+    }
+  },
+
+  openProductionRestoreModal(backupId, fileName, isEncrypted) {
+    this._drRestoreTargetId = backupId;
+    this._drRestoreTargetName = fileName;
+
+    const nameEl = document.getElementById('drRestoreFileName');
+    if (nameEl) nameEl.textContent = fileName;
+
+    const passGroup = document.getElementById('drRestorePassphraseGroup');
+    if (passGroup) passGroup.style.display = isEncrypted ? 'block' : 'none';
+
+    const confirmInp = document.getElementById('drRestoreConfirmInput');
+    if (confirmInp) confirmInp.value = '';
+
+    const reasonInp = document.getElementById('drRestoreReasonInput');
+    if (reasonInp) reasonInp.value = 'استعادة معتمدة بطلب من الإدارة';
+
+    App.openModal('drProductionRestoreModal');
+  },
+
+  async executeProductionRestore() {
+    const backupId = this._drRestoreTargetId;
+    const fileName = this._drRestoreTargetName;
+    if (!backupId) return;
+
+    const confirmText = document.getElementById('drRestoreConfirmInput')?.value?.trim();
+    if (confirmText !== 'استعادة' && confirmText !== 'RESTORE') {
+      App.showToast('لتأكيد الاستعادة الإنتاجية، يجب كتابة كلمة (استعادة) صراحة في الحقل المخصص', 'error');
+      return;
+    }
+
+    const passphrase = document.getElementById('drRestorePassphraseInput')?.value || '';
+    const reason = document.getElementById('drRestoreReasonInput')?.value || 'استعادة إنتاجية معتمدة';
+
+    const btn = document.getElementById('btnConfirmDrProductionRestore');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ جاري الفحص المسبق في Sandbox وحفظ نسخة الأمان والاستعادة...</span>';
+    }
+
+    try {
+      const res = await fetch('/api/settings/backup/restore-production', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          backupId,
+          passphrase,
+          reason,
+          confirmationText: confirmText
+        })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        App.showToast('تمت الاستعادة الإنتاجية بنجاح تام وتم التحقق من الجداول والحسابات! 🚀 جاري إعادة تحميل الصفحة...', 'success');
+        App.closeModal('drProductionRestoreModal');
+        setTimeout(() => {
+          window.location.reload();
+        }, 2200);
+      } else {
+        App.showToast(`فشلت الاستعادة: ${json.message}`, 'error');
+      }
+    } catch (err) {
+      App.showToast('خطأ في الاتصال أثناء تنفيذ الاستعادة: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  async toggleBackupProtection(backupId, currentProtection) {
+    const isProtected = currentProtection === 1 ? false : true;
+    let reason = '';
+    if (isProtected) {
+      reason = prompt('يرجى إدخال سبب حماية وتثبيت هذه النسخة (مثال: إقفال الحسابات السنوية):') || 'مثبتة بطلب من المسؤول';
+    }
+
+    try {
+      const res = await fetch('/api/settings/backup/protect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backupId, isProtected, reason })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message, 'success');
+        await this.loadBackupRecords();
+      } else {
+        App.showToast(json.message, 'error');
+      }
+    } catch (e) {
+      App.showToast('خطأ أثناء تعديل حماية النسخة', 'error');
+    }
+  },
+
+  async deleteBackupRecord(backupId, fileName) {
+    if (!confirm(`هل أنت متأكد من رغبتك في حذف النسخة الاحتياطية (${fileName}) نهائياً؟\n\nتنبيه: لا يمكن التراجع عن هذا الإجراء.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/settings/backup/records/${backupId}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم حذف النسخة بنجاح', 'success');
+        await this.loadDisasterRecoveryDashboard();
+        await this.loadBackupRecords();
+      } else {
+        App.showToast(json.message || 'فشل حذف النسخة', 'error');
+      }
+    } catch (e) {
+      App.showToast('خطأ أثناء حذف النسخة: ' + e.message, 'error');
+    }
+  },
+
+  async downloadBackupRecord(idOrName, fileName) {
+    try {
+      const token = (window.Auth && window.Auth.token)
+        || localStorage.getItem('rawasi_token')
+        || sessionStorage.getItem('rawasi_token')
+        || '';
+      const url = `/api/settings/backup/download-record/${encodeURIComponent(idOrName)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+      App.showToast(`جاري تنزيل النسخة الاحتياطية (${fileName})...`, 'info');
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+
+      if (!res.ok) {
+        throw new Error(`تعذر تنزيل الملف (رمز: ${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = blobUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+        a.remove();
+      }, 2000);
+
+      App.showToast(`تم تنزيل النسخة (${fileName}) بنجاح والاحتفاظ بها بأمان 💾`, 'success');
+    } catch (e) {
+      console.error('Error downloading backup record:', e);
+      const token = (window.Auth && window.Auth.token)
+        || localStorage.getItem('rawasi_token')
+        || sessionStorage.getItem('rawasi_token')
+        || '';
+      if (token) {
+        window.location.href = `/api/settings/backup/download-record/${encodeURIComponent(idOrName)}?token=${encodeURIComponent(token)}`;
+      } else {
+        App.showToast('تعذر تنزيل النسخة المحددة', 'error');
       }
     }
   },

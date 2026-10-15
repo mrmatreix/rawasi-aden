@@ -13,8 +13,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261015-u697">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261015-u697">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261015-3n3i">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261015-3n3i">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -5005,8 +5005,103 @@
 
         <!-- تبويب 3: النسخ الاحتياطي والأمان وإعدادات قواعد البيانات -->
         <div id="pane_settings_backup" class="settings-pane" style="display: none;">
-          
-          <!-- بطاقة 1: خيارات الربط السحابي وقاعدة البيانات (Online / Offline) -->
+
+          <!-- لوحة منظومة إدارة الكوارث والنسخ الاحتياطي المركزية (Enterprise Disaster Recovery Engine) -->
+          <div class="panel-card" style="margin-bottom: 24px; border: 2px solid var(--border-gold); background: linear-gradient(135deg, rgba(212, 175, 55, 0.06) 0%, rgba(15, 23, 42, 0.85) 100%);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid rgba(212, 175, 55, 0.25); padding-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="background: rgba(212, 175, 55, 0.15); border: 1px solid var(--border-gold); border-radius: 12px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem;">
+                  🛡️
+                </div>
+                <div>
+                  <h3 style="color: var(--gold-light); font-size: 1.25rem; margin: 0; font-weight: 700;">
+                    منظومة النسخ الاحتياطي واستعادة البيانات وإدارة الكوارث (Enterprise Disaster Recovery)
+                  </h3>
+                  <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 3px 0 0 0;">
+                    حماية استمرارية أعمال الشركة والمحاسبة والمشاريع مع فحص النزاهة الهيكلية الإلزامي (B-Tree Integrity) والاستعادة التجريبية المعزولة Sandbox
+                  </p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadDisasterRecoveryDashboard(); Settings.loadBackupRecords();">
+                  🔄 تحديث السجلات
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="Settings.openCreateBackupModal()" style="background: var(--gold-primary); color: #000; font-weight: 700;">
+                  ⚡ إنشاء نسخة احتياطية فورية معتمدة 🛡️
+                </button>
+              </div>
+            </div>
+
+            <!-- شبكة مؤشرات الحالة اللحظية (Disaster Recovery KPI Grid) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 22px;">
+              <!-- بطاقة 1: آخر نسخة معتمدة -->
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm); padding: 14px;">
+                <div style="color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 4px;">🛡️ آخر نسخة معتمدة وسليمة:</div>
+                <div id="drLastBackupDate" style="font-weight: 700; color: #f8fafc; font-size: 0.95rem; margin-bottom: 4px;">جاري التحميل...</div>
+                <div id="drLastBackupFile" style="font-size: 0.8rem; margin-bottom: 4px;">-</div>
+                <div id="drLastBackupHash"></div>
+              </div>
+
+              <!-- بطاقة 2: اختبار الاستعادة التجريبي -->
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm); padding: 14px;">
+                <div style="color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 4px;">🧪 اختبار الاستعادة التجريبي (Sandbox):</div>
+                <div id="drLastTestStatus" style="font-weight: 700; font-size: 0.95rem; margin-bottom: 4px;">جاري التحميل...</div>
+                <div id="drLastTestDetails" style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4;">-</div>
+              </div>
+
+              <!-- بطاقة 3: وحدة التخزين والديمومة -->
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm); padding: 14px;">
+                <div style="color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 4px;">💾 مسار التخزين وديمومة Railway:</div>
+                <div id="drStoragePersist" style="font-weight: 700; font-size: 0.88rem; margin-bottom: 4px;">جاري الفحص...</div>
+                <div id="drStoragePath" style="font-size: 0.75rem; color: #94a3b8; font-family: monospace; direction: ltr; text-align: right; word-break: break-all;">-</div>
+              </div>
+
+              <!-- بطاقة 4: إجمالي النسخ وسياسة الاحتفاظ -->
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm); padding: 14px;">
+                <div style="color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 4px;">📊 النسخ وسياسة الاحتفاظ النشطة:</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <span id="drTotalCount" style="font-weight: 700; color: #38bdf8; font-size: 0.95rem;">-</span>
+                  <span id="drTotalSize" style="font-size: 0.82rem; color: var(--gold-light); font-weight: 600;">-</span>
+                </div>
+                <div style="font-size: 0.74rem; color: #94a3b8; line-height: 1.3;">
+                  14 يوماً للنسخ اليومية | 8 أسابيع للأسبوعية | 12 شهراً للشهرية مع استثناء النسخ المحمية 📌
+                </div>
+              </div>
+            </div>
+
+            <!-- جدول سجل النسخ الاحتياطية المعتمدة -->
+            <div style="margin-top: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h4 style="color: var(--gold-light); font-size: 0.95rem; margin: 0; display: flex; align-items: center; gap: 6px;">
+                  <span>📋 سجل النسخ الاحتياطية المعتمدة (Live Verified Backups)</span>
+                </h4>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">يتم فحص B-Tree وبصمة SHA-256 تلقائياً قبل اعتماد أي نسخة</span>
+              </div>
+              <div class="table-responsive">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>اسم النسخة والمعرّف (UID)</th>
+                      <th>النوع والمصدر</th>
+                      <th>الحجم</th>
+                      <th>تاريخ ووقت الإنشاء</th>
+                      <th>التشفير</th>
+                      <th>سلامة B-Tree</th>
+                      <th>فحص Sandbox</th>
+                      <th>الحماية</th>
+                      <th style="text-align: center; min-width: 220px;">الإجراءات المعتمدة</th>
+                    </tr>
+                  </thead>
+                  <tbody id="backupRecordsTableBody">
+                    <tr>
+                      <td colspan="9" style="text-align: center; padding: 20px; color: var(--text-secondary);">جاري تحميل سجلات النسخ...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
               <h3 style="color: var(--gold-light); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
@@ -5300,6 +5395,157 @@
           </div>
 
         </div>
+
+        <!-- ================== نوافذ إدارة الكوارث والنسخ المنبثقة ================== -->
+
+        <!-- 1. نافذة إنشاء نسخة احتياطية فورية معتمدة -->
+        <div class="modal-overlay" id="createBackupModal">
+          <div class="modal-box" style="max-width: 580px;">
+            <div class="modal-header">
+              <h3 style="display: flex; align-items: center; gap: 8px;">
+                <span>⚡ إنشاء نسخة احتياطية فورية معتمدة (Verified Backup)</span>
+              </h3>
+              <button class="modal-close-btn" onclick="App.closeModal('createBackupModal')">&times;</button>
+            </div>
+            <form onsubmit="Settings.executeCreateBackup(event)" style="padding: 12px 0;">
+              <div style="background: rgba(212, 175, 55, 0.08); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px; font-size: 0.85rem; line-height: 1.5; color: #f8fafc;">
+                🛡️ <strong>دورة الاعتماد الصارمة:</strong> سيقوم المحرك بإجراء WAL Checkpoint ذري، فحص B-Tree عميق، التأكد من سلامة الجداول وتوازن الحسابات، وحساب بصمة SHA-256 قبل اعتماد النسخة.
+              </div>
+
+              <!-- نطاق النسخ -->
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label for="newBackupScope" style="font-weight: 600;">نطاق النسخة الاحتياطية</label>
+                <select id="newBackupScope" class="form-control">
+                  <option value="database_only">قاعدة البيانات فقط (سريع وموصى به للنسخ الدوري)</option>
+                  <option value="full_bundle_with_files">حزمة شاملة (قاعدة البيانات + وثائق ومرفقات المشاريع)</option>
+                </select>
+              </div>
+
+              <!-- خيارات التشفير -->
+              <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <label for="newBackupEncrypt" style="font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0;">
+                    <input type="checkbox" id="newBackupEncrypt" onchange="document.getElementById('newBackupPassphraseGroup').style.display = this.checked ? 'block' : 'none'">
+                    <span>🔒 تشفير النسخة عسكرياً (AES-256-GCM + PBKDF2)</span>
+                  </label>
+                  <span style="font-size: 0.72rem; color: #4ade80;">معايير البنوك</span>
+                </div>
+                <div id="newBackupPassphraseGroup" style="display: none; margin-top: 10px;">
+                  <label for="newBackupPassphrase" style="font-size: 0.82rem;">كلمة مرور التشفير (Passphrase)</label>
+                  <input type="password" id="newBackupPassphrase" class="form-control" placeholder="أدخل كلمة مرور قوية (4 خانات على الأقل)">
+                  <small style="color: #f87171; font-size: 0.72rem; display: block; margin-top: 4px;">⚠️ تحذير: احفظ كلمة المرور بأمان، فلن يمكن استعادة النسخة بدونها.</small>
+                </div>
+              </div>
+
+              <!-- خيار التثبيت والحماية من الحذف -->
+              <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
+                <label for="newBackupProtected" style="font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0;">
+                  <input type="checkbox" id="newBackupProtected" onchange="document.getElementById('newBackupProtectedReasonGroup').style.display = this.checked ? 'block' : 'none'">
+                  <span>📌 تثبيت وحماية النسخة من الحذف التلقائي والتدوير (Pin Backup)</span>
+                </label>
+                <div id="newBackupProtectedReasonGroup" style="display: none; margin-top: 10px;">
+                  <label for="newBackupProtectedReason" style="font-size: 0.82rem;">سبب الحماية والتثبيت</label>
+                  <input type="text" id="newBackupProtectedReason" class="form-control" placeholder="مثال: نسخة معتمدة قبل إقفال السنة المالية أو ترقية النظام">
+                </div>
+              </div>
+
+              <div class="modal-footer" style="padding-top: 10px;">
+                <button type="submit" class="btn btn-primary" id="btnSubmitCreateBackup">
+                  <span>بدء الإنشاء والفحص والاعتماد 🛡️</span>
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="App.closeModal('createBackupModal')">إلغاء</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- 2. نافذة تقدم فحص واختبار الاستعادة التجريبي في بيئة معزولة Sandbox -->
+        <div class="modal-overlay" id="sandboxTestProgressModal">
+          <div class="modal-box" style="max-width: 600px;">
+            <div class="modal-header">
+              <h3 style="display: flex; align-items: center; gap: 8px;">
+                <span>🧪 فحص واختبار الاستعادة التجريبي (Sandbox Test Restore)</span>
+              </h3>
+              <button class="modal-close-btn" onclick="App.closeModal('sandboxTestProgressModal')">&times;</button>
+            </div>
+            <div style="padding: 14px 0;">
+              <div style="font-size: 0.88rem; margin-bottom: 12px; color: var(--gold-light);">
+                النسخة المستهدفة للفحص: <strong id="sandboxTestTargetName" style="direction: ltr; font-family: monospace;">-</strong>
+              </div>
+
+              <!-- مؤشر الانتظار -->
+              <div id="sandboxTestSpinner" style="text-align: center; padding: 25px 15px;">
+                <div style="font-size: 2.2rem; margin-bottom: 10px;">⏳</div>
+                <div style="font-weight: 700; color: #38bdf8; margin-bottom: 6px;">جاري فحص النسخة في بيئة معزولة Sandbox...</div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+                  يتم التحقق من فك التشفير، فحص صفحات B-Tree، مطابقة الـ 119 جدولا، فحص ميزان المراجعة، ثم حذف البيئة المؤقتة دون لمس الإنتاج.
+                </div>
+              </div>
+
+              <!-- مربع النتائج -->
+              <div id="sandboxTestResultBox" style="display: none; padding: 14px; border-radius: var(--radius-sm); margin-top: 10px;"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="App.closeModal('sandboxTestProgressModal')">إغلاق</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. نافذة تأكيد الاستعادة الإنتاجية الآمنة -->
+        <div class="modal-overlay" id="drProductionRestoreModal">
+          <div class="modal-box" style="max-width: 600px;">
+            <div class="modal-header">
+              <h3 style="color: #f87171; display: flex; align-items: center; gap: 8px;">
+                <span>🚨 تأكيد الاستعادة الإنتاجية لقاعدة البيانات (Production Restore)</span>
+              </h3>
+              <button class="modal-close-btn" onclick="App.closeModal('drProductionRestoreModal')">&times;</button>
+            </div>
+            <div style="padding: 14px 0;">
+              <div style="background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.5; color: #fecaca;">
+                <div style="font-weight: 700; font-size: 1rem; margin-bottom: 6px; color: #fff;">⚠️ تحذير عالي الأهمية:</div>
+                استعادة نسخة احتياطية ستقوم باستبدال قاعدة بيانات الإنتاج الحالية بحالة النسخة المحددة.
+                <br>
+                🛡️ <strong>ضمانات الأمان والتراجع التلقائي (Auto-Rollback):</strong>
+                <ul style="margin: 6px 0 0 18px; padding: 0;">
+                  <li>يتم إجراء فحص Sandbox مسبق أولاً للتأكد من خلو النسخة من أي تلف.</li>
+                  <li>يتم حفظ <strong>نسخة أمان طارئة (Safety Snapshot)</strong> من قاعدة البيانات الحالية تلقائياً قبل البدء.</li>
+                  <li>في حال فشل أي فحص بعد الاستعادة، سيقوم المحرك <strong>بالتراجع التلقائي الفوري</strong> إلى نسخة الأمان دون فقدان أي بيانات.</li>
+                </ul>
+              </div>
+
+              <div style="font-size: 0.88rem; margin-bottom: 14px;">
+                النسخة المراد استعادتها: <strong id="drRestoreFileName" style="color: var(--gold-light); direction: ltr; font-family: monospace;">-</strong>
+              </div>
+
+              <!-- حقل فك التشفير إذا كانت مشفرة -->
+              <div id="drRestorePassphraseGroup" style="display: none; margin-bottom: 14px;">
+                <label for="drRestorePassphraseInput" style="font-weight: 600;">كلمة مرور فك التشفير للنسخة المشفرة</label>
+                <input type="password" id="drRestorePassphraseInput" class="form-control" placeholder="أدخل كلمة المرور">
+              </div>
+
+              <!-- سبب الاستعادة -->
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label for="drRestoreReasonInput" style="font-weight: 600;">سبب الاستعادة (لأغراض التدقيق وسجل العمليات)</label>
+                <input type="text" id="drRestoreReasonInput" class="form-control" value="استعادة معتمدة بطلب من الإدارة" required>
+              </div>
+
+              <!-- كلمة التأكيد الإلزامية لمنع الخطأ البشري -->
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label for="drRestoreConfirmInput" style="font-weight: 700; color: #f87171;">
+                  لتأكيد الاستبدال والاستعادة، اكتب كلمة (استعادة) في الحقل التالي:
+                </label>
+                <input type="text" id="drRestoreConfirmInput" class="form-control" placeholder="اكتب: استعادة" style="border-color: #ef4444; font-weight: bold; text-align: center;" required>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-danger" id="btnConfirmDrProductionRestore" onclick="Settings.executeProductionRestore()" style="background: #ef4444; border-color: #ef4444; font-weight: bold;">
+                <span>تأكيد وبدء الاستعادة والتحقق ↩️</span>
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="App.closeModal('drProductionRestoreModal')">إلغاء</button>
+            </div>
+          </div>
+        </div>
+
       </section>
 
     </main>
@@ -10143,27 +10389,27 @@
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/auth.js?v=1.0.0.20261015-u697"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/auth.js?v=1.0.0.20261015-3n3i"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/projects.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/accounting.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/inventory.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/hr.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/settings.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/contracts_cashflow.js?v=1.0.0.20261015-u697"></script>
-  <script src="js/app.js?v=1.0.0.20261015-u697"></script>
+  <script src="js/reports.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/projects.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/accounting.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/inventory.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/hr.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/settings.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/contracts_cashflow.js?v=1.0.0.20261015-3n3i"></script>
+  <script src="js/app.js?v=1.0.0.20261015-3n3i"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261015-u697')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261015-3n3i')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً
