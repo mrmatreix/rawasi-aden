@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261015-iu86',
+  assetVersion: '1.0.0.20261015-u697',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261015-iu86',
-    projects: 'js/projects.js?v=1.0.0.20261015-iu86',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261015-iu86',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261015-iu86',
-    accounting: 'js/accounting.js?v=1.0.0.20261015-iu86',
-    hr: 'js/hr.js?v=1.0.0.20261015-iu86',
-    reports: 'js/reports.js?v=1.0.0.20261015-iu86',
-    inventory: 'js/inventory.js?v=1.0.0.20261015-iu86',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261015-iu86',
-    settings: 'js/settings.js?v=1.0.0.20261015-iu86',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261015-iu86',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261015-iu86'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261015-u697',
+    projects: 'js/projects.js?v=1.0.0.20261015-u697',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261015-u697',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261015-u697',
+    accounting: 'js/accounting.js?v=1.0.0.20261015-u697',
+    hr: 'js/hr.js?v=1.0.0.20261015-u697',
+    reports: 'js/reports.js?v=1.0.0.20261015-u697',
+    inventory: 'js/inventory.js?v=1.0.0.20261015-u697',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261015-u697',
+    settings: 'js/settings.js?v=1.0.0.20261015-u697',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261015-u697',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261015-u697'
   },
   _loadedModules: {},
   _loadingPromises: {},

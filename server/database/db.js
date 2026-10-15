@@ -2826,13 +2826,28 @@ function backupDatabase() {
   if (!fs.existsSync(backupsDir)) {
     fs.mkdirSync(backupsDir, { recursive: true });
   }
+
+  // تنفيذ checkpoint لدمج كافة التعديلات من ملف WAL في ملف قاعدة البيانات الأساسي قبل أخذ النسخة
+  if (sqliteDb) {
+    try {
+      sqliteDb.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    } catch (e) {
+      console.warn('⚠️ [Backup] Checkpoint warning:', e.message);
+    }
+  }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFileName = `backup_rawasi_${timestamp}.db`;
   const backupFilePath = path.join(backupsDir, backupFileName);
+
   if (fs.existsSync(sqlitePath)) {
     fs.copyFileSync(sqlitePath, backupFilePath);
+  } else {
+    throw new Error(`ملف قاعدة البيانات المصدر غير موجود: ${sqlitePath}`);
   }
-  return { fileName: backupFileName, filePath: backupFilePath };
+
+  const stat = fs.existsSync(backupFilePath) ? fs.statSync(backupFilePath) : { size: 0 };
+  return { fileName: backupFileName, filePath: backupFilePath, fileSize: stat.size };
 }
 
 function restoreDatabase(sourceFilePathOrBuffer) {

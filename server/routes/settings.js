@@ -62,24 +62,64 @@ router.get('/backups', requirePermission('settings:backup'), (req, res) => {
 
 const { logAudit } = require('../services/auditService');
 
-// إنشاء وتنزيل نسخة احتياطية من قاعدة البيانات
+// إنشاء وتنزيل نسخة احتياطية فورية من كافة بيانات ومشاريع وحسابات النظام
 router.get('/backup', requirePermission('settings:backup'), async (req, res) => {
   try {
     const backup = backupDatabase();
-    await logAudit(req, {
-      action: 'BACKUP_DOWNLOAD',
-      entity_type: 'database',
-      entity_id: backup.fileName,
-      details: { fileName: backup.fileName, fileSize: backup.fileSize }
-    });
+    
+    try {
+      await logAudit(req, {
+        action: 'BACKUP_DOWNLOAD',
+        entity_type: 'database',
+        entity_id: backup.fileName,
+        details: { fileName: backup.fileName, fileSize: backup.fileSize }
+      });
+    } catch (auditErr) {
+      console.warn('Audit log warning on backup download:', auditErr.message);
+    }
 
+    if (!fs.existsSync(backup.filePath)) {
+      return res.status(404).json({ success: false, message: 'ملف النسخة الاحتياطية غير موجود على الخادم' });
+    }
+
+    res.setHeader('Content-Type', 'application/x-sqlite3');
     res.download(backup.filePath, backup.fileName, (err) => {
       if (err) {
         console.error('Error sending backup file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: 'فشل إرسال ملف النسخة الاحتياطية: ' + err.message });
+        }
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إنشاء النسخة الاحتياطية', error: err.message });
+    console.error('Backup creation error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في إنشاء وتنزيل النسخة الاحتياطية: ' + err.message, error: err.message });
+  }
+});
+
+// تنزيل نسخة احتياطية محددة من مجلد النسخ الاحتياطية على الخادم
+router.get('/backups/download/:fileName', requirePermission('settings:backup'), (req, res) => {
+  try {
+    const { fileName } = req.params;
+    const safeName = path.basename(fileName);
+    const backupsDir = path.join(__dirname, '..', 'database', 'backups');
+    const filePath = path.join(backupsDir, safeName);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'ملف النسخة الاحتياطية المطلوب غير موجود' });
+    }
+
+    res.setHeader('Content-Type', 'application/x-sqlite3');
+    res.download(filePath, safeName, (err) => {
+      if (err) {
+        console.error('Error downloading backup file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: 'خطأ في تنزيل الملف' });
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء تنزيل النسخة: ' + err.message });
   }
 });
 
