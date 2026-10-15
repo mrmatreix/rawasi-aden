@@ -1489,7 +1489,7 @@ body.light-mode .theme-icon-light { display: inline; }
 
 /* شبكة اللوحات السريعة الجانبية (Side Quick Modules) */
 .side-quick-grid {
-  display: grid;
+  display: none !important;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 22px;
@@ -5706,6 +5706,217 @@ body.light-mode .filter-preset-btn:hover, body.light-mode .filter-preset-btn.act
   }
 }
 
+/* ==========================================================================
+   أزرار وتبويبات النوافذ وسلسلة العميل الحديثة (Modern Elegant Tab & Action Buttons)
+   ========================================================================== */
+.settings-tabs,
+.chain-tabs-bar,
+div.settings-tabs {
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+  background: rgba(15, 23, 42, 0.72) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 14px !important;
+  padding: 6px 8px !important;
+  margin-bottom: 18px !important;
+  overflow-x: auto;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.2);
+}
 
+.settings-tabs::-webkit-scrollbar,
+.chain-tabs-bar::-webkit-scrollbar {
+  height: 4px;
+}
 
+.settings-tabs::-webkit-scrollbar-thumb,
+.chain-tabs-bar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
 
+.settings-tabs button.tab-btn,
+button.tab-btn,
+.tab-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 9px 18px !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+  font-family: 'Cairo', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  outline: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  user-select: none !important;
+  line-height: 1.4 !important;
+}
+
+.settings-tabs button.tab-btn:hover,
+button.tab-btn:hover,
+.tab-btn:hover {
+  background: rgba(212, 175, 55, 0.12) !important;
+  color: #ffffff !important;
+  border-color: rgba(212, 175, 55, 0.35) !important;
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 12px rgba(212, 175, 55, 0.18) !important;
+}
+
+.settings-tabs button.tab-btn:active,
+button.tab-btn:active,
+.tab-btn:active {
+  transform: translateY(0);
+}
+
+.settings-tabs button.tab-btn.active,
+button.tab-btn.active,
+.tab-btn.active {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.32) 0%, rgba(180, 140, 30, 0.18) 100%) !important;
+  color: #fbbf24 !important;
+  border-color: #d4af37 !important;
+  font-weight: 800 !important;
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+}
+
+.settings-tabs button.tab-btn.active::after,
+button.tab-btn.active::after,
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #fbbf24, transparent);
+  border-radius: 2px;
+  box-shadow: 0 0 8px #fbbf24;
+}
+
+.tab-btn .tab-icon {
+  font-size: 1.05rem;
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.25s ease;
+}
+
+.tab-btn:hover .tab-icon {
+  transform: scale(1.18);
+}
+
+.tab-btn.active .tab-icon {
+  transform: scale(1.12);
+  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.6));
+}
+
+.tab-btn .tab-count-badge,
+.tab-btn span[id*="Count"] {
+  background: rgba(0, 0, 0, 0.45) !important;
+  color: #94a3b8 !important;
+  padding: 1px 7px !important;
+  border-radius: 12px !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 20px !important;
+  transition: all 0.25s ease !important;
+  margin-right: 3px !important;
+}
+
+.tab-btn:hover .tab-count-badge,
+.tab-btn:hover span[id*="Count"] {
+  color: #ffffff !important;
+  border-color: rgba(212, 175, 55, 0.4) !important;
+}
+
+.tab-btn.active .tab-count-badge,
+.tab-btn.active span[id*="Count"] {
+  background: #d4af37 !important;
+  color: #0b1322 !important;
+  border-color: #fbbf24 !important;
+  font-weight: 900 !important;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.65) !important;
+}
+
+/* أزرار الإجراءات السريعة العلوية في نافذة السلسلة */
+.chain-quick-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.btn-chain-action {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 16px !important;
+  border-radius: 9px !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+}
+
+.btn-chain-action:hover {
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.35) !important;
+}
+
+.btn-chain-project {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.35), rgba(29, 78, 216, 0.2)) !important;
+  border: 1px solid #3b82f6 !important;
+  color: #bfdbfe !important;
+}
+.btn-chain-project:hover {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.55), rgba(29, 78, 216, 0.35)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4) !important;
+}
+
+.btn-chain-bill {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.35), rgba(180, 83, 9, 0.2)) !important;
+  border: 1px solid #f59e0b !important;
+  color: #fde68a !important;
+}
+.btn-chain-bill:hover {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.55), rgba(180, 83, 9, 0.35)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4) !important;
+}
+
+.btn-chain-receipt {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.15)) !important;
+  border: 1px solid #10b981 !important;
+  color: #a7f3d0 !important;
+}
+.btn-chain-receipt:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.45), rgba(5, 150, 105, 0.25)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4) !important;
+}
+
+.btn-chain-statement {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.25), rgba(2, 132, 199, 0.15)) !important;
+  border: 1px solid #38bdf8 !important;
+  color: #bae6fd !important;
+}
+.btn-chain-statement:hover {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.45), rgba(2, 132, 199, 0.25)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4) !important;
+}

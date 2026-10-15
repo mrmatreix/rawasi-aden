@@ -30,11 +30,19 @@ router.get('/', requirePermission('settings:view,settings:company'), async (req,
 router.post('/', requirePermission('settings:company'), async (req, res) => {
   try {
     const updates = req.body;
+    const engine = getActiveEngine();
     for (const [key, value] of Object.entries(updates)) {
-      await run(`
-        INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
-        ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
-      `, [key, String(value)]);
+      if (engine === 'sqlite') {
+        await run(`
+          INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
+          ON CONFLICT(\`key\`) DO UPDATE SET \`value\` = excluded.\`value\`
+        `, [key, String(value)]);
+      } else {
+        await run(`
+          INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
+        `, [key, String(value)]);
+      }
     }
     res.json({ success: true, message: 'تم حفظ الإعدادات بنجاح' });
   } catch (err) {

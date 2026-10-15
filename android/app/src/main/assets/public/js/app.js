@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261004-vmtb',
+  assetVersion: '1.0.0.20261015-iu86',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,17 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261004-vmtb',
-    projects: 'js/projects.js?v=1.0.0.20261004-vmtb',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261004-vmtb',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261004-vmtb',
-    accounting: 'js/accounting.js?v=1.0.0.20261004-vmtb',
-    hr: 'js/hr.js?v=1.0.0.20261004-vmtb',
-    reports: 'js/reports.js?v=1.0.0.20261004-vmtb',
-    inventory: 'js/inventory.js?v=1.0.0.20261004-vmtb',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261004-vmtb',
-    settings: 'js/settings.js?v=1.0.0.20261004-vmtb',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261004-vmtb'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261015-iu86',
+    projects: 'js/projects.js?v=1.0.0.20261015-iu86',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261015-iu86',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261015-iu86',
+    accounting: 'js/accounting.js?v=1.0.0.20261015-iu86',
+    hr: 'js/hr.js?v=1.0.0.20261015-iu86',
+    reports: 'js/reports.js?v=1.0.0.20261015-iu86',
+    inventory: 'js/inventory.js?v=1.0.0.20261015-iu86',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261015-iu86',
+    settings: 'js/settings.js?v=1.0.0.20261015-iu86',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261015-iu86',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261015-iu86'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -85,6 +86,8 @@ const App = {
       inventory: ['inventory'],
       projectCloseout: ['projects', 'projectCloseout', 'tafqeet'],
       hr: ['hr'],
+      contractLifecycle: ['projects', 'contractsCashflow'],
+      cashFlow: ['accounting', 'contractsCashflow'],
       settings: ['settings']
     };
 
@@ -433,6 +436,12 @@ const App = {
     } else if (viewId === 'reports' && typeof Reports !== 'undefined' && !Reports._initialized && Reports.init) {
       await Reports.init();
       Reports._initialized = true;
+    } else if (viewId === 'contractLifecycle' && window.ContractAlertsUI && !window.ContractAlertsUI._initialized) {
+      await window.ContractAlertsUI.init();
+      window.ContractAlertsUI._initialized = true;
+    } else if (viewId === 'cashFlow' && window.CashFlowUI && !window.CashFlowUI._initialized) {
+      await window.CashFlowUI.init();
+      window.CashFlowUI._initialized = true;
     }
 
     this.activeView = viewId;
@@ -539,6 +548,14 @@ const App = {
     } else if (viewId === 'settings') {
       Settings.loadCompanySettings();
       Settings.loadUsers();
+    } else if (viewId === 'contractLifecycle') {
+      if (window.ContractAlertsUI && window.ContractAlertsUI.loadDashboard) {
+        window.ContractAlertsUI.loadDashboard();
+      }
+    } else if (viewId === 'cashFlow') {
+      if (window.CashFlowUI && window.CashFlowUI.loadProjections) {
+        window.CashFlowUI.loadProjections();
+      }
     }
   },
 

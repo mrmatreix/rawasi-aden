@@ -169,6 +169,11 @@ const Inventory = {
     const item = this.items.find(i => i.id === itemId);
     if (!item) return;
 
+    if (Number(item.current_quantity || 0) <= 0) {
+      App.showToast(`⚠️ لا يتوفر رصيد حالي للصنف [${item.name}] في المستودع (الرصيد: 0 ${item.unit}). يرجى توريد أو شراء كميات للمخزن أولاً قبل إجراء الصرف.`, 'warning');
+      return;
+    }
+
     const select = document.getElementById('issueProjectSelect');
     if (select && typeof Projects !== 'undefined' && Projects.list) {
       select.innerHTML = `<option value="">اختر المشروع...</option>` +
@@ -183,6 +188,12 @@ const Inventory = {
     document.getElementById('issueItemId').value = item.id;
     document.getElementById('issueItemName').textContent = `${item.name} (المتوفر: ${item.current_quantity} ${item.unit})`;
     document.getElementById('issueUnitLabel').textContent = item.unit;
+
+    const qtyInput = document.getElementById('issueQuantity');
+    if (qtyInput) {
+      qtyInput.max = item.current_quantity;
+      qtyInput.value = '';
+    }
 
     App.openModal('issueMaterialModal');
   },
@@ -226,6 +237,12 @@ const Inventory = {
     const quantity = document.getElementById('issueQuantity').value;
     const recipient = document.getElementById('issueRecipient').value;
     const notes = document.getElementById('issueNotes').value;
+
+    const item = this.items.find(i => i.id == item_id);
+    if (item && Number(quantity) > Number(item.current_quantity)) {
+      App.showToast(`الكمية المطلوبة (${quantity} ${item.unit}) تتجاوز الرصيد المتوفر في المخزن (${item.current_quantity} ${item.unit})`, 'error');
+      return;
+    }
 
     if (!item_id || !project_id || !quantity || Number(quantity) <= 0) {
       App.showToast('يرجى تحديد المشروع والكمية المطلوب صرفها', 'error');

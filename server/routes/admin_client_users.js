@@ -809,7 +809,7 @@ router.get('/service-requests', async (req, res) => {
     `);
 
     // جلب قائمة الموظفين للإسناد
-    const engineers = await db.query(`SELECT id, username, name, role FROM users WHERE is_active = 1`);
+    const engineers = await db.query(`SELECT id, username, full_name AS name, role FROM users WHERE status = 'active' OR status IS NULL`);
 
     res.json({
       success: true,

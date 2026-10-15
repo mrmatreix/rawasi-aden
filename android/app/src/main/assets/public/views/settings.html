@@ -2,6 +2,10 @@
         <div class="page-header-row">
           <h2 class="page-title">إعدادات النظام وإدارة المستخدمين والصلاحيات</h2>
           <div class="page-actions">
+            <button class="btn btn-success" onclick="Settings.switchTab('client_app')" style="background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; font-weight: bold; border-radius: 6px; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); gap: 6px; display: inline-flex; align-items: center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+              <span>📱 حسابات وصلاحيات تطبيق العملاء (Client App)</span>
+            </button>
             <button class="btn btn-primary" onclick="Settings.openNewUserModal()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
               <span>إضافة مستخدم جديد +</span>
@@ -272,9 +276,9 @@
                   </div>
                 </div>
 
-                <!-- 2. قسم تخصيص سندات القبض والصرف -->
+                <!-- 2. قسم تخصيص سندات القبض والصرف والعهد والقيود المحاسبية -->
                 <div class="print-settings-section-card">
-                  <h4>💵 2. تخصيص سندات القبض والصرف (Vouchers):</h4>
+                  <h4>💵 2. تخصيص السندات المالية والقيود المحاسبية (Vouchers & Journals):</h4>
                   
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="margin-bottom: 0;">
@@ -287,8 +291,23 @@
                     </div>
                   </div>
 
+                  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى سند العهدة والتصفية</label>
+                      <input type="text" id="printCustodyTitle" class="form-control" placeholder="سـنـد عـهـدة وتـصـفـيـة مـالـيـة" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى سند قيد اليومية الرسمي</label>
+                      <input type="text" id="printJournalTitle" class="form-control" placeholder="سـنـد قـيـد يـومـيـة مـحـاسـبـي" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى كشف حركة الصندوق والسيولة</label>
+                      <input type="text" id="printCashMovementTitle" class="form-control" placeholder="كشف حركة الصندوق والسيولة النقدية" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
                   <div class="form-group" style="margin-bottom: 12px;">
-                    <label>نمط وحجم طباعة السند</label>
+                    <label>نمط وحجم طباعة السندات</label>
                     <select id="printVoucherLayout" class="form-control" onchange="Settings.updatePrintPreview()">
                       <option value="single_a4" selected>صفحة كاملة A4 (نسخة واحدة كاملة ومريحة للقراءة)</option>
                       <option value="dual_a4">سندان في ورقة A4 واحدة مقسومة (نسخة للعميل + نسخة للأرشيف لتوفير الورق)</option>
@@ -313,41 +332,58 @@
                       <input type="checkbox" id="printVoucherShowChequeRef" checked onchange="Settings.updatePrintPreview()">
                       <span>إظهار رقم المرجع / الشيك إن وجد</span>
                     </label>
-                  </div>
-                </div>
-
-                <!-- 3. قسم تخصيص كشوفات حسابات العملاء والموردين -->
-                <div class="print-settings-section-card">
-                  <h4>👥 3. تخصيص كشوفات حسابات العملاء والموردين:</h4>
-                  
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
-                      <input type="checkbox" id="printStmtShowSummaryCard" checked onchange="Settings.updatePrintPreview()">
-                      <span>إظهار بطاقة الملخص الإجمالي أعلى الكشف (المسحوبات، المدفوعات، الرصيد)</span>
+                      <input type="checkbox" id="printVoucherShowCostCenter" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار مركز التكلفة المرتبط بالحركة</span>
                     </label>
                     <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
-                      <input type="checkbox" id="printStmtShowRunningBalance" checked onchange="Settings.updatePrintPreview()">
-                      <span>إظهار عمود الرصيد التراكمي في كل حركة</span>
-                    </label>
-                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
-                      <input type="checkbox" id="printStmtShowReference" checked onchange="Settings.updatePrintPreview()">
-                      <span>إظهار أرقام المراجع والسندات والفواتير</span>
-                    </label>
-                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
-                      <input type="checkbox" id="printStmtShowNotes" checked onchange="Settings.updatePrintPreview()">
-                      <span>إظهار بيان وملاحظات الحركة التفصيلية</span>
-                    </label>
-                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
-                      <input type="checkbox" id="printStmtShowMatchSig" checked onchange="Settings.updatePrintPreview()">
-                      <span>إظهار حقل توقيع ومصادقة مطابقة الرصيد</span>
+                      <input type="checkbox" id="printVoucherShowAccount" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار كود ورقم الحساب المالي في الأستاذ</span>
                     </label>
                   </div>
                 </div>
 
-                <!-- 4. قسم تخصيص تقارير الحسابات والمشاريع الشاملة -->
+                <!-- 3. قسم تخصيص وثائق ومستندات إدارة المشاريع والعقود الهندسية -->
                 <div class="print-settings-section-card">
-                  <h4>🏗️ 4. تخصيص تقارير وبيانات المشاريع الشاملة:</h4>
+                  <h4>🏗️ 3. تخصيص وثائق المشاريع والعقود الهندسية (Contracts & IPCs):</h4>
                   
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى التقرير الفني والمالي للمشروع</label>
+                      <input type="text" id="printProjReportTitle" class="form-control" placeholder="تقرير الحساب المالي للمشروع" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى العقد الإنشائي الرسمي</label>
+                      <input type="text" id="printContractTitle" class="form-control" placeholder="عقد مقاولة وإنشاءات هندسية رسمي" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى شهادة الدفع / المستخلص الجاري IPC</label>
+                      <input type="text" id="printIpcTitle" class="form-control" placeholder="شهادة دفع وإنجاز مستخلص جاري (IPC)" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى عرض السعر والمواصفات الرسمي</label>
+                      <input type="text" id="printQuotationTitle" class="form-control" placeholder="عرض سعر ومواصفات هندسية رسمية" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى استمارة أمر التغيير</label>
+                      <input type="text" id="printChangeOrderTitle" class="form-control" placeholder="استمارة أمر تغيير هندسي ومادي" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى التقرير الميداني للموقع</label>
+                      <input type="text" id="printDailyReportTitle" class="form-control" placeholder="التقرير الميداني اليومي لأعمال الموقع" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى محضر الاستلام والمخالصة</label>
+                      <input type="text" id="printHandoverTitle" class="form-control" placeholder="محضر استلام ومخالصة ختامية للمشروع" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
                       <input type="checkbox" id="printProjShowKpiCards" checked onchange="Settings.updatePrintPreview()">
@@ -369,13 +405,120 @@
                       <input type="checkbox" id="printProjShowTasks" checked onchange="Settings.updatePrintPreview()">
                       <span>إظهار جدول مراحل ومهام العمل بالمشروع</span>
                     </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printProjShowBoqItems" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار تفاصيل بنود ومواصفات جدول الكميات (BoQ)</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printProjShowRetentions" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار تفاصيل استقطاع الضمان وحجز الصيانة في المستخلصات</span>
+                    </label>
                   </div>
                 </div>
 
-                <!-- 5. قسم تخصيص القوائم والتقارير المالية -->
+                <!-- 4. قسم تخصيص كشوفات الحسابات ومسيرات الرواتب -->
                 <div class="print-settings-section-card">
-                  <h4>📊 5. تخصيص القوائم والتقارير المالية:</h4>
+                  <h4>👥 4. تخصيص كشوفات الحسابات ومسيرات الرواتب (Statements & HR):</h4>
                   
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى كشف حساب العميل</label>
+                      <input type="text" id="printClientStmtTitle" class="form-control" placeholder="كشف حساب عميل معتمد ومطابق للأستاذ" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى كشف حساب المورد</label>
+                      <input type="text" id="printSupplierStmtTitle" class="form-control" placeholder="كشف حساب مورد معتمد ومطابق للأستاذ" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى كشف الراتب والأجور الشامل</label>
+                      <input type="text" id="printPayrollTitle" class="form-control" placeholder="كشف الراتب والأجور الشامل المعتمد" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى قسيمة راتب الموظف الفردية</label>
+                      <input type="text" id="printPaySlipTitle" class="form-control" placeholder="قسيمة استحقاق وصرف راتب موظف" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printStmtShowSummaryCard" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار بطاقة الملخص الإجمالي أعلى الكشف (المسحوبات، المدفوعات، الرصيد)</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printStmtShowRunningBalance" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار عمود الرصيد التراكمي في كل حركة</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printStmtShowReference" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار أرقام المراجع والسندات والفواتير</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printStmtShowNotes" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار بيان وملاحظات الحركة التفصيلية</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printStmtShowMatchSig" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار حقل توقيع ومصادقة مطابقة الرصيد</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printPayrollShowAllowances" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار تفصيل البدلات الخمسة (انتقال، مظهر، طبيعة عمل، معيشة، تأمين صحي)</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printPayrollShowDeductions" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار تفصيل الاستقطاعات والتأمينات والضرائب في مسير الرواتب</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printPayrollShowEmpSignature" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار خانة توقيع واستلام الموظف</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 5. قسم تخصيص القوائم والتقارير المالية والمخزون -->
+                <div class="print-settings-section-card">
+                  <h4>📊 5. تخصيص القوائم والتقارير المالية والمخزون (Financial & Inventory):</h4>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى قائمة الأرباح والخسائر</label>
+                      <input type="text" id="printPlTitle" class="form-control" placeholder="قائمة الأرباح والخسائر الرسمية" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى قائمة الدخل المعيارية</label>
+                      <input type="text" id="printIncomeStmtTitle" class="form-control" placeholder="قائمة الدخل المعيارية وإثبات الإنجاز POC" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى الميزانية العمومية والمركز المالي</label>
+                      <input type="text" id="printBalanceSheetTitle" class="form-control" placeholder="الميزانية العمومية وقائمة المركز المالي" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى قائمة التدفقات النقدية الفعلية</label>
+                      <input type="text" id="printCashFlowTitle" class="form-control" placeholder="قائمة التدفقات النقدية الفعلية" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى ميزان المراجعة بالأرصدة</label>
+                      <input type="text" id="printTrialBalanceTitle" class="form-control" placeholder="ميزان المراجعة بالأرصدة والمجاميع" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى تقرير ربحية المشاريع والمراكز</label>
+                      <input type="text" id="printProfitabilityTitle" class="form-control" placeholder="تقرير ربحية وأداء المشاريع ومراكز التكلفة" oninput="Settings.updatePrintPreview()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label>مسمى تقرير جرد وتقييم المخزون</label>
+                      <input type="text" id="printInventoryTitle" class="form-control" placeholder="تقرير جرد وتقييم المخزون والمستودعات" oninput="Settings.updatePrintPreview()">
+                    </div>
+                  </div>
+
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
                       <input type="checkbox" id="printFinShowKpiCards" checked onchange="Settings.updatePrintPreview()">
@@ -388,6 +531,10 @@
                     <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
                       <input type="checkbox" id="printFinShowDualBalance" checked onchange="Settings.updatePrintPreview()">
                       <span>إظهار جدول مقارنة الأصول والالتزامات جنباً إلى جنب في الميزانية</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
+                      <input type="checkbox" id="printFinShowReconcileBadge" checked onchange="Settings.updatePrintPreview()">
+                      <span>إظهار شارة المطابقة التامة والاتزان مع دفتر الأستاذ العام</span>
                     </label>
                   </div>
                 </div>
@@ -500,18 +647,31 @@
             <div class="print-preview-sticky">
               <div class="print-preview-title-bar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
                 <span style="font-weight: 700; font-size: 0.88rem; color: #0f2744;">👁️ المعاينة الحية والمباشرة للأوراق:</span>
-                <span style="font-size: 0.72rem; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; color: #64748b;">تحديث تلقائي فوري</span>
+                <span style="font-size: 0.72rem; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; color: #64748b;">تحديث تلقائي فوري (19 نموذجاً رسمياً)</span>
               </div>
               
               <!-- أزرار التبديل السريع بين نماذج الأوراق المختلفة -->
-              <div class="print-doc-pill-bar" id="printDocSwitcher">
+              <div class="print-doc-pill-bar" id="printDocSwitcher" style="flex-wrap: wrap; max-height: 140px; overflow-y: auto;">
                 <button type="button" class="print-doc-pill active" onclick="Settings.setPreviewDoc('receipt')">💵 سند قبض</button>
                 <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('expense')">💸 سند صرف</button>
-                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('client_stmt')">👥 كشف حساب عميل</button>
-                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('supplier_stmt')">🏢 كشف حساب مورد</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('custody')">📑 سند عهدة</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('journal')">⚖️ قيد يومية</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('cash_movement')">🪙 حركة الصندوق</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('client_stmt')">👥 كشف عميل</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('supplier_stmt')">🏢 كشف مورد</button>
                 <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('project')">🏗️ تقرير مشروع</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('contract')">📜 عقد إنشائي</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('ipc')">📑 مستخلص IPC</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('quotation')">💼 عرض سعر</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('change_order')">⚠️ أمر تغيير</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('daily_report')">📋 تقرير موقع</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('handover')">🤝 محضر استلام</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('payroll')">👥 مسير رواتب</button>
                 <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('profit_loss')">📊 أرباح وخسائر</button>
                 <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('balance_sheet')">🏛️ ميزانية عمومية</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('cash_flow')">🌊 تدفقات نقدية</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('trial_balance')">📈 ميزان مراجعة</button>
+                <button type="button" class="print-doc-pill" onclick="Settings.setPreviewDoc('inventory')">📦 جرد وتقييم مخزون</button>
               </div>
 
               <div id="printLivePreviewBox" class="print-preview-box">

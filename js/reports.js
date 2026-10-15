@@ -1036,7 +1036,7 @@ const Reports = {
     ];
 
     if (tab === 'profit-loss' || tab === 'income-statement') {
-      reportTitle = 'قائمة الدخل والأرباح والخسائر الرسمية';
+      reportTitle = (tab === 'income-statement' ? cfg.income_stmt_title : cfg.pl_title) || 'قائمة الدخل والأرباح والخسائر الرسمية';
       const d = reportData.data || {};
       reportBodyHtml = `
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
@@ -1066,7 +1066,7 @@ const Reports = {
         </table>
       `;
     } else if (tab === 'trial-balance') {
-      reportTitle = 'ميزان المراجعة بالأرصدة والمجاميع';
+      reportTitle = cfg.trial_balance_title || 'ميزان المراجعة بالأرصدة والمجاميع';
       const d = reportData.data || {};
       const rows = (d.accounts || []).map(a => `
         <tr>
@@ -1088,7 +1088,7 @@ const Reports = {
         </table>
       `;
     } else if (tab === 'balance-sheet') {
-      reportTitle = 'قائمة المركز المالي والميزانية العمومية';
+      reportTitle = cfg.balance_sheet_title || 'قائمة المركز المالي والميزانية العمومية';
       const assetsHtml = document.getElementById('bsAssetsTable')?.innerHTML || '';
       const liabHtml = document.getElementById('bsLiabTable')?.innerHTML || '';
       const totA = document.getElementById('bsTotalAssets')?.textContent || '0';
@@ -1106,16 +1106,16 @@ const Reports = {
         </div>
       `;
     } else if (tab === 'cash-flow') {
-      reportTitle = 'قائمة التدفقات النقدية الفعلية';
+      reportTitle = cfg.cash_flow_title || 'قائمة التدفقات النقدية الفعلية';
       const cfHtml = document.getElementById('cashFlowTableBody')?.innerHTML || '';
       reportBodyHtml = `<table class="official-report-table"><thead><tr><th>بيان التدفق</th><th>مقبوضات (+)</th><th>مدفوعات (-)</th><th>الصافي</th></tr></thead><tbody>${cfHtml}</tbody></table>`;
     } else if (tab === 'client-statement') {
-      reportTitle = 'كشف حساب عميل معتمد ومطابق للأستاذ';
+      reportTitle = cfg.client_stmt_title || 'كشف حساب عميل معتمد ومطابق للأستاذ';
       const cInfo = document.getElementById('repClientInfo')?.innerHTML || '';
       const cRows = document.getElementById('repClientStatementTable')?.innerHTML || '';
       reportBodyHtml = `<div style="margin-bottom:12px">${cInfo}</div><table class="official-report-table"><thead><tr><th>التاريخ</th><th>نوع الحركة</th><th>المرجع</th><th>المشروع</th><th>مدين</th><th>دائن</th><th>الرصيد</th><th>البيان</th></tr></thead><tbody>${cRows}</tbody></table>`;
     } else if (tab === 'supplier-statement') {
-      reportTitle = 'كشف حساب مورد معتمد ومطابق للأستاذ';
+      reportTitle = cfg.supplier_stmt_title || 'كشف حساب مورد معتمد ومطابق للأستاذ';
       const sInfo = document.getElementById('repSupplierInfo')?.innerHTML || '';
       const sRows = document.getElementById('repSupplierStatementTable')?.innerHTML || '';
       reportBodyHtml = `<div style="margin-bottom:12px">${sInfo}</div><table class="official-report-table"><thead><tr><th>التاريخ</th><th>نوع الحركة</th><th>المرجع</th><th>دائن</th><th>مدين</th><th>الرصيد</th><th>البيان</th></tr></thead><tbody>${sRows}</tbody></table>`;

@@ -10,9 +10,8 @@ import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
     private WebView webView;
-    // تم توجيه التطبيق ليفتح مسار تطبيق العميل (Client App) محلياً لسرعة فائقة
-    // مع الإبقاء على ارتباطه بالسيرفر الحي لجلب البيانات عبر الـ API
-    private static final String SERVER_URL = "file:///android_asset/public/client-app/index.html";
+    // توجيه التطبيق للسيرفر الفعلي مباشرة لحل مشاكل الجلسات (CORS & Cookies)
+    private static final String SERVER_URL = "https://rawasi-aden-production.up.railway.app/client-app/";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
