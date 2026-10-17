@@ -17,18 +17,38 @@
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('./auditService');
 const { assertPeriodOpen, resolveValidUserId } = require('./financialControlService');
-const ProjectCostService = require('./projectCostService');
+
+async function getInventoryAccounts(dbRunner = null) {
+  const runner = dbRunner || { get };
+  const invAsset = await runner.get("SELECT id FROM accounts WHERE code = '11301001' AND is_posting = 1 LIMIT 1");
+  const suppPay = await runner.get("SELECT id FROM accounts WHERE code = '21101001' AND is_posting = 1 LIMIT 1");
+  const projExp = await runner.get("SELECT id FROM accounts WHERE code = '32102005' AND is_posting = 1 LIMIT 1")
+    || await runner.get("SELECT id FROM accounts WHERE (code LIKE '3%' OR code LIKE '5%') AND is_posting = 1 LIMIT 1");
+  const lossShrink = await runner.get("SELECT id FROM accounts WHERE code = '32102005' AND is_posting = 1 LIMIT 1")
+    || projExp;
+  const gainSurplus = await runner.get("SELECT id FROM accounts WHERE code = '41101001' AND is_posting = 1 LIMIT 1")
+    || await runner.get("SELECT id FROM accounts WHERE code LIKE '4%' AND is_posting = 1 LIMIT 1");
+
+  return {
+    INVENTORY_ASSET: invAsset?.id,
+    SUPPLIER_PAYABLES: suppPay?.id,
+    PROJECT_EXPENSES: projExp?.id,
+    INVENTORY_LOSS_SHRINKAGE: lossShrink?.id,
+    INVENTORY_GAIN_SURPLUS: gainSurplus?.id
+  };
+}
 
 const INVENTORY_ACCOUNTS = {
-  INVENTORY_ASSET: 11,               // حـ/ المخزون العام للمواد
-  SUPPLIER_PAYABLES: 7,              // حـ/ الموردين (ذمم دائنة)
-  PROJECT_EXPENSES: 10,              // حـ/ تكاليف ومصروفات المشاريع
-  INVENTORY_LOSS_SHRINKAGE: 27,      // 5105 - خسائر عجز وتسويات المخزون
-  INVENTORY_GAIN_SURPLUS: 28         // 4205 - أرباح وفائض تسويات المخزون
+  INVENTORY_ASSET: 109,               // حـ/ المخزون العام للمواد
+  SUPPLIER_PAYABLES: 120,             // حـ/ الموردين (ذمم دائنة)
+  PROJECT_EXPENSES: 147,              // حـ/ تكاليف ومصروفات المشاريع
+  INVENTORY_LOSS_SHRINKAGE: 147,      // خسائر عجز وتسويات المخزون
+  INVENTORY_GAIN_SURPLUS: 152         // أرباح وفائض تسويات المخزون
 };
 
 const InventoryValuationService = {
   INVENTORY_ACCOUNTS,
+  getInventoryAccounts,
 
   /**
    * صمام الأمان: منع الرصيد السالب قطعياً
@@ -88,12 +108,7 @@ const InventoryValuationService = {
       const totalCost = parsedQty * unitCost;
 
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM inventory_transfers');
-      let trfSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let transfer_no = `TRF-${new Date().getFullYear()}-${String(trfSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM inventory_transfers WHERE transfer_no = ?', [transfer_no])) {
-        trfSeq += 1;
-        transfer_no = `TRF-${new Date().getFullYear()}-${String(trfSeq).padStart(4, '0')}`;
-      }
+      const transfer_no = `TRF-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       // 1. إنقاص رصيد المستودع المصدر
       await tx.run('UPDATE warehouse_stocks SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND item_id = ?', [parsedQty, from_warehouse_id, item_id]);
@@ -183,12 +198,7 @@ const InventoryValuationService = {
       const totalAmount = parsedQty * returnPrice;
 
       const countRes = await tx.get("SELECT COUNT(*) as cnt FROM inventory_returns WHERE return_type = 'purchase_return'");
-      let retSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let return_no = `RET-SUP-${new Date().getFullYear()}-${String(retSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM inventory_returns WHERE return_no = ?', [return_no])) {
-        retSeq += 1;
-        return_no = `RET-SUP-${new Date().getFullYear()}-${String(retSeq).padStart(4, '0')}`;
-      }
+      const return_no = `RET-SUP-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       // 1. إنقاص رصيد المخزن
       await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
@@ -199,12 +209,7 @@ const InventoryValuationService = {
 
       // 3. إنشاء قيد محاسبي متزن: من حـ/ الموردين إلى حـ/ المخزون
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -218,17 +223,19 @@ const InventoryValuationService = {
 
       const entryId = jvRes.lastInsertRowid || jvRes.insertId;
 
+      const accounts = await getInventoryAccounts(tx);
+
       // سطر مدين: تخفيض التزام المورد
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
         VALUES (?, ?, ?, 0, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.SUPPLIER_PAYABLES, totalAmount, `مدين: تخفيض ذمة المورد بموجب ${return_no}`]);
+      `, [entryId, accounts.SUPPLIER_PAYABLES, totalAmount, `مدين: تخفيض ذمة المورد بموجب ${return_no}`]);
 
       // سطر دائن: تخفيض أصل المخزون
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
         VALUES (?, ?, 0, ?, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, totalAmount, `دائن: تخفيض رصيد المخزون بموجب ${return_no}`]);
+      `, [entryId, accounts.INVENTORY_ASSET, totalAmount, `دائن: تخفيض رصيد المخزون بموجب ${return_no}`]);
 
       // 4. تسجيل حركة المرتجع
       const retRes = await tx.run(`
@@ -282,7 +289,6 @@ const InventoryValuationService = {
     }
 
     await assertPeriodOpen(date);
-    await ProjectCostService.ensureSchema(); // تجهيز مخطط توحيد التكلفة قبل المعاملة
 
     const userId = await resolveValidUserId(user?.id);
     const parsedQty = Number(quantity);
@@ -293,12 +299,7 @@ const InventoryValuationService = {
       const totalAmount = parsedQty * returnPrice;
 
       const countRes = await tx.get("SELECT COUNT(*) as cnt FROM inventory_returns WHERE return_type = 'project_return'");
-      let retSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let return_no = `RET-PRJ-${new Date().getFullYear()}-${String(retSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM inventory_returns WHERE return_no = ?', [return_no])) {
-        retSeq += 1;
-        return_no = `RET-PRJ-${new Date().getFullYear()}-${String(retSeq).padStart(4, '0')}`;
-      }
+      const return_no = `RET-PRJ-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       // 1. زيادة رصيد المخزن
       await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [parsedQty, item_id]);
@@ -310,16 +311,12 @@ const InventoryValuationService = {
           updated_at = CURRENT_TIMESTAMP
       `, [warehouse_id, item_id, parsedQty, returnPrice, returnPrice]);
 
-      // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
+      // 2. تخفيض التكلفة الفعلية للمشروع
+      await tx.run('UPDATE projects SET actual_cost = MAX(0, actual_cost - ?) WHERE id = ?', [totalAmount, project_id]);
 
       // 3. إنشاء قيد محاسبي متزن: من حـ/ المخزون إلى حـ/ تكاليف ومصروفات المشاريع
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -333,17 +330,19 @@ const InventoryValuationService = {
 
       const entryId = jvRes.lastInsertRowid || jvRes.insertId;
 
+      const accounts = await getInventoryAccounts(tx);
+
       // سطر مدين: زيادة المخزون
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
         VALUES (?, ?, ?, 0, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, totalAmount, `مدين: استعادة مواد للمخزن بموجب ${return_no}`]);
+      `, [entryId, accounts.INVENTORY_ASSET, totalAmount, `مدين: استعادة مواد للمخزن بموجب ${return_no}`]);
 
       // سطر دائن: تخفيض تكلفة المشروع
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, 0, ?, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.PROJECT_EXPENSES, project_id, totalAmount, `دائن: تخفيض تكلفة المشروع بموجب ${return_no}`]);
+      `, [entryId, accounts.PROJECT_EXPENSES, project_id, totalAmount, `دائن: تخفيض تكلفة المشروع بموجب ${return_no}`]);
 
       // 4. تسجيل حركة المرتجع
       const retRes = await tx.run(`
@@ -364,9 +363,6 @@ const InventoryValuationService = {
           details: { return_no, project_id, item_id, quantity: parsedQty, totalAmount, entry_no }
         });
       }
-
-      // توحيد التكلفة: إعادة احتساب تكلفة المشروع من مصادرها بعد تثبيت المرتجع
-      await ProjectCostService.recalculateProjectCost(project_id, tx);
 
       return {
         id: retRes.lastInsertRowid || retRes.insertId,
@@ -418,12 +414,7 @@ const InventoryValuationService = {
       const adjustmentType = diffQty < 0 ? 'deficit' : 'surplus'; // عجز أو فائض
 
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM inventory_adjustments');
-      let adjSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let adjustment_no = `ADJ-${new Date().getFullYear()}-${String(adjSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM inventory_adjustments WHERE adjustment_no = ?', [adjustment_no])) {
-        adjSeq += 1;
-        adjustment_no = `ADJ-${new Date().getFullYear()}-${String(adjSeq).padStart(4, '0')}`;
-      }
+      const adjustment_no = `ADJ-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       // 1. تحديث الأرصدة بالمستودع والصنف لتتطابق مع الجرد الفعلي
       await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [diffQty, item_id]);
@@ -437,12 +428,7 @@ const InventoryValuationService = {
 
       // 2. توليد قيد التسوية المحاسبي المتزن
       const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -456,28 +442,30 @@ const InventoryValuationService = {
 
       const entryId = jvRes.lastInsertRowid || jvRes.insertId;
 
+      const accounts = await getInventoryAccounts(tx);
+
       if (adjustmentType === 'deficit') {
         // حالة العجز: من حـ/ خسائر وعجز المخزون (5105) إلى حـ/ المخزون
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
           VALUES (?, ?, ?, 0, ?)
-        `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_LOSS_SHRINKAGE, diffAmount, `مدين: إثبات خسائر عجز مخزني بموجب ${adjustment_no}`]);
+        `, [entryId, accounts.INVENTORY_LOSS_SHRINKAGE, diffAmount, `مدين: إثبات خسائر عجز مخزني بموجب ${adjustment_no}`]);
 
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
           VALUES (?, ?, 0, ?, ?)
-        `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, diffAmount, `دائن: تخفيض قيمة المخزون الدفتري بموجب ${adjustment_no}`]);
+        `, [entryId, accounts.INVENTORY_ASSET, diffAmount, `دائن: تخفيض قيمة المخزون الدفتري بموجب ${adjustment_no}`]);
       } else {
         // حالة الفائض: من حـ/ المخزون إلى حـ/ أرباح وفائض المخزون (4205)
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
           VALUES (?, ?, ?, 0, ?)
-        `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, diffAmount, `مدين: زيادة قيمة المخزون الدفتري بموجب ${adjustment_no}`]);
+        `, [entryId, accounts.INVENTORY_ASSET, diffAmount, `مدين: زيادة قيمة المخزون الدفتري بموجب ${adjustment_no}`]);
 
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
           VALUES (?, ?, 0, ?, ?)
-        `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_GAIN_SURPLUS, diffAmount, `دائن: إثبات أرباح فائض مخزني بموجب ${adjustment_no}`]);
+        `, [entryId, accounts.INVENTORY_GAIN_SURPLUS, diffAmount, `دائن: إثبات أرباح فائض مخزني بموجب ${adjustment_no}`]);
       }
 
       // 3. تسجيل مستند التسوية
@@ -562,7 +550,6 @@ const InventoryValuationService = {
 
     await assertPeriodOpen(date);
     await this.assertNoNegativeStock(warehouse_id, item_id, quantity);
-    await ProjectCostService.ensureSchema();
 
     const userId = await resolveValidUserId(user?.id);
     const parsedQty = Number(quantity);
@@ -597,7 +584,8 @@ const InventoryValuationService = {
       await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
       await tx.run('UPDATE warehouse_stocks SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND item_id = ?', [parsedQty, warehouse_id, item_id]);
 
-      // 2. (توحيد التكلفة: تُعاد إعادة الاحتساب من المصادر في نهاية المعاملة)
+      // 2. زيادة التكلفة الفعلية للمشروع
+      await tx.run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [totalAmount, project_id]);
 
       // 3. تسجيل حركة الصرف مع ربط بند الـ BOQ
       const txRes = await tx.run(`
@@ -619,9 +607,6 @@ const InventoryValuationService = {
           details: { reference_no, project_id, boq_item_id, item_id, quantity: parsedQty, totalAmount, boqWarning }
         });
       }
-
-      // توحيد التكلفة: إعادة احتساب تكلفة المشروع من مصادرها بعد تثبيت الصرف
-      await ProjectCostService.recalculateProjectCost(project_id, tx);
 
       return {
         id: txRes.lastInsertRowid || txRes.insertId,

@@ -157,28 +157,30 @@
         </div>
 
         <!-- شبكة النماذج واللوحات السريعة الـ 6 المطابقة للتصميم -->
-        <div class="side-quick-grid">
+        <div class="side-quick-grid" style="display: none !important;">
           <!-- 1. سند قبض (الإيرادات) -->
           <div class="quick-form-card">
             <div class="panel-header">
               <h4 class="panel-title" style="font-size: 0.88rem;">سند قبض (الإيرادات)</h4>
-              <span style="font-size: 0.75rem; color: var(--gold-light);">RC-2024-0001</span>
+              <span id="quickRcReceiptNoBadge" style="font-size: 0.75rem; color: var(--gold-light); font-weight: bold;">RC-2026-XXXX</span>
             </div>
             <form id="quickReceiptForm" onsubmit="Accounting.submitReceiptVoucher(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="rcSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">العميل</label>
                   <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('rcClientSelect')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ عميل جديد</a>
                 </div>
-                <select id="rcClientSelect" class="form-control" required>
+                <select id="rcClientSelect" class="form-control" required onchange="Accounting.onQuickClientChange(this.value)">
                   <option value="">اختر العميل...</option>
                 </select>
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                  <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('rcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
                 </div>
-                <select id="rcAccountSelect" class="form-control">
+                <select id="rcAccountSelect" class="form-control" required>
                   <option value="">اختر الحساب (افتراضي: العملاء 112)...</option>
                 </select>
               </div>
@@ -193,7 +195,7 @@
                   <label style="margin-bottom: 0;">المشروع</label>
                   <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
-                <select id="rcProjectSelect" class="form-control">
+                <select id="rcProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('rc', this.value)">
                   <option value="">اختر المشروع...</option>
                 </select>
               </div>
@@ -204,21 +206,23 @@
               <div class="form-group">
                 <label>طريقة الدفع</label>
                 <select id="rcPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('rcPaymentMethod', 'rcCheckFieldsRow')">
+                  <option value="نقدي">نقداً</option>
                   <option value="تحويل بنكي">تحويل بنكي</option>
-                  <option value="نقدي">نقدي</option>
-                  <option value="شيك">شيك</option>
                 </select>
               </div>
-              <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
+              <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
               <div id="rcCheckFieldsRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
-                    <input type="text" id="rcCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+                    <label id="rcSettlementLabel">حساب الصندوق من دليل الحسابات *</label>
+                    <select id="rcBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
+                      <option value="">اختر حساب البنك...</option>
+                    </select>
                   </div>
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.78rem;">البنك المسحوب عليه</label>
-                    <input type="text" id="rcBankName" class="form-control" placeholder="اسم البنك">
+                  <div class="form-group" id="rcCheckNoGroup" style="margin-bottom: 0;">
+                    <label id="rcCheckLabel" style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">رقم الشيك / المرجع</label>
+                    <input type="text" id="rcCheckNo" class="form-control" placeholder="رقم الشيك أو الحوالة">
+                    <input type="hidden" id="rcBankName" value="">
                   </div>
                 </div>
               </div>
@@ -251,12 +255,13 @@
           <div class="quick-form-card">
             <div class="panel-header">
               <h4 class="panel-title" style="font-size: 0.88rem;">سند صرف (المصروفات)</h4>
-              <span style="font-size: 0.75rem; color: var(--accent-red);">EP-2024-0001</span>
+              <span id="quickExpReceiptNoBadge" style="font-size: 0.75rem; color: var(--accent-red); font-weight: bold;">EP-2026-XXXX</span>
             </div>
             <form id="quickExpenseForm" onsubmit="Accounting.submitExpenseVoucher(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="expSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
               <div class="form-group">
                 <label>نوع المصروف</label>
-                <select id="expTypeSelect" class="form-control" required>
+                <select id="expTypeSelect" class="form-control" required onchange="Accounting.onQuickExpenseTypeChange(this.value)">
                   <option value="مواد بناء">مواد بناء</option>
                   <option value="أجور عمالة">أجور عمالة</option>
                   <option value="معدات">معدات</option>
@@ -266,8 +271,11 @@
                 </select>
               </div>
               <div class="form-group">
-                <label>الحساب المالي (دليل الحسابات)</label>
-                <select id="expAccountSelect" class="form-control">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('expAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
+                </div>
+                <select id="expAccountSelect" class="form-control" required>
                   <option value="">اختر الحساب (تلقائي: تكاليف ومصروفات 5)...</option>
                 </select>
               </div>
@@ -282,7 +290,7 @@
                   <label style="margin-bottom: 0;">المشروع</label>
                   <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
-                <select id="expProjectSelect" class="form-control">
+                <select id="expProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('exp', this.value)">
                   <option value="">اختر المشروع...</option>
                 </select>
               </div>
@@ -316,21 +324,23 @@
               <div class="form-group">
                 <label>طريقة الدفع</label>
                 <select id="expPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('expPaymentMethod', 'expCheckFieldsRow')">
-                  <option value="نقدي">نقدي</option>
+                  <option value="نقدي">نقداً</option>
                   <option value="تحويل بنكي">تحويل بنكي</option>
-                  <option value="شيك">شيك</option>
                 </select>
               </div>
-              <!-- حقول الشيك الشرطية عند اختيار طريقة الدفع بشيك -->
+              <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
               <div id="expCheckFieldsRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">رقم الشيك <span style="color: var(--accent-red);">*</span></label>
-                    <input type="text" id="expCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+                    <label id="expSettlementLabel">حساب الصندوق من دليل الحسابات *</label>
+                    <select id="expBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
+                      <option value="">اختر حساب البنك...</option>
+                    </select>
                   </div>
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.78rem;">البنك المسحوب عليه</label>
-                    <input type="text" id="expBankName" class="form-control" placeholder="اسم البنك">
+                  <div class="form-group" id="expCheckNoGroup" style="margin-bottom: 0;">
+                    <label id="expCheckLabel" style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">رقم الشيك / المرجع</label>
+                    <input type="text" id="expCheckNo" class="form-control" placeholder="أدخل رقم الشيك">
+                    <input type="hidden" id="expBankName" value="">
                   </div>
                 </div>
               </div>
@@ -370,6 +380,24 @@
                 <label style="color: #60a5fa; font-weight: bold; font-size: 0.8rem;">العهدة الأصلية المراد تصفيتها <span style="color: var(--accent-red);">*</span></label>
                 <select id="custodyRelatedSelect" class="form-control" onchange="Accounting.onRelatedCustodySelect('custodyRelatedSelect', 'custodyTotalAmount', 'custodySpentAmount')">
                   <option value="">اختر العهدة المفتوحة للتصفية...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="margin-bottom: 0;">الحساب المالي (العهدة / الصندوق)</label>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('quickCustodyAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب</a>
+                </div>
+                <select id="quickCustodyAccountSelect" class="form-control">
+                  <option value="">اختر الحساب الفرعي...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="margin-bottom: 0;">المشروع المرتبط (اختياري)</label>
+                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
+                </div>
+                <select id="custodyProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('custody', this.value)">
+                  <option value="">عام / بدون مشروع محدد...</option>
                 </select>
               </div>
               <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">

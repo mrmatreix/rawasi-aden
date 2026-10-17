@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rawasi-aden-1.0.0.20260922-bhmo';
+const CACHE_NAME = 'rawasi-aden-1.0.0.20261017-ajxf';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const STATIC_ASSETS = [
   './js/tafqeet.js',
   './js/projects.js',
   './js/project_hub.js',
+  './js/project_control_ui.js',
   './js/inventory.js',
   './js/accounting.js',
   './js/hr.js',

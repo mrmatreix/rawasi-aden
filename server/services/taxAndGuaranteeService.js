@@ -76,12 +76,7 @@ const TaxAndGuaranteeService = {
 
       // 2. توليد قيد اليومية المتزن الشامل لكافة أطراف المستخلص
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      let entry_no = `JV-TAX-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-TAX-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-TAX-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -136,12 +131,7 @@ const TaxAndGuaranteeService = {
 
       // 4. تسجيل شهادة الخصم في جدول الضرائب (tax_withholdings)
       const whtCount = await tx.get('SELECT COUNT(*) as cnt FROM tax_withholdings');
-      let whtSeq = (((whtCount ? whtCount.cnt : 0) || 0)) + 1;
-      let withholding_no = `WHT-REC-${new Date().getFullYear()}-${String(whtSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM tax_withholdings WHERE withholding_no = ?', [withholding_no])) {
-        whtSeq += 1;
-        withholding_no = `WHT-REC-${new Date().getFullYear()}-${String(whtSeq).padStart(4, '0')}`;
-      }
+      const withholding_no = `WHT-REC-${new Date().getFullYear()}-${String(((whtCount ? whtCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
       const taxPeriod = bill.date.substring(0, 7); // YYYY-MM
 
       await tx.run(`
@@ -259,12 +249,7 @@ const TaxAndGuaranteeService = {
       //  حـ/ رسوم وعمولات خطابات الضمان (مصروف 5205) بمبلغ العمولة
       // إلى حـ/ البنك الجاري (3) بإجمالي المسحوب
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      let entry_no = `JV-LG-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-LG-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-LG-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
@@ -354,12 +339,7 @@ const TaxAndGuaranteeService = {
       // 1. توليد قيد استرداد الغطاء النقدي:
       // من حـ/ البنك الجاري (3) إلى حـ/ غطاء خطابات الضمان (1115)
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      let entry_no = `JV-REL-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-        jeSeq++;
-        entry_no = `JV-REL-${new Date().getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entry_no = `JV-REL-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
 
       const jvRes = await tx.run(`
         INSERT INTO journal_entries (
