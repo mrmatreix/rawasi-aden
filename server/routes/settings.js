@@ -10,6 +10,8 @@ const {
 } = require('../database/db');
 const { runMigration } = require('../database/migrate_to_mysql');
 const { requirePermission } = require('../middleware/security');
+const unifiedBackupEngine = require('../services/unifiedBackupEngine');
+
 
 // جلب إعدادات الشركة
 router.get('/', requirePermission('settings:view,settings:company'), async (req, res) => {
@@ -30,11 +32,19 @@ router.get('/', requirePermission('settings:view,settings:company'), async (req,
 router.post('/', requirePermission('settings:company'), async (req, res) => {
   try {
     const updates = req.body;
+    const engine = getActiveEngine();
     for (const [key, value] of Object.entries(updates)) {
-      await run(`
-        INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
-        ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
-      `, [key, String(value)]);
+      if (engine === 'sqlite') {
+        await run(`
+          INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
+          ON CONFLICT(\`key\`) DO UPDATE SET \`value\` = excluded.\`value\`
+        `, [key, String(value)]);
+      } else {
+        await run(`
+          INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
+        `, [key, String(value)]);
+      }
     }
     res.json({ success: true, message: 'تم حفظ الإعدادات بنجاح' });
   } catch (err) {
@@ -42,7 +52,218 @@ router.post('/', requirePermission('settings:company'), async (req, res) => {
   }
 });
 
-// جلب قائمة النسخ الاحتياطية المحفوظة محلياً
+// =========================================================================
+// منظومة إدارة النسخ الاحتياطي واستعادة البيانات الموحدة (Disaster Recovery Engine)
+// =========================================================================
+
+// 1. استخراج حالة المنظومة ومؤشرات DR للوحة التحكم
+router.get('/backup/dr-status', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const status = await unifiedBackupEngine.getDashboardStatus();
+    res.json({ success: true, data: status });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر جلب حالة منظومة النسخ والاستعادة: ' + err.message });
+  }
+});
+
+// 2. إنشاء نسخة احتياطية فورية معتمدة وفق دورة الحياة الكاملة
+router.post('/backup/create', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { scope, encrypt, passphrase, isProtected, protectedReason } = req.body || {};
+    const result = await unifiedBackupEngine.createBackup({
+      backupType: 'manual',
+      scope: scope || 'database_only',
+      encrypt: Boolean(encrypt),
+      passphrase: passphrase || '',
+      isProtected: Boolean(isProtected),
+      protectedReason: protectedReason || '',
+      user: req.user?.username || 'admin',
+      req
+    });
+
+    res.json({
+      success: true,
+      message: result.encrypted
+        ? `تم إنشاء النسخة الاحتياطية وتشفيرها بنجاح 🔒 (${result.fileName})`
+        : `تم إنشاء النسخة الاحتياطية واعتمادها بنجاح 🛡️ (${result.fileName})`,
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'فشل إنشاء النسخة الاحتياطية: ' + err.message });
+  }
+});
+
+// 3. جلب قائمة سجلات النسخ الاحتياطية من جدول backup_records
+router.get('/backup/records', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit || 50), 200);
+    const records = await query(`
+      SELECT * FROM backup_records 
+      WHERE status != 'purged'
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `, [limit]);
+
+    res.json({ success: true, data: records });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب سجلات النسخ الاحتياطية: ' + err.message });
+  }
+});
+
+// 4. إجراء اختبار استعادة تجريبي في بيئة معزولة (Sandbox Test Restore)
+router.post('/backup/test-restore', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { backupId, passphrase } = req.body || {};
+    if (!backupId) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد النسخة المراد اختبارها' });
+    }
+
+    const testReport = await unifiedBackupEngine.runSandboxTestRestore(
+      backupId,
+      passphrase || null,
+      req.user?.username || 'admin'
+    );
+
+    res.json({
+      success: true,
+      message: `اجتازت النسخة الاحتياطية اختبار الاستعادة بنجاح في البيئة المعزولة (${testReport.fileName}) 🧪✅`,
+      data: testReport
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 5. استعادة آمنة إلى قاعدة الإنتاج مع إنشاء نقطة تراجع طارئة وتراجع تلقائي
+router.post('/backup/restore-production', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { backupId, passphrase, reason, confirmationText } = req.body || {};
+
+    if (!backupId) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد النسخة المراد استعادتها' });
+    }
+
+    // التأكيد الإلزامي لمنع الخطأ البشري
+    const cleanConfirm = String(confirmationText || '').trim();
+    if (cleanConfirm !== 'استعادة' && cleanConfirm !== 'RESTORE') {
+      return res.status(400).json({
+        success: false,
+        message: 'لتأكيد الاستعادة الإنتاجية واستبدال البيانات، يجب كتابة كلمة (استعادة) صراحة في حقل التأكيد'
+      });
+    }
+
+    const result = await unifiedBackupEngine.restoreToProduction(backupId, {
+      passphrase: passphrase || null,
+      reason: reason || 'استعادة إنتاجية بطلب من المستخدم',
+      user: req.user?.username || 'admin',
+      req
+    });
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 6. حماية نسخة معينة من التدوير والحذف التلقائي
+router.post('/backup/protect', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { backupId, isProtected, reason } = req.body || {};
+    if (!backupId) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد النسخة' });
+    }
+
+    const result = await unifiedBackupEngine.toggleProtection(
+      backupId,
+      Boolean(isProtected),
+      reason || '',
+      req.user?.username || 'admin'
+    );
+
+    res.json({
+      success: true,
+      message: isProtected ? 'تم تثبيت وحماية النسخة الاحتياطية من الحذف التلقائي 📌' : 'تم فك حماية النسخة الاحتياطية',
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 7. حذف نسخة احتياطية يدوياً
+router.delete('/backup/records/:id', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await unifiedBackupEngine.deleteBackup(id, req.user?.username || 'admin');
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// 8. سجلات اختبارات الاستعادة السابقة
+router.get('/backup/test-logs', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const logs = await query(`
+      SELECT * FROM backup_test_logs 
+      ORDER BY created_at DESC 
+      LIMIT 30
+    `);
+    res.json({ success: true, data: logs });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 9. تنزيل نسخة احتياطية مسجلة بالمعرف أو الاسم مع حماية وتدقيق
+router.get('/backup/download-record/:idOrName', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { idOrName } = req.params;
+    let rec = null;
+    if (/^\d+$/.test(idOrName)) {
+      rec = await get('SELECT * FROM backup_records WHERE id = ?', [idOrName]);
+    } else {
+      rec = await get('SELECT * FROM backup_records WHERE file_name = ? OR backup_uid = ?', [idOrName, idOrName]);
+    }
+
+    let filePath = null;
+    let fileName = null;
+
+    if (rec && fs.existsSync(rec.file_path)) {
+      filePath = rec.file_path;
+      fileName = rec.file_name;
+    } else {
+      const safeName = path.basename(idOrName);
+      const candidate = path.join(unifiedBackupEngine.defaultStorageDir, safeName);
+      if (fs.existsSync(candidate)) {
+        filePath = candidate;
+        fileName = safeName;
+      }
+    }
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'ملف النسخة الاحتياطية المطلوب غير موجود على الخادم' });
+    }
+
+    await logAudit(req, {
+      action: 'BACKUP_RECORD_DOWNLOAD',
+      entity_type: 'backup_records',
+      entity_id: fileName,
+      details: { fileName, filePath }
+    });
+
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.download(filePath, fileName);
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء تنزيل النسخة: ' + err.message });
+  }
+});
+
+// جلب قائمة النسخ الاحتياطية المحفوظة محلياً (التوافق مع المسار القديم)
 router.get('/backups', requirePermission('settings:backup'), (req, res) => {
   try {
     const backups = listBackups();
@@ -54,26 +275,74 @@ router.get('/backups', requirePermission('settings:backup'), (req, res) => {
 
 const { logAudit } = require('../services/auditService');
 
-// إنشاء وتنزيل نسخة احتياطية من قاعدة البيانات
+// إنشاء وتنزيل نسخة احتياطية فورية معتمدة عبر المحرك المركزي الموحد
 router.get('/backup', requirePermission('settings:backup'), async (req, res) => {
   try {
-    const backup = backupDatabase();
-    await logAudit(req, {
-      action: 'BACKUP_DOWNLOAD',
-      entity_type: 'database',
-      entity_id: backup.fileName,
-      details: { fileName: backup.fileName, fileSize: backup.fileSize }
+    // نستخدم المحرك المركزي الموحد لضمان checkpoint والتحقق من النزاهة وحساب sha256
+    const backup = await unifiedBackupEngine.createBackup({
+      backupType: 'manual',
+      scope: 'database_only',
+      user: req.user?.username || 'admin',
+      req
     });
 
+    try {
+      await logAudit(req, {
+        action: 'BACKUP_DOWNLOAD',
+        entity_type: 'database',
+        entity_id: backup.fileName,
+        details: { fileName: backup.fileName, fileSize: backup.fileSize, sha256: backup.sha256 }
+      });
+    } catch (auditErr) {
+      console.warn('Audit log warning on backup download:', auditErr.message);
+    }
+
+    if (!fs.existsSync(backup.filePath)) {
+      return res.status(404).json({ success: false, message: 'ملف النسخة الاحتياطية غير موجود على الخادم' });
+    }
+
+    res.setHeader('Content-Type', 'application/x-sqlite3');
+    res.setHeader('X-Backup-SHA256', backup.sha256);
     res.download(backup.filePath, backup.fileName, (err) => {
       if (err) {
         console.error('Error sending backup file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: 'فشل إرسال ملف النسخة الاحتياطية: ' + err.message });
+        }
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إنشاء النسخة الاحتياطية', error: err.message });
+    console.error('Backup creation error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في إنشاء وتنزيل النسخة الاحتياطية: ' + err.message, error: err.message });
   }
 });
+
+// تنزيل نسخة احتياطية محددة من مجلد النسخ الاحتياطية على الخادم (التوافق مع المسار القديم)
+router.get('/backups/download/:fileName', requirePermission('settings:backup'), (req, res) => {
+  try {
+    const { fileName } = req.params;
+    const safeName = path.basename(fileName);
+    const backupsDir = unifiedBackupEngine.defaultStorageDir;
+    const filePath = path.join(backupsDir, safeName);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'ملف النسخة الاحتياطية المطلوب غير موجود' });
+    }
+
+    res.setHeader('Content-Type', 'application/x-sqlite3');
+    res.download(filePath, safeName, (err) => {
+      if (err) {
+        console.error('Error downloading backup file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: 'خطأ في تنزيل الملف' });
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء تنزيل النسخة: ' + err.message });
+  }
+});
+
 
 // استعادة نسخة احتياطية من ملف محلي على السيرفر
 router.post('/restore-local', requirePermission('settings:backup'), async (req, res) => {
@@ -344,6 +613,191 @@ router.post('/auto-backup/test-path', requirePermission('settings:backup'), (req
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء اختبار المسار: ' + err.message });
+  }
+});
+
+// =================== محرك النسخ الاحتياطي السحابي المشفر والأرشفة الشاملة ===================
+const cloudBackupCryptoService = require('../services/cloudBackupCryptoService');
+
+// جلب حالة الخزنة السحابية وإعدادات التشفير
+router.get('/cloud-backup/status', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const config = await cloudBackupCryptoService.getCloudConfig();
+    const vaultItems = cloudBackupCryptoService.listVaultItems();
+    const stats = await cloudBackupCryptoService.getSystemSummaryStats();
+
+    res.json({
+      success: true,
+      config,
+      vaultItems,
+      systemStats: stats
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر جلب حالة الخزنة السحابية: ' + err.message });
+  }
+});
+
+// حفظ إعدادات المزامنة السحابية
+router.post('/cloud-backup/config', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const updated = await cloudBackupCryptoService.saveCloudConfig(req.body, req.user?.username || 'admin', req);
+    res.json({
+      success: true,
+      message: 'تم حفظ إعدادات المزامنة السحابية بنجاح ☁️💾',
+      config: updated
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر حفظ إعدادات المزامنة السحابية: ' + err.message });
+  }
+});
+
+// اختبار الاتصال بالسيرفر أو المجلد السحابي
+router.post('/cloud-backup/test-connection', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const result = await cloudBackupCryptoService.testCloudConnection(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'فشل اختبار الاتصال السحابي: ' + err.message });
+  }
+});
+
+// توليد مفتاح أمان تشفير فائق القوة
+router.get('/cloud-backup/generate-key', requirePermission('settings:backup'), (req, res) => {
+  try {
+    const key = cloudBackupCryptoService.generateSecureKey(24);
+    res.json({ success: true, key });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// إنشاء أرشيف شامل للنظام (مشفر أو عادي)
+router.post('/cloud-backup/create-archive', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { encrypt, passphrase, includeProjectsFiles } = req.body || {};
+    const result = await cloudBackupCryptoService.createFullSystemArchive({
+      encrypt: Boolean(encrypt),
+      passphrase: passphrase || '',
+      includeProjectsFiles: includeProjectsFiles !== undefined ? Boolean(includeProjectsFiles) : true,
+      user: req.user?.username || 'admin',
+      req
+    });
+
+    res.json({
+      success: true,
+      message: result.encrypted 
+        ? `تم إنشاء الأرشيف الشامل وتشفيره عسكرياً بنجاح (AES-256-GCM) 🔒 (${result.fileName})`
+        : `تم إنشاء الأرشيف الشامل للنظام بنجاح 📦 (${result.fileName})`,
+      data: {
+        fileName: result.fileName,
+        fileSize: result.fileSize,
+        rawZipSize: result.rawZipSize,
+        encrypted: result.encrypted,
+        sha256: result.sha256,
+        timestamp: result.timestamp
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'فشل إنشاء الأرشيف: ' + err.message });
+  }
+});
+
+// تنزيل ملف أرشيف أو نسخة من الخزنة
+router.get('/cloud-backup/download/:fileName', requirePermission('settings:backup'), (req, res) => {
+  try {
+    const { fileName } = req.params;
+    // التحقق من أمان اسم الملف ومنع Path Traversal
+    const safeName = path.basename(fileName);
+    const filePath = path.join(cloudBackupCryptoService.vaultDir, safeName);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'الملف المطلوب غير موجود في الخزنة' });
+    }
+
+    res.download(filePath, safeName, (err) => {
+      if (err) {
+        console.error('Error downloading vault archive:', err);
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ أثناء تنزيل الملف: ' + err.message });
+  }
+});
+
+// فحص ومعاينة الأرشيف قبل الاستعادة (Inspection)
+router.post('/cloud-backup/inspect', requirePermission('settings:backup'), express.raw({ type: '*/*', limit: '150mb' }), (req, res) => {
+  try {
+    const passphrase = req.headers['x-passphrase'] ? decodeURIComponent(req.headers['x-passphrase']) : null;
+    const fileName = req.headers['x-vault-filename'] || null;
+
+    let targetBufferOrPath;
+    if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+      targetBufferOrPath = req.body;
+    } else if (fileName) {
+      const safeName = path.basename(fileName);
+      targetBufferOrPath = path.join(cloudBackupCryptoService.vaultDir, safeName);
+    } else {
+      return res.status(400).json({ success: false, message: 'يرجى إرسال ملف الأرشيف أو اختيار نسخة من الخزنة' });
+    }
+
+    const inspection = cloudBackupCryptoService.inspectArchive(targetBufferOrPath, passphrase);
+    res.json({ success: true, data: inspection });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// استعادة النظام من أرشيف الخزنة أو من ملف مرفوع
+router.post('/cloud-backup/restore', requirePermission('settings:backup'), express.raw({ type: '*/*', limit: '150mb' }), async (req, res) => {
+  try {
+    const passphrase = req.headers['x-passphrase'] ? decodeURIComponent(req.headers['x-passphrase']) : null;
+    const restoreFiles = req.headers['x-restore-files'] !== 'false';
+    const vaultFileName = req.headers['x-vault-filename'] || null;
+
+    let targetBufferOrPath;
+    if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+      targetBufferOrPath = req.body;
+    } else if (vaultFileName) {
+      const safeName = path.basename(vaultFileName);
+      targetBufferOrPath = path.join(cloudBackupCryptoService.vaultDir, safeName);
+    } else {
+      return res.status(400).json({ success: false, message: 'يرجى تقديم ملف الأرشيف أو تحديد ملف من الخزنة' });
+    }
+
+    const result = await cloudBackupCryptoService.restoreFullSystemArchive(targetBufferOrPath, {
+      passphrase,
+      restoreFiles,
+      user: req.user?.username || 'admin',
+      req
+    });
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'فشلت عملية استعادة الأرشيف: ' + err.message });
+  }
+});
+
+// مزامنة فورية إلى السحابة
+router.post('/cloud-backup/sync-now', requirePermission('settings:backup'), async (req, res) => {
+  try {
+    const { fileName } = req.body || {};
+    let result;
+    if (fileName) {
+      result = await cloudBackupCryptoService.syncArchiveToCloud(path.basename(fileName));
+    } else {
+      result = await cloudBackupCryptoService.syncLatestBackupToCloud();
+    }
+    res.json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر إتمام المزامنة السحابية: ' + err.message });
   }
 });
 
