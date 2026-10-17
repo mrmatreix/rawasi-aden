@@ -713,15 +713,18 @@ const MaterialManagementService = {
 
       const entryId = jvRes.lastInsertRowid || jvRes.insertId;
 
+      const quarantineAccounts = await getInventoryAccounts(tx);
+      if (!quarantineAccounts.INVENTORY_LOSS_SHRINKAGE || !quarantineAccounts.INVENTORY_ASSET) throw new Error('حسابات المخزون أو خسائر التلف غير مهيأة');
+
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
         VALUES (?, ?, ?, 0, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_LOSS_SHRINKAGE, totalLossAmount, `مدين: خسائر تلف مخزني بموجب مستند ${quarantine_no}`]);
+      `, [entryId, quarantineAccounts.INVENTORY_LOSS_SHRINKAGE, totalLossAmount, `مدين: خسائر تلف مخزني بموجب مستند ${quarantine_no}`]);
 
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
         VALUES (?, ?, 0, ?, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, totalLossAmount, `دائن: تخفيض أصل المخزون بالعزل للتلف ${quarantine_no}`]);
+      `, [entryId, quarantineAccounts.INVENTORY_ASSET, totalLossAmount, `دائن: تخفيض أصل المخزون بالعزل للتلف ${quarantine_no}`]);
 
       // 3. إدراج سجل الحجر والتوالف
       const qrtRes = await tx.run(`
@@ -906,15 +909,18 @@ const MaterialManagementService = {
 
         journalEntryId = jvRes.lastInsertRowid || jvRes.insertId;
 
+        const returnAccounts = await getInventoryAccounts(tx);
+        if (!returnAccounts.INVENTORY_ASSET || !returnAccounts.PROJECT_EXPENSES) throw new Error('حسابات المخزون وتكلفة المشروع غير مهيأة');
+
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
           VALUES (?, ?, ?, 0, ?)
-        `, [journalEntryId, INVENTORY_ACCOUNTS.INVENTORY_ASSET, creditedAmount, `مدين: استعادة أصل المخزون بموجب ${return_no}`]);
+        `, [journalEntryId, returnAccounts.INVENTORY_ASSET, creditedAmount, `مدين: استعادة أصل المخزون بموجب ${return_no}`]);
 
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
           VALUES (?, ?, ?, 0, ?, ?)
-        `, [journalEntryId, INVENTORY_ACCOUNTS.PROJECT_EXPENSES, project_id, creditedAmount, `دائن: تخفيض تكلفة المشروع [${project.name}] بموجب ${return_no}`]);
+        `, [journalEntryId, returnAccounts.PROJECT_EXPENSES, project_id, creditedAmount, `دائن: تخفيض تكلفة المشروع [${project.name}] بموجب ${return_no}`]);
       } else {
         // ب. إذا كانت تالفة/خردة (damaged_scrap): تحول مباشرة إلى حجر التوالف
         const qrtRes = await MaterialManagementService.quarantineDamagedMaterial({
@@ -1153,16 +1159,18 @@ const MaterialManagementService = {
       const entryId = jvRes.lastInsertRowid || jvRes.insertId;
 
       // مدين: تكاليف ومصروفات المشروع المستلم
+      const transferAccounts = await getInventoryAccounts(tx);
+      if (!transferAccounts.PROJECT_EXPENSES) throw new Error('حساب تكلفة المشروع غير مهيأ');
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, ?, 0, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.PROJECT_EXPENSES, transfer.to_project_id, totalAmount, `مدين: تكلفة مواد محولة من مشروع ${transfer.from_project_name}`]);
+      `, [entryId, transferAccounts.PROJECT_EXPENSES, transfer.to_project_id, totalAmount, `مدين: تكلفة مواد محولة من مشروع ${transfer.from_project_name}`]);
 
       // دائن: تخفيض تكاليف ومصروفات المشروع المصدر
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
         VALUES (?, ?, ?, 0, ?, ?)
-      `, [entryId, INVENTORY_ACCOUNTS.PROJECT_EXPENSES, transfer.from_project_id, totalAmount, `دائن: تخفيض تكلفة مواد محولة إلى مشروع ${transfer.to_project_name}`]);
+      `, [entryId, transferAccounts.PROJECT_EXPENSES, transfer.from_project_id, totalAmount, `دائن: تخفيض تكلفة مواد محولة إلى مشروع ${transfer.to_project_name}`]);
 
       // 4. تحديث حالة طلب التحويل
       await tx.run(`

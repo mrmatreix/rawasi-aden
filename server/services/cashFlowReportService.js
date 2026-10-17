@@ -21,7 +21,7 @@ class CashFlowReportService {
       SELECT a.id, a.code, a.name, a.type
       FROM accounts a
       WHERE (a.type = 'asset' OR a.type = 'أصول')
-        AND (a.code LIKE '121%' OR a.code LIKE '122%' OR (a.code LIKE '1%' AND (a.name LIKE '%صندوق%' OR a.name LIKE '%بنك%')))
+        AND (a.code LIKE '11101%' OR a.code LIKE '11102%')
         AND a.type NOT IN ('expense', 'مصروفات', 'تكاليف', 'revenue', 'إيرادات', 'liability', 'خصوم', 'equity')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
       ORDER BY a.code ASC

@@ -20,10 +20,8 @@ const { assertPeriodOpen, resolveValidUserId } = require('./financialControlServ
 
 async function getInventoryAccounts(dbRunner = null) {
   const runner = dbRunner || { get };
-  const invAsset = await runner.get("SELECT id FROM accounts WHERE code = '12401001' AND is_posting = 1 LIMIT 1")
-    || await runner.get("SELECT id FROM accounts WHERE code LIKE '124%' AND is_posting = 1 LIMIT 1");
-  const suppPay = await runner.get("SELECT id FROM accounts WHERE code = '22101001' AND is_posting = 1 LIMIT 1")
-    || await runner.get("SELECT id FROM accounts WHERE code LIKE '221%' AND is_posting = 1 LIMIT 1");
+  const invAsset = await runner.get("SELECT id FROM accounts WHERE code = '11301001' AND is_posting = 1 LIMIT 1");
+  const suppPay = await runner.get("SELECT id FROM accounts WHERE code = '21101001' AND is_posting = 1 LIMIT 1");
   const projExp = await runner.get("SELECT id FROM accounts WHERE code = '32102005' AND is_posting = 1 LIMIT 1")
     || await runner.get("SELECT id FROM accounts WHERE (code LIKE '3%' OR code LIKE '5%') AND is_posting = 1 LIMIT 1");
   const lossShrink = await runner.get("SELECT id FROM accounts WHERE code = '32102005' AND is_posting = 1 LIMIT 1")
@@ -32,11 +30,11 @@ async function getInventoryAccounts(dbRunner = null) {
     || await runner.get("SELECT id FROM accounts WHERE code LIKE '4%' AND is_posting = 1 LIMIT 1");
 
   return {
-    INVENTORY_ASSET: invAsset?.id || 109,
-    SUPPLIER_PAYABLES: suppPay?.id || 120,
-    PROJECT_EXPENSES: projExp?.id || 147,
-    INVENTORY_LOSS_SHRINKAGE: lossShrink?.id || 147,
-    INVENTORY_GAIN_SURPLUS: gainSurplus?.id || 152
+    INVENTORY_ASSET: invAsset?.id,
+    SUPPLIER_PAYABLES: suppPay?.id,
+    PROJECT_EXPENSES: projExp?.id,
+    INVENTORY_LOSS_SHRINKAGE: lossShrink?.id,
+    INVENTORY_GAIN_SURPLUS: gainSurplus?.id
   };
 }
 

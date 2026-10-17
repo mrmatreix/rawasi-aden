@@ -1013,6 +1013,7 @@
               <span id="quickRcReceiptNoBadge" style="font-size: 0.75rem; color: var(--gold-light); font-weight: bold;">RC-2026-XXXX</span>
             </div>
             <form id="quickReceiptForm" onsubmit="Accounting.submitReceiptVoucher(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="rcSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">العميل</label>
@@ -1024,7 +1025,7 @@
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                  <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
                   <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('rcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
                 </div>
                 <select id="rcAccountSelect" class="form-control" required>
@@ -1053,16 +1054,15 @@
               <div class="form-group">
                 <label>طريقة الدفع</label>
                 <select id="rcPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('rcPaymentMethod', 'rcCheckFieldsRow')">
+                  <option value="نقدي">نقداً</option>
                   <option value="تحويل بنكي">تحويل بنكي</option>
-                  <option value="نقدي">نقدي</option>
-                  <option value="شيك">شيك</option>
                 </select>
               </div>
               <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
               <div id="rcCheckFieldsRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">حساب البنك / الخزينة</label>
+                    <label id="rcSettlementLabel">حساب الصندوق من دليل الحسابات *</label>
                     <select id="rcBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
                       <option value="">اختر حساب البنك...</option>
                     </select>
@@ -1106,6 +1106,7 @@
               <span id="quickExpReceiptNoBadge" style="font-size: 0.75rem; color: var(--accent-red); font-weight: bold;">EP-2026-XXXX</span>
             </div>
             <form id="quickExpenseForm" onsubmit="Accounting.submitExpenseVoucher(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="expSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
               <div class="form-group">
                 <label>نوع المصروف</label>
                 <select id="expTypeSelect" class="form-control" required onchange="Accounting.onQuickExpenseTypeChange(this.value)">
@@ -1119,7 +1120,7 @@
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                  <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
                   <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('expAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
                 </div>
                 <select id="expAccountSelect" class="form-control" required>
@@ -1154,6 +1155,10 @@
                 <label>التاريخ</label>
                 <input type="date" id="expDate" class="form-control" required>
               </div>
+              <div class="form-group">
+                <label>المرجع / رقم الفاتورة</label>
+                <input type="text" id="expReferenceNo" class="form-control" placeholder="مثال: INV-1025">
+              </div>
               <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
                 <div class="form-group">
                   <label>المبلغ</label>
@@ -1171,16 +1176,15 @@
               <div class="form-group">
                 <label>طريقة الدفع</label>
                 <select id="expPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('expPaymentMethod', 'expCheckFieldsRow')">
-                  <option value="نقدي">نقدي</option>
+                  <option value="نقدي">نقداً</option>
                   <option value="تحويل بنكي">تحويل بنكي</option>
-                  <option value="شيك">شيك</option>
                 </select>
               </div>
               <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
               <div id="expCheckFieldsRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">حساب البنك / الخزينة</label>
+                    <label id="expSettlementLabel">حساب الصندوق من دليل الحسابات *</label>
                     <select id="expBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
                       <option value="">اختر حساب البنك...</option>
                     </select>
@@ -2579,7 +2583,7 @@
               تطبيق نمط CQRS لفصل مستخلص العميل الخارجي المحصن أمنياً عن مستخلص الرقابة والتدقيق الداخلي الشامل لدورة حياة المواد.
             </p>
           </div>
-          
+
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <!-- محدد المشروع -->
             <div style="display: flex; align-items: center; gap: 6px;">
@@ -3941,8 +3945,8 @@
                   <th>التاريخ</th>
                   <th>البيان العام</th>
                   <th>نوع المرجع</th>
-                  <th>إجمالي المدين</th>
-                  <th>إجمالي الدائن</th>
+                  <th>الحسابات المدينة / المبلغ</th>
+                  <th>الحسابات الدائنة / المبلغ</th>
                   <th>الحالة</th>
                   <th style="text-align: center;">الإجراءات</th>
                 </tr>
@@ -4496,7 +4500,7 @@
         <!-- تبويب 3: تخصيص ورقة الطباعة والتقارير -->
         <div id="pane_settings_print" class="settings-pane" style="display: none;">
           <div class="print-settings-layout">
-            
+
             <!-- العمود الأول: نموذج إعدادات وتخصيص الطباعة -->
             <div class="panel-card">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px; flex-wrap: wrap; gap: 8px;">
@@ -4510,11 +4514,11 @@
               </div>
 
               <form id="printSettingsForm" onsubmit="Settings.savePrintSettings(event)">
-                
+
                 <!-- 1. قسم ترويسة وهوية الورقة والخطوط -->
                 <div class="print-settings-section-card">
                   <h4>🏢 1. الهوية والترويسة والخطوط العامة:</h4>
-                  
+
                   <div class="form-group">
                     <label>اسم المؤسسة / الشركة في الترويسة <span style="color: var(--accent-red);">*</span></label>
                     <input type="text" id="printHeaderTitle" class="form-control" placeholder="شركة رواسي عدن للهندسة والمقاولات" oninput="Settings.updatePrintPreview()">
@@ -4600,7 +4604,7 @@
                 <!-- 2. قسم تخصيص سندات القبض والصرف والعهد والقيود المحاسبية -->
                 <div class="print-settings-section-card">
                   <h4>💵 2. تخصيص السندات المالية والقيود المحاسبية (Vouchers & Journals):</h4>
-                  
+
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="margin-bottom: 0;">
                       <label>مسمى سند القبض في الترويسة</label>
@@ -4647,7 +4651,7 @@
                     </label>
                     <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
                       <input type="checkbox" id="printVoucherShowPaymentMethod" checked onchange="Settings.updatePrintPreview()">
-                      <span>إظهار حقل طريقة الدفع (نقداً / شيك / بنك)</span>
+                      <span>إظهار حقل طريقة الدفع (نقداً / تحويل بنكي)</span>
                     </label>
                     <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem;">
                       <input type="checkbox" id="printVoucherShowChequeRef" checked onchange="Settings.updatePrintPreview()">
@@ -4667,7 +4671,7 @@
                 <!-- 3. قسم تخصيص وثائق ومستندات إدارة المشاريع والعقود الهندسية -->
                 <div class="print-settings-section-card">
                   <h4>🏗️ 3. تخصيص وثائق المشاريع والعقود الهندسية (Contracts & IPCs):</h4>
-                  
+
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="margin-bottom: 0;">
                       <label>مسمى التقرير الفني والمالي للمشروع</label>
@@ -4740,7 +4744,7 @@
                 <!-- 4. قسم تخصيص كشوفات الحسابات ومسيرات الرواتب -->
                 <div class="print-settings-section-card">
                   <h4>👥 4. تخصيص كشوفات الحسابات ومسيرات الرواتب (Statements & HR):</h4>
-                  
+
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="margin-bottom: 0;">
                       <label>مسمى كشف حساب العميل</label>
@@ -4802,7 +4806,7 @@
                 <!-- 5. قسم تخصيص القوائم والتقارير المالية والمخزون -->
                 <div class="print-settings-section-card">
                   <h4>📊 5. تخصيص القوائم والتقارير المالية والمخزون (Financial & Inventory):</h4>
-                  
+
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="margin-bottom: 0;">
                       <label>مسمى قائمة الأرباح والخسائر</label>
@@ -4863,7 +4867,7 @@
                 <!-- 6. قسم التوقيعات والاعتمادات والأختام والتذييل -->
                 <div class="print-settings-section-card">
                   <h4>✍️ 6. التواقيع والأختام والتذييل العام:</h4>
-                  
+
                   <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="margin-bottom: 0;">
                       <label>التوقيع الأول (الأيمن)</label>
@@ -4970,7 +4974,7 @@
                 <span style="font-weight: 700; font-size: 0.88rem; color: #0f2744;">👁️ المعاينة الحية والمباشرة للأوراق:</span>
                 <span style="font-size: 0.72rem; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; color: #64748b;">تحديث تلقائي فوري (19 نموذجاً رسمياً)</span>
               </div>
-              
+
               <!-- أزرار التبديل السريع بين نماذج الأوراق المختلفة -->
               <div class="print-doc-pill-bar" id="printDocSwitcher" style="flex-wrap: wrap; max-height: 140px; overflow-y: auto;">
                 <button type="button" class="print-doc-pill active" onclick="Settings.setPreviewDoc('receipt')">💵 سند قبض</button>
@@ -6376,13 +6380,13 @@
           <h4 style="margin: 0 0 12px 0; font-size: 0.95rem; color: var(--accent-blue, #3b82f6); display: flex; align-items: center; gap: 6px;">
             <i class="fa fa-building"></i> البيانات الأساسية وهوية المنشأة (Master Data)
           </h4>
-          
+
           <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px;">
             <div class="form-group">
               <label>اسم الشركة / المنشأة <span style="color: var(--accent-red, #ef4444);">*</span></label>
               <input type="text" id="suppName" class="form-control" placeholder="مثال: شركة التوريدات الكهربائية الحديثة" required>
             </div>
-            
+
             <div class="form-group">
               <label>الشخص المسؤول (اسم التاجر / مدير الحساب) <span style="color: var(--accent-red, #ef4444);">*</span></label>
               <input type="text" id="suppContactPerson" class="form-control" placeholder="مثال: أ/ محمد سالم باعبيد" required>
@@ -6564,7 +6568,7 @@
                ondragleave="Accounting.onInvoiceDragLeave(event)" 
                ondrop="Accounting.onInvoiceDrop(event)"
                style="border: 2px dashed rgba(148, 163, 184, 0.25); border-radius: 8px; padding: 14px; text-align: center; background: rgba(15, 23, 42, 0.4); transition: all 0.2s;">
-            
+
             <div id="suppInvoiceEmptyState" style="color: var(--text-muted); font-size: 0.82rem; padding: 6px 0;">
               <i class="fa fa-cloud-upload-alt" style="font-size: 1.8rem; color: #64748b; margin-bottom: 6px; display: block;"></i>
               <div>اسحب وأفلت فواتير <strong>PDF</strong> أو الصور هنا، أو اختر من الأزرار أعلاه</div>
@@ -6671,6 +6675,7 @@
         <button class="modal-close-btn" onclick="App.closeModal('newReceiptModal')">&times;</button>
       </div>
       <form id="modalReceiptForm" onsubmit="Accounting.submitReceiptVoucherModal(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="modalRcSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
         <!-- شريط رقم سند القبض داخل نفس الشاشة -->
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px;">
           <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم سند القبض الرسمي:</span>
@@ -6688,7 +6693,7 @@
         </div>
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">الحساب المالي (آخر مستوى تحليلي) <span style="color: var(--accent-red);">*</span></label>
+            <label style="margin-bottom: 0;">الحساب المقابل للسند <span style="color: var(--accent-red);">*</span></label>
             <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalRcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
           </div>
           <select id="modalRcAccountSelect" class="form-control">
@@ -6750,14 +6755,8 @@
           <div class="form-group">
             <label>طريقة الدفع (Payment Method)</label>
             <select id="modalRcPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('modalRcPaymentMethod', 'modalRcCheckRow')">
-              <option value="CASH" selected>نقداً (CASH)</option>
-              <option value="BANK_TRANSFER">تحويل بنكي (BANK_TRANSFER)</option>
-              <option value="CREDIT_CARD">بطاقة ائتمانية (CREDIT_CARD)</option>
-              <option value="DEBIT_CARD">بطاقة خصم (DEBIT_CARD)</option>
-              <option value="WALLET">محفظة إلكترونية (WALLET)</option>
-              <option value="ONLINE_GATEWAY">بوابة دفع إلكترونية (ONLINE_GATEWAY)</option>
-              <option value="CHEQUE">شيك بنكي (CHEQUE)</option>
-              <option value="POS">نقطة بيع (POS)</option>
+              <option value="نقدي">نقداً</option>
+              <option value="تحويل بنكي">تحويل بنكي</option>
             </select>
           </div>
         </div>
@@ -6765,8 +6764,8 @@
         <div id="modalRcCheckRow" style="background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label id="modalRcFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">الحساب المالي (Financial Account) <span style="color: var(--accent-red);">*</span></label>
-              <select id="modalRcFinancialAccountSelect" class="form-control" onchange="Accounting.onFinancialAccountChange(this.value, 'modalRcFaHint')">
+              <label id="modalRcFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">حساب الصندوق من دليل الحسابات *</label>
+              <select id="modalRcFinancialAccountSelect" class="form-control">
                 <option value="">اختر الحساب المالي...</option>
               </select>
               <select id="modalRcBankAccountSelect" style="display: none;"></select>
@@ -6829,6 +6828,7 @@
         <button class="modal-close-btn" onclick="App.closeModal('newExpenseModal')">&times;</button>
       </div>
       <form id="modalExpenseForm" onsubmit="Accounting.submitExpenseVoucherModal(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="modalExpSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
         <!-- شريط رقم سند الصرف داخل نفس الشاشة -->
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px;">
           <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم سند الصرف الرسمي:</span>
@@ -6840,7 +6840,7 @@
 
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="margin-bottom: 0;">الحساب المالي (المصروف / المستفيد) <span style="color: var(--accent-red);">*</span></label>
+            <label style="margin-bottom: 0;">الحساب المقابل للسند (المصروف / المستفيد) <span style="color: var(--accent-red);">*</span></label>
             <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalExpAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
           </div>
           <select id="modalExpAccountSelect" class="form-control">
@@ -6879,23 +6879,21 @@
           <div class="form-group">
             <label>طريقة الصرف (Payment Method)</label>
             <select id="modalExpPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('modalExpPaymentMethod', 'modalExpCheckRow')">
-              <option value="CASH" selected>نقداً (CASH)</option>
-              <option value="BANK_TRANSFER">تحويل بنكي (BANK_TRANSFER)</option>
-              <option value="CREDIT_CARD">بطاقة ائتمانية (CREDIT_CARD)</option>
-              <option value="DEBIT_CARD">بطاقة خصم (DEBIT_CARD)</option>
-              <option value="WALLET">محفظة إلكترونية (WALLET)</option>
-              <option value="ONLINE_GATEWAY">بوابة دفع إلكترونية (ONLINE_GATEWAY)</option>
-              <option value="CHEQUE">شيك بنكي (CHEQUE)</option>
-              <option value="POS">نقطة بيع (POS)</option>
+              <option value="نقدي">نقداً</option>
+              <option value="تحويل بنكي">تحويل بنكي</option>
             </select>
           </div>
+        </div>
+        <div class="form-group">
+          <label>المرجع / رقم الفاتورة</label>
+          <input type="text" id="modalExpReferenceNo" class="form-control" placeholder="أدخل رقم الفاتورة أو المرجع الخارجي">
         </div>
         <!-- تفاصيل الحساب المالي (Financial Account) المنفصل تماماً عن طريقة الصرف والمرتبط بحساب فرعي أخير -->
         <div id="modalExpCheckRow" style="background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label id="modalExpFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">الحساب المالي المصروف منه (Financial Account) <span style="color: var(--accent-red);">*</span></label>
-              <select id="modalExpFinancialAccountSelect" class="form-control" onchange="Accounting.onFinancialAccountChange(this.value, 'modalExpFaHint')">
+              <label id="modalExpFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">حساب الصندوق من دليل الحسابات *</label>
+              <select id="modalExpFinancialAccountSelect" class="form-control">
                 <option value="">اختر الحساب المالي...</option>
               </select>
               <select id="modalExpBankAccountSelect" style="display: none;"></select>
@@ -6994,7 +6992,6 @@
             <select id="modalCustodyPaymentMethod" class="form-control">
               <option value="نقدي" selected>نقدي (صندوق)</option>
               <option value="تحويل بنكي">تحويل بنكي</option>
-              <option value="شيك">شيك</option>
             </select>
           </div>
         </div>
@@ -7038,6 +7035,24 @@
     </div>
   </div>
 
+
+  <div class="modal-overlay" id="voucherReviewModal">
+    <div class="modal-box" style="max-width: 720px; width: 95%;">
+      <div class="modal-header"><h3 id="voucherReviewTitle">معاينة السند</h3><button type="button" class="modal-close-btn" onclick="App.closeModal('voucherReviewModal')">&times;</button></div>
+      <form onsubmit="Accounting.saveVoucherDraft(event)">
+        <div class="form-group"><label>التاريخ</label><input id="reviewVoucherDate" type="date" class="form-control" required></div>
+        <div class="form-group" id="reviewVoucherReferenceGroup"><label>المرجع / رقم الفاتورة</label><input id="reviewVoucherReferenceNo" type="text" class="form-control"></div>
+        <div class="form-group"><label>المبلغ بعملة السند</label><input id="reviewVoucherAmount" type="number" min="0.01" step="any" class="form-control" required oninput="Accounting.renderVoucherPreview()"></div>
+        <div class="form-group"><label>الحساب المقابل في دليل الحسابات</label><select id="reviewVoucherAccount" class="form-control" required onchange="Accounting.renderVoucherPreview()"></select></div>
+        <div class="form-group"><label>طريقة الدفع</label><select id="reviewVoucherMethod" class="form-control" onchange="Accounting.refreshReviewSettlement()"><option value="نقدي">نقداً</option><option value="تحويل بنكي">تحويل بنكي</option></select></div>
+        <div class="form-group"><label>حساب الصندوق أو البنك</label><select id="reviewVoucherSettlement" class="form-control" required onchange="Accounting.renderVoucherPreview()"></select></div>
+        <div class="form-group"><label>البيان</label><textarea id="reviewVoucherNotes" class="form-control"></textarea></div>
+        <div id="reviewVoucherPreview" style="padding:12px; margin:10px 0; border:1px solid var(--gold-light); border-radius:8px;"></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-primary">حفظ التعديلات كمسودة</button><button type="button" class="btn btn-secondary" onclick="App.closeModal('voucherReviewModal')">إغلاق</button></div>
+      </form>
+    </div>
+  </div>
+
   <!-- ================== نافذة تسجيل قيد يومية جديد (طرفين أو متعدد الأطراف) ================== -->
   <div class="modal-overlay" id="newJournalModal">
     <div class="modal-box" style="max-width: 980px; width: 95%;">
@@ -7046,13 +7061,14 @@
         <button class="modal-close-btn" onclick="App.closeModal('newJournalModal')">&times;</button>
       </div>
       <form id="modalJournalForm" onsubmit="Accounting.submitJournalEntryModal(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="journalSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
         <!-- شريط رقم قيد اليومية داخل نفس الشاشة -->
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px;">
           <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم قيد اليومية المتسلسل:</span>
           <strong id="modalJeEntryNoBadge" style="font-family: monospace; font-size: 1.1rem; color: #38bdf8; letter-spacing: 1px;">JV-2026-XXXX</strong>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1.5fr 2fr; gap: 12px; margin-bottom: 12px; align-items: end;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1.25fr 2fr; gap: 12px; margin-bottom: 12px; align-items: end;">
           <div class="form-group" style="margin-bottom: 0;">
             <label>التاريخ <span style="color: var(--accent-red);">*</span></label>
             <input type="date" id="modalJeDate" class="form-control" required>
@@ -7066,10 +7082,8 @@
             </select>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
-            <label>مركز التكلفة (موحد لكافة الأطراف)</label>
-            <select id="modalJeCostCenter" class="form-control" style="border-color: rgba(56, 189, 248, 0.5);">
-              <option value="">اختر مركز التكلفة...</option>
-            </select>
+            <label>المرجع / رقم الفاتورة</label>
+            <input type="text" id="modalJeReferenceNo" class="form-control" placeholder="مثال: INV-1025">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label>البيان العام للقيد <span style="color: var(--accent-red);">*</span></label>
@@ -7104,10 +7118,11 @@
             <table class="custom-table" style="margin-bottom: 0;">
               <thead>
                 <tr>
-                  <th style="width: 35%;">الحساب الفرعي (دليل الحسابات) <span style="color: var(--accent-red);">*</span></th>
-                  <th style="width: 18%;">مدين (منه)</th>
-                  <th style="width: 18%;">دائن (له)</th>
-                  <th style="width: 24%;">بيان السطر / الملاحظات</th>
+                  <th style="width: 28%;">الحساب الفرعي (دليل الحسابات) <span style="color: var(--accent-red);">*</span></th>
+                  <th style="width: 18%;">مركز التكلفة</th>
+                  <th style="width: 14%;">مدين (منه)</th>
+                  <th style="width: 14%;">دائن (له)</th>
+                  <th style="width: 21%;">بيان السطر / الملاحظات</th>
                   <th style="width: 5%; text-align: center;">حذف</th>
                 </tr>
               </thead>
@@ -7203,18 +7218,12 @@
               <option value="مصروفات">5 - مصروفات وتكاليف مشاريع (Expenses & Costs)</option>
             </select>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group">
-              <label>حالة الحساب</label>
-              <select id="modalAccStatus" class="form-control">
-                <option value="active">نشط (يقبل العمليات)</option>
-                <option value="restricted">🔒 موقوف / مقيد (معطل)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>الرصيد الافتتاحي</label>
-              <input type="number" id="modalAccBalance" class="form-control" value="0" step="any">
-            </div>
+          <div class="form-group">
+            <label>حالة الحساب</label>
+            <select id="modalAccStatus" class="form-control">
+              <option value="active">نشط (يقبل العمليات)</option>
+              <option value="restricted">🔒 موقوف / مقيد (معطل)</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -7259,18 +7268,12 @@
               <option value="">بدون أب (حساب رئيسي أعلى مستوى)...</option>
             </select>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group">
-              <label>حالة الحساب (تقييد / تنشيط)</label>
-              <select id="editAccStatus" class="form-control">
-                <option value="active">نشط (يقبل القيود والسندات)</option>
-                <option value="restricted">🔒 موقوف / مقيد (معطل)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>الرصيد الدفتري</label>
-              <input type="number" id="editAccBalance" class="form-control" step="any">
-            </div>
+          <div class="form-group">
+            <label>حالة الحساب (تقييد / تنشيط)</label>
+            <select id="editAccStatus" class="form-control">
+              <option value="active">نشط (يقبل القيود والسندات)</option>
+              <option value="restricted">🔒 موقوف / مقيد (معطل)</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -7652,7 +7655,7 @@
       </div>
       <form id="newUserForm" onsubmit="Settings.submitUserForm(event)">
         <input type="hidden" id="userIdVal">
-        
+
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div class="form-group">
             <label>الاسم الكامل للموظف / المستخدم <span style="color: var(--accent-red);">*</span></label>
@@ -7669,7 +7672,7 @@
             <label id="userPasswordLabel">كلمة المرور <span style="color: var(--accent-red);">*</span></label>
             <input type="password" id="userPasswordVal" class="form-control" placeholder="كلمة المرور (8 خانات على الأقل)" oninput="Auth.checkPasswordStrength(this.value, 'userPasswordStrengthBox')">
             <small id="userPasswordHint" style="font-size: 0.72rem; color: var(--text-secondary); display: none;">اترك الحقل فارغاً إذا كنت لا ترغب في تغيير كلمة المرور الحالية.</small>
-            
+
             <!-- مؤشر قوة كلمة المرور التفاعلي -->
             <div id="userPasswordStrengthBox" class="password-strength-box" style="display: none; margin-top: 8px; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
@@ -8308,7 +8311,7 @@
       </div>
       <form id="quoItemForm" onsubmit="ProjectHub.submitQuotationItemForm(event)">
         <input type="hidden" id="quoItemIndex" value="-1">
-        
+
         <div style="display: grid; grid-template-columns: 80px 1fr 1fr; gap: 10px;">
           <div class="form-group">
             <label>رقم البند</label>
@@ -9119,8 +9122,6 @@
             <select id="projPurMethod" class="form-control">
               <option value="نقدي">نقدي</option>
               <option value="تحويل بنكي">تحويل بنكي</option>
-              <option value="شيك">شيك</option>
-              <option value="أجل">أجل</option>
             </select>
           </div>
           <div class="form-group">
@@ -10398,12 +10399,12 @@
   <script src="js/projects.js?v=1.0.0.20261015-1g1p"></script>
   <script src="js/project_control_ui.js?v=1.0.0.20261015-1g1p"></script>
   <script src="js/project_hub.js?v=1.0.0.20261015-1g1p"></script>
-  <script src="js/accounting.js?v=1.0.0.20261015-1g1p"></script>
+  <script src="js/accounting.js?v=1.0.0.20261017-cash-reference"></script>
   <script src="js/inventory.js?v=1.0.0.20261015-1g1p"></script>
   <script src="js/hr.js?v=1.0.0.20261015-1g1p"></script>
   <script src="js/settings.js?v=1.0.0.20261015-1g1p"></script>
   <script src="js/contracts_cashflow.js?v=1.0.0.20261015-1g1p"></script>
-  <script src="js/app.js?v=1.0.0.20261015-1g1p"></script>
+  <script src="js/app.js?v=1.0.0.20261017-cash-reference"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
@@ -10491,7 +10492,7 @@
 
       <form id="formClosePeriod" onsubmit="Accounting.submitClosePeriod(event)">
         <input type="hidden" id="closePeriodId">
-        
+
         <div class="form-group" style="margin-bottom: 14px;">
           <label style="color: #f3cf65; font-weight: 700;">كلمة مرور المدير المالي / المشرف (إلزامية للتفويض) *</label>
           <input type="password" id="closePeriodManagerPassword" class="form-control" required placeholder="أدخل كلمة مرور الإدارة للمصادقة" autocomplete="current-password">

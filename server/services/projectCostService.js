@@ -493,9 +493,9 @@ async function resolveMirrorAccounts(conn, sourceTable) {
   const cashAcc = await conn.get(`
     SELECT id FROM accounts 
     WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
-       OR code = '12101001'
+       OR code = '11101001'
        OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
-    ORDER BY (code = '111' AND is_posting = 1) DESC, (code = '12101001') DESC, id ASC LIMIT 1
+    ORDER BY (code = '11101001') DESC, id ASC LIMIT 1
   `);
   if (!debitAcc || !cashAcc) {
     throw new Error('الحسابات المحاسبية للمرايا (5/111) غير موجودة في الدليل');
@@ -700,16 +700,16 @@ async function resolvePayableAccounts(conn) {
   const ap = await conn.get(`
     SELECT id FROM accounts 
     WHERE (code = '21' AND (is_posting = 1 OR is_posting IS NULL))
-       OR code = '22101001'
+       OR code = '21101001'
        OR (type = 'liability' AND is_posting = 1)
-    ORDER BY (code = '21' AND is_posting = 1) DESC, (code = '22101001') DESC, id ASC LIMIT 1
+    ORDER BY (code = '21101001') DESC, id ASC LIMIT 1
   `);
   const cash = await conn.get(`
     SELECT id FROM accounts 
     WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
-       OR code = '12101001'
+       OR code = '11101001'
        OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
-    ORDER BY (code = '111' AND is_posting = 1) DESC, (code = '12101001') DESC, id ASC LIMIT 1
+    ORDER BY (code = '11101001') DESC, id ASC LIMIT 1
   `);
   if (!exp || !ap || !cash) {
     throw new Error('الحسابات المحاسبية للذمم (5/21/111) غير موجودة في الدليل');
@@ -968,16 +968,16 @@ async function resolveWageAccounts(conn) {
   const wp = await conn.get(`
     SELECT id FROM accounts 
     WHERE (code = '215' AND (is_posting = 1 OR is_posting IS NULL))
-       OR code = '22401001'
+       OR code = '21401001'
        OR (type = 'liability' AND is_posting = 1)
-    ORDER BY (code = '215' AND is_posting = 1) DESC, (code = '22401001') DESC, id ASC LIMIT 1
+    ORDER BY (code = '21401001') DESC, id ASC LIMIT 1
   `);
   const cash = await conn.get(`
     SELECT id FROM accounts 
     WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
-       OR code = '12101001'
+       OR code = '11101001'
        OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
-    ORDER BY (code = '111' AND is_posting = 1) DESC, (code = '12101001') DESC, id ASC LIMIT 1
+    ORDER BY (code = '11101001') DESC, id ASC LIMIT 1
   `);
   if (!exp || !wp || !cash) {
     throw new Error('الحسابات المحاسبية للأجور (511/215/111) غير موجودة في الدليل');

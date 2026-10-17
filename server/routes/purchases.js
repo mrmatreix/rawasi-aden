@@ -69,6 +69,10 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
       status: requestedStatus = 'posted'
     } = req.body;
 
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) {
+      return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
+    }
+
     // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ فاتورة الشراء
     await FinancialControlService.assertPeriodOpen(date);
 

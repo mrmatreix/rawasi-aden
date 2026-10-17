@@ -810,7 +810,7 @@ class ReportingService {
     const partyMap = await get("SELECT account_id FROM party_account_mappings WHERE party_type = 'client' AND party_id = ?", [client.id]);
     let arAccountId = partyMap?.account_id;
     if (!arAccountId) {
-      const defAr = await get("SELECT id FROM accounts WHERE code LIKE '123%' AND NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = accounts.id) LIMIT 1");
+      const defAr = await get("SELECT id FROM accounts WHERE code = '11201002' AND NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = accounts.id) LIMIT 1");
       arAccountId = defAr ? defAr.id : null;
     }
 

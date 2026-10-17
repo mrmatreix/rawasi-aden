@@ -90,7 +90,11 @@ router.get('/accounts/suggest-code', requirePermission('accounting:view'), async
         } else {
           // أب رتبة 3 أو أكثر -> نقترح رتبة 4 بأربع خانات
           level = Math.max(4, pLen + 1);
-          if (siblings.length > 0) {
+          if (pLen === 5) {
+            level = 5;
+            const suffixes = siblings.map(item => String(item.code)).filter(code => code.startsWith(pCode) && /^\d{3}$/.test(code.slice(5))).map(code => Number(code.slice(5)));
+            suggestedCode = pCode + String(Math.max(0, ...suffixes) + 1).padStart(3, '0');
+          } else if (siblings.length > 0) {
             const lastCode = siblings[0].code;
             const num = parseInt(lastCode, 10);
             suggestedCode = !isNaN(num) ? String(num + 1) : `${pCode}01`;
@@ -147,13 +151,14 @@ router.post('/accounts', requirePermission('accounting:create,settings:company')
     } else if (cleanCode.length === 3) {
       level = 3;
     } else {
-      level = 4;
+      level = cleanCode.length >= 8 ? 5 : 4;
     }
 
+    const isPosting = level === 5 ? 1 : 0;
     const result = await run(`
-      INSERT INTO accounts (code, name, type, parent_id, balance, status, level)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [cleanCode, name.trim(), type, parent_id, Number(balance || 0), status || 'active', level]);
+      INSERT INTO accounts (code, name, type, parent_id, balance, status, level, is_posting)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [cleanCode, name.trim(), type, parent_id, Number(balance || 0), status || 'active', level, isPosting]);
 
     const newId = result.lastInsertRowid || result.insertId;
 
@@ -200,7 +205,7 @@ router.put('/accounts/:id', requirePermission('accounting:edit,settings:company'
     const pId = parent_id !== undefined && parent_id !== '' ? (parent_id ? Number(parent_id) : null) : current.parent_id;
     const accStatus = status || current.status || 'active';
     const accBalance = balance !== undefined ? Number(balance) : current.balance;
-    const level = cleanCode.length >= 4 ? 4 : (cleanCode.length === 3 ? 3 : (cleanCode.length === 2 ? 2 : 1));
+    const level = cleanCode.length >= 8 ? 5 : (cleanCode.length >= 4 ? 4 : (cleanCode.length === 3 ? 3 : (cleanCode.length === 2 ? 2 : 1)));
 
     await run(`
       UPDATE accounts 
@@ -574,8 +579,11 @@ router.get('/next-numbers', requirePermission('accounting:view,expenses:view,rev
     }
 
     // 4. قيد يومية
-    const jeCount = await get('SELECT COUNT(*) as cnt FROM journal_entries');
-    let jeSeq = ((jeCount ? jeCount.cnt : 0) || 0) + 1;
+    const lastJe = await get(
+      'SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1',
+      [`JV-${currentYear}-%`]
+    );
+    let jeSeq = lastJe?.entry_no ? (Number(lastJe.entry_no.slice(`JV-${currentYear}-`.length)) || 0) + 1 : 1;
     let nextJe = `JV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
     while (await get('SELECT id FROM journal_entries WHERE entry_no = ?', [nextJe])) {
       jeSeq++;
@@ -628,6 +636,23 @@ router.get('/journal-entries', requirePermission('accounting:view'), async (req,
 
     sql += ' GROUP BY je.id ORDER BY je.date DESC, je.id DESC LIMIT 100';
     const entries = await query(sql, params);
+    if (entries.length) {
+      const placeholders = entries.map(() => '?').join(',');
+      const lines = await query(`
+        SELECT jel.entry_id, jel.account_id, jel.debit, jel.credit,
+               a.code AS account_code, a.name AS account_name
+        FROM journal_entry_lines jel
+        LEFT JOIN accounts a ON a.id = jel.account_id
+        WHERE jel.entry_id IN (${placeholders})
+        ORDER BY jel.entry_id, jel.id
+      `, entries.map(entry => entry.id));
+      const linesByEntry = new Map();
+      for (const line of lines) {
+        if (!linesByEntry.has(line.entry_id)) linesByEntry.set(line.entry_id, []);
+        linesByEntry.get(line.entry_id).push(line);
+      }
+      for (const entry of entries) entry.lines = linesByEntry.get(entry.id) || [];
+    }
     res.json({ success: true, data: entries });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب قيود اليومية', error: err.message });
@@ -763,6 +788,7 @@ router.post('/journal-entries', requirePermission('accounting:create'), async (r
       description, 
       reference_type = 'قيد يدوي',
       reference_id = null,
+      reference_no = null,
       lines,
       status: requestedStatus
     } = req.body;
@@ -772,6 +798,7 @@ router.post('/journal-entries', requirePermission('accounting:create'), async (r
       description,
       reference_type,
       reference_id,
+      reference_no,
       status: requestedStatus
     }, lines, req);
 
@@ -900,11 +927,14 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
     const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
     const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
 
-    await run(`
-      UPDATE journal_entries 
-      SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [posterId, posterName, id]);
+    await transaction(async (tx) => {
+      await tx.run(`
+        UPDATE journal_entries
+        SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, [posterId, posterName, id]);
+      await AccountingService.syncJournalCashMovements(tx, id);
+    });
 
     await logAudit(req, {
       action: 'POST',
@@ -992,7 +1022,7 @@ router.put('/journal-entries/:id', requirePermission('accounting:create,accounti
       return res.status(400).json({ success: false, message: mErr.message, immutable: true });
     }
 
-    const { date, description, lines, reason } = req.body;
+    const { date, description, reference_no, lines, reason } = req.body;
     const targetDate = date || entry.date;
     await FinancialControlService.assertPeriodOpen(targetDate);
 
@@ -1012,6 +1042,7 @@ router.put('/journal-entries/:id', requirePermission('accounting:create,accounti
     const newVals = {
       date: targetDate,
       description: description !== undefined ? String(description).trim() : entry.description,
+      reference_no: reference_no !== undefined ? (String(reference_no).trim() || null) : entry.reference_no,
       total_debit: validated ? validated.totalDebit : entry.total_debit,
       total_credit: validated ? validated.totalCredit : entry.total_credit
     };
@@ -1019,9 +1050,9 @@ router.put('/journal-entries/:id', requirePermission('accounting:create,accounti
     await transaction(async (tx) => {
       await tx.run(`
         UPDATE journal_entries 
-        SET date = ?, description = ?, total_debit = ?, total_credit = ?
+        SET date = ?, description = ?, reference_no = ?, total_debit = ?, total_credit = ?
         WHERE id = ?
-      `, [newVals.date, newVals.description, newVals.total_debit, newVals.total_credit, id]);
+      `, [newVals.date, newVals.description, newVals.reference_no, newVals.total_debit, newVals.total_credit, id]);
 
       if (validated) {
         await tx.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [id]);
@@ -1123,6 +1154,10 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       account_name,
       payment_method = 'نقدي'
     } = req.body;
+
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) {
+      return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
+    }
 
     const validProjectId = project_id && project_id !== '' ? Number(project_id) : null;
 
@@ -1274,7 +1309,7 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
 
     // تسجيل حركة صرف العهدة في حركة الصندوق والبنك
     const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || payment_method === 'بنك') ? 'بنك' : 'نقدي';
-    const lastCash = await get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1');
+    const lastCash = await get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY date DESC, id DESC LIMIT 1', [accId]);
     const prevBal = (lastCash && lastCash.current_balance != null) ? Number(lastCash.current_balance) : 0;
     const currentBal = prevBal - parsedAmount;
 
@@ -1319,20 +1354,21 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
 router.get('/cash-movements', async (req, res) => {
   try {
     const { type, from_date, to_date, all } = req.query;
-    let sql = 'SELECT * FROM cash_movements';
+    let sql = 'SELECT cm.*, a.code AS account_code, a.name AS account_name FROM cash_movements cm LEFT JOIN accounts a ON a.id = cm.account_id';
     const conditions = [];
     const params = [];
 
-    if (type && type !== 'الكل' && type !== 'all') {
-      conditions.push('movement_type = ?');
-      params.push(type);
+    if (type === 'بنك') {
+      conditions.push("((cm.account_id IS NOT NULL AND a.code LIKE '11102%') OR (cm.account_id IS NULL AND (cm.movement_type IN ('بنك', 'شيك', 'تحويل بنكي') OR cm.payment_method IN ('تحويل بنكي', 'BANK_TRANSFER'))))");
+    } else if (type === 'نقدي') {
+      conditions.push("((cm.account_id IS NOT NULL AND a.code LIKE '11101%') OR (cm.account_id IS NULL AND (cm.movement_type IN ('نقدي', 'صندوق', 'CASH') OR cm.payment_method IN ('نقدي', 'CASH'))))");
     }
     if (from_date) {
-      conditions.push('date >= ?');
+      conditions.push('cm.date >= ?');
       params.push(from_date);
     }
     if (to_date) {
-      conditions.push('date <= ?');
+      conditions.push('cm.date <= ?');
       params.push(to_date);
     }
 
@@ -1340,7 +1376,7 @@ router.get('/cash-movements', async (req, res) => {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    sql += ' ORDER BY date DESC, id DESC';
+    sql += ' ORDER BY cm.date DESC, cm.id DESC';
     if (!all && all !== 'true') {
       sql += ' LIMIT 100';
     }
@@ -1359,9 +1395,10 @@ router.get('/cash-movements', async (req, res) => {
     `;
     let summaryConditions = [];
     let summaryParams = [];
-    if (type && type !== 'الكل' && type !== 'all') {
-      summaryConditions.push('movement_type = ?');
-      summaryParams.push(type);
+    if (type === 'بنك') {
+      summaryConditions.push("((account_id IS NOT NULL AND account_id IN (SELECT id FROM accounts WHERE code LIKE '11102%')) OR (account_id IS NULL AND (movement_type IN ('بنك', 'شيك', 'تحويل بنكي') OR payment_method IN ('تحويل بنكي', 'BANK_TRANSFER'))))");
+    } else if (type === 'نقدي') {
+      summaryConditions.push("((account_id IS NOT NULL AND account_id IN (SELECT id FROM accounts WHERE code LIKE '11101%')) OR (account_id IS NULL AND (movement_type IN ('نقدي', 'صندوق', 'CASH') OR payment_method IN ('نقدي', 'CASH'))))");
     }
     if (from_date) {
       summaryConditions.push('date >= ?');
@@ -1383,6 +1420,16 @@ router.get('/cash-movements', async (req, res) => {
       current_balance: 0 
     };
 
+    // حساب الرصيد لكل صندوق أو بنك على حدة، ثم جمع أرصدة الحسابات.
+    const summaryRows = await query(`SELECT id, account_id, movement_type, previous_balance, current_balance FROM cash_movements${summaryConditions.length ? ' WHERE ' + summaryConditions.join(' AND ') : ''} ORDER BY id ASC`, summaryParams);
+    const balances = new Map();
+    for (const row of summaryRows) {
+      const key = row.account_id == null ? `legacy:${row.movement_type || 'نقدي'}` : `account:${row.account_id}`;
+      if (!balances.has(key)) balances.set(key, { initial: Number(row.previous_balance) || 0, current: 0 });
+      balances.get(key).current = Number(row.current_balance) || 0;
+    }
+    summary.initial_balance = [...balances.values()].reduce((total, item) => total + item.initial, 0);
+    summary.current_balance = [...balances.values()].reduce((total, item) => total + item.current, 0);
     res.json({ success: true, data: movements, summary });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب حركة الصندوق', error: err.message });
@@ -1441,6 +1488,14 @@ router.get('/periods/:id/unposted-items', requirePermission('accounting:view'), 
 
     const startDate = period.start_date;
     const endDate = period.end_date;
+
+    // يمر ترحيل السندات الفردي بالتحقق وتحديث الصندوق والمستخلصات المرتبطة.
+    // لا يستخدم المسار الجماعي القديم الحسابات الثابتة للسندات.
+    const pendingExpenses = await get("SELECT COUNT(*) AS n FROM expenses WHERE date BETWEEN ? AND ? AND status NOT IN ('posted', 'reversed', 'cancelled')", [startDate, endDate]);
+    const pendingPayments = await get("SELECT COUNT(*) AS n FROM payments WHERE date BETWEEN ? AND ? AND status NOT IN ('posted', 'reversed', 'cancelled')", [startDate, endDate]);
+    if (Number(pendingExpenses.n) || Number(pendingPayments.n)) {
+      return res.status(400).json({ success: false, message: 'راجع ورحّل سندات القبض والصرف كلّاً على حدة قبل الترحيل الجماعي للقيود.' });
+    }
 
     const unpostedJournals = await query(`
       SELECT id, entry_no, date, description, total_debit, status 
@@ -1513,6 +1568,7 @@ router.post('/periods/:id/post-all', requirePermission('accounting:post'), async
             SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `, [posterId, posterName, je.id]);
+          await AccountingService.syncJournalCashMovements(tx, je.id);
           postedJournalsCount++;
         }
       }
@@ -1525,12 +1581,14 @@ router.post('/periods/:id/post-all', requirePermission('accounting:post'), async
 
       for (const exp of unpostedExpenses) {
         const parsedAmount = Number(exp.amount) || 0;
-        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-        let entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+        const entryYear = new Date(exp.date).getFullYear();
+        const prefix = `JV-PV-${entryYear}-`;
+        const lastEntry = await tx.get('SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1', [`${prefix}%`]);
+        let jeSeq = lastEntry?.entry_no ? (Number(lastEntry.entry_no.slice(prefix.length)) || 0) + 1 : 1;
+        let entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
         while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
           jeSeq++;
-          entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+          entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
         }
         const jeRes = await tx.run(`
           INSERT INTO journal_entries (
@@ -1574,12 +1632,15 @@ router.post('/periods/:id/post-all', requirePermission('accounting:post'), async
 
       for (const pay of unpostedPayments) {
         const parsedAmount = Number(pay.amount) || 0;
-        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-        let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-        let entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+        const entryYear = new Date(pay.date).getFullYear();
+        const isReceipt = pay.type === 'قبض';
+        const prefix = isReceipt ? `JV-RC-${entryYear}-` : `JV-PV-${entryYear}-`;
+        const lastEntry = await tx.get('SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1', [`${prefix}%`]);
+        let jeSeq = lastEntry?.entry_no ? (Number(lastEntry.entry_no.slice(prefix.length)) || 0) + 1 : 1;
+        let entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
         while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
           jeSeq++;
-          entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
+          entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
         }
         const jeRes = await tx.run(`
           INSERT INTO journal_entries (

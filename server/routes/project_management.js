@@ -1009,6 +1009,8 @@ router.post('/:projectId/purchases', async (req, res) => {
       payment_status = 'مدفوع', payment_method = 'نقدي', date, receipt_no, notes
     } = req.body;
 
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
+
     if (!item_description) return res.status(400).json({ success: false, message: 'وصف المواد المشتراة مطلوب' });
 
     await ProjectCostService.ensureSchema();
@@ -1147,6 +1149,8 @@ router.post('/:projectId/purchases/:id/pay', async (req, res) => {
       amount, supplier_id, supplier_name,
       payment_method = 'نقدي', date, notes
     } = req.body;
+
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
 
     const purchase = await get(
       'SELECT * FROM project_purchases WHERE id = ? AND project_id = ?', [id, projectId]
@@ -1428,6 +1432,8 @@ router.post('/:projectId/labor/:id/pay', async (req, res) => {
     const {
       amount, payment_method = 'نقدي', date, notes
     } = req.body;
+
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
 
     const labor = await get(
       'SELECT * FROM project_labor_expenses WHERE id = ? AND project_id = ?', [id, projectId]

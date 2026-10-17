@@ -282,6 +282,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     currency TEXT DEFAULT 'ر.ي',
     payment_method TEXT DEFAULT 'نقدي', -- نقدي، تحويل بنكي، شيك
     check_no TEXT,                      -- رقم الشيك (إلزامي عند الصرف بشيك)
+    reference_no TEXT,                  -- مرجع السند أو رقم الفاتورة
     bank_name TEXT,                     -- اسم البنك
     recipient TEXT,
     date DATE NOT NULL,

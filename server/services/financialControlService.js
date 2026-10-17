@@ -133,6 +133,11 @@ const FinancialControlService = {
     const revUserName = revUser.username || revUser.full_name || 'مسؤول مالي';
     const amount = Number(exp.amount);
     const cleanReason = String(reason).trim();
+    const movementAccount = exp.settlement_account_id
+      ? await AccountingService.resolveVoucherSettlementAccount(exp.payment_method, exp.settlement_account_id)
+      : (exp.payment_method === 'تحويل بنكي'
+        ? (await AccountingService.resolveBankAccount(exp.bank_account_id, exp.bank_name)).coaAccount
+        : await AccountingService.resolveCashAccount());
 
     let reversingJeId = null;
     let reversingEntryNo = null;
@@ -147,8 +152,8 @@ const FinancialControlService = {
         'SELECT account_id FROM journal_entry_lines WHERE entry_id = ? AND debit > 0 ORDER BY id ASC LIMIT 1',
         [origJe.id]
       );
-      const apAcc = await get("SELECT id FROM accounts WHERE (code = '21' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22101001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '21') DESC, (code = '22101001') DESC LIMIT 1");
-      const wpAcc = await get("SELECT id FROM accounts WHERE (code = '215' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22401001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '215') DESC, (code = '22401001') DESC LIMIT 1");
+      const apAcc = await get("SELECT id FROM accounts WHERE code = '21101001' AND is_posting = 1 LIMIT 1");
+      const wpAcc = await get("SELECT id FROM accounts WHERE code = '21401001' AND is_posting = 1 LIMIT 1");
       if (drLine && apAcc && Number(drLine.account_id) === Number(apAcc.id)) {
         const pur = await get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
         if (pur && pur.supplier_id) {
@@ -164,15 +169,15 @@ const FinancialControlService = {
 
     await transaction(async (tx) => {
       // 1. إعادة رصيد الصندوق / حركة البنك بالطرف المعاكس
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+      const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY id DESC LIMIT 1', [movementAccount.id]) || { current_balance: 0 };
       const prevBal = Number(lastCash.current_balance) || 0;
       const newBal = prevBal + amount;
       const cashNotes = `قيد عكسي لسند الصرف ${exp.receipt_no}: ${cleanReason}`;
 
       await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, 0, 0, ?, ?, ?, ?)
-      `, [prevBal, amount, newBal, exp.currency || 'ر.ي', revDate, cashNotes]);
+        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
+        VALUES (?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [prevBal, amount, newBal, exp.currency || 'ر.ي', revDate, cashNotes, exp.payment_method === 'تحويل بنكي' ? 'بنك' : 'نقدي', exp.payment_method, reversingEntryNo || `REV-${exp.receipt_no}`, movementAccount.id]);
 
       // 2. تحديث البند الفرعي المرتبط إن وجد (استعادة مبالغ السداد)
       if (settleInfo && settleInfo.kind === 'labor') {
@@ -224,10 +229,7 @@ const FinancialControlService = {
 
       // أسطر القيد العكسي: يتم عكس الطرفين تماماً
       const isBank = exp.payment_method === 'تحويل بنكي' || exp.payment_method === 'شيك' || exp.payment_method === 'bank_transfer' || exp.payment_method === 'check';
-      const contraAcc = isBank
-        ? await AccountingService.resolveBankAccount(exp.bank_account_id)
-        : await AccountingService.resolveCashAccount();
-      const contraAccId = contraAcc.id;
+      const contraAccId = movementAccount.id;
 
       let expenseAccId = settleInfo ? settleInfo.accId : exp.account_id;
       if (expenseAccId && !settleInfo) {
@@ -330,13 +332,18 @@ const FinancialControlService = {
     const amount = Number(pay.amount);
     const cleanReason = String(reason).trim();
     const isReceipt = (pay.type === 'قبض');
+    const movementAccount = pay.settlement_account_id
+      ? await AccountingService.resolveVoucherSettlementAccount(pay.payment_method, pay.settlement_account_id)
+      : (pay.payment_method === 'تحويل بنكي'
+        ? (await AccountingService.resolveBankAccount(pay.bank_account_id, pay.bank_name)).coaAccount
+        : await AccountingService.resolveCashAccount());
 
     let reversingJeId = null;
     let reversingEntryNo = null;
 
     await transaction(async (tx) => {
       // 1. عكس حركة الصندوق والبنك
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+      const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY id DESC LIMIT 1', [movementAccount.id]) || { current_balance: 0 };
       const prevBal = Number(lastCash.current_balance) || 0;
       const newBal = isReceipt ? (prevBal - amount) : (prevBal + amount);
       const cashIn = isReceipt ? 0 : amount;
@@ -344,9 +351,9 @@ const FinancialControlService = {
       const cashNotes = `قيد عكسي لسند ${pay.type} ${pay.receipt_no}: ${cleanReason}`;
 
       await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?)
-      `, [prevBal, cashIn, cashOut, newBal, pay.currency || 'ر.ي', revDate, cashNotes]);
+        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
+        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [prevBal, cashIn, cashOut, newBal, pay.currency || 'ر.ي', revDate, cashNotes, pay.payment_method === 'تحويل بنكي' ? 'بنك' : 'نقدي', pay.payment_method, reversingEntryNo || `REV-${pay.receipt_no}`, movementAccount.id]);
 
       // 2. عكس أرصدة العميل أو المورد
       if (isReceipt && pay.client_id) {
@@ -388,10 +395,7 @@ const FinancialControlService = {
       const finalCcId = pay.cost_center_id || 1;
 
       const isBank = pay.payment_method === 'تحويل بنكي' || pay.payment_method === 'شيك' || pay.payment_method === 'bank_transfer' || pay.payment_method === 'check';
-      const contraAcc = isBank
-        ? await AccountingService.resolveBankAccount(pay.bank_account_id)
-        : await AccountingService.resolveCashAccount();
-      const contraAccId = contraAcc.id;
+      const contraAccId = movementAccount.id;
 
       let voucherAccId = pay.account_id;
       if (voucherAccId) {
@@ -399,7 +403,7 @@ const FinancialControlService = {
         voucherAccId = vAcc.id;
       } else {
         if (isReceipt) {
-          const clientAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND (code = '12301001' OR name LIKE '%عملاء%') ORDER BY id ASC LIMIT 1");
+          const clientAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND code = '11201002' LIMIT 1");
           voucherAccId = clientAcc ? clientAcc.id : contraAccId;
         } else {
           const suppAcc = await get("SELECT id FROM accounts WHERE is_posting = 1 AND (code = '21101001' OR name LIKE '%مورد%') ORDER BY id ASC LIMIT 1");
@@ -549,6 +553,8 @@ const FinancialControlService = {
           `عكس سطر القيد ${entry.entry_no} - ${cleanReason}`
         ]);
       }
+
+      await AccountingService.syncJournalCashMovements(tx, reversingJeId);
 
       await tx.run(`
         UPDATE journal_entries 

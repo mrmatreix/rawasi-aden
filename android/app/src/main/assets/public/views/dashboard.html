@@ -165,6 +165,7 @@
               <span id="quickRcReceiptNoBadge" style="font-size: 0.75rem; color: var(--gold-light); font-weight: bold;">RC-2026-XXXX</span>
             </div>
             <form id="quickReceiptForm" onsubmit="Accounting.submitReceiptVoucher(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="rcSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">العميل</label>
@@ -176,7 +177,7 @@
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                  <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
                   <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('rcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
                 </div>
                 <select id="rcAccountSelect" class="form-control" required>
@@ -205,16 +206,15 @@
               <div class="form-group">
                 <label>طريقة الدفع</label>
                 <select id="rcPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('rcPaymentMethod', 'rcCheckFieldsRow')">
+                  <option value="نقدي">نقداً</option>
                   <option value="تحويل بنكي">تحويل بنكي</option>
-                  <option value="نقدي">نقدي</option>
-                  <option value="شيك">شيك</option>
                 </select>
               </div>
               <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
               <div id="rcCheckFieldsRow" style="display: none; background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">حساب البنك / الخزينة</label>
+                    <label id="rcSettlementLabel">حساب الصندوق من دليل الحسابات *</label>
                     <select id="rcBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
                       <option value="">اختر حساب البنك...</option>
                     </select>
@@ -258,6 +258,7 @@
               <span id="quickExpReceiptNoBadge" style="font-size: 0.75rem; color: var(--accent-red); font-weight: bold;">EP-2026-XXXX</span>
             </div>
             <form id="quickExpenseForm" onsubmit="Accounting.submitExpenseVoucher(event)">
+<div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="expSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
               <div class="form-group">
                 <label>نوع المصروف</label>
                 <select id="expTypeSelect" class="form-control" required onchange="Accounting.onQuickExpenseTypeChange(this.value)">
@@ -271,7 +272,7 @@
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <label style="margin-bottom: 0;">الحساب المالي (دليل الحسابات)</label>
+                  <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
                   <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('expAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
                 </div>
                 <select id="expAccountSelect" class="form-control" required>
@@ -323,16 +324,15 @@
               <div class="form-group">
                 <label>طريقة الدفع</label>
                 <select id="expPaymentMethod" class="form-control" onchange="Accounting.handlePaymentMethodChange('expPaymentMethod', 'expCheckFieldsRow')">
-                  <option value="نقدي">نقدي</option>
+                  <option value="نقدي">نقداً</option>
                   <option value="تحويل بنكي">تحويل بنكي</option>
-                  <option value="شيك">شيك</option>
                 </select>
               </div>
               <!-- حقول البنك والشيك الشرطية عند اختيار طريقة الدفع بشيك أو تحويل بنكي -->
               <div id="expCheckFieldsRow" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px dashed var(--accent-red); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="color: var(--accent-red); font-weight: bold; font-size: 0.78rem;">حساب البنك / الخزينة</label>
+                    <label id="expSettlementLabel">حساب الصندوق من دليل الحسابات *</label>
                     <select id="expBankAccountSelect" class="form-control" style="font-size: 0.8rem;">
                       <option value="">اختر حساب البنك...</option>
                     </select>

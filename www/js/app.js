@@ -570,7 +570,8 @@ const App = {
       const json = await res.json();
       if (json.success) {
         const list = json.data || [];
-        const total = list.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        this.receiptVouchers = list;
+        const total = list.filter(item => item.status === 'posted').reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
         const kpiTotal = document.getElementById('revKpiTotal');
         const kpiCount = document.getElementById('revKpiCount');
         if (kpiTotal) kpiTotal.textContent = this.formatNumber(total);
@@ -591,7 +592,7 @@ const App = {
 
               return `
                 <tr>
-                  <td><strong style="color: var(--gold-light); font-family: monospace;">${p.receipt_no}</strong></td>
+                  <td><strong style="color: var(--gold-light); font-family: monospace;">${p.receipt_no}</strong><br><small>${p.status === 'draft' ? 'مسودة' : p.status === 'posted' ? 'مرحل' : p.status}</small></td>
                   <td>${p.date}</td>
                   <td><strong>${p.client_name || '-'}</strong></td>
                   <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
@@ -601,7 +602,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${p.notes || '-'}</td>
                   <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
+                    ${p.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('receipt', ${p.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('receipt', ${p.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
                       receipt_no: '${p.receipt_no}',
                       date: '${p.date}',
                       client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
@@ -667,7 +668,8 @@ const App = {
       const json = await res.json();
       if (json.success) {
         const list = json.data || [];
-        const total = list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+        this.expenseVouchers = list;
+        const total = list.filter(item => item.status === 'posted').reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
         const kpiTotal = document.getElementById('expKpiTotal');
         const kpiCount = document.getElementById('expKpiCount');
         if (kpiTotal) kpiTotal.textContent = this.formatNumber(total);
@@ -688,7 +690,7 @@ const App = {
 
               return `
                 <tr>
-                  <td><strong style="color: var(--accent-red); font-family: monospace;">${e.receipt_no}</strong></td>
+                  <td><strong style="color: var(--accent-red); font-family: monospace;">${e.receipt_no}</strong>${e.reference_no ? `<br><small>مرجع: ${e.reference_no}</small>` : ''}<br><small>${e.status === 'draft' ? 'مسودة' : e.status === 'posted' ? 'مرحل' : e.status}</small></td>
                   <td>${e.date}</td>
                   <td><span class="badge badge-expense">${e.expense_type}</span></td>
                   <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
@@ -699,7 +701,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${e.notes || '-'}</td>
                   <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
+                    ${e.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('expense', ${e.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('expense', ${e.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
                       receipt_no: '${e.receipt_no}',
                       date: '${e.date}',
                       expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',
@@ -712,6 +714,7 @@ const App = {
                       amount: ${e.amount},
                       currency: '${e.currency || 'ر.ي'}',
                       payment_method: '${e.payment_method}',
+                      reference_no: '${(e.reference_no || '').replace(/'/g, "\\'")}',
                       check_no: '${(e.check_no || '').replace(/'/g, "\\'")}',
                       bank_name: '${(e.bank_name || '').replace(/'/g, "\\'")}',
                       notes: '${(e.notes || '').replace(/'/g, "\\'")}'
@@ -1512,9 +1515,9 @@ const App = {
     if (typeof Accounting !== 'undefined') Accounting._currentCashFilter = type;
 
     try {
-      let url = '/api/accounting/cash-movements';
+      let url = '/api/accounting/cash-movements?all=true';
       if (type && type !== 'الكل') {
-        url += '?type=' + encodeURIComponent(type);
+        url += '&type=' + encodeURIComponent(type);
       }
       const res = await fetch(url);
       const json = await res.json();
@@ -1527,14 +1530,15 @@ const App = {
         } else {
           const renderRows = (pageList) => {
             tbody.innerHTML = pageList.map(m => {
-              const typeBadge = (m.movement_type === 'بنك' || m.movement_type === 'شيك')
+              const isBank = String(m.account_code || '').startsWith('11102') || (!m.account_code && (['بنك', 'شيك', 'تحويل بنكي'].includes(m.movement_type) || ['تحويل بنكي', 'BANK_TRANSFER'].includes(m.payment_method)));
+              const typeBadge = isBank
                 ? `<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: bold;">🏦 بنك</span>`
                 : `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: bold;">💵 نقدي</span>`;
 
               return `
                 <tr>
                   <td>${m.date}</td>
-                  <td style="text-align: center;">${typeBadge}</td>
+                  <td style="text-align: center;">${typeBadge}${m.account_code ? `<br><small>${m.account_code} - ${m.account_name || ''}</small>` : ''}</td>
                   <td>${this.formatNumber(m.previous_balance)}</td>
                   <td style="color: var(--accent-green); font-weight: bold;">${m.cash_in ? '+' + this.formatNumber(m.cash_in) : '-'}</td>
                   <td style="color: var(--accent-red); font-weight: bold;">${m.cash_out ? '-' + this.formatNumber(m.cash_out) : '-'}</td>

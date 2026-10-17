@@ -399,19 +399,17 @@ router.post('/:id/post', requirePermission('billing:post,accounting:post'), asyn
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
       // حل الحسابات المالية آلياً من دليل الحسابات الموحد (Leaf Accounts)
-      const arAcc = await tx.get("SELECT id FROM accounts WHERE code = '12301001' AND is_posting = 1 LIMIT 1")
-        || await tx.get("SELECT id FROM accounts WHERE code LIKE '123%' AND is_posting = 1 LIMIT 1");
-      const retAcc = await tx.get("SELECT id FROM accounts WHERE code = '12601002' AND is_posting = 1 LIMIT 1")
-        || await tx.get("SELECT id FROM accounts WHERE (code LIKE '126%' OR code LIKE '12%') AND is_posting = 1 LIMIT 1");
-      const advAcc = await tx.get("SELECT id FROM accounts WHERE code = '22401002' AND is_posting = 1 LIMIT 1")
-        || await tx.get("SELECT id FROM accounts WHERE (code LIKE '224%' OR code LIKE '22%') AND is_posting = 1 LIMIT 1");
+      const arAcc = await tx.get("SELECT id FROM accounts WHERE code = '11201001' AND is_posting = 1 LIMIT 1");
+      const retAcc = await tx.get("SELECT id FROM accounts WHERE code = '11202001' AND is_posting = 1 LIMIT 1");
+      const advAcc = await tx.get("SELECT id FROM accounts WHERE code = '21101004' AND is_posting = 1 LIMIT 1");
       const revAcc = await tx.get("SELECT id FROM accounts WHERE code = '41101001' AND is_posting = 1 LIMIT 1")
         || await tx.get("SELECT id FROM accounts WHERE code LIKE '41%' AND is_posting = 1 LIMIT 1");
 
-      const arAccountId = arAcc ? arAcc.id : 108;
-      const retAccountId = retAcc ? retAcc.id : 111;
-      const advAccountId = advAcc ? advAcc.id : 131;
-      const revAccountId = revAcc ? revAcc.id : 152;
+      if (!arAcc || !retAcc || !advAcc || !revAcc) throw new Error('حسابات المستخلص المطلوبة غير موجودة في دليل الحسابات');
+      const arAccountId = arAcc.id;
+      const retAccountId = retAcc.id;
+      const advAccountId = advAcc.id;
+      const revAccountId = revAcc.id;
 
       if (net_amount > 0) {
         await tx.run(`

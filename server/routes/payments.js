@@ -66,7 +66,7 @@ router.post('/transactions', async (req, res) => {
     const result = await PaymentService.createPaymentTransaction(req.body, req.user, req);
     res.json({ success: true, ...result });
   } catch (err) {
-    const status = err.message.includes('يتجاوز') || err.message.includes('إلزامي') || err.message.includes('تحديد') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.message.includes('يتجاوز') || err.message.includes('إلزامي') || err.message.includes('تحديد') || err.message.includes('مغلقة') || err.message.includes('غير صالحة') ? 400 : 500;
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -331,7 +331,8 @@ router.post('/', (req, res, next) => {
       cost_center_id,
       amount,
       currency = 'ر.ي',
-      payment_method = 'نقدي', // تحويل بنكي، نقدي، شيك
+      payment_method: rawPaymentMethod = 'نقدي',
+      settlement_account_id,
       check_no,
       bank_name,
       bank_account_id,
@@ -340,6 +341,8 @@ router.post('/', (req, res, next) => {
       status: requestedStatus
     } = req.body;
 
+    const payment_method = rawPaymentMethod === 'CASH' ? 'نقدي' : rawPaymentMethod === 'BANK_TRANSFER' ? 'تحويل بنكي' : rawPaymentMethod;
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو بنك فقط' });
     // فحص الحماية من تكرار الإرسال والعمليات (Idempotency Protection)
     const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotency_key || null;
     if (idempotencyKey) {
@@ -380,9 +383,15 @@ router.post('/', (req, res, next) => {
       return res.status(400).json({ success: false, message: `عند إصدار سند ${type} بطريقة الدفع (شيك) يجب إدخال رقم الشيك` });
     }
 
-    const isBank = (payment_method === 'شيك' || payment_method === 'تحويل بنكي');
+    const isBank = payment_method === 'تحويل بنكي';
+    let settlementAccount = null;
+    if (settlement_account_id) {
+      try { settlementAccount = await AccountingService.resolveVoucherSettlementAccount(payment_method, settlement_account_id); }
+      catch (err) { return res.status(400).json({ success: false, message: err.message }); }
+      if (Number(settlementAccount.id) === Number(leafAccount.id)) return res.status(400).json({ success: false, message: 'يجب أن يختلف حساب السند عن حساب الصندوق أو البنك' });
+    }
     let resolvedBank = null;
-    if (isBank) {
+    if (isBank && !settlementAccount) {
       resolvedBank = await AccountingService.resolveBankAccount(bank_account_id, bank_name);
       if (!resolvedBank || !resolvedBank.coaAccount) {
         return res.status(400).json({ success: false, message: `عند إصدار سند ${type} عبر البنك يجب تحديد حساب البنك في دليل الحسابات` });
@@ -499,13 +508,14 @@ router.post('/', (req, res, next) => {
     let createdJe = null;
 
     // استنتاج معرف طريقة الدفع والحساب المالي
-    let pmId = req.body.payment_method_id ? Number(req.body.payment_method_id) : null;
-    if (!pmId) {
-      const pmRow = await get('SELECT id FROM payment_methods WHERE name = ? OR code = ? LIMIT 1', [payment_method, payment_method]);
-      if (pmRow) pmId = pmRow.id;
-    }
+    const pmRow = await get('SELECT id FROM payment_methods WHERE code = ? AND is_active = 1 LIMIT 1', [isBank ? 'BANK_TRANSFER' : 'CASH']);
+    const pmId = pmRow ? pmRow.id : null;
     let faId = req.body.financial_account_id ? Number(req.body.financial_account_id) : null;
-    if (!faId) {
+    if (settlementAccount) {
+      const matched = await get('SELECT id FROM financial_accounts WHERE account_id = ? AND type = ? AND is_active = 1 LIMIT 1', [settlementAccount.id, isBank ? 'bank' : 'cash']);
+      faId = matched?.id || null;
+    }
+    if (!faId && !settlementAccount) {
       if (isBank) {
         const faBank = validBankAccId 
           ? await get('SELECT id FROM financial_accounts WHERE account_number = (SELECT account_number FROM bank_accounts WHERE id = ?) LIMIT 1', [validBankAccId])
@@ -523,12 +533,12 @@ router.post('/', (req, res, next) => {
         INSERT INTO payments (
           payment_no, receipt_no, type, client_id, client_name, supplier_id, project_id, 
           contract_id, bill_id,
-          account_id, cost_center_id, amount, currency, payment_method, payment_method_id, financial_account_id,
+          account_id, settlement_account_id, cost_center_id, amount, currency, payment_method, payment_method_id, financial_account_id,
           check_no, bank_name, bank_account_id, date, notes, receipt_category,
           exchange_rate, local_amount, fee_amount, net_amount, idempotency_key,
           status, created_by, created_by_name, posted_by, posted_by_name, posted_at, updated_at
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?,
           ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?,
@@ -538,7 +548,7 @@ router.post('/', (req, res, next) => {
       `, [
         receipt_no, receipt_no, type, validClientId || null, directClientName || null, validSupplierId || null, validProjectId || null,
         validContractId || null, validBillId || null,
-        accId, finalCcId || null, parsedAmount, selectedCurrency, payment_method, pmId || null, faId || null,
+        accId, settlementAccount?.id || null, finalCcId || null, parsedAmount, selectedCurrency, payment_method, pmId || null, faId || null,
         cleanCheckNo || null, cleanBankName || null, validBankAccId || null, date, notes || '', cleanReceiptCategory || 'general',
         finalExchangeRate || 1.0, finalLocalAmount, finalLocalAmount, idempotencyKey || null,
         finalStatus, creatorId || null, creatorName || 'مسؤول مالي',
@@ -567,10 +577,11 @@ router.post('/', (req, res, next) => {
         }
 
         // التأثير على حركة الصندوق والبنك وتحديد نوع الحركة (نقدي / بنك)
-        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+        const cashAccount = settlementAccount || resolvedBank?.coaAccount || await AccountingService.resolveCashAccount();
+        const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY id DESC LIMIT 1', [cashAccount.id]) || { current_balance: 0 };
         const prevBal = Number(lastCash.current_balance) || 0;
         const newBal = type === 'قبض' ? prevBal + finalLocalAmount : prevBal - finalLocalAmount;
-        const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || String(cleanBankName).length > 0) ? 'بنك' : 'نقدي';
+        const moveType = payment_method === 'تحويل بنكي' ? 'بنك' : 'نقدي';
         const partyLabel = directClientName || directSupplierName;
         const moveDesc = payment_method === 'شيك' 
           ? `سند ${type} بشيك رقم ${cleanCheckNo}: ${receipt_no}${partyLabel ? ' (' + partyLabel + ')' : ''}`
@@ -590,7 +601,7 @@ router.post('/', (req, res, next) => {
           moveType,
           payment_method,
           receipt_no,
-          accId
+          cashAccount.id
         ]);
 
         // توليد قيد يومي تلقائي متزن بدقة عبر الخدمة المحاسبية الموحدة
@@ -603,6 +614,7 @@ router.post('/', (req, res, next) => {
           amount: finalLocalAmount,
           accountId: accId,
           paymentMethod: payment_method,
+          settlementAccountId: settlementAccount?.id || null,
           bankAccountId: validBankAccId,
           bankName: cleanBankName || resolvedBank?.bankRecord?.bank_name || null,
           costCenterId: finalCcId,
@@ -751,17 +763,15 @@ router.post('/:id/post', (req, res, next) => {
     const rawPosterId = req.user?.id || null;
     const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
     const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
-    const parsedAmount = Number(pay.amount);
+    const parsedAmount = Number(pay.local_amount) > 0 ? Number(pay.local_amount) : Number(pay.amount);
+    const settlement = pay.settlement_account_id
+      ? await AccountingService.resolveVoucherSettlementAccount(pay.payment_method, pay.settlement_account_id)
+      : pay.payment_method === 'تحويل بنكي' ? (await AccountingService.resolveBankAccount(pay.bank_account_id, pay.bank_name)).coaAccount : await AccountingService.resolveCashAccount();
 
     await transaction(async (tx) => {
-      // 1. التأثير على العميل أو المورد
-      if (pay.type === 'قبض' && pay.client_id) {
-        await tx.run(`
-          UPDATE clients SET 
-            total_paid = total_paid + ?,
-            current_balance = GREATEST(0, current_balance - ?)
-          WHERE id = ?
-        `, [parsedAmount, parsedAmount, pay.client_id]);
+      // 1. تطبيق المستخلص أو تحديث المورد كما في الترحيل المباشر.
+      if (pay.type === 'قبض') {
+        if (pay.bill_id) await require('../services/clientChainService').applyPaymentToBill(pay.bill_id, parsedAmount, tx);
       } else if (pay.type === 'صرف' && pay.supplier_id) {
         await tx.run(`
           UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?
@@ -769,7 +779,7 @@ router.post('/:id/post', (req, res, next) => {
       }
 
       // 2. حركة الصندوق والبنك
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+      const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY id DESC LIMIT 1', [settlement.id]) || { current_balance: 0 };
       const prevBal = Number(lastCash.current_balance) || 0;
       const newBal = pay.type === 'قبض' ? prevBal + parsedAmount : prevBal - parsedAmount;
       const moveDesc = pay.payment_method === 'شيك' 
@@ -777,16 +787,17 @@ router.post('/:id/post', (req, res, next) => {
         : `سند ${pay.type}: ${pay.receipt_no}`;
 
       await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?)
+        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
+        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         prevBal,
         pay.type === 'قبض' ? parsedAmount : 0,
         pay.type === 'صرف' ? parsedAmount : 0,
         newBal,
-        pay.currency || 'ر.ي',
+        'ر.ي',
         pay.date,
-        moveDesc
+        moveDesc,
+        pay.payment_method === 'تحويل بنكي' ? 'بنك' : 'نقدي', pay.payment_method, pay.receipt_no, settlement.id
       ]);
 
       // 3. قيد اليومية التلقائي المتزن بدقة عبر الخدمة المحاسبية الموحدة مع منع التكرار
@@ -799,6 +810,7 @@ router.post('/:id/post', (req, res, next) => {
         amount: parsedAmount,
         accountId: leafAcc.id,
         paymentMethod: pay.payment_method || 'نقدي',
+        settlementAccountId: pay.settlement_account_id || null,
         bankAccountId: pay.bank_account_id || null,
         bankName: pay.bank_name || null,
         costCenterId: pay.cost_center_id,
@@ -814,6 +826,7 @@ router.post('/:id/post', (req, res, next) => {
         SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [posterId, posterName, pay.id]);
+      if (pay.type === 'قبض' && pay.client_id) await require('../services/clientChainService').syncClientBalances(pay.client_id, tx);
     });
 
     await logAudit(req, {
@@ -848,19 +861,31 @@ router.put('/:id', requirePermission('revenues:edit,expenses:edit'), async (req,
     const { amount, notes, date } = req.body;
     const targetDate = date || pay.date;
     await FinancialControlService.assertPeriodOpen(targetDate);
+    const newAmount = amount !== undefined ? Number(amount) : Number(pay.amount);
+    const method = req.body.payment_method ?? pay.payment_method;
+    const accountId = Number(req.body.account_id ?? pay.account_id);
+    const settlementId = Number(req.body.settlement_account_id ?? pay.settlement_account_id);
+    if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
+    try {
+      await AccountingService.assertLeafAccount(accountId);
+      await AccountingService.resolveVoucherSettlementAccount(method, settlementId);
+      if (accountId === settlementId) throw new Error('يجب أن يختلف حساب السند عن حساب الصندوق أو البنك');
+    } catch (err) { return res.status(400).json({ success: false, message: err.message }); }
+    const pm = await get('SELECT id FROM payment_methods WHERE code = ? AND is_active = 1', [method === 'نقدي' ? 'CASH' : 'BANK_TRANSFER']);
+    const fa = await get('SELECT id FROM financial_accounts WHERE account_id = ? AND type = ? AND is_active = 1 LIMIT 1', [settlementId, method === 'نقدي' ? 'cash' : 'bank']);
 
-    const oldVals = { amount: pay.amount, notes: pay.notes, date: pay.date };
+    const oldVals = { amount: pay.amount, notes: pay.notes, date: pay.date, account_id: pay.account_id, settlement_account_id: pay.settlement_account_id, payment_method: pay.payment_method };
     const newVals = { 
-      amount: amount ? Number(amount) : pay.amount, 
+      amount: newAmount,
       notes: notes !== undefined ? notes : pay.notes,
-      date: targetDate
+      date: targetDate, account_id: accountId, settlement_account_id: settlementId, payment_method: method
     };
 
     await run(`
       UPDATE payments 
-      SET amount = ?, notes = ?, date = ?
+      SET amount = ?, notes = ?, date = ?, account_id = ?, settlement_account_id = ?, payment_method = ?, payment_method_id = ?, financial_account_id = ?, local_amount = ?, net_amount = ?
       WHERE id = ?
-    `, [newVals.amount, newVals.notes, newVals.date, id]);
+    `, [newVals.amount, newVals.notes, newVals.date, accountId, settlementId, method, pm?.id || null, fa?.id || null, Math.round(newAmount * (Number(pay.exchange_rate) || 1) * 100) / 100, Math.round((newAmount * (Number(pay.exchange_rate) || 1) - (Number(pay.fee_amount) || 0)) * 100) / 100, id]);
 
     await logAudit(req, {
       action: 'UPDATE',

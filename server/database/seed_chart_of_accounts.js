@@ -351,6 +351,10 @@ function validateTreeDataInMemory(accounts) {
  * الدالة الرئيسية لتنفيذ استيراد وتحديث شجرة دليل الحسابات
  */
 async function seedChartOfAccounts(customExcelPath) {
+  const currentCash = await get("SELECT name FROM accounts WHERE code = '11101001'");
+  if (currentCash && currentCash.name.includes('صندوق')) {
+    throw new Error('تم إيقاف المستورد القديم لحماية دليل الحسابات الحالي؛ يستخدم المستورد خريطة حسابات قديمة غير متوافقة.');
+  }
   console.log('\n================================================================');
   console.log('🚀 [COA Importer] بدء استيراد دليل الحسابات من Excel إلى قاعدة البيانات');
   console.log('================================================================');

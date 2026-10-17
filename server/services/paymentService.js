@@ -36,7 +36,7 @@ const PaymentService = {
   },
 
   async getInstruments() {
-    return await query('SELECT * FROM payment_instruments WHERE is_active = 1 ORDER BY code ASC');
+    return await query("SELECT * FROM payment_instruments WHERE is_active = 1 AND code IN ('CASH', 'BANK_TRF') ORDER BY code ASC");
   },
 
   async getChannels() {
@@ -116,6 +116,7 @@ const PaymentService = {
       throw new Error(`سياق الدفع [${context_code}] غير موجود أو غير نشط`);
     }
 
+    if (!['CASH', 'BANK_TRF'].includes(instrument_code)) throw new Error('وسيلة الدفع غير صالحة: المتاح نقداً أو تحويل بنكي فقط');
     const instrument = await get('SELECT * FROM payment_instruments WHERE code = ? AND is_active = 1', [instrument_code]);
     if (!instrument) {
       throw new Error(`وسيلة الدفع [${instrument_code}] غير موجودة أو غير نشطة`);
@@ -820,7 +821,7 @@ const PaymentService = {
   },
 
   async getPaymentMethods() {
-    return await query('SELECT * FROM payment_methods WHERE is_active = 1 ORDER BY id ASC');
+    return await query("SELECT * FROM payment_methods WHERE is_active = 1 AND code IN ('CASH', 'BANK_TRANSFER') ORDER BY id ASC");
   },
 
   async getFinancialAccounts(type = null) {
@@ -898,7 +899,7 @@ const PaymentService = {
     } else if (paymentMethodId) {
       pm = await get('SELECT * FROM payment_methods WHERE id = ? AND is_active = 1', [paymentMethodId]);
     }
-    if (!pm) {
+    if (!pm || !['CASH', 'BANK_TRANSFER'].includes(pm.code)) {
       throw new Error('طريقة الدفع غير صالحة أو غير نشطة');
     }
 
@@ -990,11 +991,8 @@ const PaymentService = {
     // البحث عن حساب مصروف العمولات والرسوم البنكية
     let feeAccount = null;
     if (fee > 0) {
-      feeAccount = await get("SELECT * FROM accounts WHERE code = '31101001' AND is_posting = 1") ||
-                         await get("SELECT * FROM accounts WHERE name LIKE '%عمولات بنكية%' AND is_posting = 1 LIMIT 1");
-      if (!feeAccount) {
-        feeAccount = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات')) LIMIT 1");
-      }
+      feeAccount = await get("SELECT * FROM accounts WHERE name LIKE '%عمولات بنكية%' AND is_posting = 1 LIMIT 1");
+      if (!feeAccount) throw new Error('حدد حساب مصروف العمولات البنكية في دليل الحسابات قبل ترحيل رسوم الدفع');
     }
 
     if (type === 'قبض') {

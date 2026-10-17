@@ -7,7 +7,82 @@ const { get, query, run, transaction } = require('../database/db');
 const { checkPeriodOpen } = require('./periodService');
 const { logAudit } = require('./auditService');
 
+function journalPrefix(referenceType, year) {
+  if (referenceType === 'سند قبض') return `JV-RC-${year}-`;
+  if (referenceType === 'سند صرف') return `JV-PV-${year}-`;
+  return `JV-${year}-`;
+}
+
+async function nextJournalNumber(db, date, referenceType) {
+  const prefix = journalPrefix(referenceType, new Date(date).getFullYear());
+  const last = await db.get(
+    'SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1',
+    [`${prefix}%`]
+  );
+  let sequence = last?.entry_no?.startsWith(prefix)
+    ? (Number(last.entry_no.slice(prefix.length)) || 0) + 1
+    : 1;
+  let entryNo = `${prefix}${String(sequence).padStart(4, '0')}`;
+  while (await db.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
+    sequence++;
+    entryNo = `${prefix}${String(sequence).padStart(4, '0')}`;
+  }
+  return entryNo;
+}
+
+async function syncJournalCashMovements(db, entryId) {
+  const entry = await db.get('SELECT * FROM journal_entries WHERE id = ?', [entryId]);
+  if (!entry || entry.status !== 'posted') return 0;
+
+  const rows = await db.query(`
+    SELECT jel.account_id, a.code, a.name,
+           SUM(COALESCE(jel.debit, 0)) AS debit,
+           SUM(COALESCE(jel.credit, 0)) AS credit
+    FROM journal_entry_lines jel
+    JOIN accounts a ON a.id = jel.account_id
+    WHERE jel.entry_id = ?
+      AND (a.code LIKE '11101%' OR a.code LIKE '11102%')
+    GROUP BY jel.account_id, a.code, a.name
+  `, [entryId]);
+
+  let inserted = 0;
+  for (const row of rows) {
+    const existing = await db.get(
+      'SELECT id FROM cash_movements WHERE reference_no = ? AND account_id = ? LIMIT 1',
+      [entry.entry_no, row.account_id]
+    );
+    if (existing) continue;
+
+    const net = Math.round(((Number(row.debit) || 0) - (Number(row.credit) || 0)) * 100) / 100;
+    if (Math.abs(net) < 0.005) continue;
+    const last = await db.get(
+      'SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY id DESC LIMIT 1',
+      [row.account_id]
+    );
+    const previous = Number(last?.current_balance) || 0;
+    const cashIn = net > 0 ? net : 0;
+    const cashOut = net < 0 ? Math.abs(net) : 0;
+    const current = Math.round((previous + net) * 100) / 100;
+    const isBank = String(row.code || '').startsWith('11102');
+    const movementType = isBank ? 'بنك' : 'نقدي';
+    const paymentMethod = isBank ? 'تحويل بنكي' : 'نقدي';
+
+    await db.run(`
+      INSERT INTO cash_movements
+        (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
+      VALUES (?, ?, ?, 0, ?, 'ر.ي', ?, ?, ?, ?, ?, ?)
+    `, [
+      previous, cashIn, cashOut, current, entry.date,
+      `قيد يومية ${entry.entry_no}: ${entry.description || row.name}`,
+      movementType, paymentMethod, entry.entry_no, row.account_id
+    ]);
+    inserted++;
+  }
+  return inserted;
+}
+
 const AccountingService = {
+  syncJournalCashMovements,
   /**
    * التحقق الصارم من أن الحساب فرعي أخير (Leaf Account) ومؤهل لتسجيل القيود
    * يرفض أي حساب أب أو حساب تجميعي أو موقوف أو غير نشط
@@ -55,14 +130,29 @@ const AccountingService = {
         AND (a.status IS NULL OR a.status = 'active')
         AND (a.is_active IS NULL OR a.is_active = 1)
         AND (SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) = 0
-        AND (a.code = '12101001' OR a.code LIKE '121%')
-      ORDER BY CASE WHEN a.code = '12101001' THEN 0 ELSE 1 END, a.id ASC
+        AND a.code = '11101001'
+      ORDER BY a.id ASC
       LIMIT 1
     `);
     if (!cashAccount) {
       throw new Error('لم يتم العثور على حساب الصندوق الرئيسي (الفرعي الأخير) في دليل الحسابات');
     }
     return cashAccount;
+  },
+
+  async resolveVoucherSettlementAccount(method, accountId) {
+    const isBank = method === 'تحويل بنكي' || method === 'BANK_TRANSFER';
+    if (!accountId) return isBank ? (await this.resolveBankAccount()).coaAccount : this.resolveCashAccount();
+    const account = await this.assertLeafAccount(accountId);
+    const rootCode = isBank ? '11102' : '11101';
+    let current = account;
+    const visited = new Set();
+    while (current && !visited.has(current.id)) {
+      if (String(current.code) === rootCode) return account;
+      visited.add(current.id);
+      current = current.parent_id ? await get('SELECT id, code, parent_id FROM accounts WHERE id = ?', [current.parent_id]) : null;
+    }
+    throw new Error(isBank ? 'يرجى اختيار حساب بنكي فرعي من دليل الحسابات' : 'يرجى اختيار حساب صندوق فرعي من دليل الحسابات');
   },
 
   /**
@@ -93,8 +183,8 @@ const AccountingService = {
         AND (a.status IS NULL OR a.status = 'active')
         AND (a.is_active IS NULL OR a.is_active = 1)
         AND (SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) = 0
-        AND (a.code = '12201001' OR a.code LIKE '122%')
-      ORDER BY CASE WHEN a.code = '12201001' THEN 0 ELSE 1 END, a.id ASC
+        AND a.code = '11102001'
+      ORDER BY a.id ASC
       LIMIT 1
     `);
 
@@ -193,7 +283,7 @@ const AccountingService = {
    * إنشاء قيد يومية جديد مع فحص الفترة المحاسبية وحفظ سطور القيد داخل Transaction ذرية
    */
   async createJournalEntry(entryData, lines, req = null, externalTx = null) {
-    const { date, description, reference_type = 'قيد يدوي', reference_id = null } = entryData;
+    const { date, description, reference_type = 'قيد يدوي', reference_id = null, reference_no = null } = entryData;
 
     if (!date || !description) {
       throw new Error('تاريخ القيد والبيان حقول إلزامية');
@@ -209,8 +299,7 @@ const AccountingService = {
     const { sanitizedLines, totalDebit, totalCredit } = await this.validateJournalEntryLines(lines);
 
     // 3. توليد رقم القيد التسلسلي
-    const countRow = await get('SELECT COUNT(*) as count FROM journal_entries');
-    const entryNo = `JV-${new Date(date).getFullYear()}-${String((countRow?.count || 0) + 1).padStart(4, '0')}`;
+    const entryNo = await nextJournalNumber({ get }, date, reference_type);
 
     // 4. الحفظ الذري مع توثيق المنشئ وحالة الترحيل
     let validCreatorId = null;
@@ -228,13 +317,13 @@ const AccountingService = {
     const runInTx = async (tx) => {
       const res = await tx.run(`
         INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id, 
+          entry_no, date, description, reference_type, reference_id, reference_no,
           total_debit, total_credit, status, 
           created_by, created_by_name, posted_by, posted_by_name, posted_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        entryNo, date, description.trim(), reference_type, reference_id, 
+        entryNo, date, description.trim(), reference_type, reference_id, reference_no ? String(reference_no).trim() : null,
         totalDebit, totalCredit, status,
         validCreatorId, creatorName, 
         status === 'posted' ? validCreatorId : null,
@@ -250,6 +339,7 @@ const AccountingService = {
           VALUES (?, ?, ?, ?, ?, ?)
         `, [entryId, line.account_id, line.cost_center_id, line.debit, line.credit, line.description]);
       }
+      if (status === 'posted') await syncJournalCashMovements(tx, entryId);
     };
 
     if (externalTx) {
@@ -288,10 +378,12 @@ const AccountingService = {
     voucherType, // 'سند صرف' | 'سند قبض'
     voucherId,
     receiptNo,
+    referenceNo = null,
     date,
     amount,
     accountId,
     paymentMethod = 'نقدي',
+    settlementAccountId = null,
     bankAccountId = null,
     bankName = null,
     costCenterId = null,
@@ -312,7 +404,9 @@ const AccountingService = {
     let opposingAccount = null;
     let bankInfo = null;
 
-    if (isBank) {
+    if (settlementAccountId) {
+      opposingAccount = await this.resolveVoucherSettlementAccount(paymentMethod, settlementAccountId);
+    } else if (isBank) {
       const resolved = await this.resolveBankAccount(bankAccountId, bankName);
       opposingAccount = resolved.coaAccount;
       bankInfo = resolved.bankRecord;
@@ -335,13 +429,7 @@ const AccountingService = {
       }
 
       // 4. توليد رقم القيد اليومي التسلسلي
-      const jeCountRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((jeCountRes ? jeCountRes.cnt : 0) || 0) + 1;
-      let entryNo = `JV-${new Date(date).getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-        jeSeq++;
-        entryNo = `JV-${new Date(date).getFullYear()}-${String(jeSeq).padStart(4, '0')}`;
-      }
+      const entryNo = await nextJournalNumber(tx, date, voucherType);
 
       const numAmount = Math.round(Number(amount) * 100) / 100;
       const creatorId = user?.id || null;
@@ -352,12 +440,12 @@ const AccountingService = {
 
       const jeRes = await tx.run(`
         INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id,
+          entry_no, date, description, reference_type, reference_id, reference_no,
           total_debit, total_credit, status,
           created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
-        entryNo, date, jeDesc, voucherType, voucherId,
+        entryNo, date, jeDesc, voucherType, voucherId, referenceNo || receiptNo,
         numAmount, numAmount,
         creatorId, creatorName, creatorId, creatorName
       ]);

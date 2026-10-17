@@ -102,7 +102,9 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       cost_center_id,
       amount,
       currency = 'ر.ي',
-      payment_method = 'نقدي',
+      payment_method: rawPaymentMethod = 'نقدي',
+      settlement_account_id,
+      reference_no,
       check_no,
       bank_name,
       bank_account_id,
@@ -114,6 +116,8 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       link_purchase_id
     } = req.body;
 
+    const payment_method = rawPaymentMethod === 'CASH' ? 'نقدي' : rawPaymentMethod === 'BANK_TRANSFER' ? 'تحويل بنكي' : rawPaymentMethod;
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو بنك فقط' });
     // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ السند
     await FinancialControlService.assertPeriodOpen(date);
 
@@ -134,10 +138,10 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
     let account_id = rawAccountId && rawAccountId !== '' ? Number(rawAccountId) : null;
     if (!account_id) {
       if (link_purchase_id) {
-        const apRow = await get("SELECT id FROM accounts WHERE (code = '21' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22101001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '21' AND is_posting = 1) DESC, (code = '22101001') DESC LIMIT 1");
+        const apRow = await get("SELECT id FROM accounts WHERE code = '21101001' AND is_posting = 1 LIMIT 1");
         account_id = apRow ? apRow.id : null;
       } else if (link_labor_id) {
-        const wpRow = await get("SELECT id FROM accounts WHERE (code = '215' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '22401001' OR (type = 'liability' AND is_posting = 1) ORDER BY (code = '215' AND is_posting = 1) DESC, (code = '22401001') DESC LIMIT 1");
+        const wpRow = await get("SELECT id FROM accounts WHERE code = '21401001' AND is_posting = 1 LIMIT 1");
         account_id = wpRow ? wpRow.id : null;
       } else {
         const defRow = await get("SELECT id FROM accounts WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '32102005' OR (type = 'expense' AND is_posting = 1) ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC LIMIT 1");
@@ -160,9 +164,15 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'عند اختيار طريقة الدفع (شيك) يجب إدخال رقم الشيك' });
     }
 
-    const isBank = (payment_method === 'شيك' || payment_method === 'تحويل بنكي');
+    const isBank = payment_method === 'تحويل بنكي';
+    let settlementAccount = null;
+    if (settlement_account_id) {
+      try { settlementAccount = await AccountingService.resolveVoucherSettlementAccount(payment_method, settlement_account_id); }
+      catch (err) { return res.status(400).json({ success: false, message: err.message }); }
+      if (Number(settlementAccount.id) === Number(leafAccount.id)) return res.status(400).json({ success: false, message: 'يجب أن يختلف حساب السند عن حساب الصندوق أو البنك' });
+    }
     let resolvedBank = null;
-    if (isBank) {
+    if (isBank && !settlementAccount) {
       resolvedBank = await AccountingService.resolveBankAccount(bank_account_id, bank_name);
       if (!resolvedBank || !resolvedBank.coaAccount) {
         return res.status(400).json({ success: false, message: 'عند اختيار الصرف عبر البنك يجب تحديد حساب البنك في دليل الحسابات' });
@@ -181,6 +191,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
 
     const parsedAmount = Number(amount);
     const selectedCurrency = currency || 'ر.ي';
+    const cleanReferenceNo = reference_no ? String(reference_no).trim() : null;
     const cleanCheckNo = check_no ? String(check_no).trim() : null;
     const cleanBankName = bank_name ? String(bank_name).trim() : (resolvedBank?.bankRecord?.bank_name || null);
 
@@ -245,15 +256,15 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       const result = await tx.run(`
         INSERT INTO expenses (
           receipt_no, expense_type, project_id, supplier_id, supplier_name,
-          account_id, cost_center_id, amount, currency, payment_method, 
-          check_no, bank_name, bank_account_id, recipient, date, notes,
+          account_id, settlement_account_id, cost_center_id, amount, currency, payment_method,
+          reference_no, check_no, bank_name, bank_account_id, recipient, date, notes,
           exchange_rate, local_amount,
           status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         receipt_no, finalExpenseType, validProjectId, validSupplierId, directSupplierName,
-        accId, finalCcId, parsedAmount, selectedCurrency, payment_method,
-        cleanCheckNo, cleanBankName, validBankAccId, directSupplierName || recipient || '', date, notes || '',
+        accId, settlementAccount?.id || null, finalCcId, parsedAmount, selectedCurrency, payment_method,
+        cleanReferenceNo, cleanCheckNo, cleanBankName, validBankAccId, directSupplierName || recipient || '', date, notes || '',
         finalExchangeRate, finalLocalAmount,
         finalStatus, creatorId, creatorName,
         finalStatus === 'posted' ? creatorId : null,
@@ -335,10 +346,11 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         }
 
         // تحديث حركة الصندوق والبنك وتحديد نوع الحركة (نقدي / بنك)
-        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+        const cashAccount = settlementAccount || resolvedBank?.coaAccount || await AccountingService.resolveCashAccount();
+        const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY id DESC LIMIT 1', [cashAccount.id]) || { current_balance: 0 };
         const prevBal = Number(lastCash.current_balance) || 0;
         const newBal = prevBal - finalLocalAmount;
-        const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || String(cleanBankName).length > 0) ? 'بنك' : 'نقدي';
+        const moveType = payment_method === 'تحويل بنكي' ? 'بنك' : 'نقدي';
         const moveDesc = payment_method === 'شيك' 
           ? `سند صرف بشيك رقم ${cleanCheckNo}: ${receipt_no} - ${finalExpenseType}${directSupplierName ? ' (' + directSupplierName + ')' : ''}`
           : `سند صرف: ${receipt_no} - ${finalExpenseType}${directSupplierName ? ' (' + directSupplierName + ')' : ''} ${selectedCurrency !== 'ر.ي' ? '(' + parsedAmount + ' ' + selectedCurrency + ')' : ''}`;
@@ -346,17 +358,19 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         await tx.run(`
           INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
           VALUES (?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [prevBal, finalLocalAmount, newBal, 'ر.ي', date, moveDesc, moveType, payment_method, receipt_no, leafAccount.id]);
+        `, [prevBal, finalLocalAmount, newBal, 'ر.ي', date, moveDesc, moveType, payment_method, receipt_no, cashAccount.id]);
 
         // تسجيل قيد يومي تلقائي متزن بدقة عبر الخدمة المحاسبية الموحدة
         createdJe = await AccountingService.createVoucherJournalEntry({
           voucherType: 'سند صرف',
           voucherId: expenseId,
           receiptNo: receipt_no,
+          referenceNo: cleanReferenceNo,
           date,
           amount: finalLocalAmount,
           accountId: leafAccount.id,
           paymentMethod: payment_method,
+          settlementAccountId: settlementAccount?.id || null,
           bankAccountId: validBankAccId,
           bankName: cleanBankName || resolvedBank?.bankRecord?.bank_name || null,
           costCenterId: finalCcId,
@@ -503,21 +517,34 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
     const rawPosterId = req.user?.id || null;
     const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
     const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
-    const parsedAmount = Number(exp.amount);
+    const parsedAmount = Number(exp.local_amount) > 0 ? Number(exp.local_amount) : Number(exp.amount);
+    const settlement = exp.settlement_account_id
+      ? await AccountingService.resolveVoucherSettlementAccount(exp.payment_method, exp.settlement_account_id)
+      : exp.payment_method === 'تحويل بنكي' ? (await AccountingService.resolveBankAccount(exp.bank_account_id, exp.bank_name)).coaAccount : await AccountingService.resolveCashAccount();
 
     await transaction(async (tx) => {
-      // 1. تحديث التكلفة الفعلية للمشروع
-      if (exp.project_id) {
-        await tx.run(`UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?`, [parsedAmount, exp.project_id]);
+      const purchase = await tx.get('SELECT * FROM project_purchases WHERE linked_expense_id = ? LIMIT 1', [exp.id]);
+      const labor = await tx.get('SELECT * FROM project_labor_expenses WHERE linked_expense_id = ? LIMIT 1', [exp.id]);
+      if (purchase && labor) throw new Error('لا يمكن ربط السند ببندين معاً');
+      if (purchase && purchase.supplier_id) {
+        if (exp.supplier_id && Number(exp.supplier_id) !== Number(purchase.supplier_id)) throw new Error('المورد لا يطابق مورد الفاتورة المرتبطة');
+        const paid = (Number(purchase.paid_amount) || 0) + parsedAmount;
+        await tx.run('UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?', [paid, Number(purchase.total_amount) - paid <= 0.005 ? 'مدفوع' : 'جزئي', purchase.id]);
+        await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [parsedAmount, purchase.supplier_id]);
+      } else {
+        let wageAccrual = null;
+        if (labor) {
+          wageAccrual = await ProjectCostService.getWageAccrualJournal(tx, labor.id);
+          if (wageAccrual && exp.supplier_id) throw new Error('مستحقات الأجور الآجلة ليس لها مورد تجاري');
+          const paid = (Number(labor.paid_amount) || 0) + parsedAmount;
+          await tx.run('UPDATE project_labor_expenses SET paid_amount = ?, payment_status = ? WHERE id = ?', [paid, Number(labor.total_amount) - paid <= 0.005 ? 'مدفوع' : 'جزئي', labor.id]);
+        }
+        if (exp.supplier_id && !wageAccrual) await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [parsedAmount, exp.supplier_id]);
       }
-
-      // 2. تحديث رصيد المورد
-      if (exp.supplier_id) {
-        await tx.run(`UPDATE suppliers SET balance = balance + ? WHERE id = ?`, [parsedAmount, exp.supplier_id]);
-      }
+      if (exp.project_id && !purchase && !labor) await tx.run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [parsedAmount, exp.project_id]);
 
       // 3. تحديث حركة الصندوق والبنك
-      const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+      const lastCash = await tx.get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY id DESC LIMIT 1', [settlement.id]) || { current_balance: 0 };
       const prevBal = Number(lastCash.current_balance) || 0;
       const newBal = prevBal - parsedAmount;
       const moveDesc = exp.payment_method === 'شيك' 
@@ -525,19 +552,21 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         : `سند صرف: ${exp.receipt_no} - ${exp.expense_type}`;
 
       await tx.run(`
-        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
-        VALUES (?, 0, ?, 0, ?, ?, ?, ?)
-      `, [prevBal, parsedAmount, newBal, exp.currency || 'ر.ي', exp.date, moveDesc]);
+        INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes, movement_type, payment_method, reference_no, account_id)
+        VALUES (?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [prevBal, parsedAmount, newBal, 'ر.ي', exp.date, moveDesc, exp.payment_method === 'تحويل بنكي' ? 'بنك' : 'نقدي', exp.payment_method, exp.receipt_no, settlement.id]);
 
       // 4. تسجيل قيد يومي تلقائي متزن بدقة عبر الخدمة المحاسبية الموحدة مع منع التكرار
       await AccountingService.createVoucherJournalEntry({
         voucherType: 'سند صرف',
         voucherId: exp.id,
         receiptNo: exp.receipt_no,
+        referenceNo: exp.reference_no,
         date: exp.date,
         amount: parsedAmount,
         accountId: leafAcc.id,
         paymentMethod: exp.payment_method || 'نقدي',
+        settlementAccountId: exp.settlement_account_id || null,
         bankAccountId: exp.bank_account_id || null,
         bankName: exp.bank_name || null,
         costCenterId: exp.cost_center_id,
@@ -553,6 +582,7 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [posterId, posterName, exp.id]);
+      if (exp.project_id && (purchase || labor)) await ProjectCostService.recalculateProjectCost(exp.project_id, tx);
     });
 
     await logAudit(req, {
@@ -585,8 +615,18 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
 
     await FinancialControlService.assertPeriodOpen(exp.date);
 
-    const { expense_type, amount, recipient, notes, date, link_labor_id, link_purchase_id, unlink } = req.body;
+    const { expense_type, amount, recipient, reference_no, notes, date, link_labor_id, link_purchase_id, unlink } = req.body;
     const targetDate = date || exp.date;
+    const newAmount = amount !== undefined ? Number(amount) : Number(exp.amount);
+    const method = req.body.payment_method ?? exp.payment_method;
+    const accountId = Number(req.body.account_id ?? exp.account_id);
+    const settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id);
+    if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
+    try {
+      await AccountingService.assertLeafAccount(accountId);
+      await AccountingService.resolveVoucherSettlementAccount(method, settlementId);
+      if (accountId === settlementId) throw new Error('يجب أن يختلف حساب السند عن حساب الصندوق أو البنك');
+    } catch (err) { return res.status(400).json({ success: false, message: err.message }); }
 
     // منع الازدواج: ربط/فك البند الفرعي (للمسودات فقط — آمن لأن المسودة بلا أثر)
     if (link_labor_id && link_purchase_id) {
@@ -612,20 +652,21 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
     }
     await FinancialControlService.assertPeriodOpen(targetDate);
 
-    const oldVals = { expense_type: exp.expense_type, amount: exp.amount, notes: exp.notes, date: exp.date };
+    const oldVals = { expense_type: exp.expense_type, amount: exp.amount, notes: exp.notes, date: exp.date, account_id: exp.account_id, settlement_account_id: exp.settlement_account_id, payment_method: exp.payment_method };
     const newVals = { 
       expense_type: expense_type || exp.expense_type, 
-      amount: amount ? Number(amount) : exp.amount, 
+      amount: newAmount,
       recipient: recipient !== undefined ? recipient : exp.recipient, 
+      reference_no: reference_no !== undefined ? (String(reference_no).trim() || null) : exp.reference_no,
       notes: notes !== undefined ? notes : exp.notes,
-      date: targetDate
+      date: targetDate, account_id: accountId, settlement_account_id: settlementId, payment_method: method
     };
 
     await run(`
       UPDATE expenses 
-      SET expense_type = ?, amount = ?, recipient = ?, notes = ?, date = ?
+      SET expense_type = ?, amount = ?, recipient = ?, reference_no = ?, notes = ?, date = ?, account_id = ?, settlement_account_id = ?, payment_method = ?, local_amount = ?
       WHERE id = ?
-    `, [newVals.expense_type, newVals.amount, newVals.recipient, newVals.notes, newVals.date, id]);
+    `, [newVals.expense_type, newVals.amount, newVals.recipient, newVals.reference_no, newVals.notes, newVals.date, accountId, settlementId, method, Math.round(newAmount * (Number(exp.exchange_rate) || 1) * 100) / 100, id]);
 
     await logAudit(req, {
       action: 'UPDATE',
