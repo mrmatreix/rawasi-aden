@@ -194,6 +194,11 @@ class VendorService {
       throw new Error(validation.errors.join(' | '));
     }
 
+    const ledgerAccount = await get("SELECT id, code, name FROM accounts WHERE code = '22101001'");
+    if (!ledgerAccount) {
+      throw new Error('تعذر إضافة المورد: الحساب 22101001 غير موجود في دليل الحسابات');
+    }
+
     // تشفير البيانات المصرفية بشكل آمن إذا توفرت
     let encryptedVault = null;
     if (data.bank_name || data.bank_account_no || data.bank_iban) {
@@ -208,14 +213,14 @@ class VendorService {
 
     const insertSql = `
       INSERT INTO suppliers (
-        name, company_name, industry_category, contact_person,
+        account_id, name, company_name, industry_category, contact_person,
         phone, phone_number, email, address,
         bank_name, bank_account_no, bank_iban, bank_details_encrypted,
         default_currency, currency, supply_lead_time_days,
         payment_document_type, status, tax_id, commercial_reg_no,
         credit_limit, balance, invoice_attachment, notes, created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?,
@@ -225,6 +230,7 @@ class VendorService {
     `;
 
     const params = [
+      ledgerAccount.id,
       vendorModel.company_name,
       vendorModel.company_name,
       vendorModel.industry_category,

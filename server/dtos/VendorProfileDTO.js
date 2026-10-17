@@ -17,6 +17,9 @@ class VendorProfileDTO {
     // 1. البيانات الأساسية الثابتة (Master Data)
     // =========================================================================
     this.id = masterData.id ?? masterData.vendor_id ?? null;
+    this.account_id = masterData.account_id ?? null;
+    this.account_code = masterData.account_code || '';
+    this.account_name = masterData.account_name || '';
     this.company_name = masterData.company_name || masterData.name || '';
     this.industry_category = masterData.industry_category || masterData.category || 'مواد بناء';
     this.contact_person = masterData.contact_person || masterData.manager_name || 'غير محدد';
@@ -173,6 +176,9 @@ class VendorProfileDTO {
   toJSON() {
     const obj = {
       id: this.id,
+      account_id: this.account_id,
+      account_code: this.account_code,
+      account_name: this.account_name,
       company_name: this.company_name,
       industry_category: this.industry_category,
       contact_person: this.contact_person,

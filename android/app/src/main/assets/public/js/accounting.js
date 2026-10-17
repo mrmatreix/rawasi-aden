@@ -2407,7 +2407,8 @@ const Accounting = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name, company, phone, email, address, previous_balance, currency, notes
+          name, company, phone, email, address, previous_balance, currency, notes,
+          account_code: '12301001'
         })
       });
       const data = await res.json();
@@ -3181,6 +3182,7 @@ const Accounting = {
         payment_document_type,
         supply_lead_time_days,
         invoice_attachment,
+        account_code: '22101001',
         notes
       };
 

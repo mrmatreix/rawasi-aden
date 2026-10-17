@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261015-1g1p',
+  assetVersion: '1.0.0.20261017-ajxf',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261015-1g1p',
-    projects: 'js/projects.js?v=1.0.0.20261015-1g1p',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261015-1g1p',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261015-1g1p',
-    accounting: 'js/accounting.js?v=1.0.0.20261015-1g1p',
-    hr: 'js/hr.js?v=1.0.0.20261015-1g1p',
-    reports: 'js/reports.js?v=1.0.0.20261015-1g1p',
-    inventory: 'js/inventory.js?v=1.0.0.20261015-1g1p',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261015-1g1p',
-    settings: 'js/settings.js?v=1.0.0.20261015-1g1p',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261015-1g1p',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261015-1g1p'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261017-ajxf',
+    projects: 'js/projects.js?v=1.0.0.20261017-ajxf',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261017-ajxf',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261017-ajxf',
+    accounting: 'js/accounting.js?v=1.0.0.20261017-ajxf',
+    hr: 'js/hr.js?v=1.0.0.20261017-ajxf',
+    reports: 'js/reports.js?v=1.0.0.20261017-ajxf',
+    inventory: 'js/inventory.js?v=1.0.0.20261017-ajxf',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261017-ajxf',
+    settings: 'js/settings.js?v=1.0.0.20261017-ajxf',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261017-ajxf',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261017-ajxf'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -511,7 +511,7 @@ const App = {
       }
     } else if (viewId === 'reports') {
       if (typeof Reports !== 'undefined' && Reports.switchReportTab) {
-        Reports.switchReportTab(Reports.activeReportTab || 'profit-loss');
+        Reports.switchReportTab(Reports.activeReportTab || 'income-statement');
       }
     } else if (viewId === 'hr') {
       HR.load();
@@ -862,7 +862,7 @@ const App = {
   async loadClientsTable() {
     const tbody = document.getElementById('fullClientsTableBody');
     if (tbody && window.UI && UI.Skeleton) {
-      UI.Skeleton.showTableSkeleton(tbody, 5, 8);
+      UI.Skeleton.showTableSkeleton(tbody, 5, 9);
     }
 
     try {
@@ -905,7 +905,7 @@ const App = {
         setTxt('kpiClientsOutstandingDue', `${this.formatNumber(totalDue)} ر.ي`);
 
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا يوجد عملاء مسجلين حتى الآن</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا يوجد عملاء مسجلين حتى الآن</td></tr>`;
           const pag = document.getElementById('clientsPagination');
           if (pag) pag.innerHTML = '';
         } else {
@@ -927,6 +927,9 @@ const App = {
                   <td>
                     <div style="font-weight: 700; color: #fff;">${c.name}</div>
                     <div style="font-size: 0.75rem; color: var(--text-secondary);">${c.company || 'عميل فردي'}</div>
+                  </td>
+                  <td dir="ltr" style="font-family: monospace; font-weight: 700; color: #38bdf8;">
+                    ${c.account_code || '12301001'}
                   </td>
                   <td>
                     <div>${c.phone || '-'}</div>
@@ -1005,11 +1008,12 @@ const App = {
       return (c.name && c.name.toLowerCase().includes(term)) ||
              (c.company && c.company.toLowerCase().includes(term)) ||
              (c.phone && c.phone.includes(term)) ||
-             (c.address && c.address.toLowerCase().includes(term));
+             (c.address && c.address.toLowerCase().includes(term)) ||
+             (c.account_code && c.account_code.includes(term));
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد نتائج مطابقة لبحثك</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد نتائج مطابقة لبحثك</td></tr>`;
       return;
     }
 
@@ -1030,7 +1034,7 @@ const App = {
   async loadSuppliersTable() {
     const tbody = document.getElementById('fullSuppliersTableBody');
     if (tbody && window.UI && UI.Skeleton) {
-      UI.Skeleton.showTableSkeleton(tbody, 5, 7);
+      UI.Skeleton.showTableSkeleton(tbody, 5, 8);
     }
 
     try {
@@ -1039,7 +1043,7 @@ const App = {
       if (tbody && json.success) {
         const list = json.data || [];
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا يوجد موردين مسجلين</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا يوجد موردين مسجلين</td></tr>`;
           const pag = document.getElementById('suppliersPagination');
           if (pag) pag.innerHTML = '';
         } else {
@@ -1077,6 +1081,9 @@ const App = {
                 <td>
                   <strong style="color: var(--text-primary);">${s.company_name || s.name}</strong>
                   ${contact}
+                </td>
+                <td dir="ltr" style="font-family: monospace; font-weight: 700; color: #38bdf8;">
+                  ${s.account_code || '22101001'}
                 </td>
                 <td>
                   <span class="badge badge-active" style="font-size: 0.8rem;">${catBadge}</span>

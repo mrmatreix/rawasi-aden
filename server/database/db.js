@@ -265,6 +265,21 @@ async function initMysql() {
       }
     };
 
+    await checkAndAddCol('clients', 'account_id', 'INT NULL');
+    await checkAndAddCol('suppliers', 'account_id', 'INT NULL');
+    await mysqlPool.query(`
+      UPDATE clients c
+      JOIN accounts a ON a.code = '12301001'
+      SET c.account_id = a.id
+      WHERE c.account_id IS NULL
+    `);
+    await mysqlPool.query(`
+      UPDATE suppliers s
+      JOIN accounts a ON a.code = '22101001'
+      SET s.account_id = a.id
+      WHERE s.account_id IS NULL
+    `);
+
     await checkAndAddCol('expenses', 'account_id', 'INT NULL');
     await checkAndAddCol('expenses', 'settlement_account_id', 'INT NULL');
     await checkAndAddCol('expenses', 'cost_center_id', 'INT NULL');
@@ -1054,9 +1069,11 @@ function initSqlite() {
 
     const clientCols = sqliteDb.prepare("PRAGMA table_info(clients)").all().map(c => c.name);
     if (!clientCols.includes('tax_number')) sqliteDb.exec("ALTER TABLE clients ADD COLUMN tax_number TEXT;");
+    if (!clientCols.includes('account_id')) sqliteDb.exec("ALTER TABLE clients ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
 
     const suppCols = sqliteDb.prepare("PRAGMA table_info(suppliers)").all().map(c => c.name);
     if (!suppCols.includes('tax_number')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN tax_number TEXT;");
+    if (!suppCols.includes('account_id')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
 
     const itemCols = sqliteDb.prepare("PRAGMA table_info(items)").all().map(c => c.name);
     if (!itemCols.includes('costing_method')) sqliteDb.exec("ALTER TABLE items ADD COLUMN costing_method TEXT DEFAULT 'wac';");
@@ -1900,6 +1917,7 @@ function initSqlite() {
 
       // 2. تحديث وتوسيع جدول الموردين (Suppliers / Vendors Master Data)
       const suppCols = sqliteDb.prepare("PRAGMA table_info(suppliers)").all().map(c => c.name);
+      if (!suppCols.includes('account_id')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
       if (!suppCols.includes('company_name')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN company_name TEXT;");
       if (!suppCols.includes('industry_category')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN industry_category TEXT DEFAULT 'مواد بناء';");
       if (!suppCols.includes('contact_person')) sqliteDb.exec("ALTER TABLE suppliers ADD COLUMN contact_person TEXT;");
@@ -1924,6 +1942,8 @@ function initSqlite() {
         UPDATE suppliers SET phone_number = phone WHERE (phone_number IS NULL OR phone_number = '') AND phone IS NOT NULL;
         UPDATE suppliers SET industry_category = category WHERE (industry_category IS NULL OR industry_category = '') AND category IS NOT NULL;
         UPDATE suppliers SET default_currency = CASE WHEN currency IS NOT NULL AND currency != '' THEN currency ELSE 'YER' END WHERE default_currency IS NULL OR default_currency = '';
+        UPDATE suppliers SET account_id = (SELECT id FROM accounts WHERE code = '22101001')
+        WHERE account_id IS NULL AND EXISTS (SELECT 1 FROM accounts WHERE code = '22101001');
       `);
 
       // 3. إنشاء فهارس الأداء (Performance Indexes for Real-Time Zero N+1)
@@ -1940,6 +1960,9 @@ function initSqlite() {
         SELECT 
             v.id AS id,
             v.id AS vendor_id,
+            v.account_id,
+            ledger.code AS account_code,
+            ledger.name AS account_name,
             COALESCE(v.company_name, v.name) AS company_name,
             COALESCE(v.industry_category, v.category, 'مواد بناء') AS industry_category,
             v.contact_person,
@@ -1973,6 +1996,7 @@ function initSqlite() {
             ROUND(COALESCE(pay.total_amount_paid, 0.0), 2) AS total_amount_paid,
             ROUND((COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0)) - COALESCE(pay.total_amount_paid, 0.0), 2) AS outstanding_balance
         FROM suppliers v
+        LEFT JOIN accounts ledger ON ledger.id = v.account_id
         LEFT JOIN (
             SELECT 
                 supplier_id,
@@ -2064,11 +2088,18 @@ function initSqlite() {
 
       // 5. بناء العرض المجمع في الوقت الفعلي للعملاء (Real-Time Zero N+1 View)
       sqliteDb.exec(`
+        UPDATE clients SET account_id = (SELECT id FROM accounts WHERE code = '12301001')
+        WHERE account_id IS NULL AND EXISTS (SELECT 1 FROM accounts WHERE code = '12301001');
+      `);
+      sqliteDb.exec(`
         DROP VIEW IF EXISTS view_client_financial_profiles;
         CREATE VIEW view_client_financial_profiles AS
         SELECT
             c.id,
             c.id AS client_id,
+            c.account_id,
+            ledger.code AS account_code,
+            ledger.name AS account_name,
             c.name,
             c.company,
             c.phone,
@@ -2091,6 +2122,7 @@ function initSqlite() {
             ROUND(COALESCE(pay.total_collected, 0.0), 2) AS total_collected,
             ROUND((COALESCE(c.previous_balance, 0.0) + COALESCE(b.total_net_billed, 0.0)) - COALESCE(pay.total_collected, 0.0), 2) AS outstanding_balance
         FROM clients c
+        LEFT JOIN accounts ledger ON ledger.id = c.account_id
         LEFT JOIN (
             SELECT client_id, COUNT(id) AS total_projects_count
             FROM projects

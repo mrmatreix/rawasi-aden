@@ -271,7 +271,7 @@ const Settings = {
       payroll_show_emp_signature: '1',
 
       // 4. القوائم المالية والمخزون
-      pl_title: 'قائمة الأرباح والخسائر الرسمية',
+      pl_title: 'قائمة الدخل الرسمية',
       income_stmt_title: 'قائمة الدخل المعيارية وإثبات الإنجاز POC',
       balance_sheet_title: 'الميزانية العمومية وقائمة المركز المالي',
       cash_flow_title: 'قائمة التدفقات النقدية الفعلية',
@@ -372,7 +372,7 @@ const Settings = {
           payroll_show_emp_signature: s.print_payroll_show_emp_signature !== undefined ? String(s.print_payroll_show_emp_signature) : '1',
 
           // 4. القوائم المالية والمخزون
-          pl_title: s.print_pl_title || 'قائمة الأرباح والخسائر الرسمية',
+          pl_title: s.print_pl_title || 'قائمة الدخل الرسمية',
           income_stmt_title: s.print_income_stmt_title || 'قائمة الدخل المعيارية وإثبات الإنجاز POC',
           balance_sheet_title: s.print_balance_sheet_title || 'الميزانية العمومية وقائمة المركز المالي',
           cash_flow_title: s.print_cash_flow_title || 'قائمة التدفقات النقدية الفعلية',
@@ -562,7 +562,7 @@ const Settings = {
       print_payroll_show_emp_signature: getChk('printPayrollShowEmpSignature'),
 
       // 4. القوائم المالية والمخزون
-      print_pl_title: getVal('printPlTitle', 'قائمة الأرباح والخسائر الرسمية'),
+      print_pl_title: getVal('printPlTitle', 'قائمة الدخل الرسمية'),
       print_income_stmt_title: getVal('printIncomeStmtTitle', 'قائمة الدخل المعيارية وإثبات الإنجاز POC'),
       print_balance_sheet_title: getVal('printBalanceSheetTitle', 'الميزانية العمومية وقائمة المركز المالي'),
       print_cash_flow_title: getVal('printCashFlowTitle', 'قائمة التدفقات النقدية الفعلية'),
@@ -740,7 +740,7 @@ const Settings = {
       payroll_show_deductions: '1',
       payroll_show_emp_signature: '1',
 
-      pl_title: 'قائمة الأرباح والخسائر الرسمية',
+      pl_title: 'قائمة الدخل الرسمية',
       income_stmt_title: 'قائمة الدخل المعيارية وإثبات الإنجاز POC',
       balance_sheet_title: 'الميزانية العمومية وقائمة المركز المالي',
       cash_flow_title: 'قائمة التدفقات النقدية الفعلية',
@@ -1189,7 +1189,7 @@ const Settings = {
     const payrollShowEmpSignature = getChk('printPayrollShowEmpSignature');
 
     // 4. القوائم المالية والمخزون
-    const plTitle = getVal('printPlTitle', 'قائمة الأرباح والخسائر الرسمية');
+    const plTitle = getVal('printPlTitle', 'قائمة الدخل الرسمية');
     const incomeStmtTitle = getVal('printIncomeStmtTitle', 'قائمة الدخل المعيارية وإثبات الإنجاز POC');
     const balanceSheetTitle = getVal('printBalanceSheetTitle', 'الميزانية العمومية وقائمة المركز المالي');
     const cashFlowTitle = getVal('printCashFlowTitle', 'قائمة التدفقات النقدية الفعلية');

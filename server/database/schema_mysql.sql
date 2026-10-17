@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- 3. جدول العملاء
 CREATE TABLE IF NOT EXISTS clients (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    account_id INT NULL,
     name VARCHAR(200) NOT NULL,
     company VARCHAR(200) NULL,
     phone VARCHAR(50) NULL,
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS clients (
 -- 4. جدول الموردين
 CREATE TABLE IF NOT EXISTS suppliers (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    account_id INT NULL,
     name VARCHAR(200) NOT NULL,
     category VARCHAR(100) NULL,
     phone VARCHAR(50) NULL,

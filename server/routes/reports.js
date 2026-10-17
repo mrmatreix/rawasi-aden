@@ -137,10 +137,50 @@ router.get('/trial-balance', requirePermission('accounting:view,reports:view'), 
 router.get('/income-statement', requirePermission('accounting:view,reports:view'), async (req, res) => {
   try {
     const { from_date, to_date } = parseAndValidateDates(req.query);
-    const report = await reportingService.getIncomeStatement({ from_date, to_date });
+    const cost_center_id = req.query.cost_center_id ? Number(req.query.cost_center_id) : null;
+    if (req.query.cost_center_id && (!Number.isInteger(cost_center_id) || cost_center_id <= 0)) {
+      return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'مركز التكلفة المحدد غير صالح' });
+    }
+    const display_level = req.query.display_level || 'subsidiary';
+    if (!['main', 'subsidiary', 'main_and_subsidiary'].includes(display_level)) {
+      return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'طريقة عرض الحسابات غير صالحة' });
+    }
+    const report = await reportingService.getIncomeStatement({
+      from_date,
+      to_date,
+      cost_center_id,
+      display_level
+    });
     res.json(report);
   } catch (err) {
     handleReportError(err, res, 'قائمة الدخل المعيارية');
+  }
+});
+
+/**
+ * تقرير حركة حساب معين خلال فترة مع تصفية اختيارية بمركز التكلفة.
+ * GET /api/reports/account-movement?account_id=...&from_date=...&to_date=...&cost_center_id=...
+ */
+router.get('/account-movement', requirePermission('accounting:view,reports:view'), async (req, res) => {
+  try {
+    const { from_date, to_date } = parseAndValidateDates(req.query);
+    const account_id = Number(req.query.account_id);
+    const cost_center_id = req.query.cost_center_id ? Number(req.query.cost_center_id) : null;
+    if (!Number.isInteger(account_id) || account_id <= 0) {
+      return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'يرجى اختيار حساب صحيح' });
+    }
+    if (req.query.cost_center_id && (!Number.isInteger(cost_center_id) || cost_center_id <= 0)) {
+      return res.status(400).json({ success: false, code: 'INVALID_INPUT', message: 'مركز التكلفة المحدد غير صالح' });
+    }
+    const report = await reportingService.getAccountMovement({
+      account_id,
+      from_date,
+      to_date,
+      cost_center_id
+    });
+    res.json(report);
+  } catch (err) {
+    handleReportError(err, res, 'تقرير حركة الحساب');
   }
 });
 

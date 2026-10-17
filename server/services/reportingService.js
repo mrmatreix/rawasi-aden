@@ -155,59 +155,112 @@ class ReportingService {
    * - صافي الدخل (Net Income): Gross Profit - Operating Expenses
    * - خالية تماماً من الـ Fallbacks (1250000, 450000)
    */
-  async getIncomeStatement({ from_date, to_date }) {
+  async getIncomeStatement({ from_date, to_date, cost_center_id = null, display_level = 'subsidiary' }) {
     const fromDate = from_date || '2024-01-01';
     const toDate = to_date || new Date().toISOString().split('T')[0];
+    const normalizedDisplayLevel = ['main', 'subsidiary', 'main_and_subsidiary'].includes(display_level)
+      ? display_level
+      : 'subsidiary';
+    const costCenterClause = cost_center_id ? ' AND jel.cost_center_id = ?' : '';
+    const reportParams = cost_center_id
+      ? [fromDate, toDate, Number(cost_center_id)]
+      : [fromDate, toDate];
 
     // الإيرادات من دفتر الأستاذ العام
     const revenueRows = await query(`
-      SELECT a.id, a.code, a.name, a.type,
+      SELECT a.id, a.code, a.name, a.type, a.parent_id, a.level,
              COALESCE(SUM(jel.credit - jel.debit), 0) AS amount
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted'
         AND je.date BETWEEN ? AND ?
+        ${costCenterClause}
         AND (a.type = 'إيرادات' OR a.code LIKE '4%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
-      GROUP BY a.id, a.code, a.name, a.type
+      GROUP BY a.id, a.code, a.name, a.type, a.parent_id, a.level
       HAVING amount != 0
       ORDER BY a.code ASC;
-    `, [fromDate, toDate]);
+    `, reportParams);
 
     // تكلفة الإيراد المباشرة (Direct Project Costs)
     const directCostRows = await query(`
-      SELECT a.id, a.code, a.name, a.type,
+      SELECT a.id, a.code, a.name, a.type, a.parent_id, a.level,
              COALESCE(SUM(jel.debit - jel.credit), 0) AS amount
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted'
         AND je.date BETWEEN ? AND ?
+        ${costCenterClause}
         AND (a.type = 'تكاليف' OR a.code LIKE '51%' OR a.name LIKE '%تكاليف مشاريع%' OR a.name LIKE '%مواد بناء%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
-      GROUP BY a.id, a.code, a.name, a.type
+      GROUP BY a.id, a.code, a.name, a.type, a.parent_id, a.level
       HAVING amount != 0
       ORDER BY a.code ASC;
-    `, [fromDate, toDate]);
+    `, reportParams);
 
     // المصروفات التشغيلية والإدارية والعمومية (Operating & General Expenses)
     const operatingExpenseRows = await query(`
-      SELECT a.id, a.code, a.name, a.type,
+      SELECT a.id, a.code, a.name, a.type, a.parent_id, a.level,
              COALESCE(SUM(jel.debit - jel.credit), 0) AS amount
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted'
         AND je.date BETWEEN ? AND ?
+        ${costCenterClause}
         AND (a.type = 'مصروفات' OR a.code LIKE '3%' OR a.code LIKE '52%')
         AND a.code NOT LIKE '51%'
         AND a.name NOT LIKE '%تكاليف مشاريع%'
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
-      GROUP BY a.id, a.code, a.name, a.type
+      GROUP BY a.id, a.code, a.name, a.type, a.parent_id, a.level
       HAVING amount != 0
       ORDER BY a.code ASC;
-    `, [fromDate, toDate]);
+    `, reportParams);
+
+    const chart = await query(`
+      SELECT id, code, name, type, parent_id, level
+      FROM accounts
+      ORDER BY code ASC
+    `);
+    const accountById = new Map(chart.map(account => [Number(account.id), account]));
+    const shapeRows = rows => {
+      const subsidiaryRows = rows.map(row => ({
+        code: row.code,
+        name: row.name,
+        amount: Number(row.amount || 0),
+        level: Number(row.level || 0),
+        account_kind: 'subsidiary'
+      }));
+      if (normalizedDisplayLevel === 'subsidiary') return subsidiaryRows;
+
+      const parentTotals = new Map();
+      rows.forEach(row => {
+        let parent = accountById.get(Number(row.parent_id));
+        const visited = new Set();
+        while (parent && !visited.has(Number(parent.id))) {
+          visited.add(Number(parent.id));
+          parentTotals.set(Number(parent.id), (parentTotals.get(Number(parent.id)) || 0) + Number(row.amount || 0));
+          parent = accountById.get(Number(parent.parent_id));
+        }
+      });
+      const mainRows = Array.from(parentTotals.entries()).map(([id, amount]) => {
+        const account = accountById.get(id);
+        return {
+          code: account.code,
+          name: account.name,
+          amount: Math.round(amount * 100) / 100,
+          level: Number(account.level || 0),
+          account_kind: 'main'
+        };
+      });
+      if (normalizedDisplayLevel === 'main') {
+        return mainRows.sort((a, b) => String(a.code).localeCompare(String(b.code), 'ar'));
+      }
+      return [...mainRows, ...subsidiaryRows]
+        .sort((a, b) => String(a.code).localeCompare(String(b.code), 'ar') || (a.account_kind === 'main' ? -1 : 1));
+    };
 
     const totalRevenues = Math.round(revenueRows.reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100;
     const totalDirectCosts = Math.round(directCostRows.reduce((s, c) => s + (Number(c.amount) || 0), 0) * 100) / 100;
@@ -226,15 +279,15 @@ class ReportingService {
       success: true,
       data: {
         period: { from_date: fromDate, to_date: toDate },
-        revenues: revenueRows.map(r => ({ code: r.code, name: r.name, amount: Number(r.amount) })),
+        revenues: shapeRows(revenueRows),
         total_revenues: totalRevenues,
-        direct_costs: directCostRows.map(c => ({ code: c.code, name: c.name, amount: Number(c.amount) })),
+        direct_costs: shapeRows(directCostRows),
         total_direct_costs: totalDirectCosts,
         gross_profit: grossProfit,
         gross_margin_percentage: grossMarginPct,
-        operating_expenses: operatingExpenseRows.map(e => ({ code: e.code, name: e.name, amount: Number(e.amount) })),
+        operating_expenses: shapeRows(operatingExpenseRows),
         total_operating_expenses: totalOperatingExpenses,
-        expenses: [...directCostRows, ...operatingExpenseRows].map(e => ({ code: e.code, name: e.name, amount: Number(e.amount) })),
+        expenses: shapeRows([...directCostRows, ...operatingExpenseRows]),
         total_expenses: totalExpenses,
         net_profit: netProfit,
         net_income: netProfit,
@@ -246,7 +299,9 @@ class ReportingService {
         to_date: toDate,
         currency: 'ر.ي',
         generated_at: new Date().toISOString(),
-        source: 'General Ledger'
+        source: 'General Ledger',
+        display_level: normalizedDisplayLevel,
+        cost_center_id: cost_center_id ? Number(cost_center_id) : null
       },
       warnings: totalRevenues === 0 && totalExpenses === 0 ? ['لا توجد قيود إيرادات أو مصروفات مرحلة خلال هذه الفترة'] : [],
       reconciliation: {
@@ -254,6 +309,102 @@ class ReportingService {
         difference: incEquationDiff,
         accounting_equation: 'Gross Profit = Revenues - Direct Costs | Net Profit = Gross Profit - Operating Expenses'
       }
+    };
+  }
+
+  /**
+   * تقرير حركة حساب خلال فترة، مع رصيد افتتاحي ورصيد متحرك وإمكانية التصفية بمركز تكلفة.
+   */
+  async getAccountMovement({ account_id, from_date, to_date, cost_center_id = null }) {
+    const fromDate = from_date || '2024-01-01';
+    const toDate = to_date || new Date().toISOString().split('T')[0];
+    const account = await get('SELECT id, code, name, type FROM accounts WHERE id = ?', [Number(account_id)]);
+    if (!account) {
+      const err = new Error('الحساب المحدد غير موجود في دليل الحسابات');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const costCenterClause = cost_center_id ? ' AND jel.cost_center_id = ?' : '';
+    const openingParams = cost_center_id
+      ? [Number(account_id), fromDate, Number(cost_center_id)]
+      : [Number(account_id), fromDate];
+    const opening = await get(`
+      SELECT COALESCE(SUM(jel.debit - jel.credit), 0) AS balance
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON je.id = jel.entry_id
+      WHERE je.status = 'posted'
+        AND jel.account_id = ?
+        AND je.date < ?
+        ${costCenterClause}
+    `, openingParams);
+
+    const movementParams = cost_center_id
+      ? [Number(account_id), fromDate, toDate, Number(cost_center_id)]
+      : [Number(account_id), fromDate, toDate];
+    const rows = await query(`
+      SELECT jel.id, je.id AS entry_id, je.entry_no, je.date, je.description,
+             je.reference_type,
+             COALESCE(pm.external_transaction_id, pm.check_no, pm.payment_no,
+                      ex.reference_no, ex.check_no) AS reference_no,
+             jel.notes,
+             jel.debit, jel.credit, jel.cost_center_id,
+             cc.code AS cost_center_code, cc.name AS cost_center_name
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON je.id = jel.entry_id
+      LEFT JOIN cost_centers cc ON cc.id = jel.cost_center_id
+      LEFT JOIN payments pm ON je.reference_type IN ('سند قبض', 'payment')
+        AND (je.reference_id = pm.id OR je.entry_no = pm.receipt_no)
+      LEFT JOIN expenses ex ON je.reference_type IN ('سند صرف', 'expense')
+        AND (je.reference_id = ex.id OR je.entry_no = ex.receipt_no)
+      WHERE je.status = 'posted'
+        AND jel.account_id = ?
+        AND je.date BETWEEN ? AND ?
+        ${costCenterClause}
+      ORDER BY je.date ASC, je.id ASC, jel.id ASC
+    `, movementParams);
+
+    let runningBalance = Math.round(Number(opening?.balance || 0) * 100) / 100;
+    let totalDebit = 0;
+    let totalCredit = 0;
+    const movements = rows.map(row => {
+      const debit = Math.round(Number(row.debit || 0) * 100) / 100;
+      const credit = Math.round(Number(row.credit || 0) * 100) / 100;
+      totalDebit += debit;
+      totalCredit += credit;
+      runningBalance = Math.round((runningBalance + debit - credit) * 100) / 100;
+      return {
+        ...row,
+        debit,
+        credit,
+        running_balance: runningBalance,
+        reference: row.reference_no || row.reference_type || '-'
+      };
+    });
+
+    const openingBalance = Math.round(Number(opening?.balance || 0) * 100) / 100;
+    return {
+      success: true,
+      data: {
+        account,
+        movements,
+        totals: {
+          opening_balance: openingBalance,
+          total_debit: Math.round(totalDebit * 100) / 100,
+          total_credit: Math.round(totalCredit * 100) / 100,
+          closing_balance: runningBalance
+        }
+      },
+      meta: {
+        report_name: 'حركة الحساب',
+        from_date: fromDate,
+        to_date: toDate,
+        cost_center_id: cost_center_id ? Number(cost_center_id) : null,
+        currency: 'ر.ي',
+        generated_at: new Date().toISOString(),
+        source: 'General Ledger'
+      },
+      warnings: movements.length ? [] : ['لا توجد حركات مرحلة لهذا الحساب خلال الفترة المحددة']
     };
   }
 
@@ -298,7 +449,7 @@ class ReportingService {
       },
       meta: {
         ...isReport.meta,
-        report_name: 'قائمة الأرباح والخسائر الشاملة'
+        report_name: 'قائمة الدخل الشاملة'
       },
       warnings: isReport.warnings,
       reconciliation: {

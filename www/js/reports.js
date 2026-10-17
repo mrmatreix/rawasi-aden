@@ -12,7 +12,7 @@
  */
 
 const Reports = {
-  activeReportTab: 'profit-loss',
+  activeReportTab: 'income-statement',
   lastReportData: {},
 
   async init() {
@@ -199,7 +199,8 @@ const Reports = {
   // =========================================================================
   // إدارة التبويبات والشاشات (Tabs Switcher)
   // =========================================================================
-  switchReportTab(tabId) {
+  async switchReportTab(tabId) {
+    if (tabId === 'profit-loss') tabId = 'income-statement';
     this.activeReportTab = tabId;
     document.querySelectorAll('.report-tab-btn').forEach(btn => btn.classList.remove('active'));
     const clickedBtn = document.getElementById(`tabBtn_${tabId}`);
@@ -209,12 +210,13 @@ const Reports = {
     const target = document.getElementById(`pane_${tabId}`);
     if (target) target.style.display = 'block';
 
-    if (tabId === 'profit-loss') {
-      this.loadFullProfitLoss();
-    } else if (tabId === 'trial-balance') {
+    if (tabId === 'trial-balance') {
       this.loadTrialBalance();
     } else if (tabId === 'income-statement') {
+      await this.initFinancialReportFilters();
       this.loadIncomeStatement();
+    } else if (tabId === 'account-movement') {
+      await this.initFinancialReportFilters();
     } else if (tabId === 'balance-sheet') {
       this.loadBalanceSheet();
     } else if (tabId === 'cash-flow') {
@@ -227,6 +229,32 @@ const Reports = {
       this.initClientStatementDropdown();
     } else if (tabId === 'supplier-statement') {
       this.initSupplierStatementDropdown();
+    }
+  },
+
+  async initFinancialReportFilters() {
+    try {
+      const [accountsRes, centersRes] = await Promise.all([
+        fetch('/api/accounting/accounts?usable_only=true', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/accounting/cost-centers', { cache: 'no-store' }).then(r => r.json())
+      ]);
+      const accounts = accountsRes.success ? (accountsRes.data || []) : [];
+      const centers = centersRes.success ? (centersRes.data || []) : [];
+      const populate = (id, placeholder, rows, labelBuilder) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = `<option value="">${placeholder}</option>` + rows.map(row =>
+          `<option value="${row.id}">${labelBuilder(row)}</option>`
+        ).join('');
+        if (current && rows.some(row => String(row.id) === String(current))) select.value = current;
+      };
+      populate('amAccountId', 'اختر الحساب من دليل الحسابات', accounts, account => `${account.code} - ${account.name}`);
+      populate('amCostCenter', 'كل مراكز التكلفة', centers, center => `${center.code} - ${center.name}`);
+      populate('isCostCenter', 'كل مراكز التكلفة', centers, center => `${center.code} - ${center.name}`);
+    } catch (error) {
+      console.error('تعذر تحديث مرشحات التقارير المالية:', error);
+      App.showToast('تعذر تحديث دليل الحسابات ومراكز التكلفة', 'error');
     }
   },
 
@@ -375,6 +403,10 @@ const Reports = {
     const params = new URLSearchParams();
     if (fromDate) params.append('from_date', fromDate);
     if (toDate) params.append('to_date', toDate);
+    const displayLevel = document.getElementById('isDisplayLevel')?.value || 'subsidiary';
+    const costCenterId = document.getElementById('isCostCenter')?.value || '';
+    params.append('display_level', displayLevel);
+    if (costCenterId) params.append('cost_center_id', costCenterId);
     if (params.toString()) url += '?' + params.toString();
 
     try {
@@ -391,9 +423,9 @@ const Reports = {
         const netEl = document.getElementById('isNetIncome');
 
         if (revEl) revEl.textContent = App.formatNumber(d.total_revenues || 0) + ' ر.ي';
-        if (dirEl) dirEl.textContent = App.formatNumber(d.direct_costs || 0) + ' ر.ي';
+        if (dirEl) dirEl.textContent = App.formatNumber(d.total_direct_costs || 0) + ' ر.ي';
         if (grossEl) grossEl.textContent = App.formatNumber(d.gross_profit || 0) + ' ر.ي';
-        if (expEl) expEl.textContent = App.formatNumber(d.operating_expenses || d.total_expenses || 0) + ' ر.ي';
+        if (expEl) expEl.textContent = App.formatNumber(d.total_operating_expenses || 0) + ' ر.ي';
         if (netEl) {
           netEl.textContent = App.formatNumber(d.net_profit || 0) + ' ر.ي';
           netEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
@@ -421,7 +453,7 @@ const Reports = {
 
         const expTbody = document.getElementById('isExpensesTableBody');
         if (expTbody) {
-          const allCosts = [...(d.direct_cost_items || []), ...(d.expense_items || [])];
+          const allCosts = d.expenses || [...(d.direct_costs || []), ...(d.operating_expenses || [])];
           if (allCosts.length === 0) {
             expTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 14px;">لا توجد مصروفات مسجلة بالأستاذ</td></tr>`;
           } else {
@@ -442,6 +474,57 @@ const Reports = {
     } catch (e) {
       console.error('❌ Error loading income statement:', e);
       App.showToast('فشل تحميل قائمة الدخل', 'error');
+    }
+  },
+
+  async loadAccountMovement() {
+    const accountId = document.getElementById('amAccountId')?.value || '';
+    if (!accountId) {
+      App.showToast('يرجى اختيار الحساب أولاً', 'warning');
+      return;
+    }
+    const params = new URLSearchParams({ account_id: accountId });
+    const fromDate = document.getElementById('amFromDate')?.value || '';
+    const toDate = document.getElementById('amToDate')?.value || '';
+    const costCenterId = document.getElementById('amCostCenter')?.value || '';
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+    if (costCenterId) params.append('cost_center_id', costCenterId);
+
+    try {
+      const response = await fetch(`/api/reports/account-movement?${params.toString()}`);
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.message || 'تعذر تحميل حركة الحساب');
+      this.lastReportData['account-movement'] = json;
+      const totals = json.data.totals || {};
+      const setAmount = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = `${App.formatNumber(value || 0)} ر.ي`;
+      };
+      setAmount('amOpeningBalance', totals.opening_balance);
+      setAmount('amTotalDebit', totals.total_debit);
+      setAmount('amTotalCredit', totals.total_credit);
+      setAmount('amClosingBalance', totals.closing_balance);
+
+      const tbody = document.getElementById('accountMovementTableBody');
+      const movements = json.data.movements || [];
+      if (tbody) {
+        tbody.innerHTML = movements.length ? movements.map(row => `
+          <tr>
+            <td>${row.date || '-'}</td>
+            <td style="font-family:monospace; color:var(--gold-light);">${row.entry_no || '-'}</td>
+            <td>${row.reference || '-'}</td>
+            <td>${row.description || row.notes || '-'}</td>
+            <td>${row.cost_center_name ? `${row.cost_center_code || ''} - ${row.cost_center_name}` : 'عام'}</td>
+            <td style="color:var(--accent-green); font-weight:bold;">${row.debit > 0 ? App.formatNumber(row.debit) : '-'}</td>
+            <td style="color:var(--accent-red); font-weight:bold;">${row.credit > 0 ? App.formatNumber(row.credit) : '-'}</td>
+            <td style="font-weight:bold;">${App.formatNumber(row.running_balance || 0)}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="8" style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد حركات مرحلة للحساب خلال الفترة المحددة</td></tr>';
+      }
+    } catch (error) {
+      console.error('تعذر تحميل حركة الحساب:', error);
+      App.showToast(error.message || 'تعذر تحميل حركة الحساب', 'error');
     }
   },
 
@@ -1024,7 +1107,7 @@ const Reports = {
     };
 
     const todayDate = new Date().toISOString().split('T')[0];
-    const tab = this.activeReportTab || 'profit-loss';
+    const tab = this.activeReportTab || 'income-statement';
     const reportData = this.lastReportData[tab] || {};
 
     let reportTitle = 'تقرير مالي معتمد';
@@ -1058,13 +1141,28 @@ const Reports = {
           <thead><tr><th>البيان المحاسبي</th><th>المبلغ المحقق</th></tr></thead>
           <tbody>
             <tr><td>إجمالي الإيرادات المعترف بها (4)</td><td style="color:#15803d;font-weight:bold">${App.formatNumber(d.total_income || d.total_revenues || 0)} ر.ي</td></tr>
-            <tr><td>تكلفة الإيراد المباشرة (51)</td><td style="color:#b91c1c">${App.formatNumber(d.direct_costs || 0)} ر.ي</td></tr>
+            <tr><td>تكلفة الإيراد المباشرة (51)</td><td style="color:#b91c1c">${App.formatNumber(d.total_direct_costs || 0)} ر.ي</td></tr>
             <tr style="background:#f8fafc;font-weight:bold"><td>مجمل الربح</td><td style="color:#047857">${App.formatNumber(d.gross_profit || 0)} ر.ي</td></tr>
-            <tr><td>المصروفات التشغيلية والإدارية (3)</td><td style="color:#b91c1c">${App.formatNumber(d.operating_expenses || 0)} ر.ي</td></tr>
+            <tr><td>المصروفات التشغيلية والإدارية (3)</td><td style="color:#b91c1c">${App.formatNumber(d.total_operating_expenses || 0)} ر.ي</td></tr>
             <tr style="background:#f0fdf4;font-weight:900;font-size:1.1rem"><td>صافي الربح / الدخل النهائي</td><td style="color:#047857">${App.formatNumber(d.net_profit || 0)} ر.ي</td></tr>
           </tbody>
         </table>
       `;
+    } else if (tab === 'account-movement') {
+      reportTitle = 'تقرير حركة الحساب';
+      const d = reportData.data || {};
+      const totals = d.totals || {};
+      const rows = (d.movements || []).map(row => `
+        <tr><td>${row.date || '-'}</td><td>${row.entry_no || '-'}</td><td>${row.reference || '-'}</td>
+        <td>${row.description || row.notes || '-'}</td><td>${row.cost_center_name || 'عام'}</td>
+        <td>${row.debit ? App.formatNumber(row.debit) : '-'}</td><td>${row.credit ? App.formatNumber(row.credit) : '-'}</td>
+        <td>${App.formatNumber(row.running_balance || 0)}</td></tr>
+      `).join('');
+      reportBodyHtml = `
+        <div style="margin-bottom:12px;font-weight:bold;">${d.account ? `${d.account.code} - ${d.account.name}` : ''}</div>
+        <table class="official-report-table"><thead><tr><th>التاريخ</th><th>القيد</th><th>المرجع</th><th>البيان</th><th>مركز التكلفة</th><th>مدين</th><th>دائن</th><th>الرصيد</th></tr></thead>
+        <tbody><tr style="font-weight:bold"><td colspan="7">الرصيد الافتتاحي</td><td>${App.formatNumber(totals.opening_balance || 0)}</td></tr>${rows}
+        <tr style="font-weight:bold"><td colspan="5">الإجمالي</td><td>${App.formatNumber(totals.total_debit || 0)}</td><td>${App.formatNumber(totals.total_credit || 0)}</td><td>${App.formatNumber(totals.closing_balance || 0)}</td></tr></tbody></table>`;
     } else if (tab === 'trial-balance') {
       reportTitle = cfg.trial_balance_title || 'ميزان المراجعة بالأرصدة والمجاميع';
       const d = reportData.data || {};
@@ -1164,7 +1262,7 @@ const Reports = {
   // تصدير Excel المتخصص
   // =========================================================================
   exportActiveReportToExcel() {
-    const tab = this.activeReportTab || 'profit-loss';
+    const tab = this.activeReportTab || 'income-statement';
     const reportData = this.lastReportData[tab] || null;
 
     if (typeof ExcelExporter !== 'undefined') {
@@ -1174,6 +1272,8 @@ const Reports = {
         ExcelExporter.exportTrialBalance(reportData);
       } else if (tab === 'income-statement') {
         ExcelExporter.exportIncomeStatement(reportData);
+      } else if (tab === 'account-movement') {
+        ExcelExporter.exportAccountMovement(reportData);
       } else if (tab === 'balance-sheet') {
         ExcelExporter.exportBalanceSheet(reportData);
       } else if (tab === 'cash-flow') {

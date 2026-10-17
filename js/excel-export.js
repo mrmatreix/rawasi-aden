@@ -295,9 +295,9 @@ const ExcelExporter = {
     const toDate = meta.to_date || document.getElementById('isToDate')?.value || new Date().toISOString().split('T')[0];
 
     const totalRev = Number(d.total_revenues || 0);
-    const directCost = Number(d.direct_costs || 0);
+    const directCost = Number(d.total_direct_costs || 0);
     const grossProfit = Number(d.gross_profit || (totalRev - directCost));
-    const opEx = Number(d.operating_expenses || 0);
+    const opEx = Number(d.total_operating_expenses || 0);
     const netIncome = Number(d.net_profit || (grossProfit - opEx));
 
     const revList = (d.revenues || []).map((r, i) => `
@@ -307,14 +307,14 @@ const ExcelExporter = {
       </tr>
     `).join('') || `<tr><td colspan="2" class="text-center" style="color:#64748b">لا توجد إيرادات مسجلة</td></tr>`;
 
-    const directList = (d.direct_cost_items || []).map((c, i) => `
+    const directList = (d.direct_costs || []).map((c, i) => `
       <tr class="${i % 2 === 1 ? 'row-alt' : ''}">
         <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
         <td class="currency" style="color: #b91c1c;">${this.formatNum(c.amount || 0)}</td>
       </tr>
     `).join('') || `<tr><td colspan="2" class="text-center" style="color:#64748b">لا توجد تكاليف مباشرة مسجلة</td></tr>`;
 
-    const opexList = (d.expense_items || []).map((e, i) => `
+    const opexList = (d.operating_expenses || []).map((e, i) => `
       <tr class="${i % 2 === 1 ? 'row-alt' : ''}">
         <td>${e.code ? e.code + ' - ' : ''}${e.name}</td>
         <td class="currency" style="color: #b91c1c;">${this.formatNum(e.amount || 0)}</td>
@@ -755,7 +755,43 @@ const ExcelExporter = {
   },
 
   // =========================================================================
-  // 9. تصدير كشف حساب مورد مفصل (Supplier Statement)
+  // 9. تصدير تقرير حركة الحساب
+  // =========================================================================
+  exportAccountMovement(apiData = null) {
+    const { companyName } = this.getCompanyInfo();
+    const d = (apiData && apiData.data) ? apiData.data : (window.Reports?.lastReportData['account-movement']?.data || {});
+    const meta = (apiData && apiData.meta) ? apiData.meta : (window.Reports?.lastReportData['account-movement']?.meta || {});
+    const account = d.account || {};
+    const totals = d.totals || {};
+    const movements = d.movements || [];
+    if (!account.id) {
+      if (typeof App !== 'undefined' && App.showToast) App.showToast('يرجى عرض حركة الحساب أولاً قبل التصدير', 'warning');
+      return;
+    }
+    const rows = movements.map((row, index) => `
+      <tr class="${index % 2 === 1 ? 'row-alt' : ''}">
+        <td class="date-cell">${row.date || '-'}</td><td class="text-center">${row.entry_no || '-'}</td>
+        <td>${row.reference || '-'}</td><td>${row.description || row.notes || '-'}</td>
+        <td>${row.cost_center_name || 'عام'}</td>
+        <td class="currency" style="color:#047857">${row.debit ? this.formatNum(row.debit) : '-'}</td>
+        <td class="currency" style="color:#b91c1c">${row.credit ? this.formatNum(row.credit) : '-'}</td>
+        <td class="currency font-bold">${this.formatNum(row.running_balance || 0)}</td>
+      </tr>
+    `).join('');
+    const html = `<table>
+      <tr><td colspan="8" class="hdr-company">${companyName}</td></tr>
+      <tr><td colspan="8" class="hdr-title">تقرير حركة الحساب: ${account.code || ''} - ${account.name || ''}</td></tr>
+      <tr><td colspan="8" class="hdr-meta">الفترة من ${meta.from_date || '-'} إلى ${meta.to_date || '-'} | المصدر: دفتر الأستاذ العام</td></tr>
+      <tr><th>التاريخ</th><th>رقم القيد</th><th>المرجع</th><th>البيان</th><th>مركز التكلفة</th><th>مدين</th><th>دائن</th><th>الرصيد</th></tr>
+      <tr class="row-total"><td colspan="7">الرصيد الافتتاحي</td><td class="currency">${this.formatNum(totals.opening_balance || 0)}</td></tr>
+      ${rows || '<tr><td colspan="8" class="text-center">لا توجد حركات خلال الفترة</td></tr>'}
+      <tr class="row-total"><td colspan="5">الإجمالي والرصيد الختامي</td><td class="currency">${this.formatNum(totals.total_debit || 0)}</td><td class="currency">${this.formatNum(totals.total_credit || 0)}</td><td class="currency">${this.formatNum(totals.closing_balance || 0)}</td></tr>
+    </table>`;
+    this.download(html, `حركة_الحساب_${account.code || 'حساب'}_${meta.from_date || ''}_${meta.to_date || ''}`, 'حركة الحساب');
+  },
+
+  // =========================================================================
+  // 10. تصدير كشف حساب مورد مفصل (Supplier Statement)
   // =========================================================================
   exportSupplierStatement(apiData = null) {
     const { companyName } = this.getCompanyInfo();

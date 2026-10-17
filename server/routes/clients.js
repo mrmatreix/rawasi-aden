@@ -11,7 +11,8 @@ router.get('/', requirePermission('clients:view'), async (req, res) => {
     try {
       clients = await query('SELECT * FROM view_client_financial_profiles ORDER BY id ASC');
     } catch (e) {
-      clients = await query('SELECT * FROM clients ORDER BY id ASC');
+      clients = await query(`SELECT c.*, a.code AS account_code, a.name AS account_name
+        FROM clients c LEFT JOIN accounts a ON a.id = c.account_id ORDER BY c.id ASC`);
     }
     res.json({ success: true, data: clients });
   } catch (err) {
@@ -27,7 +28,8 @@ router.get('/:id', requirePermission('clients:view'), async (req, res) => {
       client = await get('SELECT * FROM view_client_financial_profiles WHERE id = ?', [req.params.id]);
     } catch (e) {}
     if (!client) {
-      client = await get('SELECT * FROM clients WHERE id = ?', [req.params.id]);
+      client = await get(`SELECT c.*, a.code AS account_code, a.name AS account_name
+        FROM clients c LEFT JOIN accounts a ON a.id = c.account_id WHERE c.id = ?`, [req.params.id]);
     }
     if (!client) {
       return res.status(404).json({ success: false, message: 'العميل غير موجود' });
@@ -108,10 +110,16 @@ router.post('/', requirePermission('clients:create'), async (req, res) => {
     const prevBal = Number(previous_balance) || 0;
     const selectedCurrency = currency || 'ر.ي';
 
+    const ledgerAccount = await get("SELECT id, code, name FROM accounts WHERE code = '12301001'");
+    if (!ledgerAccount) {
+      return res.status(409).json({ success: false, message: 'تعذر إضافة العميل: الحساب 12301001 غير موجود في دليل الحسابات' });
+    }
+
     const result = await run(`
-      INSERT INTO clients (name, company, phone, email, address, previous_balance, current_balance, currency, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO clients (account_id, name, company, phone, email, address, previous_balance, current_balance, currency, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
+      ledgerAccount.id,
       trimmedName,
       company ? company.trim() : '',
       phone ? phone.trim() : '',
@@ -125,11 +133,12 @@ router.post('/', requirePermission('clients:create'), async (req, res) => {
 
     const newId = result.lastInsertRowid || result.insertId;
 
-    const confirmedClient = await get('SELECT * FROM clients WHERE id = ?', [newId]);
+    const confirmedClient = await get(`SELECT c.*, a.code AS account_code, a.name AS account_name
+      FROM clients c LEFT JOIN accounts a ON a.id = c.account_id WHERE c.id = ?`, [newId]);
 
     res.json({
       success: true,
-      message: `تم حفظ وتأكيد إضافة العميل (${confirmedClient ? confirmedClient.name : trimmedName}) في قاعدة البيانات بنجاح`,
+      message: `تم حفظ العميل (${confirmedClient ? confirmedClient.name : trimmedName}) وربطه بالحساب ${ledgerAccount.code} بنجاح`,
       data: confirmedClient,
       id: newId
     });

@@ -945,10 +945,14 @@ router.post('/service-requests/:id/convert-to-project', async (req, res) => {
       if (existingClient) {
         clientId = existingClient.id;
       } else {
+        const ledgerAccount = await db.get(`SELECT id FROM accounts WHERE code = '12301001'`);
+        if (!ledgerAccount) {
+          return res.status(409).json({ success: false, message: 'تعذر إنشاء العميل: الحساب 12301001 غير موجود في دليل الحسابات' });
+        }
         const clientInsert = await db.run(`
-          INSERT INTO clients (name, phone, email, notes, created_at)
-          VALUES (?, ?, ?, 'تم الإنشاء تلقائياً من طلب خدمة مكتب الهندسة والمقاولات ' || ?, CURRENT_TIMESTAMP)
-        `, [request.client_name, request.phone, request.email, request.request_no]);
+          INSERT INTO clients (account_id, name, phone, email, notes, created_at)
+          VALUES (?, ?, ?, ?, 'تم الإنشاء تلقائياً من طلب خدمة مكتب الهندسة والمقاولات ' || ?, CURRENT_TIMESTAMP)
+        `, [ledgerAccount.id, request.client_name, request.phone, request.email, request.request_no]);
         clientId = clientInsert.lastID || clientInsert.insertId;
       }
     }

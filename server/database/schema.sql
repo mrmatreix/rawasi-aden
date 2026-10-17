@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS departments (
 -- 3. جدول العملاء
 CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER REFERENCES accounts(id),
     name TEXT NOT NULL,
     company TEXT,
     phone TEXT,
@@ -101,6 +102,7 @@ CREATE TABLE IF NOT EXISTS vendor_payment_document_types (
 
 CREATE TABLE IF NOT EXISTS suppliers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER REFERENCES accounts(id),
     name TEXT NOT NULL,
     company_name TEXT NOT NULL,
     industry_category TEXT NOT NULL DEFAULT 'مواد بناء',
@@ -137,6 +139,9 @@ CREATE VIEW IF NOT EXISTS view_vendor_financial_profiles AS
 SELECT 
     v.id AS id,
     v.id AS vendor_id,
+    v.account_id,
+    ledger.code AS account_code,
+    ledger.name AS account_name,
     COALESCE(v.company_name, v.name) AS company_name,
     COALESCE(v.industry_category, v.category, 'مواد بناء') AS industry_category,
     v.contact_person,
@@ -166,6 +171,7 @@ SELECT
     ROUND(COALESCE(pay.total_amount_paid, 0.0), 2) AS total_amount_paid,
     ROUND((COALESCE(v.balance, 0.0) + COALESCE(inv.total_invoiced_amount, 0.0)) - COALESCE(pay.total_amount_paid, 0.0), 2) AS outstanding_balance
 FROM suppliers v
+LEFT JOIN accounts ledger ON ledger.id = v.account_id
 LEFT JOIN (
     SELECT 
         supplier_id,
@@ -569,6 +575,9 @@ CREATE VIEW IF NOT EXISTS view_client_financial_profiles AS
 SELECT
     c.id,
     c.id AS client_id,
+    c.account_id,
+    ledger.code AS account_code,
+    ledger.name AS account_name,
     c.name,
     c.company,
     c.phone,
@@ -591,6 +600,7 @@ SELECT
     ROUND(COALESCE(pay.total_collected, 0.0), 2) AS total_collected,
     ROUND((COALESCE(c.previous_balance, 0.0) + COALESCE(b.total_net_billed, 0.0)) - COALESCE(pay.total_collected, 0.0), 2) AS outstanding_balance
 FROM clients c
+LEFT JOIN accounts ledger ON ledger.id = c.account_id
 LEFT JOIN (
     SELECT client_id, COUNT(id) AS total_projects_count
     FROM projects

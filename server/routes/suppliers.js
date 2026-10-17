@@ -92,7 +92,7 @@ router.post('/', requirePermission('suppliers:create'), async (req, res) => {
     const result = await VendorService.createVendor(req.body, req.user);
     res.status(201).json({
       success: true,
-      message: `تمت إضافة المورد (${result.data.company_name}) بنجاح وتفعيل ملف الـ SRM التعريفي.`,
+      message: `تمت إضافة المورد (${result.data.company_name}) وربطه بالحساب 22101001 بنجاح.`,
       data: result.data,
       id: result.data.id
     });
