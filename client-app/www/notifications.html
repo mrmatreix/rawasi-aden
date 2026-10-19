@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>الإشعارات - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div id="appHeader"></div>
+
+  <div class="app-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <h2 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;">مركز الإشعارات</h2>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">تحديثات المستخلصات، الدفعات، وأنشطة المشاريع</p>
+      </div>
+      <button onclick="markAllAsRead()" class="btn btn-secondary btn-sm" style="white-space: nowrap;">
+        <i class="fa-solid fa-check-double"></i> قراءة الكل
+      </button>
+    </div>
+
+    <!-- Notifications List -->
+    <div id="notificationsContainer">
+      <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--gold); margin-bottom: 10px;"></i>
+        <p>جاري تحميل الإشعارات...</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottomNav"></div>
+
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    let notifications = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('dashboard');
+      const isAuth = await ClientAuth.requireAuth();
+      if (!isAuth) return;
+
+      loadNotifications();
+    });
+
+    async function loadNotifications() {
+      try {
+        const data = await ClientAPI.get('/notifications');
+        if (!data.success) throw new Error(data.message);
+
+        notifications = data.notifications || [];
+        renderNotifications(notifications);
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل تحميل الإشعارات', 'error');
+      }
+    }
+
+    function renderNotifications(notifs) {
+      const container = document.getElementById('notificationsContainer');
+      if (!notifs || notifs.length === 0) {
+        container.innerHTML = `
+          <div class="card" style="text-align: center; padding: 40px 20px;">
+            <i class="fa-solid fa-bell-slash" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
+            <h3 style="font-size: 1rem; color: #FFFFFF; font-weight: bold;">لا توجد إشعارات جديدة</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">ستصلك هنا إشعارات فورية عند إصدار مستخلصات جديدة أو تسجيل دفعاتك</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = notifs.map(n => {
+        let icon = 'fa-bell';
+        let iconColor = 'var(--gold)';
+        let bg = 'rgba(212, 175, 55, 0.15)';
+
+        if (n.type === 'ipc_issued') {
+          icon = 'fa-file-invoice-dollar';
+          iconColor = '#F59E0B';
+          bg = 'rgba(245, 158, 11, 0.15)';
+        } else if (n.type === 'payment_received') {
+          icon = 'fa-money-bill-wave';
+          iconColor = '#10B981';
+          bg = 'rgba(16, 185, 129, 0.15)';
+        } else if (n.type === 'report_submitted') {
+          icon = 'fa-clipboard-check';
+          iconColor = '#3B82F6';
+          bg = 'rgba(59, 130, 246, 0.15)';
+        }
+
+        return `
+          <div class="card" style="${!n.is_read ? 'border-color: rgba(212, 175, 55, 0.4); background: rgba(28, 43, 74, 0.9);' : ''} cursor: pointer;" onclick="handleNotifClick(${n.id}, '${n.reference_type}', ${n.reference_id})">
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: ${bg}; display: flex; align-items: center; justify-content: center; color: ${iconColor}; font-size: 1.1rem; flex-shrink: 0;">
+                <i class="fa-solid ${icon}"></i>
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <h4 style="font-size: 0.95rem; font-weight: bold; color: #FFFFFF;">${n.title}</h4>
+                  ${!n.is_read ? '<span style="width: 8px; height: 8px; border-radius: 50%; background: var(--gold);"></span>' : ''}
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 6px;">${n.body}</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: var(--text-muted);">
+                  <span>${n.project_name ? `<i class="fa-solid fa-city"></i> ${n.project_name}` : ''}</span>
+                  <span>${ClientApp.formatDate(n.created_at)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function handleNotifClick(id, refType, refId) {
+      try {
+        await ClientAPI.post(`/notifications/${id}/read`, {});
+        const notif = notifications.find(n => n.id === id);
+        if (notif) notif.is_read = 1;
+        renderNotifications(notifications);
+
+        if (refType === 'invoice') {
+          window.location.href = 'invoices.html';
+        } else if (refType === 'payment') {
+          window.location.href = 'payments.html';
+        } else if (refType === 'project' && refId) {
+          window.location.href = `project-details.html?id=${refId}`;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function markAllAsRead() {
+      try {
+        await ClientAPI.post('/notifications/read-all', {});
+        notifications.forEach(n => n.is_read = 1);
+        renderNotifications(notifications);
+        ClientApp.showToast('تم تحديد جميع الإشعارات كمقروءة', 'success');
+      } catch (err) {
+        ClientApp.showToast('فشل تحديث الإشعارات', 'error');
+      }
+    }
+  </script>
+</body>
+</html>

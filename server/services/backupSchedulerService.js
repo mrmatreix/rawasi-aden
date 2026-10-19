@@ -15,7 +15,7 @@ class BackupSchedulerService {
     this.timer = null;
     this.isExecuting = false;
     this.nextRunTime = null;
-    this.defaultStoragePath = path.resolve(__dirname, '..', 'database', 'backups');
+    this.defaultStoragePath = require('../config/environment').storage.backups;
     this.config = {
       enabled: true,
       interval: 'daily', // 'daily' | 'weekly'
@@ -86,7 +86,7 @@ class BackupSchedulerService {
       this.config.interval = (map.auto_backup_interval === 'weekly') ? 'weekly' : 'daily';
       this.config.time = map.auto_backup_time || '02:00';
       this.config.dayOfWeek = map.auto_backup_day_of_week !== undefined ? Number(map.auto_backup_day_of_week) : 5;
-      this.config.storagePath = map.auto_backup_path ? path.resolve(map.auto_backup_path) : this.defaultStoragePath;
+      this.config.storagePath = require('../config/environment').isDev && map.auto_backup_path ? path.resolve(map.auto_backup_path) : this.defaultStoragePath;
       this.config.maxFiles = Math.max(1, Number(map.auto_backup_max_files) || 14);
       this.config.lastRun = map.auto_backup_last_run || null;
       this.config.lastStatus = map.auto_backup_last_status || null;
@@ -112,7 +112,7 @@ class BackupSchedulerService {
       const d = Number(newConfig.dayOfWeek);
       if (d >= 0 && d <= 6) this.config.dayOfWeek = d;
     }
-    if (newConfig.storagePath) {
+    if (newConfig.storagePath && require('../config/environment').isDev) {
       this.config.storagePath = path.resolve(newConfig.storagePath.trim());
     } else {
       this.config.storagePath = this.defaultStoragePath;
@@ -234,7 +234,7 @@ class BackupSchedulerService {
   }
 
   /**
-   * تنفيذ النسخ الاحتياطي التلقائي فعلياً وحفظه بالمسار المعتمد
+   * تنفيذ النسخ الاحتياطي التلقائي المعتمد والمتحقق منه عبر محرك النسخ المركزي الموحد
    */
   async executeBackup(triggerSource = 'scheduled', username = 'system', req = null) {
     if (this.isExecuting) {
@@ -243,52 +243,32 @@ class BackupSchedulerService {
 
     this.isExecuting = true;
     const startTime = Date.now();
-    const targetDir = this.config.storagePath || this.defaultStoragePath;
 
     try {
-      this.ensureStoragePath(targetDir);
+      const unifiedBackupEngine = require('./unifiedBackupEngine');
+      const backupType = triggerSource === 'scheduled' ? `scheduled_${this.config.interval}` : 'manual';
+      
+      const backupResult = await unifiedBackupEngine.createBackup({
+        backupType,
+        scope: 'full_bundle_with_files',
+        user: username || 'system',
+        req
+      });
 
-      // نقاط تفتيش SQLite لضمان دمج ملفات WAL بالكامل
-      try {
-        await exec('PRAGMA wal_checkpoint(TRUNCATE);');
-      } catch (e) {}
-
-      const now = new Date();
-      const pad = n => String(n).padStart(2, '0');
-      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-      const fileName = `backup_auto_${this.config.interval}_${dateStr}.db`;
-      const targetFilePath = path.join(targetDir, fileName);
-
-      // فحص وجود قاعدة البيانات ومصدر النسخ
-      const sourceDbPath = dbPath || path.resolve(__dirname, '..', 'database', 'rawasi_aden.db');
-      if (!fs.existsSync(sourceDbPath)) {
-        throw new Error(`ملف قاعدة البيانات المصدر غير موجود: ${sourceDbPath}`);
-      }
-
-      // نسخ الملف بأمان
-      fs.copyFileSync(sourceDbPath, targetFilePath);
-
-      const stat = fs.statSync(targetFilePath);
-      const fileSize = stat.size;
-
-      // تدوير وحذف النسخ القديمة الزائدة عن الحد المسموح
-      this.pruneOldBackups(targetDir, this.config.maxFiles);
-
-      // تحديث الإحصائيات في الخدمة والقاعدة
-      const nowIso = now.toISOString();
+      const nowIso = backupResult.createdAt;
       this.config.lastRun = nowIso;
       this.config.lastStatus = 'success';
-      this.config.lastFile = fileName;
-      this.config.lastSize = fileSize;
+      this.config.lastFile = backupResult.fileName;
+      this.config.lastSize = backupResult.fileSize;
       this.config.lastError = null;
 
       const updates = [
         ['auto_backup_last_run', nowIso],
         ['auto_backup_last_status', 'success'],
-        ['auto_backup_last_file', fileName],
-        ['auto_backup_last_size', String(fileSize)],
+        ['auto_backup_last_file', backupResult.fileName],
+        ['auto_backup_last_size', String(backupResult.fileSize)],
         ['auto_backup_last_error', ''],
-        ['auto_backup_last_path', targetFilePath]
+        ['auto_backup_last_path', backupResult.filePath]
       ];
 
       for (const [k, v] of updates) {
@@ -299,30 +279,16 @@ class BackupSchedulerService {
         } catch (e) {}
       }
 
-      // توثيق في سجل التدقيق المالي والإداري
-      await logAudit(req, {
-        action: 'AUTO_SCHEDULED_BACKUP',
-        entity_type: 'database',
-        entity_id: fileName,
-        details: {
-          trigger: triggerSource,
-          user: username || 'system',
-          interval: this.config.interval,
-          path: targetFilePath,
-          size: fileSize,
-          durationMs: Date.now() - startTime
-        }
-      });
-
-      console.log(`✅ [BackupScheduler] تم إنشاء النسخة المجدولة بنجاح: ${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB) في ${targetDir}`);
+      console.log(`✅ [BackupScheduler] تم تنفيذ واعتماد النسخة المجدولة بنجاح: ${backupResult.fileName} (${(backupResult.fileSize / (1024 * 1024)).toFixed(2)} MB)`);
 
       return {
         success: true,
-        fileName,
-        filePath: targetFilePath,
-        fileSize,
+        fileName: backupResult.fileName,
+        filePath: backupResult.filePath,
+        fileSize: backupResult.fileSize,
         interval: this.config.interval,
         timestamp: nowIso,
+        sha256: backupResult.sha256,
         nextRun: this.calculateNextRunTime()
       };
     } catch (err) {

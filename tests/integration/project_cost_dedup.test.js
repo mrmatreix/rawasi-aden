@@ -263,10 +263,18 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
     assert.ok(r.data.warnings.length > 0, 'يجب وجود تحذير اشتباه');
     assert.ok(r.data.warnings.some(w => w.kind === 'expense'), 'التحذير يشير للمصروف المشابه');
 
-    // 11. السند المرتبط سدادٌ: الذمة تنخفض والمسدد يتراكم والقيد مدين 21 (SUGGESTION-7)
-    const acc21 = (await db.get("SELECT id FROM accounts WHERE code = '21'")).id;
-    const acc111 = (await db.get("SELECT id FROM accounts WHERE code = '111'")).id;
-    const acc5 = (await db.get("SELECT id FROM accounts WHERE code = '5'")).id;
+    const acc = async (code) => {
+      let row = await db.get('SELECT id FROM accounts WHERE code = ? AND (is_posting = 1 OR is_posting IS NULL)', [code]);
+      if (!row) {
+        if (code === '5') row = await db.get("SELECT id FROM accounts WHERE code = '32102005' OR (type = 'expense' AND is_posting = 1) LIMIT 1");
+        else if (code === '21') row = await db.get("SELECT id FROM accounts WHERE code = '22101001' OR (type = 'liability' AND is_posting = 1) LIMIT 1");
+        else if (code === '111') row = await db.get("SELECT id FROM accounts WHERE code = '12101001' OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%') LIMIT 1");
+      }
+      return row ? row.id : null;
+    };
+    const acc21 = await acc('21');
+    const acc111 = await acc('111');
+    const acc5 = await acc('5');
     const suppAfter = await db.get('SELECT balance FROM suppliers WHERE id = ?', [supplierId]);
     assert.strictEqual(Number(suppAfter.balance), 50000, 'الذمة = 80k استحقاق − 30k تسوية');
     const purAfter = await db.get('SELECT paid_amount, payment_status FROM project_purchases WHERE id = ?', [purchaseId]);

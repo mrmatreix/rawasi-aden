@@ -13,6 +13,8 @@ const {
   JWT_SECRET
 } = require('../middleware/security');
 
+router.post('/realtime-ticket',requireAuth,(req,res)=>res.json({success:true,ticket:jwt.sign({id:req.user.id,purpose:'realtime'},JWT_SECRET,{expiresIn:'60s'})}));
+
 function getRoleDefaultPermissions(role) {
   switch (role) {
     case 'admin':
@@ -96,22 +98,11 @@ function getHeartbeatTimestamp(hb) {
 }
 
 // التحقق من أن المستخدم المتصل هو المدير العام (Admin Only)
-function verifyAdmin(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'يرجى تسجيل الدخول بحساب المدير العام لتنفيذ هذا الإجراء' });
-  }
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== 'admin' && decoded.username !== 'admin') {
-      return res.status(403).json({ success: false, message: 'عذراً! ضبط وتعديل خيارات الأمان متاح حصرياً لحساب المدير العام' });
-    }
-    req.adminUser = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ success: false, message: 'جلسة المدير العام غير صالحة أو منتهية، يرجى إعادة تسجيل الدخول' });
-  }
+function verifyAdmin(req,res,next) {
+  return requireAuth(req,res,()=>{
+    if(req.user.role!=='admin')return res.status(403).json({success:false,message:'هذه العملية متاحة للمدير العام فقط'});
+    req.adminUser=req.user;next();
+  });
 }
 
 // دالة مساعدة لتنسيق الوقت بالعربية
@@ -234,7 +225,7 @@ router.get('/2fa-status', verifyAdmin, async (req, res) => {
     const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
     const isEnabled = row2fa ? (row2fa.value === '1' || row2fa.value === 'true') : true;
     const pin = rowPin && rowPin.value ? rowPin.value : '123456';
-    res.json({ success: true, enabled: isEnabled, pin, backupCode: '889900' });
+    res.json({ success: true, enabled: isEnabled, pinConfigured:Boolean(rowPin?.value) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -540,37 +531,38 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
-    // التحقق هل الحساب للمدير العام وهل ميزة 2FA مفعلة
+    // التحقق هل الحساب مفعل له 2FA (المدير العام أو أي مستخدم مفعّل له التحقق بخطوتين)
+    let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
+      ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
+      : (user.role === 'admin' || user.username === 'admin');
+
     if (user.role === 'admin' || user.username === 'admin') {
-      let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
-        ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
-        : true;
       try {
         const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
         if (row2fa && (user.two_factor_enabled === undefined || user.two_factor_enabled === null)) {
           is2FaEnabled = (row2fa.value === '1' || row2fa.value === 'true');
         }
       } catch (e) {}
+    }
 
-      if (is2FaEnabled) {
-        const tempToken = jwt.sign(
-          { id: user.id, username: user.username, role: user.role, isPending2FA: true },
-          JWT_SECRET,
-          { expiresIn: '5m' }
-        );
-        return res.json({
-          success: true,
-          requires2FA: true,
-          tempToken,
-          user: {
-            id: user.id,
-            username: user.username,
-            full_name: user.full_name,
-            role: user.role
-          },
-          message: 'مرحباً بالمدير العام! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️'
-        });
-      }
+    if (is2FaEnabled) {
+      const tempToken = jwt.sign(
+        { id: user.id, username: user.username, role: user.role, isPending2FA: true },
+        JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+      return res.json({
+        success: true,
+        requires2FA: true,
+        tempToken,
+        user: {
+          id: user.id,
+          username: user.username,
+          full_name: user.full_name,
+          role: user.role
+        },
+        message: `مرحباً بك (${user.full_name || user.username})! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️`
+      });
     }
 
     // إكمال تسجيل الدخول الاعتيادي
@@ -581,7 +573,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   }
 });
 
-// 1.1 التحقق من رمز التحقق بخطوتين (2FA) للمدير العام
+// 1.1 التحقق من رمز التحقق بخطوتين (2FA)
 router.post('/verify-2fa', async (req, res) => {
   try {
     const { tempToken, code, force, deviceInfo, deviceId, deviceName } = req.body;
@@ -596,14 +588,14 @@ router.post('/verify-2fa', async (req, res) => {
       return res.status(401).json({ success: false, message: 'جلسة التحقق المؤقتة منتهية، يرجى إعادة تسجيل الدخول' });
     }
 
-    if (!decoded || !decoded.isPending2FA || decoded.role !== 'admin') {
+    if (!decoded || !decoded.isPending2FA) {
       return res.status(401).json({ success: false, message: 'طلب التحقق غير صالح' });
     }
 
     // جلب بيانات المستخدم أولاً
     const user = await get('SELECT * FROM users WHERE id = ?', [decoded.id]);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    if (!user || user.status !== 'active') {
+      return res.status(404).json({ success: false, message: 'المستخدم غير متاح' });
     }
 
     // جلب الرمز السري المعتمد لـ 2FA الخاص بالمستخدم أو من إعدادات النظام
@@ -616,9 +608,24 @@ router.post('/verify-2fa', async (req, res) => {
     }
     if (!admin2FaPin) admin2FaPin = '123456';
 
-    const cleanCode = String(code).trim();
-    // التحقق من الرمز أو رمز الطوارئ الاحتياطي 889900
-    if (cleanCode !== String(admin2FaPin).trim() && cleanCode !== '889900') {
+    const normalizeDigits = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+        .trim();
+    };
+
+    const cleanCode = normalizeDigits(code);
+    const userPinNormalized = normalizeDigits(user.two_factor_pin);
+    const adminPinNormalized = normalizeDigits(admin2FaPin);
+
+    // Accept only this user's configured PIN. Published emergency codes are never accepted.
+    const expectedPin = userPinNormalized || (user.role==='admin' ? adminPinNormalized : '');
+    if (!expectedPin || (!require('../config/environment').isDev && ['123456','654321','889900'].includes(expectedPin))) return res.status(403).json({success:false,message:'يجب إعداد رمز أمان خاص بالحساب قبل الدخول'});
+    const validPins = new Set([expectedPin]);
+
+    if (!validPins.has(cleanCode)) {
       return res.status(401).json({
         success: false,
         message: 'رمز التحقق بخطوتين (2FA) غير صحيح، يرجى التأكد من الرمز والمحاولة مجدداً'
@@ -634,7 +641,7 @@ router.post('/verify-2fa', async (req, res) => {
 });
 
 // 2. نبض الحفاظ على الجلسة والتحقق من عدم تكرار الدخول
-router.post('/heartbeat', async (req, res) => {
+router.post('/heartbeat', requireAuth, async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
@@ -692,7 +699,7 @@ router.post('/heartbeat', async (req, res) => {
 });
 
 // 3. التحقق من صحة الجلسة (Verify Token)
-router.get('/me', async (req, res) => {
+router.get('/me', requireAuth, async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
@@ -764,11 +771,11 @@ router.get('/me', async (req, res) => {
 });
 
 // 4. تسجيل الخروج وإنهاء الجلسة فوراً
-router.post('/logout', async (req, res) => {
+router.post('/logout', requireAuth, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    let userId = req.body?.userId;
-    let username = req.body?.username;
+    let userId = req.user.id;
+    let username = req.user.username;
     let currentSessionId = null;
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -815,7 +822,7 @@ router.post('/logout', async (req, res) => {
 });
 
 // 5. جلب قائمة المستخدمين المتصلين حالياً بالنظام
-router.get('/connected-users', async (req, res) => {
+router.get('/connected-users', verifyAdmin, async (req, res) => {
   try {
     const ACTIVE_THRESHOLD_MS = 75 * 1000;
     const now = Date.now();

@@ -53,7 +53,7 @@ router.put('/:projectId/completion/manual', async (req, res) => {
     );
     if (validation.accepted) {
       await run(
-        `UPDATE projects SET completion_percentage = ?, updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE projects SET progress_percentage = ? WHERE id = ?`,
         [Number(percent_complete), req.params.projectId]
       );
     }
