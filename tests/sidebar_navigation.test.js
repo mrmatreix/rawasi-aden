@@ -1,0 +1,15 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const vm=require('node:vm');const {groups,renderNavigation}=require('../scripts/navigation_config');const html=fs.readFileSync(require('path').join(__dirname,'../index.html'),'utf8');
+test('navigation covers every existing project, report, HR, inventory and settings tab once',()=>{
+ const all=groups.flatMap(g=>g.sections.flatMap(s=>s[1]));assert.equal(groups.length,8);
+ for(const [view,regex] of [['inventory',/Inventory.switchTab\('([^']+)'/g],['projectHub',/id="hubTabBtn_([^"]+)"/g],['reports',/id="tabBtn_((?:trial-balance|income-statement|account-movement|balance-sheet|cash-flow|project-budget|projects-profitability|cost-centers-profitability|client-statement|supplier-statement))"/g],['settings',/id="tabBtn_settings_([^"]+)"/g],['hr',/HR.showPane\('([^']+)'/g]]){
+  const actual=[...new Set([...html.matchAll(regex)].map(m=>m[1]))].sort();const routes=all.filter(i=>i.view===view&&i.tab).map(i=>i.tab).sort();assert.deepEqual(routes,actual,view);
+ }
+ const routes=all.map(i=>[i.view,i.tab,i.action].join(':'));assert.equal(new Set(routes).size,routes.length);
+ const icons = new Set([...html.matchAll(/<symbol id="([^"]+)"/g)].map(m=>m[1]));
+ for (const match of renderNavigation().matchAll(/href="#(icon-[^"]+)"/g)) assert.ok(icons.has(match[1]), match[1]);
+ assert.ok(!renderNavigation().includes('undefined'));assert.equal((renderNavigation().match(/class="nav-group"/g)||[]).length,8);
+});
+function sidebar(allowed,navigateResult=true){const calls=[];const context={console,App:{activeView:'dashboard',showToast:(...args)=>calls.push(['toast',...args]),navigateDeep:async(...args)=>{calls.push(['deep',...args]);return navigateResult},navigate:async(...args)=>{calls.push(['view',...args]);return navigateResult}},Auth:{hasPermission:()=>allowed}};vm.createContext(context);vm.runInContext(fs.readFileSync(require('path').join(__dirname,'../js/sidebar.js'),'utf8')+'\nthis.subject=Sidebar;',context);context.subject.sync=(...args)=>calls.push(['sync',...args]);return {subject:context.subject,calls};}
+test('permission-denied links never navigate or open forms',async()=>{const {subject,calls}=sidebar(false);await subject.open({dataset:{view:'settings',tab:'users'},closest:()=>({dataset:{perm:'settings:users'}})});assert.deepEqual(calls.map(c=>c[0]),['toast']);});
+test('deep links preserve the precise module tab and respect navigation rejection',async()=>{for(const result of [true,false]){const {subject,calls}=sidebar(true,result);await subject.open({dataset:{view:'projectHub',tab:'invoices'},closest:()=>({dataset:{perm:'projects:view'}})});assert.deepEqual(calls[0],['deep','projectHub','invoices']);assert.equal(calls.some(c=>c[0]==='sync'),result);}});
+test('Arabic navigation search normalizes diacritics and common letter variants',()=>{const {subject}=sidebar(true);assert.equal(subject.normalize('إيرادات'),subject.normalize('ايرادات'));assert.equal(subject.normalize('مُورِّد'),subject.normalize('مورد'));});

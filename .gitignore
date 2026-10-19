@@ -2,6 +2,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+server-restart.out.log
+server-restart.err.log
 .DS_Store
 Thumbs.db
 server/database/backups/*.db
@@ -13,6 +15,13 @@ server/database/*staging*.db*
 *.zip
 *.rar
 *.exe
+*.tar.gz
+*.tar
+*.bundle
+*.enc
+*.rawasi.enc
+server/database/backups/cloud_vault/*.enc
+server/database/backups/cloud_vault/*.zip
 android/.gradle/
 android/app/build/
 android/build/
@@ -22,11 +31,26 @@ cloudflared.exe
 ملفات_المشاريع/
 .vscode/
 scratch/
+uploads/*
+!uploads/.gitkeep
+!uploads/service_requests/
+uploads/service_requests/*
+!uploads/service_requests/.gitkeep
 
-# قاعدة البيانات المحلية (تُبنى تلقائياً عند الإقلاع + `npm run seed` للعرض)
-server/database/rawasi_aden.db
-server/database/*.db-journal
-# مرآة الواجهة للأندرويد (مولّدة: `npm run build`)
-www/
-# الحزم التنفيذية (تُبنى عند الإصدار، لا تُنسخ في Git)
-*.exe
+
+
+# Runtime data, credentials, local archives and logs must never be published.
+.env
+.env.*
+!.env.example
+*.log
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+server/database/config.json
+server/database/.development-secrets.json
+server/database/backups/
+backups_archive/
+.rawasi-data/

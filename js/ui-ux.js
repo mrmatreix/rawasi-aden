@@ -244,6 +244,11 @@
           { icon: '🏗️', label: 'المشاريع', nav: 'projects' },
           { icon: '📁', label: 'مركز وثائق ومستندات المشروع' }
         ],
+        projectCloseout: [
+          { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
+          { icon: '🏗️', label: 'المشاريع', nav: 'projects' },
+          { icon: '🔒', label: 'إغلاق المشروع والتحليلات الختامية (CQRS)' }
+        ],
         revenues: [
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
           { icon: '💰', label: 'الحسابات والمالية' },

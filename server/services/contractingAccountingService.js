@@ -17,8 +17,6 @@
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('./auditService');
 const { checkPeriodOpen } = require('./periodService');
-const { resolveValidUserId } = require('./financialControlService');
-const ProjectCostService = require('./projectCostService');
 
 // معرفات الحسابات المعيارية لعقود المقاولات في دليل الحسابات
 const CONTRACT_ACCOUNTS = {
@@ -83,33 +81,52 @@ const ContractingAccountingService = {
     const revisedContractValue = baseContractValue + approvedVariationsAmount;
 
     // 3. التكاليف الفعلية المتكبدة حتى تاريخه (Cumulative Incurred Actual Cost)
-    // من المصدر الموحد الوحيد — نفس المعادلة المستخدمة في projects.actual_cost
-    // (مصروفات مباشرة مرحلة/معتمدة + صافي الصرف المخزني + أجور + مشتريات فرعية، بلا ازدواج)
-    const costBreakdown = await ProjectCostService.getCostBreakdown(pId);
-    const cumulativeActualCost = costBreakdown.total;
+    const expRow = await get(`
+      SELECT COALESCE(SUM(amount), 0) as total 
+      FROM expenses 
+      WHERE project_id = ? AND status IN ('posted', 'approved')
+    `, [pId]);
+    const purchasesRow = await get(`
+      SELECT COALESCE(SUM(total_amount), 0) as total 
+      FROM project_purchases 
+      WHERE project_id = ?
+    `, [pId]);
+    const laborRow = await get(`
+      SELECT COALESCE(SUM(total_amount), 0) as total 
+      FROM project_labor_expenses 
+      WHERE project_id = ?
+    `, [pId]);
+
+    const directCostFromRecords = (expRow ? Number(expRow.total) : 0) +
+                                  (purchasesRow ? Number(purchasesRow.total) : 0) +
+                                  (laborRow ? Number(laborRow.total) : 0);
+
+    const cumulativeActualCost = Math.max(Number(proj.actual_cost) || 0, directCostFromRecords);
 
     // تقدير التكلفة الإجمالية المنقحة (Revised Estimated Total Cost)
-    // إذا لم يحدد المستخدم تكلفة تقديرية، نستخدم هامش تحفظ افتراضي (80% من قيمة العقد)
-    let revisedEstimatedCost = baseEstimatedCost > 0 
-      ? (baseEstimatedCost + (approvedVariationsAmount * 0.75))
-      : (revisedContractValue * 0.8);
+    // بدون أي نسب افتراضية مصطنعة (Zero Magic Numbers)
+    const warnings = [];
+    let revisedEstimatedCost = baseEstimatedCost > 0 ? (baseEstimatedCost + approvedVariationsAmount) : 0;
 
     if (revisedEstimatedCost <= 0) {
-      revisedEstimatedCost = Math.max(cumulativeActualCost, 1);
+      warnings.push({
+        code: 'MISSING_ESTIMATED_COST',
+        message: `المشروع (${proj.name}) يفتقر إلى موازنة تقديرية معتمدة (Estimated Cost = 0)`
+      });
     }
 
     // 4. نسبة الإنجاز المحاسبية المعيارية (POC - Percentage of Completion / Cost-to-Cost)
-    let costToCostPOC = 0;
-    if (revisedEstimatedCost > 0) {
-      costToCostPOC = Math.min(100, Math.round(((cumulativeActualCost / revisedEstimatedCost) * 100) * 100) / 100);
-    }
-    // في حالة انتهاء المشروع يتم تثبيت النسبة عند 100%
+    let costToCostPOC = null;
     if (proj.status === 'completed') {
       costToCostPOC = 100;
+    } else if (revisedEstimatedCost > 0) {
+      costToCostPOC = Math.min(100, Math.round(((cumulativeActualCost / revisedEstimatedCost) * 100) * 100) / 100);
     }
 
     // 5. الإيراد المعترف به تراكمياً وفق نسبة الإنجاز والمعيار الدولي IFRS 15
-    const cumulativeRecognizedRevenue = Math.round(revisedContractValue * (costToCostPOC / 100));
+    const cumulativeRecognizedRevenue = (costToCostPOC !== null && revisedContractValue > 0)
+      ? Math.round(revisedContractValue * (costToCostPOC / 100))
+      : 0;
 
     // فحص الإيرادات المثبتة دفترياً من جدول القيود السابقة
     const lastRecognition = await get(`
@@ -151,9 +168,8 @@ const ContractingAccountingService = {
         const ded = Number(b.deduction) || 0;
         const net = Number(b.net_amount) || (amt - ded);
         grossBillings += amt;
-        // افتراض توزيع الاستقطاع مناصفة بين دفعة وضمان إن لم تكن محددة بدقة
-        advanceDeducted += Number(b.advance_deduction) || (ded * 0.5);
-        retentionDeducted += Number(b.retention_deduction) || (ded * 0.5);
+        advanceDeducted += Number(b.advance_deduction) || 0;
+        retentionDeducted += Number(b.retention_deduction) || 0;
         netBilledReceivable += net;
       });
     }
@@ -239,7 +255,6 @@ const ContractingAccountingService = {
       revised_contract_value: revisedContractValue,
       revised_estimated_cost: revisedEstimatedCost,
       cumulative_actual_cost: cumulativeActualCost,
-      cost_breakdown: costBreakdown,
 
       // نسب الإنجاز المقارنة
       engineering_progress_pct: engineeringProgress,
@@ -321,7 +336,8 @@ const ContractingAccountingService = {
           : (liquidityVsProfitGap < 0
             ? 'الإيراد يفوق السيولة (إنجاز عالي ومستحقات ذمم تحت التحصيل)'
             : 'تطابق تام بين التدفق النقدي والإيراد المكتسب')
-      }
+      },
+      warnings
     };
   },
 
@@ -474,18 +490,14 @@ const ContractingAccountingService = {
     let entryNo = '';
     let jeId = null;
 
-    const creatorId = await resolveValidUserId(user?.id);
+    const creatorId = user?.id || null;
     const creatorName = user?.username || user?.full_name || 'مدير الحسابات';
 
     await transaction(async (tx) => {
       // 1. توليد رقم تسلسلي لإثبات الإيراد
       const countRes = await tx.get('SELECT COUNT(*) as cnt FROM contract_revenue_recognitions');
-      let recSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      let recNo = `REV-REC-${new Date().getFullYear()}-${String(recSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM contract_revenue_recognitions WHERE recognition_no = ?', [recNo])) {
-        recSeq += 1;
-        recNo = `REV-REC-${new Date().getFullYear()}-${String(recSeq).padStart(4, '0')}`;
-      }
+      const recSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
+      const recNo = `REV-REC-${new Date().getFullYear()}-${String(recSeq).padStart(4, '0')}`;
 
       // 2. توليد قيد اليومية العام لإثبات الإيراد المعترف به
       // الطرف المدين: 1128 - أصول تعاقدية / أعمال منجزة غير مفوترة (Contract Asset / WIP)

@@ -61,6 +61,7 @@ router.get('/', requirePermission('billing:view,revenues:view'), async (req, res
 const FinancialControlService = {
   ...require('../services/financialControlService')
 };
+const clientChainService = require('../services/clientChainService');
 
 // إنشاء مستخلص أو فاتورة أعمال جديدة مع التحقق من الصلاحيات والنطاق
 router.post('/', requirePermission('billing:create'), async (req, res) => {
@@ -69,6 +70,7 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
       bill_type = 'مستخلص جاري',
       project_id,
       client_id,
+      contract_id,
       amount,
       deduction = 0,
       advance_deduction = 0,
@@ -88,30 +90,30 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المشروع والمبلغ الإجمالي' });
     }
 
-    const parsedGrossAmount = Number(amount);
-    const parsedAdvDed = Number(advance_deduction) || 0;
-    const parsedRetDed = Number(retention_deduction) || 0;
+    // ربط واستنتاج العقد والعميل والاستقطاعات آلياً من دورة حياة المشروع
+    const resolution = await clientChainService.resolveBillContractAndClient({
+      project_id,
+      client_id,
+      contract_id,
+      amount,
+      advance_deduction,
+      retention_deduction
+    });
+
+    const finalClientId = resolution.client_id;
+    const finalContractId = resolution.contract_id;
+    const parsedGrossAmount = resolution.gross_amount;
+    const parsedAdvDed = resolution.advance_deduction;
+    const parsedRetDed = resolution.retention_deduction;
     const totalDeductions = parsedAdvDed > 0 || parsedRetDed > 0 
-      ? (parsedAdvDed + parsedRetDed)
+      ? (parsedAdvDed + parsedRetDed) 
       : (Number(deduction) || 0);
 
     const net_amount = Math.max(0, parsedGrossAmount - totalDeductions);
 
-    // جلب معرف العميل إن لم يكن محدد
-    let finalClientId = client_id;
-    if (!finalClientId) {
-      const proj = await get('SELECT client_id FROM projects WHERE id = ?', [project_id]);
-      if (proj) finalClientId = proj.client_id;
-    }
-
-    // توليد رقم المستخلص (حلقة فرادة: COUNT+1 وحده يصطدم بعد أي حذف صف)
+    // توليد رقم المستخلص
     const countRes = await get('SELECT COUNT(*) as cnt FROM bills');
-    let billSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-    let bill_no = `INV-${new Date().getFullYear()}-${String(billSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM bills WHERE bill_no = ?', [bill_no])) {
-      billSeq += 1;
-      bill_no = `INV-${new Date().getFullYear()}-${String(billSeq).padStart(4, '0')}`;
-    }
+    const bill_no = `INV-${new Date().getFullYear()}-${String((countRes ? countRes.cnt : 0) + 1).padStart(4, '0')}`;
 
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
@@ -125,15 +127,17 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
     const txResult = await transaction(async (tx) => {
       const result = await tx.run(`
         INSERT INTO bills (
-          bill_no, bill_type, project_id, client_id, 
+          bill_no, bill_type, project_id, client_id, contract_id,
           amount, deduction, net_amount, status, date, notes,
           gross_amount, advance_deduction, retention_deduction,
+          paid_amount, remaining_amount, payment_status,
           created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'unpaid', ?, ?, ?, ?, ?)
       `, [
-        bill_no, bill_type, project_id, finalClientId || null,
+        bill_no, bill_type, project_id, finalClientId || null, finalContractId || null,
         parsedGrossAmount, totalDeductions, net_amount, finalStatus, date, notes || '',
         parsedGrossAmount, parsedAdvDed, parsedRetDed,
+        net_amount,
         creatorId, creatorName,
         isPosted ? creatorId : null,
         isPosted ? creatorName : null,
@@ -142,15 +146,24 @@ router.post('/', requirePermission('billing:create'), async (req, res) => {
 
       const billId = result.lastInsertRowid || result.insertId;
 
-      // التأثير المحاسبي وقيد استحقاق المستخلص فقط عند الترحيل/الاعتماد
+      // تحديث نسبة إنجاز المشروع تلقائياً وتوثيقها في السجل التاريخي مع صدور المستخلص
+      if (req.body.progress_percentage !== undefined && req.body.progress_percentage !== null && project_id) {
+        const newProg = Math.min(100, Math.max(0, parseFloat(req.body.progress_percentage) || 0));
+        const oldP = await tx.get('SELECT progress_percentage FROM projects WHERE id = ?', [project_id]);
+        const oldProg = oldP ? (Number(oldP.progress_percentage) || 0) : 0;
+        if (newProg !== oldProg && newProg > 0) {
+          await tx.run('UPDATE projects SET progress_percentage = ? WHERE id = ?', [newProg, project_id]);
+          await tx.run(`
+            INSERT INTO project_progress_history (project_id, previous_percentage, new_percentage, notes, recorded_by, date)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [project_id, oldProg, newProg, `تحديث نسبة الإنجاز تلقائياً مع إصدار ${bill_type} رقم ${bill_no}`, creatorName, date]);
+        }
+      }
+
+      // التأثير المحاسبي وتحديث رصيد العميل الذري التلقائي
       if (isPosted) {
         if (finalClientId) {
-          await tx.run(`
-            UPDATE clients SET 
-              total_due = total_due + ?,
-              current_balance = current_balance + ?
-            WHERE id = ?
-          `, [net_amount, net_amount, finalClientId]);
+          await clientChainService.syncClientBalances(finalClientId, tx);
         }
 
         const jeCountRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
@@ -385,37 +398,55 @@ router.post('/:id/post', requirePermission('billing:post,accounting:post'), asyn
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
+      // حل الحسابات المالية آلياً من دليل الحسابات الموحد (Leaf Accounts)
+      const arAcc = await tx.get("SELECT id FROM accounts WHERE code = '11201001' AND is_posting = 1 LIMIT 1");
+      const retAcc = await tx.get("SELECT id FROM accounts WHERE code = '11202001' AND is_posting = 1 LIMIT 1");
+      const advAcc = await tx.get("SELECT id FROM accounts WHERE code = '21101004' AND is_posting = 1 LIMIT 1");
+      const revAcc = await tx.get("SELECT id FROM accounts WHERE code = '41101001' AND is_posting = 1 LIMIT 1")
+        || await tx.get("SELECT id FROM accounts WHERE code LIKE '41%' AND is_posting = 1 LIMIT 1");
+
+      if (!arAcc || !retAcc || !advAcc || !revAcc) throw new Error('حسابات المستخلص المطلوبة غير موجودة في دليل الحسابات');
+      const arAccountId = arAcc.id;
+      const retAccountId = retAcc.id;
+      const advAccountId = advAcc.id;
+      const revAccountId = revAcc.id;
+
       if (net_amount > 0) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 4, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, net_amount, `ذمم عملاء مستحقة - صافي ${bill.bill_type} رقم ${bill.bill_no}`]);
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, arAccountId, bill.project_id, net_amount, `ذمم عملاء مستحقة - صافي ${bill.bill_type} رقم ${bill.bill_no}`]);
       }
 
       if (parsedRetDed > 0) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 16, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, parsedRetDed, `أصل تعاقدي - محتجز ضمان مستقطع لحين التسليم النهائي`]);
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, retAccountId, bill.project_id, parsedRetDed, `أصل تعاقدي - محتجز ضمان مستقطع لحين التسليم النهائي`]);
       }
 
       if (parsedAdvDed > 0) {
         await tx.run(`
           INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 18, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, parsedAdvDed, `إطفاء التزام تعاقدي - استقطاع استهلاك دفعة مقدمة`]);
+          VALUES (?, ?, ?, ?, 0, ?)
+        `, [jeId, advAccountId, bill.project_id, parsedAdvDed, `إطفاء التزام تعاقدي - استقطاع استهلاك دفعة مقدمة`]);
       }
 
       await tx.run(`
         INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, 17, ?, 0, ?, ?)
-      `, [jeId, bill.project_id, parsedGrossAmount, `أصول تعاقدية - إجمالي الأعمال المنجزة المفوترة بالمستخلص`]);
+        VALUES (?, ?, ?, 0, ?, ?)
+      `, [jeId, revAccountId, bill.project_id, parsedGrossAmount, `أصول تعاقدية - إجمالي الأعمال المنجزة المفوترة بالمستخلص`]);
 
       await tx.run(`
         UPDATE bills 
-        SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP, journal_entry_id = ?
+        SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP, journal_entry_id = ?,
+            remaining_amount = COALESCE(remaining_amount, net_amount)
         WHERE id = ?
       `, [posterId, posterName, jeId, bill.id]);
+
+      if (bill.client_id) {
+        await clientChainService.syncClientBalances(bill.client_id, tx);
+      }
     });
 
     await logAudit(req, {

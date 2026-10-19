@@ -16,7 +16,8 @@
   window.fetch = async function (resource, init = {}) {
     try {
       const url = typeof resource === 'string' ? resource : (resource?.url || '');
-      const isApiCall = url.startsWith('/api/') || url.includes('/api/');
+      const targetUrl=new URL(url,window.location.href);
+      const isApiCall=targetUrl.origin===window.location.origin && targetUrl.pathname.startsWith('/api/');
 
       if (isApiCall) {
         init = init || {};
@@ -610,14 +611,43 @@ const Auth = {
     }, 1000);
   },
 
-  // فتح نافذة التحقق بخطوتين (2FA) للمدير العام
+  // تطبيع وتوحيد مدخلات رمز التحقق بخطوتين (تحويل الأرقام العربية إلى إنجليزية ومنع الرموز)
+  normalize2FaInput(input) {
+    if (!input) return;
+    let val = String(input.value || '')
+      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+      .replace(/[^0-9]/g, '');
+    input.value = val.slice(0, 6);
+  },
+
+  // تبديل إظهار / إخفاء رمز 2FA في نافذة تسجيل الدخول
+  toggle2FaLoginEye() {
+    const input = document.getElementById('twoFactorCodeInput');
+    const eye = document.getElementById('twoFactorLoginEyeIcon');
+    if (!input) return;
+    if (input.type === 'password') {
+      input.type = 'text';
+      if (eye) eye.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      if (eye) eye.textContent = '👁️';
+    }
+  },
+
+  // فتح نافذة التحقق بخطوتين (2FA)
   show2FAModal() {
     const modal = document.getElementById('twoFactorModal');
     const input = document.getElementById('twoFactorCodeInput');
     const err = document.getElementById('twoFactorErrorMsg');
+    const subtitle = document.getElementById('twoFactorSubtitle');
     if (err) {
       err.style.display = 'none';
       err.textContent = '';
+    }
+    if (subtitle && this._pending2FAUser) {
+      const uName = this._pending2FAUser.full_name || this._pending2FAUser.username;
+      subtitle.textContent = `مرحباً بك (${uName})! حسابك محمي بالتحقق بخطوتين. يرجى إدخال رمز الأمان (PIN) المكون من 6 أرقام للدخول.`;
     }
     if (modal) {
       modal.style.display = 'flex';
@@ -625,6 +655,9 @@ const Auth = {
     }
     if (input) {
       input.value = '';
+      input.type = 'password';
+      const eye = document.getElementById('twoFactorLoginEyeIcon');
+      if (eye) eye.textContent = '👁️';
       setTimeout(() => input.focus(), 150);
     }
   },
@@ -652,7 +685,17 @@ const Auth = {
     const input = document.getElementById('twoFactorCodeInput');
     const err = document.getElementById('twoFactorErrorMsg');
     const btn = document.getElementById('btnSubmit2FA');
-    const code = input ? input.value.trim() : '';
+
+    const normalizeDigits = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+        .replace(/[^0-9]/g, '')
+        .trim();
+    };
+
+    const code = normalizeDigits(input ? input.value : '');
 
     if (!code || code.length !== 6) {
       if (err) {
@@ -1024,6 +1067,7 @@ const Auth = {
       'dashboard': 'dashboard:view',
       'projects': 'projects:view',
       'projectHub': 'projects:view',
+      'projectCloseout': 'projects:view,reports:view',
       'inventory': 'inventory:view',
       'hr': 'hr:view',
       'reports': 'reports:view',
@@ -1038,6 +1082,8 @@ const Auth = {
       'clients': 'clients:view',
       'suppliers': 'suppliers:view',
       'cash': 'cash:view',
+      'contractLifecycle': 'projects:view',
+      'cashFlow': 'accounting:view,reports:view',
       'settings': 'settings:users,settings:company,settings:backup'
     };
 
@@ -1144,17 +1190,20 @@ const Auth = {
       const reqPerm = li.getAttribute('data-perm');
       if (this.hasPermission(reqPerm)) {
         li.style.display = '';
-        if (!firstAllowed) {
+        if (!firstAllowed && !li.classList.contains('nav-group')) {
           const navLink = li.querySelector('a');
           if (navLink) {
             const match = navLink.getAttribute('onclick')?.match(/App\.navigate\('([^']+)'/);
-            if (match) firstAllowed = match[1];
+            if (navLink.dataset.view) firstAllowed = navLink.dataset.view;
+            else if (match) firstAllowed = match[1];
           }
         }
       } else {
         li.style.display = 'none';
       }
     });
+
+    if (typeof Sidebar !== 'undefined') Sidebar.refresh();
 
     // إخفاء أو إظهار ألسنة الإعدادات حسب الصلاحيات
     const usersTab = document.getElementById('tabBtn_settings_users');
