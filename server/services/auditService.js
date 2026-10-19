@@ -18,7 +18,7 @@ async function logAudit(req, {
     const user = req?.user || {};
     const userId = user.id || null;
     const username = user.username || user.full_name || req?.headers?.['x-user-name'] || 'المدير العام (نظام)';
-    const ip = req?.headers ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1') : (req?.socket?.remoteAddress || '127.0.0.1');
+    const ip = req?.ip || req?.socket?.remoteAddress || '127.0.0.1';
 
     const stringifyVal = (val) => {
       if (val === null || val === undefined) return null;

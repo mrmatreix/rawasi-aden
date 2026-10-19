@@ -123,7 +123,7 @@ router.post('/auth/login', async (req, res) => {
         maskedPhone: user.phone ? user.phone.replace(/(\d{3})\d+(\d{2})/, '$1****$2') : null,
         message: 'تم إرسال رمز التحقق OTP بنجاح. يرجى إدخال الرمز المكون من 6 أرقام لتأكيد الدخول.',
         // في بيئة التطوير، يتم إرجاع الكود لتسهيل الاختبار السريع
-        debugOtp: process.env.NODE_ENV !== 'production' ? otpCode : undefined
+        debugOtp: require('../config/environment').isDev ? otpCode : undefined
       });
     }
 
@@ -140,7 +140,7 @@ router.post('/auth/login', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
     await db.run(`
       UPDATE client_users 
       SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = ? 
@@ -193,10 +193,12 @@ router.post('/auth/verify-otp', async (req, res) => {
 
     const cleanOtp = normalizeDigits(String(otp).trim());
 
+    if(!tempToken)return res.status(401).json({success:false,message:'سجّل الدخول بكلمة المرور أولاً'});
     let decoded;
     if (tempToken) {
       try {
-        decoded = jwt.verify(tempToken, CLIENT_JWT_SECRET);
+        decoded = jwt.verify(tempToken, CLIENT_JWT_SECRET, {algorithms:['HS256']});
+        if(decoded.type!=='client_temp_otp')throw new Error('Invalid verification token');
       } catch {
         return res.status(401).json({
           success: false,
@@ -206,7 +208,7 @@ router.post('/auth/verify-otp', async (req, res) => {
     }
 
     const userId = decoded ? decoded.id : null;
-    const cleanEmail = email ? String(email).trim().toLowerCase() : (decoded ? decoded.email : null);
+    const cleanEmail = decoded.email ? String(decoded.email).trim().toLowerCase() : '';
 
     const user = await db.get(`
       SELECT 
@@ -215,7 +217,7 @@ router.post('/auth/verify-otp', async (req, res) => {
         c.company AS client_company
       FROM client_users cu
       INNER JOIN clients c ON c.id = cu.client_id
-      WHERE (cu.id = ? OR LOWER(cu.email) = ?) AND cu.status = 'active'
+      WHERE cu.id = ? AND LOWER(cu.email) = ? AND cu.status = 'active'
     `, [userId || 0, cleanEmail || '']);
 
     if (!user) {
@@ -248,7 +250,7 @@ router.post('/auth/verify-otp', async (req, res) => {
       UPDATE client_users 
       SET otp_code = NULL, otp_expires_at = NULL, last_login_at = CURRENT_TIMESTAMP, last_login_ip = ?
       WHERE id = ?
-    `, [req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1', user.id]);
+    `, [req.ip || req.socket.remoteAddress || '127.0.0.1', user.id]);
 
     // إصدار توكن الجلسة لمدة 30 يوم
     const token = jwt.sign(
@@ -322,7 +324,7 @@ router.post('/auth/forgot-password', async (req, res) => {
       success: true,
       message: 'تمت إرسال تعليمات ورمز إعادة تعيين كلمة المرور بنجاح',
       maskedPhone: user.phone ? user.phone.replace(/(\d{3})\d+(\d{2})/, '$1****$2') : null,
-      debugOtp: process.env.NODE_ENV !== 'production' ? otpCode : undefined
+      debugOtp: require('../config/environment').isDev ? otpCode : undefined
     });
   } catch (err) {
     console.error('Forgot password error:', err);
@@ -363,6 +365,7 @@ router.get('/services', async (req, res) => {
  * تقديم طلب خدمات جديد (سواء كان زائر أو عميل مسجل)
  */
 router.post('/services/requests', async (req, res) => {
+  const writtenFiles=[];let requestCommitted=false;
   try {
     const {
       client_name,
@@ -419,9 +422,9 @@ router.post('/services/requests', async (req, res) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, CLIENT_JWT_SECRET);
-        if (decoded && decoded.id) {
-          const userCheck = await db.get(`SELECT id FROM client_users WHERE id = ? AND status = 'active'`, [decoded.id]);
+        const decoded = jwt.verify(token, CLIENT_JWT_SECRET,{algorithms:['HS256']});
+        if (decoded && decoded.type==='client' && decoded.id && decoded.client_id) {
+          const userCheck = await db.get(`SELECT id FROM client_users WHERE id = ? AND client_id = ? AND status = 'active'`, [decoded.id,decoded.client_id]);
           if (userCheck) {
             clientUserId = userCheck.id;
             source = 'registered_client';
@@ -442,33 +445,36 @@ router.post('/services/requests', async (req, res) => {
     const requestNo = `SR-${currentYear}-${nextSeq}`;
 
     // توليد كود تحقق آمن
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationCode = require('crypto').randomInt(100000,1000000).toString();
 
     // 4. معالجة وحفظ المرفقات المرفوعة بأمان
+    if(!Array.isArray(attachments)||attachments.length>10)throw Object.assign(new Error('الحد الأقصى عشرة مرفقات'),{statusCode:400});
     const savedAttachments = [];
     if (Array.isArray(attachments) && attachments.length > 0) {
-      const uploadDir = path.join(__dirname, '../../uploads/service_requests');
+      const uploadDir = path.join(require('../config/environment').storage.uploads, 'service_requests');
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
       for (let i = 0; i < Math.min(attachments.length, 10); i++) {
         const att = attachments[i];
-        if (!att || !att.contentBase64 || !att.fileName) continue;
+        if (!att || !att.contentBase64 || !att.fileName) throw Object.assign(new Error('مرفق غير مكتمل'),{statusCode:400});
 
         const allowedExts = ['.pdf', '.dwg', '.dxf', '.doc', '.docx', '.xls', '.xlsx', '.png', '.jpg', '.jpeg', '.webp', '.zip', '.rar'];
         const fileExt = path.extname(att.fileName).toLowerCase();
-        if (!allowedExts.includes(fileExt)) continue;
+        if (!allowedExts.includes(fileExt)) throw Object.assign(new Error('نوع المرفق غير مسموح'),{statusCode:400});
 
         const base64Clean = String(att.contentBase64).replace(/^data:[^;]+;base64,/, '');
         const fileBuf = Buffer.from(base64Clean, 'base64');
         if (fileBuf.length > 25 * 1024 * 1024) continue; // أقصى حجم 25MB
 
         const safeOriginalName = path.basename(att.fileName).replace(/[^\w\u0600-\u06FF.-]/g, '_');
-        const diskFileName = `${requestNo}_${Date.now()}_${i + 1}${fileExt}`;
+        const diskFileName = `${requestNo}_${require('crypto').randomUUID()}${fileExt}`;
         const diskPath = path.join(uploadDir, diskFileName);
 
-        fs.writeFileSync(diskPath, fileBuf);
+        require('../services/uploadValidationService').validateUpload(att.fileName,fileBuf);
+        fs.writeFileSync(diskPath, fileBuf, {flag:'wx',mode:0o600});
+        writtenFiles.push(diskPath);
         savedAttachments.push({
           fileName: safeOriginalName,
           diskFileName,
@@ -491,7 +497,8 @@ router.post('/services/requests', async (req, res) => {
     const cleanNotes = notes ? String(notes).trim() : null;
     const budgetNum = estimated_budget ? parseFloat(estimated_budget) : null;
 
-    const insertResult = await db.run(`
+    const requestId = await db.transaction(async tx=>{
+    const insertResult = await tx.run(`
       INSERT INTO service_requests (
         request_no, client_user_id, source, client_name, phone, email,
         project_name, project_type, location, description,
@@ -521,22 +528,26 @@ router.post('/services/requests', async (req, res) => {
 
     // 6. حفظ عناصر الخدمات المختارة ضمن الطلب الرئيسي الواحد
     for (const s of activeServices) {
-      await db.run(`
+      await tx.run(`
         INSERT INTO service_request_items (request_id, service_id, service_title, created_at)
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
       `, [requestId, s.id, s.title]);
     }
 
+      return requestId;
+    });
+    requestCommitted=true;
+
     // 7. إرسال إشعار داخلي في لوحة التحكم / التدقيق
     try {
       const servicesListStr = activeServices.map(s => s.title).join('، ');
       await db.run(`
-        INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, ip_address, created_at)
-        VALUES (1, 'NEW_SERVICE_REQUEST', 'service_requests', ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO audit_logs (user_id, username, action, entity_type, entity_id, details, ip_address, created_at)
+        VALUES (NULL, 'بوابة العملاء', 'NEW_SERVICE_REQUEST', 'service_requests', ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
-        requestId,
+        String(requestId),
         `طلب خدمات جديد (${requestNo}) من ${source === 'guest' ? 'الزائر' : 'العميل'}: ${cleanClientName} - الخدمات: [${servicesListStr}]`,
-        req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1'
+        req.ip || req.socket.remoteAddress || '127.0.0.1'
       ]);
     } catch (auditErr) {
       console.warn('Could not insert audit log for service request:', auditErr);
@@ -558,8 +569,9 @@ router.post('/services/requests', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Submit service request error:', err);
-    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم أثناء تقديم الطلب' });
+    if(!requestCommitted)for(const file of writtenFiles){try{fs.unlinkSync(file);}catch{}}
+    console.error('Submit service request failed:', err.code||err.name);
+    res.status(err.statusCode||500).json({ success: false, message: err.statusCode===400?err.message:'حدث خطأ في الخادم أثناء تقديم الطلب' });
   }
 });
 

@@ -1,3 +1,5 @@
+if (['production','staging'].includes(process.env.NODE_ENV)||process.env.RAILWAY_ENVIRONMENT_ID) throw new Error('Demo seeding is forbidden in cloud environments');
+if (!process.env.RAWASI_DB_PATH) throw new Error('Set RAWASI_DB_PATH to an isolated disposable test database before seeding');
 const bcrypt = require('bcryptjs');
 const { db, query, run } = require('./db');
 

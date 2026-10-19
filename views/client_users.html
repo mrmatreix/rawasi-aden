@@ -2019,7 +2019,7 @@
           attContainer.innerHTML = '<span class="text-xs text-slate-500 italic">لا توجد ملفات مرفقة مع هذا الطلب</span>';
         } else {
           attContainer.innerHTML = attachments.map(att => `
-            <a href="${att.url}" target="_blank" download="${att.fileName}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-amber-400 rounded-lg text-xs font-semibold flex items-center gap-2 transition" title="تحميل أو معاينة الملف">
+            <a href="#" data-private-url="${escapeHtml(att.url)}" data-private-name="${escapeHtml(att.fileName)}" onclick="downloadPrivateAttachment(event,this)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-amber-400 rounded-lg text-xs font-semibold flex items-center gap-2 transition" title="تحميل أو معاينة الملف">
               <i class="fa-solid fa-file-arrow-down text-amber-400"></i>
               <span>${escapeHtml(att.fileName)}</span>
               <span class="text-slate-400 text-[0.7rem]">(${formatFileSize(att.size)})</span>
@@ -2123,6 +2123,19 @@
       const sizes = ['B', 'KB', 'MB', 'GB'];
       const i = Math.floor(Math.log(bytes) / Math.log(k));
       return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    async function downloadPrivateAttachment(event,link) {
+      event.preventDefault();
+      const url = new URL(link.dataset.privateUrl,location.origin);
+      if(url.origin !== location.origin || !url.pathname.startsWith('/uploads/service_requests/')) return;
+      try {
+        const response = await fetch(url.href,{headers:getAuthHeaders()});
+        if(!response.ok) throw new Error();
+        const objectUrl=URL.createObjectURL(await response.blob());
+        const a=document.createElement('a');a.href=objectUrl;a.download=link.dataset.privateName || 'document';a.click();
+        setTimeout(()=>URL.revokeObjectURL(objectUrl),30000);
+      }catch{showToast('تعذر تنزيل المستند أو لا توجد صلاحية','error');}
     }
 
     function escapeHtml(str) {

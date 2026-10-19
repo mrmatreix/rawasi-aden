@@ -1,6 +1,7 @@
+const {nextPartyNumber,validateStatus} = require('../services/partyRegistryService');
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../database/db');
+const { query, get, run, transaction } = require('../database/db');
 const { requirePermission } = require('../middleware/security');
 const clientChainService = require('../services/clientChainService');
 
@@ -25,7 +26,7 @@ router.get('/:id', requirePermission('clients:view'), async (req, res) => {
   try {
     let client = null;
     try {
-      client = await get('SELECT * FROM view_client_financial_profiles WHERE id = ?', [req.params.id]);
+      client = await get('SELECT profile.*, c.notes FROM view_client_financial_profiles profile JOIN clients c ON c.id = profile.id WHERE profile.id = ?', [req.params.id]);
     } catch (e) {}
     if (!client) {
       client = await get(`SELECT c.*, a.code AS account_code, a.name AS account_name
@@ -115,11 +116,13 @@ router.post('/', requirePermission('clients:create'), async (req, res) => {
       return res.status(409).json({ success: false, message: 'تعذر إضافة العميل: الحساب 12301001 غير موجود في دليل الحسابات' });
     }
 
-    const result = await run(`
-      INSERT INTO clients (account_id, name, company, phone, email, address, previous_balance, current_balance, currency, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    const result = await transaction(async tx => {
+      const partyNo=await nextPartyNumber(tx,'client');
+      return tx.run(`
+      INSERT INTO clients (party_no, account_id, name, company, phone, email, address, previous_balance, current_balance, currency, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      ledgerAccount.id,
+      partyNo, ledgerAccount.id,
       trimmedName,
       company ? company.trim() : '',
       phone ? phone.trim() : '',
@@ -130,6 +133,8 @@ router.post('/', requirePermission('clients:create'), async (req, res) => {
       selectedCurrency,
       notes ? notes.trim() : ''
     ]);
+
+    });
 
     const newId = result.lastInsertRowid || result.insertId;
 
@@ -145,6 +150,22 @@ router.post('/', requirePermission('clients:create'), async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء حفظ العميل: ' + err.message, error: err.message });
   }
+});
+
+
+router.put('/:id',requirePermission('clients:edit'),async(req,res)=>{
+ try {
+  const old=await get('SELECT * FROM clients WHERE id=?',[req.params.id]);
+  if(!old)return res.status(404).json({success:false,message:'العميل غير موجود'});
+  const name=String(req.body.name ?? old.name).trim();
+  if(!name)return res.status(400).json({success:false,message:'اسم العميل مطلوب'});
+  const status=validateStatus(req.body.status ?? old.status ?? 'active');
+  const fields=['company','phone','email','address','currency','notes'];
+  const values=fields.map(key=>String(req.body[key] ?? old[key] ?? '').trim());
+  await run('UPDATE clients SET name=?,company=?,phone=?,email=?,address=?,currency=?,notes=?,status=? WHERE id=?',[name,...values,status,old.id]);
+  await require('../services/auditService').logAudit(req,{action:'UPDATE',entity_type:'client',entity_id:String(old.id),old_values:{name:old.name,status:old.status},new_values:{name,status}});
+  res.json({success:true,message:'تم تعديل العميل بنجاح',id:old.id,data:await get('SELECT * FROM clients WHERE id=?',[old.id])});
+ }catch(error){res.status(error.statusCode||500).json({success:false,message:error.message});}
 });
 
 module.exports = router;

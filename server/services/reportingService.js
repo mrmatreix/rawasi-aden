@@ -13,7 +13,8 @@
  * 6. بنية استجابة موحدة تشمل meta, warnings, reconciliation.
  */
 
-const { query, get } = require('../database/db');
+const { query, get } = require('./reportingLedger');
+const { shapeAccountRows, documentBaseAmount } = require('./reportFilterService');
 const CashFlowReportService = require('./cashFlowReportService');
 const ContractingAccountingService = require('./contractingAccountingService');
 
@@ -176,7 +177,7 @@ class ReportingService {
       WHERE je.status = 'posted'
         AND je.date BETWEEN ? AND ?
         ${costCenterClause}
-        AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+        AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
       GROUP BY a.id, a.code, a.name, a.type, a.parent_id, a.level
       HAVING amount != 0
@@ -193,7 +194,7 @@ class ReportingService {
       WHERE je.status = 'posted'
         AND je.date BETWEEN ? AND ?
         ${costCenterClause}
-        AND (a.type = 'تكاليف' OR a.code LIKE '51%' OR a.name LIKE '%تكاليف مشاريع%' OR a.name LIKE '%مواد بناء%')
+        AND (a.type IN ('expense','cost','مصروفات','تكاليف') OR a.code LIKE '3%' OR a.code LIKE '5%') AND (a.type IN ('cost','تكاليف') OR a.code LIKE '31%' OR a.code LIKE '51%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
       GROUP BY a.id, a.code, a.name, a.type, a.parent_id, a.level
       HAVING amount != 0
@@ -210,57 +211,15 @@ class ReportingService {
       WHERE je.status = 'posted'
         AND je.date BETWEEN ? AND ?
         ${costCenterClause}
-        AND (a.type = 'مصروفات' OR a.code LIKE '3%' OR a.code LIKE '52%')
-        AND a.code NOT LIKE '51%'
-        AND a.name NOT LIKE '%تكاليف مشاريع%'
+        AND (a.type IN ('expense','cost','مصروفات','تكاليف') OR a.code LIKE '3%' OR a.code LIKE '5%') AND NOT (a.type IN ('cost','تكاليف') OR a.code LIKE '31%' OR a.code LIKE '51%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
       GROUP BY a.id, a.code, a.name, a.type, a.parent_id, a.level
       HAVING amount != 0
       ORDER BY a.code ASC;
     `, reportParams);
 
-    const chart = await query(`
-      SELECT id, code, name, type, parent_id, level
-      FROM accounts
-      ORDER BY code ASC
-    `);
-    const accountById = new Map(chart.map(account => [Number(account.id), account]));
-    const shapeRows = rows => {
-      const subsidiaryRows = rows.map(row => ({
-        code: row.code,
-        name: row.name,
-        amount: Number(row.amount || 0),
-        level: Number(row.level || 0),
-        account_kind: 'subsidiary'
-      }));
-      if (normalizedDisplayLevel === 'subsidiary') return subsidiaryRows;
-
-      const parentTotals = new Map();
-      rows.forEach(row => {
-        let parent = accountById.get(Number(row.parent_id));
-        const visited = new Set();
-        while (parent && !visited.has(Number(parent.id))) {
-          visited.add(Number(parent.id));
-          parentTotals.set(Number(parent.id), (parentTotals.get(Number(parent.id)) || 0) + Number(row.amount || 0));
-          parent = accountById.get(Number(parent.parent_id));
-        }
-      });
-      const mainRows = Array.from(parentTotals.entries()).map(([id, amount]) => {
-        const account = accountById.get(id);
-        return {
-          code: account.code,
-          name: account.name,
-          amount: Math.round(amount * 100) / 100,
-          level: Number(account.level || 0),
-          account_kind: 'main'
-        };
-      });
-      if (normalizedDisplayLevel === 'main') {
-        return mainRows.sort((a, b) => String(a.code).localeCompare(String(b.code), 'ar'));
-      }
-      return [...mainRows, ...subsidiaryRows]
-        .sort((a, b) => String(a.code).localeCompare(String(b.code), 'ar') || (a.account_kind === 'main' ? -1 : 1));
-    };
+    const chart = await query('SELECT id,code,name,type,parent_id,level FROM accounts ORDER BY code');
+    const shapeRows = rows => shapeAccountRows(rows.map(row => ({ ...row, amount: Number(row.amount || 0), account_kind: 'subsidiary' })), chart, normalizedDisplayLevel);
 
     const totalRevenues = Math.round(revenueRows.reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100;
     const totalDirectCosts = Math.round(directCostRows.reduce((s, c) => s + (Number(c.amount) || 0), 0) * 100) / 100;
@@ -303,7 +262,7 @@ class ReportingService {
         display_level: normalizedDisplayLevel,
         cost_center_id: cost_center_id ? Number(cost_center_id) : null
       },
-      warnings: totalRevenues === 0 && totalExpenses === 0 ? ['لا توجد قيود إيرادات أو مصروفات مرحلة خلال هذه الفترة'] : [],
+      warnings: totalRevenues === 0 && totalExpenses === 0 ? ['لا توجد حركات إيرادات أو مصروفات ضمن الخيارات المحددة'] : [],
       reconciliation: {
         is_balanced: isIncomeBalanced,
         difference: incEquationDiff,
@@ -325,23 +284,29 @@ class ReportingService {
       throw err;
     }
 
+    const chart = await query('SELECT id,parent_id FROM accounts');
+    const ids = new Set([Number(account_id)]);
+    let changed = true;
+    while (changed) { changed = false; for (const row of chart) if (ids.has(Number(row.parent_id)) && !ids.has(Number(row.id))) { ids.add(Number(row.id)); changed = true; } }
+    const accountIds = [...ids];
+    const accountCondition = 'jel.account_id IN (' + accountIds.map(() => '?').join(',') + ')';
     const costCenterClause = cost_center_id ? ' AND jel.cost_center_id = ?' : '';
     const openingParams = cost_center_id
-      ? [Number(account_id), fromDate, Number(cost_center_id)]
-      : [Number(account_id), fromDate];
+      ? [...accountIds, fromDate, Number(cost_center_id)]
+      : [...accountIds, fromDate];
     const opening = await get(`
       SELECT COALESCE(SUM(jel.debit - jel.credit), 0) AS balance
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.entry_id
       WHERE je.status = 'posted'
-        AND jel.account_id = ?
+        AND ${accountCondition}
         AND je.date < ?
         ${costCenterClause}
     `, openingParams);
 
     const movementParams = cost_center_id
-      ? [Number(account_id), fromDate, toDate, Number(cost_center_id)]
-      : [Number(account_id), fromDate, toDate];
+      ? [...accountIds, fromDate, toDate, Number(cost_center_id)]
+      : [...accountIds, fromDate, toDate];
     const rows = await query(`
       SELECT jel.id, je.id AS entry_id, je.entry_no, je.date, je.description,
              je.reference_type,
@@ -358,7 +323,7 @@ class ReportingService {
       LEFT JOIN expenses ex ON je.reference_type IN ('سند صرف', 'expense')
         AND (je.reference_id = ex.id OR je.entry_no = ex.receipt_no)
       WHERE je.status = 'posted'
-        AND jel.account_id = ?
+        AND ${accountCondition}
         AND je.date BETWEEN ? AND ?
         ${costCenterClause}
       ORDER BY je.date ASC, je.id ASC, jel.id ASC
@@ -404,7 +369,7 @@ class ReportingService {
         generated_at: new Date().toISOString(),
         source: 'General Ledger'
       },
-      warnings: movements.length ? [] : ['لا توجد حركات مرحلة لهذا الحساب خلال الفترة المحددة']
+      warnings: movements.length ? [] : ['لا توجد حركات لهذا الحساب ضمن الخيارات المحددة']
     };
   }
 
@@ -413,14 +378,15 @@ class ReportingService {
    * يعتمد على نفس المحرك والأرقام الخاصة بـ getIncomeStatement بنسبة 100%
    * ويدعمه بمقارنة السيولة النقدية والمقبوضات
    */
-  async getProfitLoss({ from_date, to_date }) {
-    const isReport = await this.getIncomeStatement({ from_date, to_date });
+  async getProfitLoss(options) {
+    const { from_date, to_date } = options;
+    const isReport = await this.getIncomeStatement(options);
     const fromDate = isReport.meta.from_date;
     const toDate = isReport.meta.to_date;
 
     // المقبوضات النقدية والبنكية الفعلية من payments للمقارنة الرقابية
     const receiptsRes = await get(`
-      SELECT COALESCE(SUM(amount), 0) AS total
+      SELECT COALESCE(SUM(CASE WHEN local_amount > 0 THEN local_amount ELSE amount * COALESCE(NULLIF(exchange_rate, 0), 1) END), 0) AS total
       FROM payments
       WHERE type = 'قبض' AND status NOT IN ('reversed', 'failed', 'draft')
         AND date BETWEEN ? AND ?
@@ -440,6 +406,8 @@ class ReportingService {
       success: true,
       data: {
         ...isReport.data,
+        total_income: isReport.data.total_revenues,
+        expenses_breakdown: isReport.data.expenses,
         cash_receipts: cashReceipts,
         net_cash_flow: netCashMargin,
         liquidity_vs_profit_gap: liquidityVsProfitGap,
@@ -531,7 +499,7 @@ class ReportingService {
     const pnlRes = await get(`
       SELECT 
         COALESCE(SUM(CASE WHEN a.type = 'إيرادات' OR a.code LIKE '4%' THEN jel.credit - jel.debit ELSE 0 END), 0) -
-        COALESCE(SUM(CASE WHEN a.type = 'مصروفات' OR a.type = 'تكاليف' OR a.code LIKE '3%' OR a.code LIKE '5%' THEN jel.debit - jel.credit ELSE 0 END), 0) AS net_profit
+        COALESCE(SUM(CASE WHEN a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '3%' OR a.code LIKE '5%' THEN jel.debit - jel.credit ELSE 0 END), 0) AS net_profit
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
@@ -675,7 +643,7 @@ class ReportingService {
         WHERE jel.project_id = ?
           AND je.status = 'posted'
           AND je.date BETWEEN ? AND ?
-          AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+          AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
       `, [prj.id, fromDate, toDate]);
 
       // 2. التكاليف والمصروفات المثبتة دفترياً من قيود الأستاذ العام المرتبطة بالمشروع
@@ -687,7 +655,7 @@ class ReportingService {
         WHERE jel.project_id = ?
           AND je.status = 'posted'
           AND je.date BETWEEN ? AND ?
-          AND (a.type = 'تكاليف' OR a.type = 'مصروفات' OR a.code LIKE '5%' OR a.code LIKE '3%')
+          AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
       `, [prj.id, fromDate, toDate]);
 
       const glRevenue = Math.round(Number(revRes?.gl_revenue || 0) * 100) / 100;
@@ -697,7 +665,7 @@ class ReportingService {
 
       // المقبوضات النقدية التشغيلية من السندات
       const payRes = await get(`
-        SELECT COALESCE(SUM(amount), 0) AS cash_in
+        SELECT COALESCE(SUM(CASE WHEN local_amount > 0 THEN local_amount ELSE amount * COALESCE(NULLIF(exchange_rate, 0), 1) END), 0) AS cash_in
         FROM payments
         WHERE project_id = ? AND type = 'قبض' AND status NOT IN ('reversed', 'failed', 'draft')
           AND date BETWEEN ? AND ?
@@ -803,7 +771,7 @@ class ReportingService {
         WHERE jel.cost_center_id = ?
           AND je.status = 'posted'
           AND je.date BETWEEN ? AND ?
-          AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+          AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
       `, [cc.id, fromDate, toDate]);
 
       // تكاليف ومصروفات المركز من قيود الأستاذ العام
@@ -815,7 +783,7 @@ class ReportingService {
         WHERE jel.cost_center_id = ?
           AND je.status = 'posted'
           AND je.date BETWEEN ? AND ?
-          AND (a.type = 'تكاليف' OR a.type = 'مصروفات' OR a.code LIKE '5%' OR a.code LIKE '3%')
+          AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
       `, [cc.id, fromDate, toDate]);
 
       const rev = Math.round(Number(revRes?.revenue || 0) * 100) / 100;
@@ -856,7 +824,7 @@ class ReportingService {
       WHERE jel.cost_center_id IS NULL
         AND je.status = 'posted'
         AND je.date BETWEEN ? AND ?
-        AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+        AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
     `, [fromDate, toDate]);
 
     const unallocatedExpRes = await get(`
@@ -867,7 +835,7 @@ class ReportingService {
       WHERE jel.cost_center_id IS NULL
         AND je.status = 'posted'
         AND je.date BETWEEN ? AND ?
-        AND (a.type = 'تكاليف' OR a.type = 'مصروفات' OR a.code LIKE '5%' OR a.code LIKE '3%')
+        AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
     `, [fromDate, toDate]);
 
     const unallocatedRev = Math.round(Number(unallocatedRevRes?.revenue || 0) * 100) / 100;
@@ -880,7 +848,7 @@ class ReportingService {
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
-        AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+        AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
     `, [fromDate, toDate]);
 
     const glTotalExpRes = await get(`
@@ -889,7 +857,7 @@ class ReportingService {
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
-        AND (a.type = 'تكاليف' OR a.type = 'مصروفات' OR a.code LIKE '5%' OR a.code LIKE '3%')
+        AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
     `, [fromDate, toDate]);
 
     const glTotalRev = Math.round(Number(glTotalRevRes?.total_rev || 0) * 100) / 100;
@@ -1011,7 +979,7 @@ class ReportingService {
     }
 
     bills.forEach(b => {
-      const amt = Number(b.net_amount) || Number(b.amount) || 0;
+      const amt = documentBaseAmount(b, Number(b.net_amount) || Number(b.amount) || 0);
       statement.push({
         date: b.date,
         type: b.bill_type || 'مستخلص أعمال',
@@ -1030,7 +998,7 @@ class ReportingService {
         ref: p.receipt_no || p.payment_no || ('PAY-' + p.id),
         project_name: p.project_name || '-',
         debit: 0,
-        credit: Number(p.amount) || 0,
+        credit: documentBaseAmount(p, p.amount, true),
         notes: p.notes || ''
       });
     });
@@ -1137,7 +1105,7 @@ class ReportingService {
 
     // 3. الحركات التشغيلية المساندة (أوامر الشراء ومستخلصات التوريد وسندات الصرف)
     const grns = await query(`
-      SELECT g.*, po.po_no, po.total_amount as po_amount, p.name as project_name
+      SELECT g.*, po.po_no, po.total_amount as po_amount, po.currency AS currency, p.name as project_name
       FROM goods_receipt_notes g
       LEFT JOIN purchase_orders po ON g.po_id = po.id
       LEFT JOIN projects p ON po.project_id = p.id
@@ -1168,7 +1136,7 @@ class ReportingService {
     }
 
     grns.forEach(g => {
-      const amt = Number(g.po_amount) || 0;
+      const amt = documentBaseAmount(g, g.po_amount);
       statement.push({
         date: g.received_date,
         type: 'استلام بضاعة (GRN)',
@@ -1187,7 +1155,7 @@ class ReportingService {
         ref: e.receipt_no || ('EXP-' + e.id),
         project_name: e.project_name || '-',
         credit: 0,
-        debit: Number(e.amount) || 0,
+        debit: documentBaseAmount(e, e.amount, true),
         notes: e.notes || ''
       });
     });
@@ -1298,7 +1266,7 @@ class ReportingService {
         JOIN journal_entries je ON je.id = jel.entry_id
         JOIN accounts a ON a.id = jel.account_id
         WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
-          AND (a.type = 'إيرادات' OR a.code LIKE '4%')
+          AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
       `, [mStart, mEnd]);
 
       const mExpRes = await get(`
@@ -1307,7 +1275,7 @@ class ReportingService {
         JOIN journal_entries je ON je.id = jel.entry_id
         JOIN accounts a ON a.id = jel.account_id
         WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
-          AND (a.type = 'مصروفات' OR a.type = 'تكاليف' OR a.code LIKE '3%' OR a.code LIKE '5%')
+          AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '3%' OR a.code LIKE '5%')
       `, [mStart, mEnd]);
 
       monthlyTrends.push({

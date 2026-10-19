@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261017-ajxf',
+  assetVersion: '1.0.0.20261019-tfzi',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261017-ajxf',
-    projects: 'js/projects.js?v=1.0.0.20261017-ajxf',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261017-ajxf',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261017-ajxf',
-    accounting: 'js/accounting.js?v=1.0.0.20261017-ajxf',
-    hr: 'js/hr.js?v=1.0.0.20261017-ajxf',
-    reports: 'js/reports.js?v=1.0.0.20261017-ajxf',
-    inventory: 'js/inventory.js?v=1.0.0.20261017-ajxf',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261017-ajxf',
-    settings: 'js/settings.js?v=1.0.0.20261017-ajxf',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261017-ajxf',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261017-ajxf'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261019-tfzi',
+    projects: 'js/projects.js?v=1.0.0.20261019-tfzi',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261019-tfzi',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261019-tfzi',
+    accounting: 'js/accounting.js?v=1.0.0.20261019-tfzi',
+    hr: 'js/hr.js?v=1.0.0.20261019-tfzi',
+    reports: 'js/reports.js?v=1.0.0.20261019-tfzi',
+    inventory: 'js/inventory.js?v=1.0.0.20261019-tfzi',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261019-tfzi',
+    settings: 'js/settings.js?v=1.0.0.20261019-tfzi',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261019-tfzi',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261019-tfzi'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -112,6 +112,7 @@ const App = {
 
     // تطبيق المظهر المحفوظ فورياً قبل تحميل أي شيء
     this.initTheme();
+    if (typeof Sidebar !== 'undefined') Sidebar.init();
 
     // التحقق المسبق من الاتصال بقاعدة البيانات (أونلاين / أوفلاين)
     await this.checkDatabaseStatus();
@@ -331,7 +332,8 @@ const App = {
     const groupEl = document.getElementById(groupId);
     if (!groupEl) return;
     const isOpen = groupEl.classList.contains('open');
-    groupEl.classList.toggle('open', !isOpen);
+    if (typeof Sidebar !== 'undefined') Sidebar.setOpen(groupEl, !isOpen);
+    else groupEl.classList.toggle('open', !isOpen);
   },
 
   // التنقل الشجري العميق إلى إدارة وتبويب محدد
@@ -345,7 +347,7 @@ const App = {
     }
 
     // الانتقال للشاشة الرئيسية أولاً وتحميل حزمتها البرمجية
-    await this.navigate(viewId, null);
+    if (await this.navigate(viewId, null) === false) return false;
 
     // تحديث مسار التنقل الدلالي ليشمل التبويب المتخصص
     if (window.UI && UI.Breadcrumbs) {
@@ -363,7 +365,7 @@ const App = {
       }
     } else if (viewId === 'reports') {
       if (typeof Reports !== 'undefined' && Reports.switchReportTab) {
-        Reports.switchReportTab(subTab);
+        await Reports.switchReportTab(subTab);
       }
     } else if (viewId === 'hr') {
       if (typeof HR !== 'undefined' && HR.showPane) {
@@ -374,18 +376,26 @@ const App = {
       if (typeof Projects !== 'undefined' && Projects.filterStatus) {
         Projects.filterStatus(subTab);
       }
+    } else if (viewId === 'projectHub') {
+      if (typeof ProjectHub !== 'undefined') ProjectHub.switchTab(subTab);
+    } else if (viewId === 'cash') {
+      if (typeof Accounting !== 'undefined') await Accounting.switchCashFilter(subTab === 'bank' ? 'بنك' : 'نقدي', document.getElementById(subTab === 'bank' ? 'tabCashBank' : 'tabCashCash'));
     } else if (viewId === 'inventory') {
       if (typeof Inventory !== 'undefined' && Inventory.switchTab) {
         Inventory.switchTab(subTab);
       }
     }
+    if (typeof Sidebar !== 'undefined') Sidebar.sync(viewId, subTab);
   },
 
   // التنقل السريع إلى قسم محدد داخل مركز مستندات المشروع الـ 16
   async navigateProjectHubSection(sectionNumber) {
     await this.navigate('projectHub');
     if (typeof ProjectHub !== 'undefined') {
-      if (ProjectHub.switchSection) {
+      if (ProjectHub.switchTab) {
+        const tabs = ['contract','drawings','boq','quotations','budgets','change-orders','purchases','labor','invoices','daily-reports','weekly-reports','handovers','correspondence','settlement','project-files','integrated-quotation'];
+        ProjectHub.switchTab(tabs[sectionNumber - 1] || 'contract');
+      } else if (ProjectHub.switchSection) {
         ProjectHub.switchSection(sectionNumber);
       } else if (ProjectHub.showSection) {
         ProjectHub.showSection(sectionNumber);
@@ -445,6 +455,7 @@ const App = {
     }
 
     this.activeView = viewId;
+    if (typeof Sidebar !== 'undefined') Sidebar.sync(viewId);
     this.closeMobileSidebar();
 
     // تحديث مسار التنقل الدلالي تلقائياً
@@ -463,6 +474,8 @@ const App = {
       const matchedNavItem = document.querySelector(`.nav-item[onclick*="'${viewId}'"]`);
       if (matchedNavItem) matchedNavItem.classList.add('active');
     }
+
+    if (typeof Sidebar !== 'undefined') Sidebar.sync(viewId);
 
     // تحديث أزرار شريط التنقل السفلي للهواتف
     const accountingViews = ['journal', 'revenues', 'expenses', 'custody', 'chartOfAccounts', 'costCenters', 'currencies', 'cash'];
@@ -511,7 +524,7 @@ const App = {
       }
     } else if (viewId === 'reports') {
       if (typeof Reports !== 'undefined' && Reports.switchReportTab) {
-        Reports.switchReportTab(Reports.activeReportTab || 'income-statement');
+        await Reports.switchReportTab(Reports.activeReportTab || 'income-statement');
       }
     } else if (viewId === 'hr') {
       HR.load();
@@ -544,7 +557,7 @@ const App = {
       this.loadSuppliersTable();
     } else if (viewId === 'cash') {
       Accounting.loadCashMovement();
-      this.loadCashTable();
+      await this.loadCashTable();
     } else if (viewId === 'settings') {
       Settings.loadCompanySettings();
       Settings.loadUsers();
@@ -602,7 +615,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${p.notes || '-'}</td>
                   <td style="text-align: center;">
-                    ${p.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('receipt', ${p.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('receipt', ${p.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('payment', ${p.id})">📎 المؤيدات</button> ${p.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('receipt', ${p.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('receipt', ${p.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
                       receipt_no: '${p.receipt_no}',
                       date: '${p.date}',
                       client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
@@ -701,7 +714,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${e.notes || '-'}</td>
                   <td style="text-align: center;">
-                    ${e.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('expense', ${e.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('expense', ${e.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('expense', ${e.id})">📎 المؤيدات</button> ${e.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('expense', ${e.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('expense', ${e.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
                       receipt_no: '${e.receipt_no}',
                       date: '${e.date}',
                       expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',
@@ -927,6 +940,7 @@ const App = {
                   <td>
                     <div style="font-weight: 700; color: #fff;">${c.name}</div>
                     <div style="font-size: 0.75rem; color: var(--text-secondary);">${c.company || 'عميل فردي'}</div>
+                    <small>${c.party_no || ''} · ${Accounting.partyStatusLabel(c.status)}</small>
                   </td>
                   <td dir="ltr" style="font-family: monospace; font-weight: 700; color: #38bdf8;">
                     ${c.account_code || '12301001'}
@@ -961,11 +975,9 @@ const App = {
                   <td style="text-align: center;">
                     <div style="display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;">
                       <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${c.id})" title="استعراض دورة حياة وسلسلة العميل المالية التفاعلية" style="padding: 4px 8px; font-size: 0.75rem;">
-                        <span>🔗 السلسلة الشاملة</span>
+                        <span>ملف العميل</span>
                       </button>
-                      <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${c.id}; Reports.fetchFullClientStatement();" title="كشف الحساب التفصيلي" style="padding: 4px 8px; font-size: 0.75rem;">
-                        <span>كشف الحساب</span>
-                      </button>
+                      <button class="btn btn-secondary btn-sm" onclick="Accounting.openEditClientModal(${c.id})" title="تعديل بيانات العميل">تعديل</button>
                       <button class="btn btn-secondary btn-sm" onclick="App.syncClientBalance(${c.id})" title="مزامنة وتدقيق رصيد العميل لحظياً" style="padding: 4px 6px;">
                         <span>🔄</span>
                       </button>
@@ -1080,6 +1092,7 @@ const App = {
               <tr>
                 <td>
                   <strong style="color: var(--text-primary);">${s.company_name || s.name}</strong>
+                  <div><small>${s.party_no || ''} · ${Accounting.partyStatusLabel(s.status)}</small></div>
                   ${contact}
                 </td>
                 <td dir="ltr" style="font-family: monospace; font-weight: 700; color: #38bdf8;">
@@ -1107,9 +1120,6 @@ const App = {
                   </button>
                   <button class="btn btn-secondary btn-sm" onclick="Accounting.openEditSupplierModal(${s.id})" title="تعديل بيانات المورد">
                     <i class="fa fa-edit"></i> تعديل
-                  </button>
-                  <button class="btn btn-secondary btn-sm" onclick="Reports.showSupplierStatement(${s.id})" title="كشف الحساب">
-                    كشف الحساب
                   </button>
                 </td>
               </tr>
@@ -1531,7 +1541,7 @@ const App = {
       if (tbody && json.success) {
         const list = json.data || [];
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد حركات مسجلة (${type})</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد عمليات مسجلة (${type})</td></tr>`;
           const pag = document.getElementById('cashPagination');
           if (pag) pag.innerHTML = '';
         } else {
@@ -1545,13 +1555,15 @@ const App = {
               return `
                 <tr>
                   <td>${m.date}</td>
-                  <td style="text-align: center;">${typeBadge}${m.account_code ? `<br><small>${m.account_code} - ${m.account_name || ''}</small>` : ''}</td>
+                  <td style="text-align: center;">${typeBadge}${m.account_code ? `<br><small>${m.account_code} - ${m.account_name || ''}</small>` : ''}<br><small>${m.account_role_label || ''}</small></td>
                   <td>${this.formatNumber(m.previous_balance)}</td>
                   <td style="color: var(--accent-green); font-weight: bold;">${m.cash_in ? '+' + this.formatNumber(m.cash_in) : '-'}</td>
                   <td style="color: var(--accent-red); font-weight: bold;">${m.cash_out ? '-' + this.formatNumber(m.cash_out) : '-'}</td>
                   <td>${m.withdrawals ? this.formatNumber(m.withdrawals) : '-'}</td>
-                  <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(m.current_balance)}</td>
+                  <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(m.current_balance)}${m.is_posted === false ? '<br><small>يشمل الأثر المتوقع</small>' : ''}</td>
                   <td>
+                    <span class="badge ${m.is_posted === false ? 'badge-warning' : 'badge-active'}">${m.status_label || 'مرحل'}</span><br>
+                    ${m.payment_method ? `<small>طريقة دفع السند: ${m.payment_method}</small><br>` : ''}
                     ${m.notes || '-'}
                     ${m.reference_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">المرجع: ${m.reference_no}</small>` : ''}
                   </td>

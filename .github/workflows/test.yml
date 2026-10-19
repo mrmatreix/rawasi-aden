@@ -1,25 +1,51 @@
-name: test-suite
-
-on:
-  push:
-    branches: ['**']
-  pull_request:
-
+name: isolated-security-and-accounting
+on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
-  integration:
+  sqlite:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
-      - run: npm ci
-      # البناء الحتمي (يتحقق من بصمة الإصدار)
+      - run: npm ci --ignore-scripts
       - run: npm run build
-      # البذرة + الترحيل (مرتين للتحقق من عدم التكرار) قبل الفحص الكامل
-      - run: npm run seed
-      - run: npm run migrate
-      - run: npm run migrate
-      # الفحص الكامل: تكامل + وحدة (96 اختباراً) على قاعدة مبذورة ومرحّلة
       - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Build runtime image
+        run: docker build -t rawasi-ci .
+      - name: Verify production image with synthetic persistent data
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/rawasi-ci-data"
+          RAWASI_DB_PATH="$RUNNER_TEMP/rawasi-ci-data/rawasi_aden.db" node tests/create_fixture.js
+          docker run -d --name rawasi-ci --user "$(id -u):$(id -g)" -p 127.0.0.1:3100:3000 \
+            -v "$RUNNER_TEMP/rawasi-ci-data:/data" \
+            -e PORT=3000 -e DB_ENGINE=sqlite -e RAWASI_DATA_DIR=/data -e RAWASI_DB_PATH=/data/rawasi_aden.db \
+            -e JWT_SECRET=ci-only-staff-key-0000000000000000000000000000 \
+            -e CLIENT_JWT_SECRET=ci-only-client-key-11111111111111111111111111 \
+            -e BANK_ENCRYPTION_KEY=ci-only-bank-key-2222222222222222222222222222 \
+            -e ENABLE_SCHEDULERS=false rawasi-ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3100/api/ready; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:3100/api/ready
+          test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/server/database/rawasi_aden.db)" = 404
+          docker stop --time 15 rawasi-ci
+          test "$(docker inspect --format '{{.State.ExitCode}}' rawasi-ci)" = 0
+          docker start rawasi-ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3100/api/ready; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:3100/api/ready
+      - name: Runtime logs and cleanup
+        if: always()
+        run: |
+          docker logs rawasi-ci 2>/dev/null || true
+          docker rm -f rawasi-ci 2>/dev/null || true

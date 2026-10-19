@@ -445,13 +445,21 @@ class ContractAlertsService {
     this._wsAttached = true;
     const clients = new Set();
 
-    server.on('upgrade', (req, socket, head) => {
+    server.on('upgrade', async (req, socket, head) => {
       const url = req.url ? req.url.split('?')[0] : '';
       const validPaths = ['/ws/alerts', '/ws/contracts', '/ws', '/alerts/ws'];
       if (!validPaths.some(p => url === p || url === p + '/')) {
-        return;
+        socket.destroy(); return;
       }
 
+      const security=require('../middleware/security');
+      const protocolToken=String(req.headers['sec-websocket-protocol']||'').split(',').map(s=>s.trim()).find(s=>s.startsWith('ticket.'));
+      if(protocolToken)req.headers.authorization='Bearer '+protocolToken.slice(7);
+      req.originalUrl=req.url;
+      const user=await new Promise(resolve=>{const response={status(){return this;},json(){resolve(null);}};security.requireAuth(req,response,()=>resolve(req.user));});
+      if(!user||!security.hasUserPermission(user,'projects:view')){socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');socket.destroy();return;}
+      socket.rawasiUser=user;
+      const expire=setTimeout(()=>socket.end(),Math.max(1,((user.exp||0)*1000-Date.now())));expire.unref();socket.once('close',()=>clearTimeout(expire));
       const key = req.headers['sec-websocket-key'];
       if (!key) {
         socket.destroy();
@@ -480,6 +488,7 @@ class ContractAlertsService {
       // إرسال ترويسات التبديل
       socket.write(responseHeaders.join('\r\n') + '\r\n\r\n');
       clients.add(socket);
+      socket.once('end',()=>socket.destroy());
 
       // الاستماع للبيانات الواردة من العميل (Masked Frames & Ping/Pong/Close)
       socket.on('data', (buffer) => {
@@ -583,10 +592,14 @@ class ContractAlertsService {
     });
 
     // بث أي تنبيه تعاقدي جديد لجميع المتصلين فورياً
-    alertEvents.on('alert', (alertData) => {
+    alertEvents.on('new_alert', (alertData) => {
       const frame = ContractAlertsService._encodeWsFrame({ type: 'ALERT', alert: alertData });
       for (const client of clients) {
-        if (client.writable) {
+        const user=client.rawasiUser;
+        const security=require('../middleware/security');
+        const projects=security.parseScopeArray(user?.allowed_projects);
+        const scoped=(user?.role==='admin'||user?.username==='admin'||projects.includes('*')||projects.map(String).includes(String(alertData.project_id)));
+        if (client.writable && scoped) {
           try { client.write(frame); } catch {}
         }
       }

@@ -6,42 +6,16 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync, backup } = require('node:sqlite');
 const mysql = require('mysql2/promise');
 const connectionManager = require('./connectionManager');
 
 const configPath = path.join(__dirname, 'config.json');
 
-function loadConfig() {
-  const defaults = {
-    dbEngine: process.env.DB_ENGINE || (process.env.MYSQL_HOST ? 'mysql' : 'sqlite'), // 'mysql' | 'sqlite'
-    mysql: {
-      host: process.env.MYSQL_HOST || 'localhost',
-      port: Number(process.env.MYSQL_PORT) || 3306,
-      user: process.env.MYSQL_USER || 'root',
-      password: process.env.MYSQL_PASSWORD || '',
-      database: process.env.MYSQL_DATABASE || 'rawasi_aden',
-      waitForConnections: true,
-      connectionLimit: 20,
-      queueLimit: 0
-    },
-    dbPath: 'server/database/rawasi_aden.db'
-  };
-
-  if (fs.existsSync(configPath)) {
-    try {
-      const raw = fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '');
-      const parsed = JSON.parse(raw);
-      return Object.assign(defaults, parsed, {
-        mysql: Object.assign(defaults.mysql, parsed.mysql || {})
-      });
-    } catch (e) {
-      console.warn('Config load note:', e.message);
-    }
-  }
-
-  return defaults;
-}
+const runtime = require('../config/environment');
+const { SqliteCoordinator } = require('./sqliteCoordinator');
+const sqliteCoordinator = new SqliteCoordinator();
+function loadConfig() { return runtime.database; }
 
 let appConfig = loadConfig();
 
@@ -60,7 +34,7 @@ function resolveSqlitePath() {
 }
 
 let sqlitePath = resolveSqlitePath();
-let activeEngine = 'sqlite'; // سيتم تحديده عند التهيئة: 'mysql' أو 'sqlite'
+let activeEngine = null; // سيتم تحديده عند التهيئة: 'mysql' أو 'sqlite'
 let mysqlPool = null;
 let sqliteDb = null;
 
@@ -128,7 +102,7 @@ async function initMysql() {
       connectTimeout: 4000
     });
 
-    await initConn.query(`CREATE DATABASE IF NOT EXISTS \`${mysqlCfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
+    if (!runtime.isProd) await initConn.query(`CREATE DATABASE IF NOT EXISTS \`${mysqlCfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
     await initConn.end();
   } catch (err) {
     throw new Error(`MySQL connection failed: ${err.message}`);
@@ -155,6 +129,7 @@ async function initMysql() {
   // 3. التحقق من وجود الجداول وتطبيق schema_mysql.sql إن كانت جديدة
   const [rows] = await mysqlPool.query("SHOW TABLES LIKE 'users'");
   if (!rows || rows.length === 0) {
+    if (!runtime.isDev) throw new Error('Existing MySQL schema required; run approved migrations separately');
     console.log('🌱 [Rawasi DB] New MySQL database detected - Initializing 31 tables...');
     const schemaMysqlPath = path.join(__dirname, 'schema_mysql.sql');
     if (fs.existsSync(schemaMysqlPath)) {
@@ -165,7 +140,7 @@ async function initMysql() {
 
   // 4. التحقق من وجود المستخدم الرئيسي الافتراضي في MySQL
   const [userCountRows] = await mysqlPool.query("SELECT count(*) as count FROM users");
-  if (!userCountRows || userCountRows[0].count === 0) {
+  if ((!userCountRows || userCountRows[0].count === 0) && runtime.isDev && process.env.ALLOW_DEMO_SEED === 'true') {
     console.log('👤 تهيئة حسابات الإدارة الافتراضية في MySQL...');
     const bcrypt = require('bcryptjs');
     const salt = bcrypt.genSaltSync(10);
@@ -265,7 +240,15 @@ async function initMysql() {
       }
     };
 
+    await require('../services/partyRegistryService').initializePartyRegistry({query: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0], run: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0]}, true);
     await checkAndAddCol('clients', 'account_id', 'INT NULL');
+    await checkAndAddCol('accounts', 'default_cost_center_id', 'INT NULL');
+    await checkAndAddCol('accounts', 'analytical_type', "VARCHAR(30) NOT NULL DEFAULT 'general'");
+    await mysqlPool.query(`CREATE TABLE IF NOT EXISTS supporting_documents (
+      id INT AUTO_INCREMENT PRIMARY KEY, entity_type VARCHAR(20) NOT NULL, entity_id INT NOT NULL,
+      file_name VARCHAR(200) NOT NULL, mime_type VARCHAR(150) NOT NULL, size_bytes INT NOT NULL,
+      content_base64 LONGTEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_supporting_entity (entity_type, entity_id))`);
     await checkAndAddCol('suppliers', 'account_id', 'INT NULL');
     await mysqlPool.query(`
       UPDATE clients c
@@ -281,6 +264,7 @@ async function initMysql() {
     `);
 
     await checkAndAddCol('expenses', 'account_id', 'INT NULL');
+    await checkAndAddCol('expenses', 'reference_no', 'VARCHAR(255) NULL');
     await checkAndAddCol('expenses', 'settlement_account_id', 'INT NULL');
     await checkAndAddCol('expenses', 'cost_center_id', 'INT NULL');
     await checkAndAddCol('expenses', 'check_no', 'VARCHAR(100) NULL');
@@ -293,6 +277,7 @@ async function initMysql() {
     await checkAndAddCol('payments', 'bank_name', 'VARCHAR(150) NULL');
 
     await checkAndAddCol('journal_entry_lines', 'cost_center_id', 'INT NULL');
+    await checkAndAddCol('journal_entries', 'reference_no', 'VARCHAR(255) NULL');
 
     await checkAndAddCol('custodies', 'custody_no', 'VARCHAR(100) NULL');
     await checkAndAddCol('custodies', 'employee_id', 'INT NULL');
@@ -536,6 +521,12 @@ async function initMysql() {
  */
 function initSqlite() {
   initSqliteInstance();
+  if (!runtime.isDev) {
+    if (!sqliteDb.prepare('PRAGMA quick_check').all().every(row=>Object.values(row)[0]==='ok')) throw new Error('SQLite integrity check failed; restore and verify a separate copy before deployment');
+    if (sqliteDb.prepare('PRAGMA foreign_key_check').all().length) throw new Error('SQLite foreign key check failed; review data before deployment');
+    const existing = sqliteDb.prepare("SELECT COUNT(*) AS count FROM users").get();
+    if (!existing?.count) throw new Error('Provision an existing verified database; cloud boot never creates demo users');
+  }
 
   // فحص استباقي للأعمدة المحدثة في الجداول الموجودة قبل تطبيق مخطط schema.sql
   try {
@@ -643,6 +634,11 @@ function initSqlite() {
     sqliteDb.exec(schemaSql);
   }
 
+  for (const table of ['project_purchases','project_labor_expenses']) {
+    const columns = sqliteDb.prepare('PRAGMA table_info(' + table + ')').all().map(c=>c.name);
+    if (!columns.includes('linked_expense_id')) sqliteDb.exec('ALTER TABLE ' + table + ' ADD COLUMN linked_expense_id INTEGER REFERENCES expenses(id)');
+  }
+
   // Safe migration for SQLite
   try {
     const cols = sqliteDb.prepare("PRAGMA table_info(users)").all();
@@ -669,6 +665,9 @@ function initSqlite() {
     try {
       const cmCols = sqliteDb.prepare("PRAGMA table_info(cash_movements)").all();
       const cmNames = cmCols.map(c => c.name);
+      for (const [name,type] of Object.entries({account_id:'INTEGER REFERENCES accounts(id)',currency:'TEXT',movement_type:'TEXT',payment_method:'TEXT',reference_no:'TEXT'})) {
+        if (!cmNames.includes(name)) sqliteDb.exec('ALTER TABLE cash_movements ADD COLUMN '+name+' '+type);
+      }
       if (!cmNames.includes('project_id')) sqliteDb.exec("ALTER TABLE cash_movements ADD COLUMN project_id INTEGER;");
     } catch {}
 
@@ -727,6 +726,7 @@ function initSqlite() {
 
     // ترقية أعمدة جدول المشاريع لربطها بالفروع والأقسام
     const prjCols = sqliteDb.prepare("PRAGMA table_info(projects)").all().map(c => c.name);
+    if (!prjCols.includes('currency')) sqliteDb.exec("ALTER TABLE projects ADD COLUMN currency TEXT DEFAULT 'ر.ي'");
     if (!prjCols.includes('branch_id')) sqliteDb.exec("ALTER TABLE projects ADD COLUMN branch_id INTEGER DEFAULT 1;");
     if (!prjCols.includes('department_id')) sqliteDb.exec("ALTER TABLE projects ADD COLUMN department_id INTEGER DEFAULT 3;");
 
@@ -767,6 +767,9 @@ function initSqlite() {
     }
 
     const expCols = sqliteDb.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+    if (!expCols.includes('supplier_name')) sqliteDb.exec('ALTER TABLE expenses ADD COLUMN supplier_name TEXT;');
+    if (!expCols.includes('exchange_rate')) sqliteDb.exec('ALTER TABLE expenses ADD COLUMN exchange_rate REAL DEFAULT 1;');
+    if (!expCols.includes('local_amount')) sqliteDb.exec('ALTER TABLE expenses ADD COLUMN local_amount REAL DEFAULT 0;');
     if (!expCols.includes('account_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
     if (!expCols.includes('settlement_account_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN settlement_account_id INTEGER REFERENCES accounts(id);");
     if (!expCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
@@ -797,6 +800,7 @@ function initSqlite() {
     if (!expCols.includes('bank_account_id')) sqliteDb.exec("ALTER TABLE expenses ADD COLUMN bank_account_id INTEGER REFERENCES bank_accounts(id);");
 
     const payCols = sqliteDb.prepare("PRAGMA table_info(payments)").all().map(c => c.name);
+    if (!payCols.includes('client_name')) sqliteDb.exec('ALTER TABLE payments ADD COLUMN client_name TEXT;');
     if (!payCols.includes('account_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN account_id INTEGER REFERENCES accounts(id);");
     if (!payCols.includes('settlement_account_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN settlement_account_id INTEGER REFERENCES accounts(id);");
     if (!payCols.includes('cost_center_id')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN cost_center_id INTEGER REFERENCES cost_centers(id);");
@@ -827,6 +831,16 @@ function initSqlite() {
     if (!payCols.includes('receipt_category')) sqliteDb.exec("ALTER TABLE payments ADD COLUMN receipt_category TEXT DEFAULT 'general';");
 
     const jeCols = sqliteDb.prepare("PRAGMA table_info(journal_entries)").all().map(c => c.name);
+    require('../services/partyRegistryService').initializeSqlitePartyRegistry(sqliteDb);
+    const accountCenterCols = sqliteDb.prepare('PRAGMA table_info(accounts)').all().map(c => c.name);
+    if (!accountCenterCols.includes('default_cost_center_id')) sqliteDb.exec('ALTER TABLE accounts ADD COLUMN default_cost_center_id INTEGER REFERENCES cost_centers(id);');
+    if (!accountCenterCols.includes('analytical_type')) sqliteDb.exec("ALTER TABLE accounts ADD COLUMN analytical_type TEXT NOT NULL DEFAULT 'general';");
+    sqliteDb.exec(`CREATE TABLE IF NOT EXISTS supporting_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
+      file_name TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+      content_base64 TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE INDEX IF NOT EXISTS idx_supporting_entity ON supporting_documents(entity_type, entity_id);`);
+    if (!jeCols.includes('reference_no')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN reference_no TEXT;");
     if (!jeCols.includes('status')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN status TEXT DEFAULT 'posted';");
     if (!jeCols.includes('created_by')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN created_by INTEGER REFERENCES users(id);");
     if (!jeCols.includes('created_by_name')) sqliteDb.exec("ALTER TABLE journal_entries ADD COLUMN created_by_name TEXT;");
@@ -933,14 +947,7 @@ function initSqlite() {
       sqliteDb.exec("ALTER TABLE payroll ADD COLUMN journal_entry_id INTEGER REFERENCES journal_entries(id);");
     }
 
-    // 5. تهيئة عينة لمشاريع تحت الدراسة إن لم تكن موجودة
-    const studyProj = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM projects WHERE status = 'under_study'").get();
-    if (!studyProj || studyProj.cnt === 0) {
-      sqliteDb.exec(`
-        INSERT INTO projects (name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status, notes)
-        VALUES ('مشروع مجمع خورمكسر الطبي (قيد الدراسة والتسعير)', 1, 65000000, 52000000, 0, 0, 'under_study', 'مشروع قيد إعداد جدول الكميات BOQ والتسعير الهندسي للعطاء المنافس');
-      `);
-    }
+    // Demo projects belong only in explicit isolated fixtures.
 
     // 6. إضافة أعمدة تصنيف المستخلصات ودورة المستند والفصل المحاسبي للمقاولات
     const billCols = sqliteDb.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
@@ -1697,22 +1704,8 @@ function initSqlite() {
       );
     `);
 
-    // 15. تهيئة بذور البيانات الافتراضية للمستودعات والحساب البنكي وإعدادات الضرائب اليمنية
-    sqliteDb.exec(`
-      INSERT OR IGNORE INTO warehouses (id, code, name, type, location, manager_name) VALUES
-      (1, 'WH-MAIN', 'المستودع المركزي الرئيسي - خورمكسر', 'central', 'عدن - خورمكسر', 'أمين المستودع العام'),
-      (2, 'WH-SITE-1', 'مستودع موقع مشروع برج الصالح', 'site', 'عدن - المعلا', 'مهندس الموقع');
+    // Demo warehouses, bank balances and tax configuration are never inserted at startup.
 
-      INSERT OR IGNORE INTO bank_accounts (id, account_id, bank_name, account_number, iban, currency, current_balance)
-      SELECT 1, id, 'البنك الأهلي اليمني', '1023456789', 'YE98NBYE0000001023456789', 'ر.ي', 50000000 FROM accounts WHERE code = '11102001';
-      INSERT OR IGNORE INTO bank_accounts (id, account_id, bank_name, account_number, iban, currency, current_balance)
-      SELECT 2, id, 'بنك التضامن الإسلامي', '2034567890', 'YE98TDBE0000002034567890', 'ر.ي', 25000000 FROM accounts WHERE code = '11102002';
-
-      INSERT OR IGNORE INTO tax_configs (id, tax_code, tax_name, rate_percentage, type, law_reference, legal_disclaimer) VALUES
-      (1, 'WHT-CONT-3', 'ضريبة أرباح تجارية وصناعية - مقاولات (3%)', 3.0, 'wht_contracting', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
-      (2, 'WHT-SUPP-1', 'ضريبة خصم من المنبع - توريدات ومشتريات (1%)', 1.0, 'wht_supplies', 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته', 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني'),
-      (3, 'VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية', 'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
-    `);
   } catch (err) {
     console.warn('Accounting migration note (SQLite):', err.message);
   }
@@ -1960,6 +1953,7 @@ function initSqlite() {
         SELECT 
             v.id AS id,
             v.id AS vendor_id,
+            v.party_no,
             v.account_id,
             ledger.code AS account_code,
             ledger.name AS account_name,
@@ -2097,6 +2091,8 @@ function initSqlite() {
         SELECT
             c.id,
             c.id AS client_id,
+            c.party_no,
+            c.status,
             c.account_id,
             ledger.code AS account_code,
             ledger.name AS account_name,
@@ -2667,27 +2663,41 @@ function initSqlite() {
 /**
  * دالة التهيئة والتشغيل العامة عند بدء الخادم
  */
+let initializing = null;
+let databaseState = 'starting';
+let databaseError = null;
 async function initializeDatabase() {
-  appConfig = loadConfig();
-
-  if (appConfig.dbEngine === 'mysql') {
+  if (initializing) return initializing;
+  initializing = (async () => {
+    databaseState = 'starting';
+    appConfig = loadConfig();
     try {
-      await initMysql();
-      return;
-    } catch (err) {
-      const isRefused = err.message.includes('ECONNREFUSED');
-      console.warn(`⚠️  [Rawasi DB] MySQL server is offline (${isRefused ? 'Connection refused on port ' + (appConfig.mysql?.port || 3306) : err.message})`);
-      console.warn('👉 [Rawasi DB] Fallback active: Automatically running on local SQLite.');
+      if (appConfig.dbEngine === 'mysql') await initMysql();
+      else initSqlite();
+      databaseState = 'ready'; databaseError = null;
+    } catch (error) {
+      databaseState = 'failed'; databaseError = error;
+      if (mysqlPool) { await mysqlPool.end().catch(() => {}); mysqlPool = null; }
+      activeEngine = null;
+      throw error;
     }
-  }
-
-  initSqlite();
+  })();
+  try { return await initializing; } finally { initializing = null; }
 }
-
-// بدء التهيئة الفورية
-initializeDatabase().catch(e => {
-  console.error('Fatal database initialization error:', e);
-});
+const ready = initializeDatabase();
+ready.catch(error => console.error('Database initialization failed:', error.code || error.name));
+async function ensureReady() {
+  if (initializing) await initializing;
+  if (databaseState !== 'ready') throw Object.assign(new Error('Database unavailable'), { code: 'DATABASE_UNAVAILABLE', statusCode: 503, cause: databaseError });
+}
+async function closeDatabase() {
+  databaseState = 'closing';
+  await sqliteCoordinator.drain();
+  if (mysqlPool) { await mysqlPool.end(); mysqlPool = null; }
+  if (sqliteDb) { sqliteDb.close(); sqliteDb = null; }
+  databaseState = 'closed'; activeEngine = null;
+}
+function getDatabaseState() { return { state: databaseState, engine: activeEngine }; }
 
 // =================== دوال الاستعلام العامة (Unified Query Layer) ===================
 
@@ -2695,6 +2705,7 @@ initializeDatabase().catch(e => {
  * استعلام يعيد كافة السجلات المطابقة كـ Array
  */
 async function query(sql, params = []) {
+  await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
 
   if (activeEngine === 'mysql' && mysqlPool) {
@@ -2702,23 +2713,19 @@ async function query(sql, params = []) {
       const [rows] = await mysqlPool.query(targetSql, params);
       return rows;
     } catch (err) {
-      // محاولة تنفيذ استعلام احتياطي على SQLite إذا فشل اتصال MySQL فجأة
-      if (sqliteDb && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST')) {
-        console.warn('MySQL connection lost, fallback query to SQLite:', err.message);
-        return sqliteDb.prepare(normalizeSql(sql, 'sqlite')).all(...params);
-      }
       throw err;
     }
   }
 
   initSqliteInstance();
-  return sqliteDb.prepare(targetSql).all(...params);
+  return sqliteCoordinator.execute(() => sqliteDb.prepare(targetSql).all(...params));
 }
 
 /**
  * استعلام يعيد سجلاً واحداً (أو null)
  */
 async function get(sql, params = []) {
+  await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
 
   if (activeEngine === 'mysql' && mysqlPool) {
@@ -2726,15 +2733,12 @@ async function get(sql, params = []) {
       const [rows] = await mysqlPool.query(targetSql, params);
       return (rows && rows.length > 0) ? rows[0] : null;
     } catch (err) {
-      if (sqliteDb && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST')) {
-        return sqliteDb.prepare(normalizeSql(sql, 'sqlite')).get(...params) || null;
-      }
       throw err;
     }
   }
 
   initSqliteInstance();
-  return sqliteDb.prepare(targetSql).get(...params) || null;
+  return sqliteCoordinator.execute(() => sqliteDb.prepare(targetSql).get(...params) || null);
 }
 
 /**
@@ -2742,6 +2746,7 @@ async function get(sql, params = []) {
  * يعيد كائناً موحداً يحتوي { lastInsertRowid, insertId, changes, affectedRows }
  */
 async function run(sql, params = []) {
+  await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
 
   if (activeEngine === 'mysql' && mysqlPool) {
@@ -2755,21 +2760,12 @@ async function run(sql, params = []) {
         affectedRows: result.affectedRows
       };
     } catch (err) {
-      if (sqliteDb && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST')) {
-        const res = sqliteDb.prepare(normalizeSql(sql, 'sqlite')).run(...params);
-        return {
-          lastInsertRowid: res.lastInsertRowid,
-          insertId: res.lastInsertRowid,
-          lastID: res.lastInsertRowid,
-          changes: res.changes,
-          affectedRows: res.changes
-        };
-      }
       throw err;
     }
   }
 
   initSqliteInstance();
+  return sqliteCoordinator.execute(() => {
   const res = sqliteDb.prepare(targetSql).run(...params);
   return {
     id: res.lastInsertRowid,
@@ -2779,24 +2775,27 @@ async function run(sql, params = []) {
     changes: res.changes,
     affectedRows: res.changes
   };
+  });
 }
 
 /**
  * تنفيذ سكربت أو مجموعة استعلامات نصية
  */
 async function exec(sql) {
+  await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
   if (activeEngine === 'mysql' && mysqlPool) {
     return mysqlPool.query(targetSql);
   }
   initSqliteInstance();
-  return sqliteDb.exec(targetSql);
+  return sqliteCoordinator.execute(() => sqliteDb.exec(targetSql));
 }
 
 /**
  * تنفيذ معاملة مالية ذرية (Atomic Transaction) تدعم كلاً من MySQL و SQLite
  */
 async function transaction(callback) {
+  await ensureReady();
   if (activeEngine === 'mysql' && mysqlPool) {
     const connection = await mysqlPool.getConnection();
     await connection.beginTransaction();
@@ -2835,6 +2834,7 @@ async function transaction(callback) {
 
   // في حالة SQLite
   initSqliteInstance();
+  return sqliteCoordinator.execute(async () => {
   sqliteDb.exec('BEGIN TRANSACTION;');
   try {
     const tx = {
@@ -2857,12 +2857,25 @@ async function transaction(callback) {
     sqliteDb.exec('ROLLBACK;');
     throw err;
   }
+  });
 }
 
 // =================== دوال النسخ الاحتياطي وإدارة السيرفر ===================
 
-function backupDatabase() {
-  const backupsDir = path.join(__dirname, 'backups');
+async function backupSnapshot(destination) {
+  await ensureReady();
+  if(activeEngine!=='sqlite')throw new Error('SQLite snapshot is unavailable for the selected database engine');
+  return sqliteCoordinator.execute(async()=>{
+    const source=new DatabaseSync(sqlitePath,{readOnly:true});
+    try { await backup(source,destination); } finally {source.close();}
+    const verify=new DatabaseSync(destination,{readOnly:true});
+    try {if(verify.prepare('PRAGMA quick_check').get().quick_check!=='ok')throw new Error('Snapshot integrity failed');}finally{verify.close();}
+    return destination;
+  });
+}
+
+async function backupDatabase() {
+  const backupsDir = runtime.storage.backups;
   if (!fs.existsSync(backupsDir)) {
     fs.mkdirSync(backupsDir, { recursive: true });
   }
@@ -2881,7 +2894,7 @@ function backupDatabase() {
   const backupFilePath = path.join(backupsDir, backupFileName);
 
   if (fs.existsSync(sqlitePath)) {
-    fs.copyFileSync(sqlitePath, backupFilePath);
+    await backupSnapshot(backupFilePath);
   } else {
     throw new Error(`ملف قاعدة البيانات المصدر غير موجود: ${sqlitePath}`);
   }
@@ -2891,7 +2904,8 @@ function backupDatabase() {
 }
 
 function restoreDatabase(sourceFilePathOrBuffer) {
-  const backupsDir = path.join(__dirname, 'backups');
+  if(runtime.isProd||runtime.isStaging)throw new Error('Cloud database restoration requires the offline maintenance procedure');
+  const backupsDir = runtime.storage.backups;
   if (!fs.existsSync(backupsDir)) {
     fs.mkdirSync(backupsDir, { recursive: true });
   }
@@ -2929,7 +2943,7 @@ function restoreDatabase(sourceFilePathOrBuffer) {
 }
 
 function listBackups() {
-  const backupsDir = path.join(__dirname, 'backups');
+  const backupsDir = runtime.storage.backups;
   if (!fs.existsSync(backupsDir)) return [];
   const files = fs.readdirSync(backupsDir);
   const backups = [];
@@ -2947,8 +2961,8 @@ function listBackups() {
   return backups.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-function createLogoutBackup(username = 'unknown', meta = {}) {
-  const backupsDir = path.join(__dirname, 'backups');
+async function createLogoutBackup(username = 'unknown', meta = {}) {
+  const backupsDir = runtime.storage.backups;
   if (!fs.existsSync(backupsDir)) {
     fs.mkdirSync(backupsDir, { recursive: true });
   }
@@ -2965,7 +2979,7 @@ function createLogoutBackup(username = 'unknown', meta = {}) {
   const backupFilePath = path.join(backupsDir, backupFileName);
 
   if (fs.existsSync(sqlitePath)) {
-    fs.copyFileSync(sqlitePath, backupFilePath);
+    await backupSnapshot(backupFilePath);
   }
 
   const stat = fs.existsSync(backupFilePath) ? fs.statSync(backupFilePath) : { size: 0 };
@@ -2985,7 +2999,7 @@ function createLogoutBackup(username = 'unknown', meta = {}) {
 }
 
 function listLogoutBackups() {
-  const backupsDir = path.join(__dirname, 'backups');
+  const backupsDir = runtime.storage.backups;
   if (!fs.existsSync(backupsDir)) return [];
   const files = fs.readdirSync(backupsDir);
   const list = [];
@@ -3015,15 +3029,16 @@ function getMysqlConfig() {
 }
 
 module.exports = {
-  db: sqliteDb,
-  mysqlPool,
+  get db() { return sqliteDb; },
+  get mysqlPool() { return mysqlPool; },
+  ready, closeDatabase, getDatabaseState,
   query,
   get,
   run,
   exec,
   transaction,
   initializeDatabase,
-  backupDatabase,
+  backupDatabase, backupSnapshot,
   restoreDatabase,
   listBackups,
   createLogoutBackup,

@@ -6,6 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
+router.use(require('../middleware/security').requirePermission('settings:users'));
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../database/db');

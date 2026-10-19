@@ -17,8 +17,8 @@ const { query, run, get, exec, dbPath, restoreDatabase } = require('../database/
 const { logAudit } = require('./auditService');
 
 const MAGIC_HEADER = 'RAWASI01'; // رأس التشفير المعتمد (8 بايت)
-const DEFAULT_CLOUD_VAULT_DIR = path.resolve(__dirname, '..', 'database', 'backups', 'cloud_vault');
-const DEFAULT_PROJECTS_DIR = path.resolve(__dirname, '..', '..', 'ملفات_المشاريع');
+const DEFAULT_CLOUD_VAULT_DIR = path.join(require('../config/environment').storage.backups,'cloud_vault');
+const DEFAULT_PROJECTS_DIR = require('../config/environment').storage.projects;
 
 class CloudBackupCryptoService {
   constructor() {
@@ -204,8 +204,10 @@ class CloudBackupCryptoService {
       throw new Error(`ملف قاعدة البيانات غير موجود في المسار: ${sourceDb}`);
     }
 
-    const dbStats = fs.statSync(sourceDb);
-    const dbSha256 = this.computeSha256(sourceDb);
+    const snapshot=path.join(this.vaultDir,'.snapshot_'+crypto.randomUUID()+'.db');
+    await require('../database/db').backupSnapshot(snapshot);
+    const dbStats = fs.statSync(snapshot);
+    const dbSha256 = this.computeSha256(snapshot);
     const summaryStats = await this.getSystemSummaryStats();
 
     const now = new Date();
@@ -232,7 +234,8 @@ class CloudBackupCryptoService {
 
     // 2. تجميع الملفات داخل ZIP في الذاكرة عبر AdmZip
     const zip = new AdmZip();
-    zip.addLocalFile(sourceDb, 'database');
+    zip.addFile('database/rawasi_aden.db',fs.readFileSync(snapshot));
+    fs.unlinkSync(snapshot);
     zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
 
     if (includeProjectsFiles && fs.existsSync(this.projectsDir)) {
@@ -241,6 +244,7 @@ class CloudBackupCryptoService {
         zip.addLocalFolder(this.projectsDir, 'ملفات_المشاريع');
       }
     }
+    if(includeProjectsFiles && fs.existsSync(require('../config/environment').storage.uploads))zip.addLocalFolder(require('../config/environment').storage.uploads,'uploads');
     const zipBuffer = zip.toBuffer();
 
     // 3. التشفير إذا طلب المستخدم
@@ -376,6 +380,7 @@ class CloudBackupCryptoService {
     user = 'admin',
     req = null
   } = {}) {
+    if (!require('../config/environment').isDev) throw new Error('Cloud restore requires offline maintenance; use the documented restore procedure');
     let buf;
     if (Buffer.isBuffer(fileBufferOrPath)) {
       buf = fileBufferOrPath;
@@ -423,11 +428,11 @@ class CloudBackupCryptoService {
 
     // إنشاء نقطة أمان قبل الاستعادة
     const sourceDb = dbPath || path.resolve(__dirname, '..', 'database', 'rawasi_aden.db');
-    const safetyDir = path.resolve(__dirname, '..', 'database', 'backups');
+    const safetyDir = require('../config/environment').storage.backups;
     if (!fs.existsSync(safetyDir)) fs.mkdirSync(safetyDir, { recursive: true });
     const safetyFile = path.join(safetyDir, `safety_before_full_restore_${Date.now()}.db`);
     if (fs.existsSync(sourceDb)) {
-      fs.copyFileSync(sourceDb, safetyFile);
+      await require('../database/db').backupSnapshot(safetyFile);
     }
 
     // استخراج قاعدة البيانات واستعادتها
@@ -440,7 +445,7 @@ class CloudBackupCryptoService {
       entries.forEach(entry => {
         if (entry.entryName.startsWith('ملفات_المشاريع/') && !entry.isDirectory) {
           const relativePath = entry.entryName.replace(/^ملفات_المشاريع\//, '');
-          const targetPath = path.join(this.projectsDir, relativePath);
+          const targetPath = require('../middleware/fileAccess').safePath(this.projectsDir,relativePath,{existing:false});
           const dir = path.dirname(targetPath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(targetPath, entry.getData());
@@ -573,7 +578,7 @@ class CloudBackupCryptoService {
         provider: map.cloud_backup_provider || 'cloud_vault', // 'cloud_vault' | 'local_cloud_folder' | 's3_webhook'
         endpointUrl: map.cloud_backup_endpoint || '',
         authToken: map.cloud_backup_token || '',
-        syncedFolder: map.cloud_backup_folder || path.resolve(__dirname, '..', 'database', 'backups', 'cloud_drive_sync'),
+        syncedFolder: require('../config/environment').isDev && map.cloud_backup_folder || path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'),
         autoEncrypt: map.cloud_backup_encrypt !== undefined ? (map.cloud_backup_encrypt === 'true') : true,
         lastSyncStatus: map.cloud_backup_last_status || 'idle',
         lastSyncTime: map.cloud_backup_last_time || null,
@@ -586,7 +591,7 @@ class CloudBackupCryptoService {
         provider: 'cloud_vault',
         endpointUrl: '',
         authToken: '',
-        syncedFolder: path.resolve(__dirname, '..', 'database', 'backups', 'cloud_drive_sync'),
+        syncedFolder: path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'),
         autoEncrypt: true,
         lastSyncStatus: 'idle',
         lastSyncTime: null,
@@ -604,10 +609,11 @@ class CloudBackupCryptoService {
       ['cloud_backup_auto_sync', String(Boolean(newConfig.autoSyncAfterBackup))],
       ['cloud_backup_provider', newConfig.provider || 'cloud_vault'],
       ['cloud_backup_endpoint', newConfig.endpointUrl || ''],
-      ['cloud_backup_token', newConfig.authToken || ''],
       ['cloud_backup_folder', newConfig.syncedFolder || ''],
       ['cloud_backup_encrypt', String(newConfig.autoEncrypt !== undefined ? Boolean(newConfig.autoEncrypt) : true)]
     ];
+    if (newConfig.authToken) entries.push(['cloud_backup_token',newConfig.authToken]);
+    else if (newConfig.clearAuthToken === true) entries.push(['cloud_backup_token','']);
 
     if (newConfig.encryptionPassphrase && newConfig.encryptionPassphrase.trim().length >= 4) {
       entries.push(['cloud_backup_passphrase', newConfig.encryptionPassphrase.trim()]);
@@ -641,7 +647,7 @@ class CloudBackupCryptoService {
     const provider = config.provider || 'cloud_vault';
 
     if (provider === 'local_cloud_folder') {
-      const folder = path.resolve(config.syncedFolder || path.resolve(__dirname, '..', 'database', 'backups', 'cloud_drive_sync'));
+      const folder = path.resolve(config.syncedFolder || path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'));
       try {
         if (!fs.existsSync(folder)) {
           fs.mkdirSync(folder, { recursive: true });
@@ -746,7 +752,7 @@ class CloudBackupCryptoService {
       let syncResult = null;
 
       if (provider === 'local_cloud_folder') {
-        const destDir = path.resolve(config.syncedFolder || path.resolve(__dirname, '..', 'database', 'backups', 'cloud_drive_sync'));
+        const destDir = path.resolve(config.syncedFolder || path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'));
         if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
         const destFile = path.join(destDir, fileName);
         fs.copyFileSync(filePath, destFile);

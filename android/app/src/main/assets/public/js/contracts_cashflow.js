@@ -20,14 +20,16 @@ const ContractAlertsUI = {
     this.connectLiveAlerts();
   },
 
-  connectLiveAlerts() {
+  async connectLiveAlerts() {
     if (this.ws || this.eventSource) return;
 
     // 1. محاولة الاتصال بخادم الـ WebSocket المباشر
     try {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${location.host}/ws/alerts`;
-      this.ws = new WebSocket(wsUrl);
+      const response=await fetch('/api/auth/realtime-ticket',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const data=await response.json();if(!response.ok||!data.ticket)throw new Error('Session unavailable');
+      this.ws = new WebSocket(wsUrl,['rawasi-auth','ticket.'+data.ticket]);
 
       this.ws.onmessage = (event) => {
         try {
@@ -44,16 +46,19 @@ const ContractAlertsUI = {
       };
       this.ws.onclose = () => {
         this.ws = null;
+        if (window.Auth?.token) setTimeout(()=>this.connectLiveAlerts(),1500);
       };
     } catch {
       this.fallbackToSSE();
     }
   },
 
-  fallbackToSSE() {
+  async fallbackToSSE() {
     if (this.eventSource) return;
     try {
-      this.eventSource = new EventSource('/api/contracts/alerts/stream');
+      const response=await fetch('/api/auth/realtime-ticket',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const data=await response.json();if(!response.ok||!data.ticket)throw new Error('Session unavailable');
+      this.eventSource = new EventSource('/api/contracts/alerts/stream?token='+encodeURIComponent(data.ticket));
       this.eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);

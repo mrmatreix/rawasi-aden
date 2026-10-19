@@ -37,7 +37,7 @@ router.get(['/alerts/dashboard', '/dashboard'], requirePermission('projects:view
  * @desc    بث الإشعارات الفورية اللحظية (Server-Sent Events) لمتصفح الويب
  * @access  خاص
  */
-router.get(['/alerts/stream', '/stream'], (req, res) => {
+router.get(['/alerts/stream', '/stream'], requirePermission('projects:view'), (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -48,12 +48,17 @@ router.get(['/alerts/stream', '/stream'], (req, res) => {
 
   const eventBus = ContractAlertsService.getEventBus();
   const alertListener = (alertData) => {
+    const security=require('../middleware/security');
+    const projects=security.parseScopeArray(req.user.allowed_projects);
+    if(req.user.role!=='admin'&&req.user.username!=='admin'&&!projects.includes('*')&&!projects.map(String).includes(String(alertData.project_id)))return;
     res.write(`data: ${JSON.stringify(alertData)}\n\n`);
   };
 
   eventBus.on('new_alert', alertListener);
 
+  const timeout=setTimeout(()=>res.end(),Math.max(1,((req.user.exp||0)*1000-Date.now())));timeout.unref();
   req.on('close', () => {
+    clearTimeout(timeout);
     eventBus.removeListener('new_alert', alertListener);
   });
 });

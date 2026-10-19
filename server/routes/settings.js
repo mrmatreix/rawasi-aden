@@ -13,13 +13,20 @@ const { requirePermission } = require('../middleware/security');
 const unifiedBackupEngine = require('../services/unifiedBackupEngine');
 
 
+const runtime=require('../config/environment');
+const secretSetting=key=>/(password|passphrase|credential|secret|token|api.?key|private.?key|encryption.?key|online_db_key)/i.test(key);
+const publicCloudConfig=config=>({...config,authToken:'',authTokenConfigured:Boolean(config.authToken)});
+router.use((req,res,next)=>{
+  if((runtime.isProd||runtime.isStaging)&&req.method!=='GET'&&['/save-mysql-config','/run-migration','/restore-local','/restore-upload','/backup/restore-production','/cloud-backup/restore'].includes(req.path))return res.status(409).json({success:false,message:'هذه العملية تتطلب صيانة منفصلة واعتماداً خارج واجهة الإنتاج'});
+  next();
+});
 // جلب إعدادات الشركة
 router.get('/', requirePermission('settings:view,settings:company'), async (req, res) => {
   try {
     const settingsRows = await query('SELECT * FROM settings');
     const settingsObj = {};
     settingsRows.forEach(row => {
-      settingsObj[row.key] = row.value;
+      if(!secretSetting(row.key)) settingsObj[row.key] = row.value;
     });
     settingsObj.active_db_engine = getActiveEngine();
     res.json({ success: true, data: settingsObj });
@@ -34,6 +41,7 @@ router.post('/', requirePermission('settings:company'), async (req, res) => {
     const updates = req.body;
     const engine = getActiveEngine();
     for (const [key, value] of Object.entries(updates)) {
+      if(secretSetting(key)||/(?:db_engine|db_mode|online_db_url|projects_base_folder|backup.*path)/i.test(key))return res.status(400).json({success:false,message:'استخدم واجهة الإعداد المتخصصة لهذه القيمة'});
       if (engine === 'sqlite') {
         await run(`
           INSERT INTO settings (\`key\`, \`value\`) VALUES (?, ?)
@@ -533,7 +541,7 @@ router.post('/run-migration', requirePermission('settings:company'), async (req,
 router.post('/auto-backup-logout', async (req, res) => {
   try {
     const { username, mode, notes } = req.body || {};
-    const backupItem = createLogoutBackup(username || 'user', { mode, notes });
+    const backupItem = await createLogoutBackup(username || 'user', { mode, notes });
 
     if (backupItem && backupItem.fileName) {
       await logAudit(req, {
@@ -628,7 +636,7 @@ router.get('/cloud-backup/status', requirePermission('settings:backup'), async (
 
     res.json({
       success: true,
-      config,
+      config: publicCloudConfig(config),
       vaultItems,
       systemStats: stats
     });
@@ -644,7 +652,7 @@ router.post('/cloud-backup/config', requirePermission('settings:backup'), async 
     res.json({
       success: true,
       message: 'تم حفظ إعدادات المزامنة السحابية بنجاح ☁️💾',
-      config: updated
+      config: publicCloudConfig(updated)
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'تعذر حفظ إعدادات المزامنة السحابية: ' + err.message });

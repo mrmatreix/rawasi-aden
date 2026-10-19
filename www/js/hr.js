@@ -1035,6 +1035,7 @@ const HR = {
   },
 
   showPane(name, button) {
+    if (typeof Sidebar !== 'undefined' && App.activeView === 'hr') Sidebar.sync('hr', name);
     document.querySelectorAll('.hr-pane').forEach(p => p.style.display = 'none');
     const pane = document.getElementById('hrPane_' + name);
     if (pane) pane.style.display = 'block';

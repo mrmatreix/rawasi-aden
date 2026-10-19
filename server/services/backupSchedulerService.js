@@ -15,7 +15,7 @@ class BackupSchedulerService {
     this.timer = null;
     this.isExecuting = false;
     this.nextRunTime = null;
-    this.defaultStoragePath = path.resolve(__dirname, '..', 'database', 'backups');
+    this.defaultStoragePath = require('../config/environment').storage.backups;
     this.config = {
       enabled: true,
       interval: 'daily', // 'daily' | 'weekly'
@@ -86,7 +86,7 @@ class BackupSchedulerService {
       this.config.interval = (map.auto_backup_interval === 'weekly') ? 'weekly' : 'daily';
       this.config.time = map.auto_backup_time || '02:00';
       this.config.dayOfWeek = map.auto_backup_day_of_week !== undefined ? Number(map.auto_backup_day_of_week) : 5;
-      this.config.storagePath = map.auto_backup_path ? path.resolve(map.auto_backup_path) : this.defaultStoragePath;
+      this.config.storagePath = require('../config/environment').isDev && map.auto_backup_path ? path.resolve(map.auto_backup_path) : this.defaultStoragePath;
       this.config.maxFiles = Math.max(1, Number(map.auto_backup_max_files) || 14);
       this.config.lastRun = map.auto_backup_last_run || null;
       this.config.lastStatus = map.auto_backup_last_status || null;
@@ -112,7 +112,7 @@ class BackupSchedulerService {
       const d = Number(newConfig.dayOfWeek);
       if (d >= 0 && d <= 6) this.config.dayOfWeek = d;
     }
-    if (newConfig.storagePath) {
+    if (newConfig.storagePath && require('../config/environment').isDev) {
       this.config.storagePath = path.resolve(newConfig.storagePath.trim());
     } else {
       this.config.storagePath = this.defaultStoragePath;
@@ -250,7 +250,7 @@ class BackupSchedulerService {
       
       const backupResult = await unifiedBackupEngine.createBackup({
         backupType,
-        scope: 'database_only',
+        scope: 'full_bundle_with_files',
         user: username || 'system',
         req
       });

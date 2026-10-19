@@ -66,12 +66,15 @@ CREATE TABLE IF NOT EXISTS departments (
 -- 3. جدول العملاء
 CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_no TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
     account_id INTEGER REFERENCES accounts(id),
     name TEXT NOT NULL,
     company TEXT,
     phone TEXT,
     email TEXT,
     address TEXT,
+    currency TEXT DEFAULT 'ر.ي',
     previous_balance REAL DEFAULT 0,
     total_paid REAL DEFAULT 0,
     total_due REAL DEFAULT 0,
@@ -102,6 +105,7 @@ CREATE TABLE IF NOT EXISTS vendor_payment_document_types (
 
 CREATE TABLE IF NOT EXISTS suppliers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_no TEXT,
     account_id INTEGER REFERENCES accounts(id),
     name TEXT NOT NULL,
     company_name TEXT NOT NULL,
@@ -115,6 +119,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     bank_account_no TEXT,
     bank_iban TEXT,
     bank_details_encrypted TEXT,
+    currency TEXT DEFAULT 'YER',
     default_currency TEXT NOT NULL DEFAULT 'YER',
     supply_lead_time_days INTEGER NOT NULL DEFAULT 3,
     payment_document_type TEXT NOT NULL DEFAULT 'إيصال عادي',
@@ -130,15 +135,16 @@ CREATE TABLE IF NOT EXISTS suppliers (
 );
 
 -- فهارس الأداء للموردين وتجميعات الـ SRM
-CREATE INDEX IF NOT EXISTS idx_suppliers_industry_status ON suppliers (industry_category, status);
-CREATE INDEX IF NOT EXISTS idx_purchases_supplier_status ON purchases (supplier_id, status);
-CREATE INDEX IF NOT EXISTS idx_payments_supplier_type_status ON payments (supplier_id, type, status);
+
+
+
 
 -- عرض التجميعات المالية الديناميكية للموردين في الوقت الفعلي (Zero N+1 Query Aggregation View)
 CREATE VIEW IF NOT EXISTS view_vendor_financial_profiles AS
 SELECT 
     v.id AS id,
     v.id AS vendor_id,
+    v.party_no,
     v.account_id,
     ledger.code AS account_code,
     ledger.name AS account_name,
@@ -423,6 +429,11 @@ CREATE TABLE IF NOT EXISTS accounts (
     type TEXT NOT NULL, -- أصول، خصوم، حقوق ملكية، إيرادات، مصروفات
     parent_id INTEGER REFERENCES accounts(id),
     balance REAL DEFAULT 0,
+    level INTEGER DEFAULT 5,
+    is_posting INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'active',
+    default_cost_center_id INTEGER REFERENCES cost_centers(id),
+    analytical_type TEXT NOT NULL DEFAULT 'general',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -446,6 +457,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     description TEXT NOT NULL,
     reference_type TEXT, -- سند قبض، سند صرف، فاتورة، مستخلص، قيد يدوي
     reference_id INTEGER,
+    reference_no TEXT,
     total_debit REAL DEFAULT 0,
     total_credit REAL DEFAULT 0,
     status TEXT DEFAULT 'posted',       -- draft, under_review, approved, posted, closed, reversed
@@ -564,17 +576,19 @@ CREATE TABLE IF NOT EXISTS project_contracts (
 );
 
 -- فهارس الأداء للمستخلصات والعقود ودورة حياة العميل
-CREATE INDEX IF NOT EXISTS idx_project_contracts_client ON project_contracts (client_id);
-CREATE INDEX IF NOT EXISTS idx_bills_client_project_status ON bills (client_id, project_id, status);
-CREATE INDEX IF NOT EXISTS idx_bills_contract_status ON bills (contract_id, status);
-CREATE INDEX IF NOT EXISTS idx_payments_client_bill_type ON payments (client_id, bill_id, type, status);
-CREATE INDEX IF NOT EXISTS idx_payments_contract_type ON payments (contract_id, type, status);
+
+
+
+
+
 
 -- عرض التجميعات المالية الديناميكية للعملاء في الوقت الفعلي (Zero N+1 Client Financial Profile View)
 CREATE VIEW IF NOT EXISTS view_client_financial_profiles AS
 SELECT
     c.id,
     c.id AS client_id,
+    c.party_no,
+    c.status,
     c.account_id,
     ledger.code AS account_code,
     ledger.name AS account_name,
@@ -1780,9 +1794,9 @@ CREATE TABLE IF NOT EXISTS project_closeout_internal_audit_boq (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_closeouts_proj ON project_closeouts(project_id);
-CREATE INDEX IF NOT EXISTS idx_client_boq_closeout ON project_closeout_client_boq(closeout_id);
-CREATE INDEX IF NOT EXISTS idx_audit_boq_closeout ON project_closeout_internal_audit_boq(closeout_id);
+
+
+
 
 -- =========================================================================
 -- جداول وقوادح حماية دفتر الأستاذ العام والتقارير المالية
@@ -1805,13 +1819,13 @@ CREATE TABLE IF NOT EXISTS party_account_mappings (
     UNIQUE(party_type, party_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_je_status_date ON journal_entries(status, date);
-CREATE INDEX IF NOT EXISTS idx_jel_entry_account ON journal_entry_lines(entry_id, account_id);
-CREATE INDEX IF NOT EXISTS idx_jel_account ON journal_entry_lines(account_id);
-CREATE INDEX IF NOT EXISTS idx_jel_project ON journal_entry_lines(project_id);
-CREATE INDEX IF NOT EXISTS idx_jel_cost_center ON journal_entry_lines(cost_center_id);
-CREATE INDEX IF NOT EXISTS idx_payments_date_type_status ON payments(date, type, status);
-CREATE INDEX IF NOT EXISTS idx_expenses_date_status ON expenses(date, status);
+
+
+
+
+
+
+
 
 CREATE TRIGGER IF NOT EXISTS trg_journal_line_leaf_insert
 BEFORE INSERT ON journal_entry_lines
@@ -1879,3 +1893,31 @@ BEGIN
     );
 END;
 
+
+CREATE TABLE IF NOT EXISTS supporting_documents (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
+ file_name TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+ content_base64 TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+-- Indexes follow all table declarations for clean installations.
+CREATE INDEX IF NOT EXISTS idx_suppliers_industry_status ON suppliers (industry_category, status);
+CREATE INDEX IF NOT EXISTS idx_payments_supplier_type_status ON payments (supplier_id, type, status);
+CREATE INDEX IF NOT EXISTS idx_project_contracts_client ON project_contracts (client_id);
+CREATE INDEX IF NOT EXISTS idx_bills_client_project_status ON bills (client_id, project_id, status);
+CREATE INDEX IF NOT EXISTS idx_bills_contract_status ON bills (contract_id, status);
+CREATE INDEX IF NOT EXISTS idx_payments_client_bill_type ON payments (client_id, bill_id, type, status);
+CREATE INDEX IF NOT EXISTS idx_payments_contract_type ON payments (contract_id, type, status);
+CREATE INDEX IF NOT EXISTS idx_closeouts_proj ON project_closeouts(project_id);
+CREATE INDEX IF NOT EXISTS idx_client_boq_closeout ON project_closeout_client_boq(closeout_id);
+CREATE INDEX IF NOT EXISTS idx_audit_boq_closeout ON project_closeout_internal_audit_boq(closeout_id);
+CREATE INDEX IF NOT EXISTS idx_je_status_date ON journal_entries(status, date);
+CREATE INDEX IF NOT EXISTS idx_jel_entry_account ON journal_entry_lines(entry_id, account_id);
+CREATE INDEX IF NOT EXISTS idx_jel_account ON journal_entry_lines(account_id);
+CREATE INDEX IF NOT EXISTS idx_jel_project ON journal_entry_lines(project_id);
+CREATE INDEX IF NOT EXISTS idx_jel_cost_center ON journal_entry_lines(cost_center_id);
+CREATE INDEX IF NOT EXISTS idx_payments_date_type_status ON payments(date, type, status);
+CREATE INDEX IF NOT EXISTS idx_expenses_date_status ON expenses(date, status);
+-- purchases status index is created after its legacy migration in db.js

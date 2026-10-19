@@ -39,6 +39,7 @@ const PaymentDocumentTypeEnum = Object.freeze({
 
 const VendorStatusEnum = Object.freeze({
   ACTIVE: 'active',
+  INACTIVE: 'inactive',
   SUSPENDED: 'suspended',
   BLACKLISTED: 'blacklisted',
   UNDER_REVIEW: 'under_review'

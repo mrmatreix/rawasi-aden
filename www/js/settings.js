@@ -18,6 +18,7 @@ const Settings = {
   // ================== تبديل تبويبات الإعدادات ==================
   switchTab(tab) {
     this.activeTab = tab;
+    if (typeof Sidebar !== 'undefined' && App.activeView === 'settings') Sidebar.sync('settings', tab);
     document.querySelectorAll('.settings-pane').forEach(p => p.style.display = 'none');
     document.querySelectorAll('.report-tabs-bar .report-tab-btn').forEach(b => b.classList.remove('active'));
 

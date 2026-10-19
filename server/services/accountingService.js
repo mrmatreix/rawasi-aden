@@ -1,3 +1,4 @@
+const { saveDocuments } = require('./supportingDocumentService');
 /**
  * خدمة الحسابات المالية العامة (Accounting Service)
  * تفصل منطق الأعمال والتحقق المالي عن مسارات الـ HTTP/Routes
@@ -83,6 +84,32 @@ async function syncJournalCashMovements(db, entryId) {
 
 const AccountingService = {
   syncJournalCashMovements,
+  async resolveOptionalCostCenter(value, db = { get }) {
+    if (value === undefined || value === null || value === '') return null;
+    const id = Number(value);
+    if (!Number.isInteger(id) || id <= 0 || !await db.get('SELECT id FROM cost_centers WHERE id = ?', [id])) {
+      throw new Error('مركز التكلفة المحدد غير صالح');
+    }
+    return id;
+  },
+
+  async assertVoucherAccount(voucherType, accountId) {
+    const account = await this.assertLeafAccount(accountId);
+    if (voucherType === 'سند صرف') {
+      const seen = new Set();
+      let current = account;
+      while (current && !seen.has(Number(current.id))) {
+        seen.add(Number(current.id));
+        const text = `${current.type || ''} ${current.name || ''}`.normalize('NFKC').toLowerCase()
+          .replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآ]/g, 'ا');
+        if (/ايراد|revenue|income/.test(text) || String(current.code).startsWith('4')) {
+          throw new Error('لا يمكن اختيار حساب إيرادات كحساب مقابل لسند الصرف');
+        }
+        current = current.parent_id ? await get('SELECT id, code, name, type, parent_id FROM accounts WHERE id = ?', [current.parent_id]) : null;
+      }
+    }
+    return account;
+  },
   /**
    * التحقق الصارم من أن الحساب فرعي أخير (Leaf Account) ومؤهل لتسجيل القيود
    * يرفض أي حساب أب أو حساب تجميعي أو موقوف أو غير نشط
@@ -230,20 +257,7 @@ const AccountingService = {
       // التحقق الصارم من الحساب: يجب أن يكون فرعياً أخيراً ونشطاً
       const account = await this.assertLeafAccount(accountId);
 
-      const isNominal = account.type === 'مصروفات' || account.type === 'إيرادات' || 
-                        account.code.startsWith('4') || account.code.startsWith('5');
-      let costCenterId = line.cost_center_id ? Number(line.cost_center_id) : null;
-
-      if (costCenterId) {
-        const cc = await get('SELECT id FROM cost_centers WHERE id = ?', [costCenterId]);
-        if (!cc) {
-          const defCc = await get('SELECT id FROM cost_centers WHERE status = ? OR status = ? ORDER BY id ASC LIMIT 1', ['active', '1']);
-          costCenterId = defCc ? defCc.id : null;
-        }
-      } else if (isNominal) {
-        const defCc = await get('SELECT id FROM cost_centers WHERE status = ? OR status = ? ORDER BY id ASC LIMIT 1', ['active', '1']);
-        costCenterId = defCc ? defCc.id : null;
-      }
+      const costCenterId = await this.resolveOptionalCostCenter(line.cost_center_id);
 
       totalDebit += debit;
       totalCredit += credit;
@@ -339,6 +353,7 @@ const AccountingService = {
           VALUES (?, ?, ?, ?, ?, ?)
         `, [entryId, line.account_id, line.cost_center_id, line.debit, line.credit, line.description]);
       }
+      await saveDocuments(tx, 'journal', entryId, entryData.supporting_documents);
       if (status === 'posted') await syncJournalCashMovements(tx, entryId);
     };
 
@@ -397,7 +412,7 @@ const AccountingService = {
     }
 
     // 1. التحقق الصارم من الحساب المالي المختار أنه حساب فرعي أخير
-    const selectedLeafAccount = await this.assertLeafAccount(accountId);
+    const selectedLeafAccount = await this.assertVoucherAccount(voucherType, accountId);
 
     // 2. التحقق من طريقة الدفع وتحديد الحساب المقابل (صندوق أو بنك)
     const isBank = (paymentMethod === 'تحويل بنكي' || paymentMethod === 'شيك');
@@ -452,15 +467,7 @@ const AccountingService = {
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
-      let finalCcId = null;
-      if (costCenterId) {
-        const ccExists = await tx.get('SELECT id FROM cost_centers WHERE id = ?', [Number(costCenterId)]);
-        if (ccExists) finalCcId = ccExists.id;
-      }
-      if (!finalCcId) {
-        const defCc = await tx.get('SELECT id FROM cost_centers ORDER BY id ASC LIMIT 1');
-        if (defCc) finalCcId = defCc.id;
-      }
+      const finalCcId = await this.resolveOptionalCostCenter(costCenterId, tx);
 
       let validProjectId = null;
       if (projectId) {

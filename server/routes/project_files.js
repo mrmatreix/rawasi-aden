@@ -2,12 +2,14 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
-const { exec, execFile, spawn } = require('child_process');
+const { spawn } = require('child_process');
 const { get, query, run } = require('../database/db');
-const { requirePermission, requireScope } = require('../middleware/security');
+const { requirePermission, requireScope, checkUserScope } = require('../middleware/security');
 
 // المجلد الرئيسي الافتراضي لحفظ ملفات وتقارير المشاريع
-const DEFAULT_PROJECTS_BASE_DIR = path.resolve(__dirname, '..', '..', 'ملفات_المشاريع');
+const runtime=require('../config/environment');
+const {safePath}=require('../middleware/fileAccess');
+const DEFAULT_PROJECTS_BASE_DIR=runtime.storage.projects;
 
 // التأكد من وجود المجلد الافتراضي
 if (!fs.existsSync(DEFAULT_PROJECTS_BASE_DIR)) {
@@ -15,14 +17,13 @@ if (!fs.existsSync(DEFAULT_PROJECTS_BASE_DIR)) {
 }
 
 // حماية مسارات ملفات المشروع بالنطاق والصلاحيات
-router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
-  if (req.method === 'GET') {
-    return requirePermission('projects:view')(req, res, next);
-  }
-  if (req.path.includes('/export-package')) {
-    return requirePermission('projects:export,projects:view')(req, res, next);
-  }
-  return requirePermission('projects:edit,projects:create')(req, res, next);
+router.use((req,res,next)=>{
+  if(req.path.startsWith('/settings/'))return requirePermission(req.method==='GET'?'projects:view':'settings:company')(req,res,next);
+  if(['/download','/open-file'].includes(req.path))return requirePermission('projects:view')(req,res,next);
+  const match=req.path.match(/^\/(\d+)(?:\/|$)/);
+  if(!match)return res.status(404).json({success:false,message:'المسار غير موجود'});
+  req.params.projectId=match[1];
+  requireScope({projectParam:'projectId'})(req,res,()=>requirePermission(req.method==='GET'?'projects:view':req.path.includes('/export-package')?'projects:export':'projects:edit,projects:create')(req,res,next));
 });
 
 /**
@@ -30,6 +31,7 @@ router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res
  * يفحص جدول الإعدادات أولاً، وإن لم يوجد مسار مخصص يعتمد المسار الافتراضي
  */
 async function getProjectsBaseDir() {
+  if(runtime.isProd||runtime.isStaging)return DEFAULT_PROJECTS_BASE_DIR;
   try {
     const row = await get("SELECT value FROM settings WHERE `key` = 'projects_base_folder'");
     if (row && row.value && row.value.trim()) {
@@ -146,6 +148,19 @@ function scanProjectFiles(folderPath, baseDir) {
   return filesList.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
 }
 
+async function authorizedProjectFile(req,candidate) {
+ const base=await getProjectsBaseDir();
+ const file=safePath(base,candidate);
+ const projects=await query('SELECT id,code,name,branch_id,department_id FROM projects');
+ const owner=projects.find(project=>{
+  const code=(project.code||'PRJ-'+project.id).replace(/[\\/:*?"<>|]/g,'_').trim();
+  const folder=path.join(base,'['+code+'] '+sanitizeFolderName(project.name));
+  return runtime.contained(folder,file);
+ });
+ if(!owner||!checkUserScope(req.user,{projectId:owner.id,branchId:owner.branch_id,departmentId:owner.department_id}).allowed)throw Object.assign(new Error('غير مصرح بملفات هذا المشروع'),{statusCode:403});
+ return file;
+}
+
 // =================== المسارات البرمجية (API Routes) ===================
 
 // 0. إدارة وتحديد مسار حفظ ملفات المشاريع على الجهاز
@@ -167,6 +182,7 @@ router.get('/settings/base-folder', async (req, res) => {
 });
 
 router.post('/settings/base-folder', async (req, res) => {
+  if(runtime.isProd||runtime.isStaging)return res.status(409).json({success:false,message:'مسار التخزين الدائم يضبط من متغيرات البيئة'});
   try {
     let { folderPath, resetToDefault } = req.body;
 
@@ -214,6 +230,7 @@ router.post('/settings/base-folder', async (req, res) => {
 });
 
 router.post('/settings/open-base-folder', async (req, res) => {
+  if (!require('../config/environment').isDev || process.platform !== 'win32') return res.status(409).json({success:false,message:'استعرض ملفات المشاريع وحمّلها من النظام؛ فتح مجلد الخادم متاح محلياً فقط'});
   try {
     const baseDir = await getProjectsBaseDir();
     if (!fs.existsSync(baseDir)) {
@@ -255,41 +272,15 @@ router.get('/:projectId/folder', async (req, res) => {
  * فتح مجلد أو ملف في نظام ويندوز بطريقة فورية وموثوقة 100%
  * تدعم المسارات العربية والأقواس المربعة [PRJ-...] بدون مشاكل ترميز سطر الأوامر (CP437) أو تعليق
  */
-function openInWindows(targetPath, isFolder = true) {
-  const resolved = path.resolve(targetPath);
-
-  if (isFolder) {
-    // 1. استدعاء explorer.exe مباشرة عبر spawn (فوري وخفيف بدون تشويه UTF-8)
-    try {
-      const child = spawn('explorer.exe', [resolved], {
-        detached: true,
-        stdio: 'ignore'
-      });
-      child.unref();
-    } catch (e) {
-      console.warn('[openInWindows] spawn explorer error:', e.message);
-    }
-  }
-
-  // 2. تشغيل Invoke-Item مع -LiteralPath عبر PowerShell بترميز Base64 UTF-16LE
-  // لضمان استدعاء مشغل ويندوز ShellExecute الأصلي بدقة مع كافة المسارات العربية والأقواس
-  const psScript = `Invoke-Item -LiteralPath "${resolved.replace(/"/g, '`"')}"`;
-  const b64 = Buffer.from(psScript, 'utf16le').toString('base64');
-
-  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', b64], (err) => {
-    if (err) {
-      console.warn('[openInWindows] PowerShell error:', err.message);
-      if (isFolder) {
-        exec(`explorer.exe "${resolved}"`);
-      } else {
-        spawn('explorer.exe', ['/select,', resolved], { detached: true, stdio: 'ignore' }).unref();
-      }
-    }
-  });
+function openInWindows(targetPath) {
+  const child = spawn('explorer.exe', [path.resolve(targetPath)], {detached:true,stdio:'ignore',windowsHide:true});
+  child.on('error', error => console.warn('Folder opener failed:',error.code));
+  child.unref();
 }
 
 // 2. فتح مجلد المشروع مباشرة في مستكشف ملفات ويندوز (Windows Explorer)
 router.post('/:projectId/open-folder', async (req, res) => {
+  if (!require('../config/environment').isDev || process.platform !== 'win32') return res.status(409).json({success:false,message:'استعرض ملفات المشروع وحمّلها من النظام؛ فتح مجلد الخادم متاح محلياً فقط'});
   try {
     const projectId = req.params.projectId;
     const folderInfo = await ensureProjectFolder(projectId);
@@ -313,37 +304,14 @@ router.post('/:projectId/open-folder', async (req, res) => {
 });
 
 // 3. فتح ملف محدد عبر تطبيقه الافتراضي في ويندوز
-router.post('/open-file', (req, res) => {
-  try {
-    const { filePath } = req.body;
-    if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, message: 'الملف غير موجود في المسار المحدد' });
-    }
-
-    openInWindows(filePath, false);
-
-    res.json({ success: true, message: 'تم فتح الملف بنجاح', filePath });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+router.post('/open-file', async(req,res)=>{
+ try {const file=await authorizedProjectFile(req,req.body.filePath||req.body.path||'');res.json({success:true,downloadUrl:'/api/project-files/download?path='+encodeURIComponent(file),message:'استخدم رابط التنزيل لعرض المستند بأمان'});}
+ catch(error){res.status(error.statusCode||404).json({success:false,message:'تعذر فتح المستند'});}
 });
 
-// 3.1 تنزيل أو استعراض الملف مباشرة في المتصفح
-router.get('/download', async (req, res) => {
-  try {
-    const filePath = req.query.path;
-    if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(404).send('الملف غير موجود');
-    }
-    const resolved = path.resolve(filePath);
-    const baseDir = await getProjectsBaseDir();
-    if (!resolved.startsWith(baseDir) && !resolved.startsWith(DEFAULT_PROJECTS_BASE_DIR)) {
-      return res.status(403).send('غير مصرح بالوصول لهذا المسار');
-    }
-    res.download(resolved);
-  } catch (err) {
-    res.status(500).send('خطأ أثناء تحميل الملف: ' + err.message);
-  }
+router.get('/download',async(req,res)=>{
+ try {const file=await authorizedProjectFile(req,req.query.path||'');res.set({'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});res.download(file);}
+ catch(error){res.status(error.statusCode||404).json({success:false,message:'الملف غير متاح أو غير مصرح به'});}
 });
 
 
@@ -378,13 +346,14 @@ router.post('/:projectId/save-report', async (req, res) => {
       else if (reportType === 'حساب ختامي' || reportType === 'settlement') subfolder = '09_الحساب_الختامي_والتصفية';
     }
 
-    const destDir = path.join(folderInfo.folderPath, subfolder);
+    const destDir = safePath(folderInfo.folderPath, subfolder, {existing:false});
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
 
-    const targetFilePath = path.join(destDir, fileName);
+    const targetFilePath = safePath(folderInfo.folderPath, path.join(destDir,fileName), {existing:false});
 
     // كتابة محتوى التقرير (مع BOM UTF-8 لملفات الإكسيل والـ HTML)
     const fileData = (ext === '.xls' || ext === '.html') ? '\uFEFF' + content : content;
+    if(!/\.(html|pdf|xls|csv|txt|json)$/i.test(fileName))return res.status(400).json({success:false,message:'نوع المستند غير مسموح'});
     fs.writeFileSync(targetFilePath, fileData, 'utf8');
 
     // حفظ نسخة إضافية مرجعية في مجلد تقارير_المشروع_المصدرة
@@ -423,16 +392,17 @@ router.post('/:projectId/scan-archive', async (req, res) => {
     const ext = allowed[mimeType];
     if (!ext) return res.status(400).json({ success: false, message: 'الملف يجب أن يكون PDF أو صورة JPG/PNG/WEBP' });
     const data = Buffer.from(String(contentBase64).replace(/^data:[^;]+;base64,/, ''), 'base64');
+    require('../services/uploadValidationService').validateUpload('scan'+ext,data);
     if (!data.length || data.length > 25 * 1024 * 1024) return res.status(400).json({ success: false, message: 'حجم الملف غير صالح أو يتجاوز 25MB' });
     const folderInfo = await ensureProjectFolder(req.params.projectId);
     const archiveDir = path.join(folderInfo.folderPath, '10_أرشيف_التقارير_الممسوحة');
     fs.mkdirSync(archiveDir, { recursive: true });
     const safeTitle = sanitizeFolderName(reportTitle || path.basename(fileName, path.extname(fileName))).replace(/[^\w\u0600-\u06FF\s-]/g, '_').slice(0, 120) || 'تقرير_ممسوح';
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const targetFilePath = path.join(archiveDir, `${safeTitle}_${stamp}${ext}`);
+    const targetFilePath = safePath(folderInfo.folderPath,path.join(archiveDir, `${safeTitle}_${stamp}_${require('crypto').randomUUID()}${ext}`),{existing:false});
     fs.writeFileSync(targetFilePath, data);
     res.json({ success: true, message: `تمت أرشفة ${category} داخل مجلد المشروع بنجاح`, data: { fileName: path.basename(targetFilePath), filePath: targetFilePath, category } });
-  } catch (err) { res.status(500).json({ success: false, message: 'تعذر أرشفة التقرير: ' + err.message }); }
+  } catch (err) { res.status(err.statusCode||500).json({ success: false, message: 'تعذر أرشفة التقرير: ' + err.message }); }
 });
 
 // 5. استعراض كافة ملفات المشروع

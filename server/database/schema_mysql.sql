@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- 3. جدول العملاء
 CREATE TABLE IF NOT EXISTS clients (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    party_no VARCHAR(30),
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
     account_id INT NULL,
     name VARCHAR(200) NOT NULL,
     company VARCHAR(200) NULL,
@@ -62,6 +64,7 @@ CREATE TABLE IF NOT EXISTS clients (
 -- 4. جدول الموردين
 CREATE TABLE IF NOT EXISTS suppliers (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    party_no VARCHAR(30),
     account_id INT NULL,
     name VARCHAR(200) NOT NULL,
     category VARCHAR(100) NULL,
@@ -299,6 +302,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     type VARCHAR(100) NOT NULL,
     parent_id INT NULL,
     balance DECIMAL(15,2) DEFAULT 0,
+    default_cost_center_id INT NULL,
+    analytical_type VARCHAR(30) NOT NULL DEFAULT 'general',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (parent_id) REFERENCES accounts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -324,6 +329,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     description TEXT NOT NULL,
     reference_type VARCHAR(100) NULL,
     reference_id INT NULL,
+    reference_no VARCHAR(255) NULL,
     total_debit DECIMAL(15,2) DEFAULT 0,
     total_credit DECIMAL(15,2) DEFAULT 0,
     status VARCHAR(50) DEFAULT 'posted',
@@ -741,3 +747,10 @@ CREATE TABLE IF NOT EXISTS employee_evaluations (
 
 SET FOREIGN_KEY_CHECKS = 1;
 
+
+CREATE TABLE IF NOT EXISTS supporting_documents (
+ id INT AUTO_INCREMENT PRIMARY KEY, entity_type VARCHAR(20) NOT NULL, entity_id INT NOT NULL,
+ file_name VARCHAR(200) NOT NULL, mime_type VARCHAR(150) NOT NULL, size_bytes INT NOT NULL,
+ content_base64 LONGTEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+ INDEX idx_supporting_entity (entity_type, entity_id)
+);

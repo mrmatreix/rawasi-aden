@@ -3,6 +3,54 @@
  */
 
 const Accounting = {
+  financialTypeLabel(value) { return (typeof FinancialLabels !== 'undefined' ? FinancialLabels : require('./financial-labels')).type(value); },
+  async readSupportingDocuments(inputId) {
+    const files = Array.from(document.getElementById(inputId)?.files || []);
+    if (files.length > 10 || files.some(f => f.size > 10 * 1024 * 1024) || files.reduce((sum, f) => sum + f.size, 0) > 20 * 1024 * 1024) {
+      throw new Error('حد المؤيدات: 10 ملفات، 10 ميجابايت للملف و20 ميجابايت للمجموع');
+    }
+    return Promise.all(files.map(file => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, content_base64: String(reader.result).split(',')[1] });
+      reader.onerror = () => reject(new Error('تعذرت قراءة الملف: ' + file.name));
+      reader.readAsDataURL(file);
+    })));
+  },
+
+  async viewSupportingDocuments(kind, id) {
+    try {
+      const response = await fetch(`/api/supporting-documents/${kind}/${id}`);
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'تعذر تحميل المؤيدات');
+      const files = result.data || [];
+      App.showDynamicModal('المؤيدات المستندية', files.length ? files.map(doc => `<div style="display:flex;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px solid var(--border-color)"><span>${this.escapeJournalDescription(doc.file_name)} <small>(${Math.ceil(doc.size_bytes / 1024)} KB)</small></span><button class="btn btn-secondary btn-sm" onclick="Accounting.downloadSupportingDocument('${doc.entity_type || kind}', ${Number(doc.entity_id || id)}, ${Number(doc.id)})">تنزيل</button></div>`).join('') : '<p>لا توجد مؤيدات مرفقة بهذه العملية.</p>');
+    } catch (error) { App.showToast(error.message, 'error'); }
+  },
+
+  async downloadSupportingDocument(kind, id, documentId) {
+    try {
+      const response = await fetch(`/api/supporting-documents/${kind}/${id}/${documentId}`);
+      if (!response.ok) throw new Error('تعذر تنزيل المؤيد');
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const name = disposition.includes("UTF-8''") ? decodeURIComponent(disposition.split("UTF-8''")[1]) : 'document';
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (error) { App.showToast(error.message, 'error'); }
+  },
+
+  printJournalListPdf() {
+    const entries = this.filteredJournalEntries || this.journalEntries || [];
+    if (!entries.length) return App.showToast('لا توجد قيود للطباعة', 'warning');
+    const area = document.getElementById('printArea');
+    if (!area) return;
+    const escape = value => this.escapeJournalDescription(value || '-');
+    const amount = value => App.formatNumber(Number(value) || 0);
+    area.innerHTML = `<div class="multi-page-report-document font-cairo" dir="rtl" style="padding:14mm;color:#111;background:white"><div class="letterhead-content-wrap"><h2>سجل قيود اليومية</h2><p>القيود المعروضة حسب البحث والتصفية — عدد القيود: ${entries.length}</p><table style="width:100%;border-collapse:collapse" border="1" cellpadding="7"><thead><tr><th>رقم القيد / السند</th><th>التاريخ</th><th>البيان العام</th><th>المرجع</th><th>مدين</th><th>دائن</th><th>الحالة</th></tr></thead><tbody>${entries.map(entry => `<tr><td>${escape(entry.display_no || entry.entry_no)}</td><td>${escape(entry.date)}</td><td style="white-space:pre-wrap">${escape(entry.description)}</td><td>${escape(entry.reference_no)}</td><td>${amount(entry.total_debit)}</td><td>${amount(entry.total_credit)}</td><td>${escape(entry.status === 'draft' ? 'مسودة' : entry.status === 'posted' ? 'مرحل' : entry.status)}</td></tr>`).join('')}</tbody><tfoot><tr><th colspan="4">الإجمالي</th><th>${amount(entries.reduce((sum, entry) => sum + Number(entry.total_debit || 0), 0))}</th><th>${amount(entries.reduce((sum, entry) => sum + Number(entry.total_credit || 0), 0))}</th><th></th></tr></tfoot></table></div></div>`;
+    window.print();
+  },
+
   clients: [],
   suppliers: [],
   projects: [],
@@ -110,13 +158,28 @@ const Accounting = {
     }
   },
 
+  voucherAccounts(kind) {
+    const byId = new Map([...(this.allAccounts || []), ...(this.accounts || [])].map(account => [String(account.id), account]));
+    return (this.accounts || []).filter(account => {
+      if (kind !== 'expense') return true;
+      const seen = new Set();
+      for (let current = account; current && !seen.has(current); current = byId.get(String(current.parent_id))) {
+        seen.add(current);
+        const text = `${current.type || current.account_type || ''} ${current.name || current.account_name || ''}`
+          .normalize('NFKC').toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآ]/g, 'ا');
+        if (/ايراد|revenue|income/.test(text) || String(current.code || current.account_code || '').startsWith('4')) return false;
+      }
+      return true;
+    });
+  },
+
   refreshAllAccountSelects() {
     if (this.accounts && this.accounts.length) {
-      const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || a.account_type || ''})`;
+      const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${this.financialTypeLabel(a.type || a.account_type)})`;
       this.populateSelectCustom('rcAccountSelect', this.accounts, formatLeafAcc);
       this.populateSelectCustom('modalRcAccountSelect', this.accounts, formatLeafAcc);
-      this.populateSelectCustom('expAccountSelect', this.accounts, formatLeafAcc);
-      this.populateSelectCustom('modalExpAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('expAccountSelect', this.voucherAccounts('expense'), formatLeafAcc);
+      this.populateSelectCustom('modalExpAccountSelect', this.voucherAccounts('expense'), formatLeafAcc);
       this.populateSelectCustom('modalCustodyAccountSelect', this.accounts, formatLeafAcc);
       this.populateSelectCustom('quickCustodyAccountSelect', this.accounts, formatLeafAcc);
 
@@ -146,7 +209,7 @@ const Accounting = {
           if (sel.options.length <= 1) {
             const currentVal = sel.value;
             const optionsHtml = this.accounts.map(a => 
-              `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${currentVal == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || ''})</option>`
+              `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${currentVal == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${this.financialTypeLabel(a.type)})</option>`
             ).join('');
             sel.innerHTML = `<option value="">اختر الحساب...</option>` + optionsHtml;
             if (currentVal) sel.value = currentVal;
@@ -173,7 +236,9 @@ const Accounting = {
   populateSelectCustom(elementId, items, formatFn) {
     const el = document.getElementById(elementId);
     if (!el || !el.options || !Array.isArray(items)) return;
-    const defaultOption = el.options[0] ? el.options[0].outerHTML : '<option value="">اختر...</option>';
+    const isExpense = ['expAccountSelect', 'modalExpAccountSelect'].includes(elementId);
+    if (isExpense) items = this.voucherAccounts.call({ accounts: items, allAccounts: this.allAccounts }, 'expense');
+    const defaultOption = el.options[0] && !el.options[0].value ? el.options[0].outerHTML : '<option value="">اختر...</option>';
     el.innerHTML = defaultOption + items.map(item => `<option value="${item.id}">${formatFn(item)}</option>`).join('');
   },
 
@@ -415,7 +480,7 @@ const Accounting = {
     if (!accSelect || !this.accounts || this.accounts.length === 0) return;
 
     let match = null;
-    const accounts = this.accounts;
+    const accounts = this.voucherAccounts('expense');
 
     if (typeVal === 'مواد بناء') {
       match = accounts.find(a => (a.name && (a.name.includes('مواد') || a.name.includes('بناء') || a.name.includes('مشتريات'))) || (a.code && (a.code.startsWith('31') || a.code.startsWith('51'))));
@@ -560,6 +625,7 @@ const Accounting = {
   _currentCashFilter: 'الكل',
   switchCashFilter(type, btn) {
     this._currentCashFilter = type;
+    if (typeof Sidebar !== 'undefined' && App.activeView === 'cash') Sidebar.sync('cash', type === 'بنك' ? 'bank' : 'cash');
     const tabs = ['tabCashAll', 'tabCashCash', 'tabCashBank'];
     tabs.forEach(id => {
       const el = document.getElementById(id);
@@ -567,7 +633,7 @@ const Accounting = {
     });
     if (btn) btn.classList.add('active');
     if (window.App && App.loadCashTable) {
-      App.loadCashTable(type);
+      return App.loadCashTable(type);
     }
   },
 
@@ -618,7 +684,7 @@ const Accounting = {
                 <td class="num">${Number(m.previous_balance || 0).toLocaleString('en-US')}</td>
                 <td class="currency" style="color:#047857;">${m.cash_in ? Number(m.cash_in).toLocaleString('en-US') : '0'}</td>
                 <td class="currency" style="color:#b91c1c;">${m.cash_out ? Number(m.cash_out).toLocaleString('en-US') : '0'}</td>
-                <td class="currency" style="font-weight:bold; color:#0f2744;">${Number(m.current_balance || 0).toLocaleString('en-US')}</td>
+                <td class="currency" style="font-weight:bold; color:#0f2744;">${Number(m.current_balance || 0).toLocaleString('en-US') + (m.is_posted === false ? ' (متوقع)' : '')}</td>
                 <td style="text-align:right;">${m.notes || '-'}</td>
               </tr>
             `).join('')}
@@ -715,7 +781,7 @@ const Accounting = {
                   <td class="text-left">${Number(m.previous_balance || 0).toLocaleString('en-US')}</td>
                   <td class="text-left green">${m.cash_in ? '+' + Number(m.cash_in).toLocaleString('en-US') : '-'}</td>
                   <td class="text-left red">${m.cash_out ? '-' + Number(m.cash_out).toLocaleString('en-US') : '-'}</td>
-                  <td class="text-left gold">${Number(m.current_balance || 0).toLocaleString('en-US')}</td>
+                  <td class="text-left gold">${Number(m.current_balance || 0).toLocaleString('en-US') + (m.is_posted === false ? ' (متوقع)' : '')}</td>
                   <td>${m.notes || '-'}</td>
                 </tr>
               `).join('')}
@@ -783,6 +849,17 @@ const Accounting = {
     if (refGroup) refGroup.style.display = isBankMethod ? '' : 'none';
     const refInput = document.getElementById(isModal ? (isRc ? 'modalRcCheckNo' : 'modalExpCheckNo') : (isRc ? 'rcCheckNo' : 'expCheckNo'));
     if (refInput && !isBankMethod) refInput.value = '';
+    if (!isRc) this.updateExpenseTransferHint(isModal);
+  },
+
+  updateExpenseTransferHint(isModal = true) {
+    const select = document.getElementById(isModal ? 'modalExpAccountSelect' : 'expAccountSelect');
+    const hint = document.getElementById(isModal ? 'modalExpTransferHint' : 'expTransferHint');
+    const method = document.getElementById(isModal ? 'modalExpPaymentMethod' : 'expPaymentMethod')?.value;
+    if (!hint) return;
+    const account = (this.accounts || []).find(a => String(a.id) === String(select?.value));
+    hint.textContent = method === 'نقدي' && String(account?.code || '').startsWith('11102')
+      ? 'الحساب المقابل المختار بنك؛ سيظهر تحويل من الصندوق إلى هذا البنك. إذا كان المبلغ مصروفاً فاختر حساب المصروف المقصود.' : '';
   },
 
   onFinancialAccountChange(faId, hintId) {
@@ -821,7 +898,7 @@ const Accounting = {
     if (filtered.length === 0) filtered = allFa;
 
     select.innerHTML = '<option value="">اختر الحساب المالي...</option>' +
-      filtered.map((f, idx) => `<option value="${f.id}" ${idx === 0 ? 'selected' : ''}>${f.name} (${f.type})</option>`).join('');
+      filtered.map((f, idx) => `<option value="${f.id}" ${idx === 0 ? 'selected' : ''}>${f.name} (${this.financialTypeLabel(f.type)})</option>`).join('');
 
     if (filtered.length > 0 && hintId) {
       this.onFinancialAccountChange(filtered[0].id, hintId);
@@ -1114,7 +1191,7 @@ const Accounting = {
 
     // ملء قوائم الحسابات، المشاريع، ومراكز التكلفة فوراً
     if (this.accounts && this.accounts.length) {
-      const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || a.account_type || ''})`;
+      const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${this.financialTypeLabel(a.type || a.account_type)})`;
       this.populateSelectCustom('modalRcAccountSelect', this.accounts, formatLeafAcc);
     }
     if (this.costCenters && this.costCenters.length) {
@@ -1217,6 +1294,7 @@ const Accounting = {
           'Idempotency-Key': idempotency_key
         },
         body: JSON.stringify({
+          supporting_documents: await this.readSupportingDocuments('modalRcSupportingFiles'),
           type: 'قبض',
           client_id: client_id || null,
           client_name: client_name || client_input,
@@ -1287,7 +1365,7 @@ const Accounting = {
         App.showToast(data.message || 'حدث خطأ أثناء الحفظ', 'error');
       }
     } catch (e) {
-      App.showToast('فشل الاتصال بالخادم', 'error');
+      App.showToast(e.message || 'فشل الاتصال بالخادم', 'error');
     }
   },
 
@@ -1333,6 +1411,7 @@ const Accounting = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          supporting_documents: await this.readSupportingDocuments('rcSupportingFiles'),
           type: 'قبض',
           client_id,
           project_id,
@@ -1383,7 +1462,7 @@ const Accounting = {
         App.showToast(data.message || 'حدث خطأ', 'error');
       }
     } catch (e) {
-      App.showToast('فشل الاتصال بالخادم', 'error');
+      App.showToast(e.message || 'فشل الاتصال بالخادم', 'error');
     }
   },
 
@@ -1439,6 +1518,7 @@ const Accounting = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          supporting_documents: await this.readSupportingDocuments('expSupportingFiles'),
           expense_type,
           project_id,
           supplier_id,
@@ -1468,7 +1548,7 @@ const Accounting = {
         App.showToast(data.message || 'حدث خطأ', 'error');
       }
     } catch (e) {
-      App.showToast('فشل الاتصال بالخادم', 'error');
+      App.showToast(e.message || 'فشل الاتصال بالخادم', 'error');
     }
   },
 
@@ -1541,7 +1621,7 @@ const Accounting = {
         App.showToast(data.message || 'خطأ', 'error');
       }
     } catch (e) {
-      App.showToast('فشل الاتصال بالخادم', 'error');
+      App.showToast(e.message || 'فشل الاتصال بالخادم', 'error');
     }
   },
 
@@ -1647,7 +1727,7 @@ const Accounting = {
       }
     }
     if (this.accounts && this.accounts.length) {
-      this.populateSelectCustom('modalExpAccountSelect', this.accounts, a => `${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || a.account_type || ''})`);
+      this.populateSelectCustom('modalExpAccountSelect', this.voucherAccounts('expense'), a => `${a.code || a.account_code} - ${a.name || a.account_name} (${this.financialTypeLabel(a.type || a.account_type)})`);
     }
     if (this.costCenters && this.costCenters.length) {
       this.populateSelectCustom('modalExpCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
@@ -1735,6 +1815,7 @@ const Accounting = {
           'X-Idempotency-Key': idempotency_key
         },
         body: JSON.stringify({
+          supporting_documents: await this.readSupportingDocuments('modalExpSupportingFiles'),
           expense_type: expense_type || 'مصروف عام',
           project_id: project_id || null,
           supplier_id: supplier_id || null,
@@ -1796,7 +1877,7 @@ const Accounting = {
         App.showToast(data.message || 'حدث خطأ أثناء الحفظ', 'error');
       }
     } catch (e) {
-      App.showToast('فشل الاتصال بالخادم', 'error');
+      App.showToast(e.message || 'فشل الاتصال بالخادم', 'error');
     }
   },
 
@@ -1904,7 +1985,7 @@ const Accounting = {
         App.showToast(data.message || 'حدث خطأ', 'error');
       }
     } catch (e) {
-      App.showToast('فشل الاتصال بالخادم', 'error');
+      App.showToast(e.message || 'فشل الاتصال بالخادم', 'error');
     }
   },
 
@@ -2368,11 +2449,39 @@ const Accounting = {
   },
 
   // ================== إدارة العملاء ==================
+  partyStatusLabel(status) {
+    return ({ active: 'نشط', inactive: 'موقف', suspended: 'معلق', under_review: 'معلق', blacklisted: 'موقف' })[status] || 'نشط';
+  },
+
   openNewClientModal(targetSelectId = null) {
     this._targetClientSelectId = targetSelectId;
     const form = document.getElementById('newClientForm');
     if (form) form.reset();
+    document.getElementById('clientEditId').value = '';
+    document.getElementById('clientPartyNo').value = '';
+    document.getElementById('clientModalTitle').textContent = 'إضافة عميل جديد';
+    document.getElementById('clientStatusGroup').hidden = true;
+    document.getElementById('clientPrevBal').disabled = false;
     App.openModal('newClientModal');
+  },
+
+  async openEditClientModal(id) {
+    try {
+      const res = await fetch('/api/clients/' + id, { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || !json.success || !json.data) throw new Error(json.message || 'تعذر تحميل العميل');
+      const client = json.data;
+      this.openNewClientModal();
+      document.getElementById('clientEditId').value = id;
+      document.getElementById('clientPartyNo').value = client.party_no || '';
+      document.getElementById('clientModalTitle').textContent = 'تعديل بيانات العميل';
+      document.getElementById('clientStatusGroup').hidden = false;
+      document.getElementById('clientStatus').value = client.status || 'active';
+      for (const [field, key] of Object.entries({ clientName: 'name', clientCompany: 'company', clientPhone: 'phone', clientEmail: 'email', clientAddress: 'address', clientCurrency: 'currency', clientNotes: 'notes', clientPrevBal: 'previous_balance' })) {
+        document.getElementById(field).value = client[key] ?? '';
+      }
+      document.getElementById('clientPrevBal').disabled = true;
+    } catch (error) { App.showToast(error.message, 'error'); }
   },
 
   async submitNewClient(e) {
@@ -2403,11 +2512,13 @@ const Accounting = {
     }
 
     try {
-      const res = await fetch('/api/clients', {
-        method: 'POST',
+      const editId = document.getElementById('clientEditId').value;
+      const res = await fetch('/api/clients' + (editId ? '/' + editId : ''), {
+        method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name, company, phone, email, address, previous_balance, currency, notes,
+          name, company, phone, email, address, previous_balance: editId ? undefined : previous_balance, currency, notes,
+          status: editId ? document.getElementById('clientStatus').value : undefined,
           account_code: '12301001'
         })
       });
@@ -2909,6 +3020,9 @@ const Accounting = {
     
     const editIdInput = document.getElementById('suppEditId');
     if (editIdInput) editIdInput.value = '';
+    document.getElementById('supplierPartyNo').value = '';
+    document.getElementById('supplierStatusGroup').hidden = true;
+    document.getElementById('supplierStatus').value = 'active';
 
     const titleEl = document.getElementById('supplierModalTitle');
     if (titleEl) titleEl.textContent = 'ملف تعريف المورد (SRM Profile) / إضافة مورد جديد';
@@ -2971,6 +3085,9 @@ const Accounting = {
       }
 
       const v = json.data;
+      document.getElementById('supplierPartyNo').value = v.party_no || '';
+      document.getElementById('supplierStatusGroup').hidden = false;
+      document.getElementById('supplierStatus').value = ({ under_review: 'suspended', blacklisted: 'inactive' })[v.status] || v.status || 'active';
       const fin = v.financial_summary || {};
       const bank = v.bank_details || {};
 
@@ -3186,6 +3303,11 @@ const Accounting = {
         notes
       };
 
+      // Hidden legacy values must not overwrite existing balances or bank data.
+      delete payload.balance;
+      delete payload.bank_iban;
+      delete payload.supply_lead_time_days;
+      payload.status = isEdit ? document.getElementById('supplierStatus').value : 'active';
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -3230,31 +3352,7 @@ const Accounting = {
   // ================== إدارة قيود اليومية العامة (Journal Entries) ==================
 
   injectPeriodAndAuditButtons() {
-    const actions = document.getElementById('journalHeaderActions');
-    if (!actions) return;
-    if (!document.getElementById('btnJournalPeriods')) {
-      const pBtn = document.createElement('button');
-      pBtn.id = 'btnJournalPeriods';
-      pBtn.className = 'btn btn-warning';
-      pBtn.title = 'إدارة وإغلاق الفترات المحاسبية';
-      pBtn.innerHTML = '<span>🔒 الفترات المحاسبية</span>';
-      pBtn.onclick = () => Accounting.openPeriodsModal();
-      actions.insertBefore(pBtn, actions.firstChild);
-    }
-    if (!document.getElementById('btnJournalAuditLog')) {
-      const aBtn = document.createElement('button');
-      aBtn.id = 'btnJournalAuditLog';
-      aBtn.className = 'btn btn-info';
-      aBtn.title = 'سجل التدقيق والرقابة المالية';
-      aBtn.innerHTML = '<span>📜 سجل التدقيق</span>';
-      aBtn.onclick = () => Accounting.openAuditLogModal();
-      const pBtn = document.getElementById('btnJournalPeriods');
-      if (pBtn && pBtn.nextSibling) {
-        actions.insertBefore(aBtn, pBtn.nextSibling);
-      } else {
-        actions.appendChild(aBtn);
-      }
-    }
+    ['btnJournalPeriods', 'btnJournalAuditLog'].forEach(id => document.getElementById(id)?.remove());
   },
 
   async loadJournalEntries() {
@@ -3298,11 +3396,12 @@ const Accounting = {
   },
 
   renderJournalTable(entries) {
+    this.filteredJournalEntries = entries;
     const tbody = document.getElementById('fullJournalTableBody');
     if (!tbody) return;
 
     if (!entries || entries.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد قيود يومية مسجلة حتى الآن</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد قيود يومية مسجلة حتى الآن</td></tr>`;
       return;
     }
 
@@ -3314,9 +3413,9 @@ const Accounting = {
 
     tbody.innerHTML = entries.map(je => `
       <tr>
-        <td><strong>${je.entry_no}</strong><br><small>${je.status === 'draft' ? 'مسودة' : je.status === 'posted' ? 'مرحل' : je.status}</small></td>
+        <td><strong>${je.display_no || je.entry_no}</strong><br><small>${je.status === 'draft' ? 'مسودة' : je.status === 'posted' ? 'مرحل' : je.status}</small></td>
         <td>${je.date}</td>
-        <td>${je.description || '-'}</td>
+        <td style="min-width: 220px; max-width: 420px; white-space: pre-wrap; overflow-wrap: anywhere;">${this.escapeJournalDescription(je.description || je.entry_description || je.notes || '-')}</td>
         <td><span class="badge ${je.reference_type === 'يدوي' ? 'badge-info' : 'badge-active'}">${je.reference_type || 'يدوي'} ${je.reference_no ? '(' + je.reference_no + ')' : ''}</span></td>
         <td style="color: var(--accent-green);">${renderSide(je.lines, 'debit', je.currency)}</td>
         <td style="color: #38bdf8;">${renderSide(je.lines, 'credit', je.currency)}</td>
@@ -3325,11 +3424,15 @@ const Accounting = {
           <div style="display: flex; gap: 6px; justify-content: center;">
             <button class="btn btn-sm btn-secondary" onclick="Accounting.viewJournalDetails(${je.id})" title="عرض تفاصيل وسطور القيد">👁️ تفاصيل</button>
             ${je.status === 'draft' ? `<button class="btn btn-sm btn-secondary" onclick="Accounting.editJournalDraft(${je.id})">تعديل</button><button class="btn btn-sm btn-primary" onclick="Accounting.postDraft('journal', ${je.id})">ترحيل</button>` : ''}
-            <button class="btn btn-sm btn-primary" onclick="Accounting.printJournalEntryById(${je.id})" title="طباعة سند القيد الرسمي">🖨️ طباعة</button>
+            <button class="btn btn-sm btn-secondary" onclick="Accounting.viewSupportingDocuments('journal', ${je.id})">📎 المؤيدات</button><button class="btn btn-sm btn-primary" onclick="Accounting.printJournalEntryById(${je.id})" title="طباعة أو حفظ PDF">🖨️ PDF</button>
           </div>
         </td>
       </tr>
     `).join('');
+  },
+
+  escapeJournalDescription(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   },
 
   filterJournalTable() {
@@ -3339,6 +3442,7 @@ const Accounting = {
     const filtered = this.journalEntries.filter(je => {
       const matchQuery = !query || 
         (je.entry_no && je.entry_no.toLowerCase().includes(query)) ||
+        (je.display_no && je.display_no.toLowerCase().includes(query)) ||
         (je.description && je.description.toLowerCase().includes(query)) ||
         (je.reference_no && je.reference_no.toLowerCase().includes(query));
 
@@ -3429,7 +3533,7 @@ const Accounting = {
     }
 
     const accountOptions = (accountsList || []).map(a => 
-      `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${data.account_id == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${a.type || ''})</option>`
+      `<option value="${a.id}" data-code="${a.code || a.account_code || ''}" data-type="${a.type || a.account_type || ''}" ${data.account_id == a.id ? 'selected' : ''}>${a.code || a.account_code} - ${a.name || a.account_name} (${this.financialTypeLabel(a.type)})</option>`
     ).join('');
 
     const centerOptions = (this.costCenters || []).map(cc =>
@@ -3474,15 +3578,11 @@ const Accounting = {
     const accSelect = tr.querySelector('.je-line-account');
     if (!accSelect) return;
 
-    const opt = accSelect.options[accSelect.selectedIndex];
-    const code = opt ? (opt.getAttribute('data-code') || '') : '';
-    const type = opt ? (opt.getAttribute('data-type') || '') : '';
-
-    const isNominal = type === 'مصروفات' || type === 'إيرادات' || type === 'expense' || type === 'revenue' || code.startsWith('4') || code.startsWith('5');
     const centerSelect = tr.querySelector('.je-line-cost-center');
     if (centerSelect) {
-      centerSelect.style.borderColor = isNominal && !centerSelect.value ? '#f59e0b' : '';
-      centerSelect.title = isNominal ? 'مركز التكلفة مطلوب لهذا السطر' : '';
+      centerSelect.required = false;
+      centerSelect.style.borderColor = '';
+      centerSelect.title = 'مركز التكلفة اختياري';
     }
   },
 
@@ -3631,7 +3731,6 @@ const Accounting = {
     let totalDebit = 0;
     let totalCredit = 0;
     let hasInvalidAccount = false;
-    let missingCostCenter = null;
     let nonLeafAccountMsg = null;
 
     rows.forEach(r => {
@@ -3650,15 +3749,6 @@ const Accounting = {
         if (accObj && ((accObj.children_count && accObj.children_count > 0) || (accObj.is_posting === 0 && accObj.level < 5))) {
           nonLeafAccountMsg = 'لا يمكن تسجيل العملية على هذا الحساب، يرجى اختيار الحساب الفرعي الأخير.';
         }
-      }
-
-      // فحص إلزامية مركز التكلفة لحسابات الأرباح والخسائر
-      if (accountSelect && accountSelect.selectedIndex >= 0) {
-        const opt = accountSelect.options[accountSelect.selectedIndex];
-        const code = opt ? (opt.getAttribute('data-code') || '') : '';
-        const type = opt ? (opt.getAttribute('data-type') || '') : '';
-        const isNominal = type === 'مصروفات' || type === 'إيرادات' || type === 'expense' || type === 'revenue' || code.startsWith('4') || code.startsWith('5');
-        if (isNominal && (debit > 0 || credit > 0) && !costCenterId && !missingCostCenter) missingCostCenter = centerSelect;
       }
 
       if (debit > 0 || credit > 0) {
@@ -3684,12 +3774,6 @@ const Accounting = {
       return;
     }
 
-    if (missingCostCenter) {
-      App.showToast('يرجى اختيار مركز التكلفة لسطر المصروف أو الإيراد', 'error');
-      missingCostCenter.focus();
-      missingCostCenter.style.borderColor = '#f59e0b';
-      return;
-    }
 
     if (lines.length < 2) {
       App.showToast('يجب أن يتضمن القيد سطرين فعليين بمبالغ مالية على الأقل', 'error');
@@ -3714,6 +3798,7 @@ const Accounting = {
         method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          supporting_documents: await this.readSupportingDocuments('modalJeSupportingFiles'),
           date,
           currency,
           exchange_rate: currency === 'ر.ي' ? 1.0 : (parseFloat(document.getElementById('modalJeExchangeRate')?.value) || 1.0),
@@ -3734,7 +3819,7 @@ const Accounting = {
       }
     } catch (e) {
       console.error('Error saving journal entry:', e);
-      App.showToast('فشل الاتصال بالخادم', 'error');
+      App.showToast(e.message || 'فشل الاتصال بالخادم', 'error');
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -3780,7 +3865,7 @@ const Accounting = {
         this.loadCashMovement();
         if (App.loadCashTable) App.loadCashTable();
       }
-    } catch (err) { App.showToast('تعذر الاتصال بالخادم', 'error'); }
+    } catch (err) { App.showToast(err.message || 'تعذر الاتصال بالخادم', 'error'); }
   },
 
   async openVoucherReview(kind, id) {
@@ -3802,10 +3887,13 @@ const Accounting = {
     document.getElementById('reviewVoucherMethod').value = voucher.payment_method;
     const account = document.getElementById('reviewVoucherAccount');
     account.replaceChildren(new Option('اختر الحساب المقابل...', ''));
-    for (const a of this.accounts || []) account.add(new Option(`${a.code} - ${a.name}`, a.id));
+    for (const a of this.voucherAccounts(kind)) account.add(new Option(`${a.code} - ${a.name}`, a.id));
     account.value = String(voucher.account_id || '');
+    this.populateSelectCustom('reviewVoucherCostCenter', this.costCenters || [], cc => `${cc.code} - ${cc.name}`);
+    document.getElementById('reviewVoucherCostCenter').value = voucher.cost_center_id ? String(voucher.cost_center_id) : '';
     this.refreshReviewSettlement(voucher.settlement_account_id);
     this.renderVoucherPreview();
+    document.getElementById('reviewSupportingFiles').value = '';
     App.openModal('voucherReviewModal');
   },
 
@@ -3849,10 +3937,12 @@ const Accounting = {
       reference_no: kind === 'expense' ? (document.getElementById('reviewVoucherReferenceNo').value.trim() || null) : undefined,
       notes: document.getElementById('reviewVoucherNotes').value,
       account_id: Number(document.getElementById('reviewVoucherAccount').value),
+      cost_center_id: document.getElementById('reviewVoucherCostCenter').value || null,
       settlement_account_id: Number(document.getElementById('reviewVoucherSettlement').value),
       payment_method: document.getElementById('reviewVoucherMethod').value
     };
     try {
+      body.supporting_documents = await this.readSupportingDocuments('reviewSupportingFiles');
       const response = await fetch(`/api/${kind === 'expense' ? 'expenses' : 'payments'}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const result = await response.json();
       App.showToast(result.message || 'تعذر الحفظ', result.success ? 'success' : 'error');
@@ -3872,14 +3962,14 @@ const Accounting = {
         this.currentJournalEntry = je;
 
         const titleEl = document.getElementById('viewJeTitle');
-        if (titleEl) titleEl.textContent = `تفاصيل قيد اليومية: ${je.entry_no}`;
+        if (titleEl) titleEl.textContent = `تفاصيل قيد اليومية: ${je.display_no || je.entry_no}`;
 
         const contentEl = document.getElementById('viewJeContent');
         if (contentEl) {
           contentEl.innerHTML = `
             <div style="background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 14px;">
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
-                <div><span style="color: var(--text-secondary); font-size: 0.8rem;">رقم القيد:</span> <strong style="color: var(--gold-light);">${je.entry_no}</strong></div>
+                <div><span style="color: var(--text-secondary); font-size: 0.8rem;">رقم القيد:</span> <strong style="color: var(--gold-light);">${je.display_no || je.entry_no}</strong></div>
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">التاريخ:</span> <strong>${je.date}</strong></div>
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">العملة:</span> <strong>${je.currency || 'ر.ي'}</strong></div>
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">المرجع:</span> <strong>${je.reference_type || 'يدوي'} ${je.reference_no ? '(' + je.reference_no + ')' : ''}</strong></div>
@@ -3967,7 +4057,7 @@ const Accounting = {
                 سـنـد قـيـد يـومـيـة عـام
               </div>
               <div class="letterhead-doc-meta">
-                <div class="letterhead-doc-meta-item">رقم القيد: <strong>${je.entry_no}</strong></div>
+                <div class="letterhead-doc-meta-item">رقم القيد: <strong>${je.display_no || je.entry_no}</strong></div>
                 <div class="letterhead-doc-meta-item">التاريخ: <strong>${je.date}</strong></div>
                 <div class="letterhead-doc-meta-item">المرجع: <strong>${je.reference_type || 'يدوي'} ${je.reference_no ? '(' + je.reference_no + ')' : ''}</strong></div>
               </div>
@@ -4036,7 +4126,7 @@ const Accounting = {
     `;
 
     if (typeof Settings !== 'undefined' && Settings.setPrintTitle) {
-      Settings.setPrintTitle(`قيد يومية - ${je.entry_no}`);
+      Settings.setPrintTitle(`قيد يومية - ${je.display_no || je.entry_no}`);
     }
     window.print();
   },
@@ -4112,7 +4202,7 @@ const Accounting = {
     const parentSelect = document.getElementById('modalAccParentSelect');
     if (parentSelect && Array.isArray(this.allAccounts)) {
       parentSelect.innerHTML = '<option value="">اختر الحساب الأب لتوليد الكود المقترح تلقائياً (أو اتركه فارغاً)...</option>' +
-        this.allAccounts.map(a => `<option value="${a.id}" data-code="${a.code}" data-type="${a.type}">[رتبة ${a.level || 1}] ${a.code} - ${a.name} (${a.type})</option>`).join('');
+        this.allAccounts.map(a => `<option value="${a.id}" data-code="${a.code}" data-type="${a.type}">[رتبة ${a.level || 1}] ${a.code} - ${a.name} (${this.financialTypeLabel(a.type)})</option>`).join('');
     }
   },
 
@@ -4155,8 +4245,10 @@ const Accounting = {
         <td>
           <strong style="${isRestricted ? 'text-decoration: line-through;' : ''}">${a.name || a.account_name}</strong>
           ${a.parent_name ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">تابع لـ: ${a.parent_code} - ${a.parent_name}</div>` : ''}
+          <div style="font-size:0.75rem;color:var(--text-secondary)">نوع الحساب التحليلي: ${{general:"عام",cash:"صندوق",bank:"بنك",employee_receivables:"ذمم موظفين",customers:"عملاء",suppliers:"موردين"}[a.analytical_type] || "عام"}</div>
+          ${a.default_cost_center_name ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">مركز التكلفة: ${a.default_cost_center_code || ''} - ${a.default_cost_center_name}</div>` : ''}
         </td>
-        <td><span class="badge" style="${typeBadges[a.type || a.account_type] || 'background: #334155; color: #fff;'}">${a.type || a.account_type}</span></td>
+        <td><span class="badge" style="${typeBadges[a.type || a.account_type] || 'background: #334155; color: #fff;'}">${this.financialTypeLabel(a.type || a.account_type)}</span></td>
         <td>${levelBadge}</td>
         <td style="font-weight: bold; font-family: monospace; direction: ltr; text-align: left;">${App.formatNumber(a.current_balance || a.balance || 0)} ر.ي</td>
         <td style="text-align: center;">
@@ -4188,12 +4280,52 @@ const Accounting = {
       const code = String(a.code || a.account_code || '').toLowerCase();
       const name = String(a.name || a.account_name || '').toLowerCase();
       const type = String(a.type || a.account_type || '').toLowerCase();
-      return !q || code.includes(q) || name.includes(q) || type.includes(q);
+      return !q || code.includes(q) || name.includes(q) || type.includes(q) || this.financialTypeLabel(type).includes(q);
     });
     this.renderAccountsTable(filtered);
   },
 
-  openNewAccountModal() {
+  populateAccountTypes(id, selected = 'asset') {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const types = new Map(['asset','liability','equity','expense','revenue','cost'].map(value => [value, this.financialTypeLabel(value)]));
+    for (const account of this.allAccounts || []) {
+      if (!account.parent_id) types.set(account.type, this.financialTypeLabel(account.type));
+    }
+    if (!types.has(selected)) types.set(selected, this.financialTypeLabel(selected));
+    select.replaceChildren(...[...types].map(([value, label]) => new Option(label, value)));
+    select.value = selected;
+  },
+
+  async loadAccountCostCenters(edit = false, selected = null) {
+    const response = await fetch('/api/accounting/cost-centers', { cache: 'no-store' });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error('تعذر تحميل مراكز التكلفة');
+    const select = document.getElementById(edit ? 'editAccCostCenter' : 'modalAccCostCenter');
+    select.replaceChildren(new Option('اختر مركز التكلفة...', ''));
+    for (const center of result.data || []) {
+      if (!center.status || center.status === 'active') select.add(new Option(`${center.code} - ${center.name}`, center.id));
+    }
+    select.value = selected ? String(selected) : '';
+    this.updateAccountCenterRequirement(edit);
+  },
+
+  updateAccountCenterRequirement(edit = false) {
+    const prefix = edit ? 'editAcc' : 'modalAcc';
+    const parentId = document.getElementById(prefix + 'ParentSelect')?.value;
+    const parent = (this.allAccounts || []).find(account => String(account.id) === String(parentId));
+    const typeSelect = document.getElementById(prefix + 'Type');
+    if (parent && typeSelect) typeSelect.value = parent.type;
+    const type = String(parent?.type || typeSelect?.value || '').trim().toLowerCase();
+    const required = ['expense', 'revenue', 'cost', 'مصروفات', 'تكاليف', 'إيرادات', 'ايرادات'].includes(type);
+    const select = document.getElementById(prefix + 'CostCenter');
+    if (select) select.required = required;
+    const label = document.getElementById(prefix + 'CostCenterLabel');
+    if (label) label.textContent = required ? 'مركز التكلفة * (إلزامي لهذا النوع)' : 'مركز التكلفة (اختياري لهذا النوع)';
+  },
+
+  async openNewAccountModal() {
+    document.getElementById('modalAccAnalyticalType').value = 'general';
     const c = document.getElementById('modalAccCode');
     const n = document.getElementById('modalAccName');
     const t = document.getElementById('modalAccType');
@@ -4201,11 +4333,13 @@ const Accounting = {
     const s = document.getElementById('modalAccStatus');
     if (c) c.value = '';
     if (n) n.value = '';
-    if (t) t.value = 'أصول';
+    this.populateAccountTypes('modalAccType');
     if (p) p.value = '';
     if (s) s.value = 'active';
     this.populateParentSelects();
     this.suggestAccountCode();
+    try { await this.loadAccountCostCenters(); }
+    catch (error) { return App.showToast(error.message, 'error'); }
     App.openModal('accountModal');
   },
 
@@ -4220,6 +4354,7 @@ const Accounting = {
       }
     }
     this.suggestAccountCode();
+    this.updateAccountCenterRequirement();
   },
 
   async suggestAccountCode() {
@@ -4232,11 +4367,15 @@ const Accounting = {
     const type = typeSelect ? typeSelect.value : 'أصول';
 
     try {
-      const url = `/api/accounting/suggest-code?type=${encodeURIComponent(type)}${parent_id ? `&parent_id=${parent_id}` : ''}`;
+      const url = `/api/accounting/accounts/suggest-code?type=${encodeURIComponent(type)}${parent_id ? `&parent_id=${parent_id}` : ''}`;
       const res = await fetch(url);
       const json = await res.json();
       if (json.success && json.suggested_code) {
+        if ((document.getElementById('modalAccParentSelect')?.value || '') !== parent_id) return;
         codeInput.value = json.suggested_code;
+      } else {
+        codeInput.value = '';
+        App.showToast(json.message || 'تعذر اقتراح رقم الحساب', 'error');
       }
     } catch (e) {
       console.warn('Could not suggest code:', e);
@@ -4250,6 +4389,7 @@ const Accounting = {
     const type = document.getElementById('modalAccType')?.value?.trim();
     const parent_id = document.getElementById('modalAccParentSelect')?.value || null;
     const status = document.getElementById('modalAccStatus')?.value || 'active';
+    const default_cost_center_id = document.getElementById('modalAccCostCenter')?.value || null;
 
     if (!code || !name || !type) {
       App.showToast('يرجى ملء جميع الحقول المطلوبة', 'error');
@@ -4260,7 +4400,7 @@ const Accounting = {
       const res = await fetch('/api/accounting/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, type, parent_id, status })
+        body: JSON.stringify({ code, name, type, parent_id, status, default_cost_center_id, analytical_type: document.getElementById('modalAccAnalyticalType').value })
       });
       const data = await res.json();
       if (data.success) {
@@ -4270,6 +4410,7 @@ const Accounting = {
         await this.loadDropdowns();
       } else {
         App.showToast(data.message || 'فشل حفظ الحساب', 'error');
+        if (data.suggested_code) document.getElementById('modalAccCode').value = data.suggested_code;
       }
     } catch (err) {
       console.error(err);
@@ -4277,7 +4418,7 @@ const Accounting = {
     }
   },
 
-  openEditAccountModal(id) {
+  async openEditAccountModal(id) {
     const acc = (this.allAccounts || []).find(a => a.id == id);
     if (!acc) {
       App.showToast('لم يتم العثور على الحساب المالي', 'error');
@@ -4287,11 +4428,10 @@ const Accounting = {
     document.getElementById('editAccId').value = acc.id;
     document.getElementById('editAccCode').value = acc.code || acc.account_code || '';
     document.getElementById('editAccName').value = acc.name || acc.account_name || '';
-    if (document.getElementById('editAccType')) {
-      document.getElementById('editAccType').value = acc.type || acc.account_type || 'أصول';
-    }
+    this.populateAccountTypes('editAccType', acc.type || acc.account_type || 'asset');
     if (document.getElementById('editAccStatus')) {
       document.getElementById('editAccStatus').value = acc.status || 'active';
+      document.getElementById('editAccAnalyticalType').value = acc.analytical_type || 'general';
     }
 
     const parentSelect = document.getElementById('editAccParentSelect');
@@ -4303,6 +4443,8 @@ const Accounting = {
           .join('');
     }
 
+    try { await this.loadAccountCostCenters(true, acc.default_cost_center_id); }
+    catch (error) { return App.showToast(error.message, 'error'); }
     App.openModal('editAccountModal');
   },
 
@@ -4314,6 +4456,7 @@ const Accounting = {
     const type = document.getElementById('editAccType')?.value?.trim();
     const parent_id = document.getElementById('editAccParentSelect')?.value || null;
     const status = document.getElementById('editAccStatus')?.value || 'active';
+    const default_cost_center_id = document.getElementById('editAccCostCenter')?.value || null;
 
     if (!id || !code || !name) {
       App.showToast('يرجى ملء جميع الحقول الإلزامية', 'error');
@@ -4324,7 +4467,7 @@ const Accounting = {
       const res = await fetch(`/api/accounting/accounts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, type, parent_id, status })
+        body: JSON.stringify({ code, name, type, parent_id, status, default_cost_center_id, analytical_type: document.getElementById('editAccAnalyticalType').value })
       });
       const data = await res.json();
       if (data.success) {
@@ -4413,7 +4556,7 @@ const Accounting = {
       <tr style="${isInactive ? 'opacity: 0.65; background: rgba(239,68,68,0.03);' : ''}">
         <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${c.code}</td>
         <td><strong>${c.name}</strong></td>
-        <td><span class="badge badge-info">${c.type || 'مشروع'}</span></td>
+        <td><span class="badge badge-info">${this.financialTypeLabel(c.type || 'project')}</span></td>
         <td>${c.project_name ? `<strong>${c.project_name}</strong>` : '<span style="color: var(--text-secondary);">عام</span>'}</td>
         <td style="text-align: center;">
           ${isInactive 
@@ -4894,6 +5037,7 @@ const Accounting = {
       if (data.success) {
         App.showToast(data.message, 'success');
         await this.loadPeriodsTable();
+        await this.refreshOperationLists();
       } else {
         App.showToast(data.message || 'فشل إغلاق الفترة', 'error');
       }
@@ -4901,6 +5045,16 @@ const Accounting = {
       console.error(e);
       App.showToast('خطأ في إغلاق الفترة', 'error');
     }
+  },
+
+  async refreshOperationLists() {
+    await Promise.allSettled([
+      this.loadJournalEntries(),
+      this.loadCashMovement(),
+      App.loadCashTable(),
+      App.loadExpensesTable(),
+      App.loadRevenuesTable()
+    ]);
   },
 
   async promptReopenPeriod(id, name) {
@@ -4920,6 +5074,7 @@ const Accounting = {
       if (data.success) {
         App.showToast(data.message, 'success');
         await this.loadPeriodsTable();
+        await this.refreshOperationLists();
       } else {
         App.showToast(data.message || 'فشل إعادة فتح الفترة', 'error');
       }
@@ -5186,6 +5341,7 @@ const Accounting = {
         else App.showToast(json.message, 'success');
         App.closeModal('periodCloseModal');
         await this.loadPeriods();
+        await this.refreshOperationLists();
       } else {
         if (window.UI && UI.Toast) UI.Toast.error(json.message);
         else App.showToast(json.message, 'error');
@@ -5213,6 +5369,7 @@ const Accounting = {
         if (window.UI && UI.Toast) UI.Toast.success(json.message);
         else App.showToast(json.message, 'success');
         await this.loadPeriods();
+        await this.refreshOperationLists();
       } else {
         if (window.UI && UI.Toast) UI.Toast.error(json.message);
         else App.showToast(json.message, 'error');
@@ -5362,7 +5519,7 @@ const Accounting = {
         return `
           <tr style="${index % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
             <td style="text-align: center; mso-number-format:'\\@';">${index + 1}</td>
-            <td style="text-align: center; font-weight: bold; mso-number-format:'\\@';">${r.entry_no || '-'}</td>
+            <td style="text-align: center; font-weight: bold; mso-number-format:'\\@';">${r.display_no || r.entry_no || '-'}</td>
             <td style="text-align: center; mso-number-format:'\\@';">${r.entry_date || '-'}</td>
             <td style="text-align: center; font-weight: bold; mso-number-format:'\\@';">${r.account_code || '-'}</td>
             <td style="font-weight: 600; mso-number-format:'\\@';">${r.account_name || 'حساب غير محدد'}</td>

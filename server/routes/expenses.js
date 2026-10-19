@@ -1,8 +1,10 @@
+const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const { openPeriodCondition } = require('../services/operationVisibility');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 const AccountingService = require('../services/accountingService');
 const ProjectCostService = require('../services/projectCostService');
@@ -30,7 +32,7 @@ router.get('/', requirePermission('expenses:view'), async (req, res) => {
       LEFT JOIN cost_centers cc ON e.cost_center_id = cc.id
     `;
     const params = [];
-    const conditions = [];
+    const conditions = [openPeriodCondition('e.date', req.query.include_closed)];
 
     // تطبيق نطاق المشاريع للمستخدم
     if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
@@ -154,7 +156,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
     }
 
     // التحقق الصارم من الحساب المالي المختار أنه حساب فرعي أخير
-    const leafAccount = await AccountingService.assertLeafAccount(account_id);
+    const leafAccount = await AccountingService.assertVoucherAccount('سند صرف', account_id);
 
     if (!payment_method) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد طريقة الدفع (نقدي / تحويل بنكي / شيك)' });
@@ -230,19 +232,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         if (bExists) validBankAccId = bExists.id;
       }
     }
-    let finalCcId = null;
-    if (cost_center_id && cost_center_id !== '') {
-      const ccExists = await get('SELECT id FROM cost_centers WHERE id = ?', [Number(cost_center_id)]);
-      if (ccExists) finalCcId = ccExists.id;
-    }
-    if (!finalCcId && validProjectId) {
-      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [validProjectId]);
-      if (prjCc) finalCcId = prjCc.id;
-    }
-    if (!finalCcId) {
-      const defCc = await get('SELECT id FROM cost_centers ORDER BY id ASC LIMIT 1');
-      if (defCc) finalCcId = defCc.id;
-    }
+    const finalCcId = await AccountingService.resolveOptionalCostCenter(cost_center_id);
 
     const accId = leafAccount.id;
     const rawCreatorId = req.user?.id || null;
@@ -381,6 +371,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         }, tx);
       }
 
+      await saveDocuments(tx, 'expense', result.lastInsertRowid || result.insertId, req.body.supporting_documents);
       return { ...result, linkNote };
     });
 
@@ -405,7 +396,7 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
       entry_no: createdJe?.entry_no || null
     });
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('مغلقة') || err.message.includes('الحساب') || err.message.includes('غير متزن') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('مغلقة') || err.message.includes('الحساب') || err.message.includes('غير متزن') ? 400 : 500);
     const msg = status === 400 ? err.message : 'خطأ أثناء إضافة سند الصرف: ' + err.message;
     res.status(status).json({ success: false, message: msg, error: err.message });
   }
@@ -442,7 +433,7 @@ router.post('/:id/submit-review', requirePermission('expenses:edit,expenses:crea
 
     res.json({ success: true, message: `تم إرسال سند الصرف (${exp.receipt_no}) للمراجعة بنجاح`, status: 'under_review' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -488,7 +479,7 @@ router.post('/:id/approve', requirePermission('expenses:approve'), async (req, r
 
     res.json({ success: true, message: `تم اعتماد سند الصرف (${exp.receipt_no}) بنجاح من قبل [${approverName}]`, status: 'approved' });
   } catch (err) {
-    const status = err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500;
+    const status = err.statusCode || (err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -512,7 +503,7 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
     if (!exp.account_id) {
       return res.status(400).json({ success: false, message: 'لا يمكن ترحيل سند صرف بدون تحديد حساب مالي صالح في الدليل' });
     }
-    const leafAcc = await AccountingService.assertLeafAccount(exp.account_id);
+    const leafAcc = await AccountingService.assertVoucherAccount('سند صرف', exp.account_id);
 
     const rawPosterId = req.user?.id || null;
     const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
@@ -621,9 +612,11 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
     const method = req.body.payment_method ?? exp.payment_method;
     const accountId = Number(req.body.account_id ?? exp.account_id);
     const settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id);
+    const costCenterId = await AccountingService.resolveOptionalCostCenter(
+      req.body.cost_center_id !== undefined ? req.body.cost_center_id : exp.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {
-      await AccountingService.assertLeafAccount(accountId);
+      await AccountingService.assertVoucherAccount('سند صرف', accountId);
       await AccountingService.resolveVoucherSettlementAccount(method, settlementId);
       if (accountId === settlementId) throw new Error('يجب أن يختلف حساب السند عن حساب الصندوق أو البنك');
     } catch (err) { return res.status(400).json({ success: false, message: err.message }); }
@@ -652,21 +645,24 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
     }
     await FinancialControlService.assertPeriodOpen(targetDate);
 
-    const oldVals = { expense_type: exp.expense_type, amount: exp.amount, notes: exp.notes, date: exp.date, account_id: exp.account_id, settlement_account_id: exp.settlement_account_id, payment_method: exp.payment_method };
+    const oldVals = { expense_type: exp.expense_type, amount: exp.amount, notes: exp.notes, date: exp.date, account_id: exp.account_id, settlement_account_id: exp.settlement_account_id, payment_method: exp.payment_method, cost_center_id: exp.cost_center_id };
     const newVals = { 
       expense_type: expense_type || exp.expense_type, 
       amount: newAmount,
       recipient: recipient !== undefined ? recipient : exp.recipient, 
       reference_no: reference_no !== undefined ? (String(reference_no).trim() || null) : exp.reference_no,
       notes: notes !== undefined ? notes : exp.notes,
-      date: targetDate, account_id: accountId, settlement_account_id: settlementId, payment_method: method
+      date: targetDate, account_id: accountId, settlement_account_id: settlementId, payment_method: method, cost_center_id: costCenterId
     };
 
-    await run(`
+    await transaction(async tx => {
+    await tx.run(`
       UPDATE expenses 
-      SET expense_type = ?, amount = ?, recipient = ?, reference_no = ?, notes = ?, date = ?, account_id = ?, settlement_account_id = ?, payment_method = ?, local_amount = ?
+      SET expense_type = ?, amount = ?, recipient = ?, reference_no = ?, notes = ?, date = ?, account_id = ?, settlement_account_id = ?, payment_method = ?, local_amount = ?, cost_center_id = ?
       WHERE id = ?
-    `, [newVals.expense_type, newVals.amount, newVals.recipient, newVals.reference_no, newVals.notes, newVals.date, accountId, settlementId, method, Math.round(newAmount * (Number(exp.exchange_rate) || 1) * 100) / 100, id]);
+    `, [newVals.expense_type, newVals.amount, newVals.recipient, newVals.reference_no, newVals.notes, newVals.date, accountId, settlementId, method, Math.round(newAmount * (Number(exp.exchange_rate) || 1) * 100) / 100, costCenterId, id]);
+      await saveDocuments(tx, 'expense', id, req.body.supporting_documents);
+    });
 
     await logAudit(req, {
       action: 'UPDATE',
@@ -679,7 +675,7 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
 
     res.json({ success: true, message: 'تم تعديل مسودة سند الصرف بنجاح', link_note: linkNote });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -698,7 +694,7 @@ router.post('/:id/reverse', requirePermission('expenses:cancel,expenses:approve,
 
     res.json(result);
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });

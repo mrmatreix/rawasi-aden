@@ -236,6 +236,7 @@ const ProjectHub = {
 
   switchTab(tabId) {
     this.activeTab = tabId;
+    if (typeof Sidebar !== 'undefined' && App.activeView === 'projectHub') Sidebar.sync('projectHub', tabId);
 
     // تحديث أزرار التبويبات
     document.querySelectorAll('.hub-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -3754,8 +3755,16 @@ const ProjectHub = {
         body: JSON.stringify({ filePath })
       });
       const json = await res.json();
-      if (json.success) {
-        App.showToast('تم فتح الملف بنجاح', 'success');
+      if (json.success && json.downloadUrl) {
+        const download = await fetch(json.downloadUrl);
+        if (!download.ok) throw new Error('Download failed');
+        const objectUrl = URL.createObjectURL(await download.blob());
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filePath.split(/[\\/]/).pop() || 'document';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+        App.showToast('تم تنزيل الملف بنجاح', 'success');
       } else {
         App.showToast(json.message || 'تعذر فتح الملف', 'error');
       }

@@ -1,8 +1,10 @@
+const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const { openPeriodCondition } = require('../services/operationVisibility');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 const AccountingService = require('../services/accountingService');
 const PaymentService = require('../services/paymentService');
@@ -20,7 +22,7 @@ router.get('/contexts', async (req, res) => {
     const data = await PaymentService.getContexts();
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -29,7 +31,7 @@ router.get('/instruments', async (req, res) => {
     const data = await PaymentService.getInstruments();
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -38,7 +40,7 @@ router.get('/channels', async (req, res) => {
     const data = await PaymentService.getChannels();
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -47,7 +49,7 @@ router.get('/timings', async (req, res) => {
     const data = await PaymentService.getTimings();
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -56,7 +58,7 @@ router.get('/documents', async (req, res) => {
     const data = await PaymentService.getDocuments();
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -66,7 +68,7 @@ router.post('/transactions', async (req, res) => {
     const result = await PaymentService.createPaymentTransaction(req.body, req.user, req);
     res.json({ success: true, ...result });
   } catch (err) {
-    const status = err.message.includes('يتجاوز') || err.message.includes('إلزامي') || err.message.includes('تحديد') || err.message.includes('مغلقة') || err.message.includes('غير صالحة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('يتجاوز') || err.message.includes('إلزامي') || err.message.includes('تحديد') || err.message.includes('مغلقة') || err.message.includes('غير صالحة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -76,7 +78,7 @@ router.get('/transactions', async (req, res) => {
     const result = await PaymentService.getTransactions(req.query);
     res.json({ success: true, ...result });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -194,7 +196,7 @@ router.post('/initiate', requirePermission('revenues:create,expenses:create,acco
     });
     res.json({ success: true, ...result });
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('غير صالح') || err.message.includes('مطلوب') || err.message.includes('الحساب') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('غير صالح') || err.message.includes('مطلوب') || err.message.includes('الحساب') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -267,7 +269,7 @@ router.get('/', requirePermission('revenues:view,expenses:view,accounting:view')
       LEFT JOIN cost_centers cc ON p.cost_center_id = cc.id
     `;
     const params = [];
-    const conditions = [];
+    const conditions = [openPeriodCondition('p.date', req.query.include_closed)];
 
     // تطبيق نطاق المشاريع المصرح بها
     if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
@@ -373,7 +375,7 @@ router.post('/', (req, res, next) => {
     }
 
     // التحقق الصارم من الحساب المالي المختار أنه حساب فرعي أخير
-    const leafAccount = await AccountingService.assertLeafAccount(account_id);
+    const leafAccount = await AccountingService.assertVoucherAccount(type === 'قبض' ? 'سند قبض' : 'سند صرف', account_id);
 
     if (!payment_method) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد طريقة الدفع / القبض (نقدي / تحويل بنكي / شيك)' });
@@ -486,19 +488,7 @@ router.post('/', (req, res, next) => {
     const directClientName = req.body.client_name ? String(req.body.client_name).trim() : null;
     const directSupplierName = req.body.supplier_name ? String(req.body.supplier_name).trim() : null;
     const accId = leafAccount.id;
-    let finalCcId = null;
-    if (cost_center_id && cost_center_id !== '') {
-      const ccExists = await get('SELECT id FROM cost_centers WHERE id = ?', [Number(cost_center_id)]);
-      if (ccExists) finalCcId = ccExists.id;
-    }
-    if (!finalCcId && validProjectId) {
-      const prjCc = await get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [validProjectId]);
-      if (prjCc) finalCcId = prjCc.id;
-    }
-    if (!finalCcId) {
-      const defCc = await get('SELECT id FROM cost_centers ORDER BY id ASC LIMIT 1');
-      if (defCc) finalCcId = defCc.id;
-    }
+    const finalCcId = await AccountingService.resolveOptionalCostCenter(cost_center_id);
 
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
@@ -625,6 +615,7 @@ router.post('/', (req, res, next) => {
         }, tx);
       }
 
+      await saveDocuments(tx, 'payment', result.lastInsertRowid || result.insertId, req.body.supporting_documents);
       return result;
     });
 
@@ -649,7 +640,7 @@ router.post('/', (req, res, next) => {
     });
   } catch (err) {
     console.error('Payment transaction error:', err);
-    const status = err.message.includes('لا يمكن') || err.message.includes('مغلقة') || err.message.includes('الحساب') || err.message.includes('غير متزن') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('مغلقة') || err.message.includes('الحساب') || err.message.includes('غير متزن') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message, error: err.message });
   }
 });
@@ -685,7 +676,7 @@ router.post('/:id/submit-review', requirePermission('revenues:create,expenses:cr
 
     res.json({ success: true, message: `تم إرسال سند ${pay.type} (${pay.receipt_no}) للمراجعة بنجاح`, status: 'under_review' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -732,7 +723,7 @@ router.post('/:id/approve', (req, res, next) => {
 
     res.json({ success: true, message: `تم اعتماد سند ${pay.type} (${pay.receipt_no}) بنجاح بواسطة [${approverName}]`, status: 'approved' });
   } catch (err) {
-    const status = err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500;
+    const status = err.statusCode || (err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -758,7 +749,7 @@ router.post('/:id/post', (req, res, next) => {
     if (!pay.account_id) {
       return res.status(400).json({ success: false, message: `لا يمكن ترحيل سند ${pay.type} بدون تحديد حساب مالي صالح في الدليل` });
     }
-    const leafAcc = await AccountingService.assertLeafAccount(pay.account_id);
+    const leafAcc = await AccountingService.assertVoucherAccount(pay.type === 'قبض' ? 'سند قبض' : 'سند صرف', pay.account_id);
 
     const rawPosterId = req.user?.id || null;
     const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
@@ -865,27 +856,32 @@ router.put('/:id', requirePermission('revenues:edit,expenses:edit'), async (req,
     const method = req.body.payment_method ?? pay.payment_method;
     const accountId = Number(req.body.account_id ?? pay.account_id);
     const settlementId = Number(req.body.settlement_account_id ?? pay.settlement_account_id);
+    const costCenterId = await AccountingService.resolveOptionalCostCenter(
+      req.body.cost_center_id !== undefined ? req.body.cost_center_id : pay.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {
-      await AccountingService.assertLeafAccount(accountId);
+      await AccountingService.assertVoucherAccount(pay.type === 'قبض' ? 'سند قبض' : 'سند صرف', accountId);
       await AccountingService.resolveVoucherSettlementAccount(method, settlementId);
       if (accountId === settlementId) throw new Error('يجب أن يختلف حساب السند عن حساب الصندوق أو البنك');
     } catch (err) { return res.status(400).json({ success: false, message: err.message }); }
     const pm = await get('SELECT id FROM payment_methods WHERE code = ? AND is_active = 1', [method === 'نقدي' ? 'CASH' : 'BANK_TRANSFER']);
     const fa = await get('SELECT id FROM financial_accounts WHERE account_id = ? AND type = ? AND is_active = 1 LIMIT 1', [settlementId, method === 'نقدي' ? 'cash' : 'bank']);
 
-    const oldVals = { amount: pay.amount, notes: pay.notes, date: pay.date, account_id: pay.account_id, settlement_account_id: pay.settlement_account_id, payment_method: pay.payment_method };
+    const oldVals = { amount: pay.amount, notes: pay.notes, date: pay.date, account_id: pay.account_id, settlement_account_id: pay.settlement_account_id, payment_method: pay.payment_method, cost_center_id: pay.cost_center_id };
     const newVals = { 
       amount: newAmount,
       notes: notes !== undefined ? notes : pay.notes,
-      date: targetDate, account_id: accountId, settlement_account_id: settlementId, payment_method: method
+      date: targetDate, account_id: accountId, settlement_account_id: settlementId, payment_method: method, cost_center_id: costCenterId
     };
 
-    await run(`
+    await transaction(async tx => {
+    await tx.run(`
       UPDATE payments 
-      SET amount = ?, notes = ?, date = ?, account_id = ?, settlement_account_id = ?, payment_method = ?, payment_method_id = ?, financial_account_id = ?, local_amount = ?, net_amount = ?
+      SET amount = ?, notes = ?, date = ?, account_id = ?, settlement_account_id = ?, payment_method = ?, payment_method_id = ?, financial_account_id = ?, local_amount = ?, net_amount = ?, cost_center_id = ?
       WHERE id = ?
-    `, [newVals.amount, newVals.notes, newVals.date, accountId, settlementId, method, pm?.id || null, fa?.id || null, Math.round(newAmount * (Number(pay.exchange_rate) || 1) * 100) / 100, Math.round((newAmount * (Number(pay.exchange_rate) || 1) - (Number(pay.fee_amount) || 0)) * 100) / 100, id]);
+    `, [newVals.amount, newVals.notes, newVals.date, accountId, settlementId, method, pm?.id || null, fa?.id || null, Math.round(newAmount * (Number(pay.exchange_rate) || 1) * 100) / 100, Math.round((newAmount * (Number(pay.exchange_rate) || 1) - (Number(pay.fee_amount) || 0)) * 100) / 100, costCenterId, id]);
+      await saveDocuments(tx, 'payment', id, req.body.supporting_documents);
+    });
 
     await logAudit(req, {
       action: 'UPDATE',
@@ -898,7 +894,7 @@ router.put('/:id', requirePermission('revenues:edit,expenses:edit'), async (req,
 
     res.json({ success: true, message: 'تم تعديل مسودة السند بنجاح' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -919,7 +915,7 @@ router.post('/:id/reverse', (req, res, next) => {
 
     res.json(result);
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });

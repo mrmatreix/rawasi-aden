@@ -8,7 +8,7 @@
     "start:staging": "node scripts/run_staging.js",
     "build": "node build_www.js",
     "dev": "node server/server.js",
-    "test": "node --test --test-concurrency=1 tests/**/*.test.js",
+    "test": "node scripts/test_isolated.js",
     "test:flow": "node tests/test_material_flow.js",
     "test:contracts": "node tests/test_cash_flow_and_contract_lifecycle.js",
     "test:material": "node --test --test-concurrency=1 tests/integration/material_management_ddd.test.js",
@@ -39,6 +39,9 @@
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.24.4",
     "pdf-lib": "^1.17.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "engines": {
+    "node": ">=24.0.0 <25"
   }
 }

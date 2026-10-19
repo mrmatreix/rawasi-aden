@@ -1,10 +1,12 @@
-const CACHE_NAME = 'rawasi-aden-1.0.0.20261017-ajxf';
+const CACHE_NAME = 'rawasi-aden-1.0.0.20261019-tfzi';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './css/style.css',
   './js/ui-ux.js',
   './js/auth.js',
+  './js/sidebar.js',
+  './css/sidebar.css',
   './js/app.js',
   './js/events.js',
   './js/tafqeet.js',
@@ -17,6 +19,7 @@ const STATIC_ASSETS = [
   './js/reports.js',
   './js/settings.js',
   './js/excel-export.js',
+  './js/financial-labels.js',
   './images/logo.svg',
   './images/icon.svg',
   './images/logo.png',
@@ -51,8 +54,9 @@ self.addEventListener('activate', (event) => {
 
 // استراتيجية Network First مع التحديث التلقائي للكاش
 self.addEventListener('fetch', (event) => {
-  // تمرير طلبات API مباشرة دون كاش
-  if (event.request.url.includes('/api/')) {
+  // Only public static assets may enter the offline cache. Never cache private documents.
+  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || event.request.headers.has('Authorization') || !/^(?:\/$|\/index\.html$|\/manifest\.json$|\/(?:css|js|images)\/)/.test(url.pathname)) {
     return;
   }
 

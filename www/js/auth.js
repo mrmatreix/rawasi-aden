@@ -16,7 +16,8 @@
   window.fetch = async function (resource, init = {}) {
     try {
       const url = typeof resource === 'string' ? resource : (resource?.url || '');
-      const isApiCall = url.startsWith('/api/') || url.includes('/api/');
+      const targetUrl=new URL(url,window.location.href);
+      const isApiCall=targetUrl.origin===window.location.origin && targetUrl.pathname.startsWith('/api/');
 
       if (isApiCall) {
         init = init || {};
@@ -1189,17 +1190,20 @@ const Auth = {
       const reqPerm = li.getAttribute('data-perm');
       if (this.hasPermission(reqPerm)) {
         li.style.display = '';
-        if (!firstAllowed) {
+        if (!firstAllowed && !li.classList.contains('nav-group')) {
           const navLink = li.querySelector('a');
           if (navLink) {
             const match = navLink.getAttribute('onclick')?.match(/App\.navigate\('([^']+)'/);
-            if (match) firstAllowed = match[1];
+            if (navLink.dataset.view) firstAllowed = navLink.dataset.view;
+            else if (match) firstAllowed = match[1];
           }
         }
       } else {
         li.style.display = 'none';
       }
     });
+
+    if (typeof Sidebar !== 'undefined') Sidebar.refresh();
 
     // إخفاء أو إظهار ألسنة الإعدادات حسب الصلاحيات
     const usersTab = document.getElementById('tabBtn_settings_users');

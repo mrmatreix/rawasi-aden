@@ -38,3 +38,19 @@ uploads/service_requests/*
 !uploads/service_requests/.gitkeep
 
 
+
+# Runtime data, credentials, local archives and logs must never be published.
+.env
+.env.*
+!.env.example
+*.log
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+server/database/config.json
+server/database/.development-secrets.json
+server/database/backups/
+backups_archive/
+.rawasi-data/

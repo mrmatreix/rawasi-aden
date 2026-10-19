@@ -1,12 +1,19 @@
+const { saveDocuments } = require('../services/supportingDocumentService');
+const analyticalTypes = new Set(['general','cash','bank','employee_receivables','customers','suppliers']);
+function analyticalType(value = 'general') { if (!analyticalTypes.has(value)) { const e = new Error('نوع الحساب التحليلي غير صالح'); e.statusCode = 400; throw e; } return value; }
 const express = require('express');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
+const { openPeriodCondition } = require('../services/operationVisibility');
 const AccountingService = require('../services/accountingService');
+const { suggestAccountNumber, assertAccountNumber } = require('../services/accountNumberingService');
 const FinancialControlService = require('../services/financialControlService');
 const { requirePermission } = require('../middleware/security');
+const { loadVoucherSources, journalDisplay } = require('../services/voucherDisplayService');
+const { resolveAccountCostCenter } = require('../services/accountCostCenterService');
 
 // دليل الحسابات الشجري مع دعم الهرمية، الرتب، والحسابات التحليلية الطرفية
 router.get('/accounts', requirePermission('accounting:view,accounting,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
@@ -16,9 +23,12 @@ router.get('/accounts', requirePermission('accounting:view,accounting,expenses:v
       SELECT a.*, 
              p.code as parent_code, 
              p.name as parent_name,
+             cc.name as default_cost_center_name,
+             cc.code as default_cost_center_code,
              (SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) as children_count
       FROM accounts a
       LEFT JOIN accounts p ON a.parent_id = p.id
+      LEFT JOIN cost_centers cc ON cc.id = a.default_cost_center_id
     `;
     const conditions = [];
     const params = [];
@@ -41,8 +51,26 @@ router.get('/accounts', requirePermission('accounting:view,accounting,expenses:v
 
     sql += ' ORDER BY a.code ASC';
     const accounts = await query(sql, params);
+    const reportingLedger = require('../services/reportingLedger');
+    const balances = await reportingLedger.query(`SELECT jel.account_id, SUM(jel.debit - jel.credit) AS balance
+      FROM journal_entry_lines jel JOIN journal_entries je ON je.id = jel.entry_id
+      WHERE je.status = 'posted' GROUP BY jel.account_id`);
+    const amounts = new Map(balances.map(row => [Number(row.account_id), Number(row.balance) || 0]));
+    const parents = new Map((await query('SELECT id, parent_id FROM accounts')).map(row => [Number(row.id), Number(row.parent_id) || null]));
+    const totals = new Map(amounts);
+    for (const [id, amount] of amounts) {
+      const visited = new Set([id]);
+      let parent = parents.get(id);
+      while (parent && !visited.has(parent)) {
+        visited.add(parent);
+        totals.set(parent, (totals.get(parent) || 0) + amount);
+        parent = parents.get(parent);
+      }
+    }
     const enriched = accounts.map(a => ({
       ...a,
+      type_label: require('../../js/financial-labels').type(a.type),
+      balance: Math.round((totals.get(Number(a.id)) || 0) * 100) / 100,
       is_leaf: ((a.is_posting === 1 || a.level === 5) && Number(a.children_count || 0) === 0),
       status: a.status || 'active'
     }));
@@ -54,79 +82,19 @@ router.get('/accounts', requirePermission('accounting:view,accounting,expenses:v
 });
 
 // اقتراح رقم وكود حساب آلي من الرتبة الثالثة فما فوق
-router.get('/accounts/suggest-code', requirePermission('accounting:view'), async (req, res) => {
+router.get(['/accounts/suggest-code', '/suggest-code'], requirePermission('accounting:view'), async (req, res) => {
   try {
-    const { parent_id, type } = req.query;
-    let suggestedCode = '1111';
-    let level = 3;
-
-    if (parent_id) {
-      const parent = await get('SELECT id, code, level FROM accounts WHERE id = ?', [parent_id]);
-      if (parent) {
-        const pCode = String(parent.code).trim();
-        const pLen = pCode.length;
-        // البحث عن الحسابات الفرعية الحالية لنفس الأب
-        const siblings = await query('SELECT code FROM accounts WHERE parent_id = ? ORDER BY code DESC', [parent.id]);
-        if (pLen === 1) {
-          // أب رتبة 1 (مثل 1) -> نقترح رتبة 3 (مثل 111 أو 115)
-          level = 3;
-          if (siblings.length > 0) {
-            const lastCode = siblings[0].code;
-            const num = parseInt(lastCode, 10);
-            suggestedCode = !isNaN(num) ? String(num + 1) : `${pCode}11`;
-          } else {
-            suggestedCode = `${pCode}11`;
-          }
-        } else if (pLen === 2) {
-          // أب رتبة 2 (مثل 11 أو 21) -> نقترح رتبة 3 بثلاث خانات (مثل 115)
-          level = 3;
-          if (siblings.length > 0) {
-            const lastCode = siblings[0].code;
-            const num = parseInt(lastCode, 10);
-            suggestedCode = !isNaN(num) ? String(num + 1) : `${pCode}1`;
-          } else {
-            suggestedCode = `${pCode}1`;
-          }
-        } else {
-          // أب رتبة 3 أو أكثر -> نقترح رتبة 4 بأربع خانات
-          level = Math.max(4, pLen + 1);
-          if (pLen === 5) {
-            level = 5;
-            const suffixes = siblings.map(item => String(item.code)).filter(code => code.startsWith(pCode) && /^\d{3}$/.test(code.slice(5))).map(code => Number(code.slice(5)));
-            suggestedCode = pCode + String(Math.max(0, ...suffixes) + 1).padStart(3, '0');
-          } else if (siblings.length > 0) {
-            const lastCode = siblings[0].code;
-            const num = parseInt(lastCode, 10);
-            suggestedCode = !isNaN(num) ? String(num + 1) : `${pCode}01`;
-          } else {
-            suggestedCode = `${pCode}01`;
-          }
-        }
-      }
-    } else if (type) {
-      // افتراضي حسب النوع
-      const prefixMap = { 'أصول': '111', 'خصوم': '211', 'حقوق ملكية': '311', 'إيرادات': '411', 'مصروفات': '511', 'تكاليف': '521' };
-      const basePrefix = prefixMap[type] || '111';
-      level = 3;
-      const existing = await query('SELECT code FROM accounts WHERE code LIKE ? ORDER BY code DESC LIMIT 1', [`${basePrefix}%`]);
-      if (existing && existing.length > 0) {
-        const num = parseInt(existing[0].code, 10);
-        suggestedCode = !isNaN(num) ? String(num + 1) : `${basePrefix}1`;
-      } else {
-        suggestedCode = `${basePrefix}1`;
-      }
-    }
-
-    res.json({ success: true, suggested_code: suggestedCode, level });
+    const next = await suggestAccountNumber({ get, query }, req.query.parent_id ? Number(req.query.parent_id) : null);
+    res.json({ success: true, ...next });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في توليد كود الحساب', error: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
 // إضافة حساب جديد إلى الدليل المحاسبي مع الترقيم من الرتبة الثالثة
 router.post('/accounts', requirePermission('accounting:create,settings:company'), async (req, res) => {
   try {
-    const { code, name, type, parent_code = '', parent_id: reqParentId, balance = 0, status = 'active' } = req.body;
+    const { code, name, type, parent_code = '', parent_id: reqParentId, balance = 0, status = 'active', default_cost_center_id } = req.body;
     if (!code || !name || !type) {
       return res.status(400).json({ success: false, message: 'رقم الحساب، الاسم، والنوع حقول إلزامية' });
     }
@@ -139,26 +107,21 @@ router.post('/accounts', requirePermission('accounting:create,settings:company')
     let parent_id = reqParentId ? Number(reqParentId) : null;
     if (!parent_id && parent_code) {
       const parent = await get('SELECT id FROM accounts WHERE code = ?', [String(parent_code).trim()]);
-      if (parent) parent_id = parent.id;
+      if (!parent) return res.status(400).json({ success: false, message: 'الحساب الأب غير موجود' });
+      parent_id = parent.id;
     }
 
-    // حساب المستوى وتأكيد الرتبة
-    let level = 3;
-    if (!parent_id && cleanCode.length === 1) {
-      level = 1;
-    } else if (cleanCode.length === 2) {
-      level = 2;
-    } else if (cleanCode.length === 3) {
-      level = 3;
-    } else {
-      level = cleanCode.length >= 8 ? 5 : 4;
-    }
-
-    const isPosting = level === 5 ? 1 : 0;
-    const result = await run(`
-      INSERT INTO accounts (code, name, type, parent_id, balance, status, level, is_posting)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [cleanCode, name.trim(), type, parent_id, Number(balance || 0), status || 'active', level, isPosting]);
+    let level;
+    let accountSetup;
+    const analytical = analyticalType(req.body.analytical_type);
+    const result = await transaction(async tx => {
+      const sequence = await assertAccountNumber(tx, cleanCode, parent_id);
+      level = sequence.level;
+      accountSetup = await resolveAccountCostCenter(tx, parent_id, type, default_cost_center_id);
+      return tx.run(`INSERT INTO accounts (code, name, type, parent_id, balance, status, level, is_posting, default_cost_center_id, analytical_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [cleanCode, name.trim(), accountSetup.type, parent_id, Number(balance || 0), status || 'active', level, level === 5 ? 1 : 0, accountSetup.cost_center_id, analytical]);
+    });
 
     const newId = result.lastInsertRowid || result.insertId;
 
@@ -166,17 +129,17 @@ router.post('/accounts', requirePermission('accounting:create,settings:company')
       action: 'INSERT',
       entity_type: 'account',
       entity_id: cleanCode,
-      details: { id: newId, code: cleanCode, name: name.trim(), type, status, level }
+      details: { id: newId, code: cleanCode, name: name.trim(), type: accountSetup.type, status, level, default_cost_center_id: accountSetup.cost_center_id }
     });
 
     res.json({ 
       success: true, 
       message: `تمت إضافة الحساب [${cleanCode} - ${name.trim()}] بنجاح`, 
       id: newId,
-      data: { id: newId, code: cleanCode, name: name.trim(), type, status, level }
+      data: { id: newId, code: cleanCode, name: name.trim(), type: accountSetup.type, status, level, default_cost_center_id: accountSetup.cost_center_id }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إضافة الحساب: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في إضافة الحساب: ' + err.message, suggested_code: err.suggested_code });
   }
 });
 
@@ -203,26 +166,34 @@ router.put('/accounts/:id', requirePermission('accounting:edit,settings:company'
     }
 
     const pId = parent_id !== undefined && parent_id !== '' ? (parent_id ? Number(parent_id) : null) : current.parent_id;
+    if (cleanCode !== String(current.code) || Number(pId) !== Number(current.parent_id)) {
+      const child = await get('SELECT id FROM accounts WHERE parent_id = ? LIMIT 1', [id]);
+      if (child) return res.status(400).json({ success: false, message: 'لا يمكن تغيير رقم أو أب حساب له حسابات فرعية حفاظاً على تسلسل الدليل' });
+      await assertAccountNumber({ get, query }, cleanCode, pId, Number(id));
+    }
     const accStatus = status || current.status || 'active';
+    const accountSetup = await resolveAccountCostCenter({ get }, pId, type,
+      req.body.default_cost_center_id !== undefined ? req.body.default_cost_center_id : current.default_cost_center_id);
+    const analytical = analyticalType(req.body.analytical_type ?? current.analytical_type ?? 'general');
     const accBalance = balance !== undefined ? Number(balance) : current.balance;
     const level = cleanCode.length >= 8 ? 5 : (cleanCode.length >= 4 ? 4 : (cleanCode.length === 3 ? 3 : (cleanCode.length === 2 ? 2 : 1)));
 
     await run(`
       UPDATE accounts 
-      SET code = ?, name = ?, type = ?, parent_id = ?, balance = ?, status = ?, level = ?
+      SET code = ?, name = ?, type = ?, parent_id = ?, balance = ?, status = ?, level = ?, default_cost_center_id = ?, analytical_type = ?
       WHERE id = ?
-    `, [cleanCode, name.trim(), type, pId, accBalance, accStatus, level, id]);
+    `, [cleanCode, name.trim(), accountSetup.type, pId, accBalance, accStatus, level, accountSetup.cost_center_id, analytical, id]);
 
     await logAudit(req, {
       action: 'UPDATE',
       entity_type: 'account',
       entity_id: String(id),
-      details: { id, code: cleanCode, name: name.trim(), type, status: accStatus }
+      details: { id, code: cleanCode, name: name.trim(), type: accountSetup.type, status: accStatus, default_cost_center_id: accountSetup.cost_center_id }
     });
 
     res.json({ success: true, message: `تم تحديث بيانات الحساب [${cleanCode} - ${name.trim()}] بنجاح` });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في تحديث الحساب: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في تحديث الحساب: ' + err.message, suggested_code: err.suggested_code });
   }
 });
 
@@ -615,7 +586,7 @@ router.get('/journal-entries', requirePermission('accounting:view'), async (req,
       LEFT JOIN journal_entry_lines jel ON je.id = jel.entry_id
     `;
     const params = [];
-    const conditions = [];
+    const conditions = [openPeriodCondition('je.date', req.query.include_closed)];
 
     if (from_date) {
       conditions.push('je.date >= ?');
@@ -653,7 +624,8 @@ router.get('/journal-entries', requirePermission('accounting:view'), async (req,
       }
       for (const entry of entries) entry.lines = linesByEntry.get(entry.id) || [];
     }
-    res.json({ success: true, data: entries });
+    const sources = await loadVoucherSources({ query });
+    res.json({ success: true, data: entries.map(entry => journalDisplay(entry, sources)) });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب قيود اليومية', error: err.message });
   }
@@ -705,7 +677,7 @@ router.get('/journal-entries/export-data', requirePermission('accounting:view'),
       LEFT JOIN expenses ex ON (je.reference_type IN ('سند صرف', 'expense') AND (je.reference_id = ex.id OR je.entry_no = ex.receipt_no))
       LEFT JOIN suppliers sp ON ex.supplier_id = sp.id
     `;
-    const conditions = [];
+    const conditions = [openPeriodCondition('je.date', req.query.include_closed)];
     const params = [];
 
     if (from_date) {
@@ -732,7 +704,8 @@ router.get('/journal-entries/export-data', requirePermission('accounting:view'),
     sql += ' ORDER BY je.date DESC, je.id DESC, jel.id ASC';
 
     const rows = await query(sql, params);
-    res.json({ success: true, data: rows });
+    const sources = await loadVoucherSources({ query });
+    res.json({ success: true, data: rows.map(row => journalDisplay(row, sources)) });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب بيانات تصدير القيود: ' + err.message });
   }
@@ -763,7 +736,8 @@ router.get('/journal-entries/:id', requirePermission('accounting:view'), async (
       ORDER BY jel.id ASC
     `, [id]);
 
-    res.json({ success: true, data: { ...entry, lines } });
+    const sources = await loadVoucherSources({ query });
+    res.json({ success: true, data: { ...journalDisplay(entry, sources), lines } });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب تفاصيل القيد', error: err.message });
   }
@@ -776,7 +750,7 @@ router.get('/check-period', requirePermission('accounting:view,expenses:create,r
     const result = await checkPeriodOpen(date || new Date().toISOString().split('T')[0]);
     res.json({ success: true, ...result });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -799,7 +773,7 @@ router.post('/journal-entries', requirePermission('accounting:create'), async (r
       reference_type,
       reference_id,
       reference_no,
-      status: requestedStatus
+      status: requestedStatus, supporting_documents: req.body.supporting_documents
     }, lines, req);
 
     res.json({
@@ -812,7 +786,7 @@ router.post('/journal-entries', requirePermission('accounting:create'), async (r
       status: result.status
     });
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('غير متزن') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('غير متزن') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message, error: err.message });
   }
 });
@@ -849,7 +823,7 @@ router.post('/journal-entries/:id/submit-review', requirePermission('accounting:
 
     res.json({ success: true, message: `تم إرسال القيد اليومي (${entry.entry_no}) للمراجعة بنجاح`, status: 'under_review' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -896,7 +870,7 @@ router.post('/journal-entries/:id/approve', requirePermission('accounting:approv
 
     res.json({ success: true, message: `تم اعتماد القيد اليومي (${entry.entry_no}) بنجاح بواسطة [${approverName}]`, status: 'approved' });
   } catch (err) {
-    const status = err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500;
+    const status = err.statusCode || (err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -965,7 +939,7 @@ router.post('/journal-entries/:id/reverse', requirePermission('accounting:approv
 
     res.json(result);
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -1005,7 +979,7 @@ router.delete('/journal-entries/:id', requirePermission('accounting:approve'), a
 
     res.json({ success: true, message: 'تم حذف مسودة القيد اليومي بنجاح' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -1054,6 +1028,7 @@ router.put('/journal-entries/:id', requirePermission('accounting:create,accounti
         WHERE id = ?
       `, [newVals.date, newVals.description, newVals.reference_no, newVals.total_debit, newVals.total_credit, id]);
 
+      await saveDocuments(tx, 'journal', id, req.body.supporting_documents);
       if (validated) {
         await tx.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [id]);
         for (const line of validated.sanitizedLines) {
@@ -1082,7 +1057,7 @@ router.put('/journal-entries/:id', requirePermission('accounting:create,accounti
       total_credit: newVals.total_credit
     });
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('غير متزن') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('غير متزن') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -1353,84 +1328,9 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
 // حركة الصندوق والبنك مع الفلترة حسب نوع الحركة (نقدي / بنك / الكل) والتاريخ
 router.get('/cash-movements', async (req, res) => {
   try {
-    const { type, from_date, to_date, all } = req.query;
-    let sql = 'SELECT cm.*, a.code AS account_code, a.name AS account_name FROM cash_movements cm LEFT JOIN accounts a ON a.id = cm.account_id';
-    const conditions = [];
-    const params = [];
-
-    if (type === 'بنك') {
-      conditions.push("((cm.account_id IS NOT NULL AND a.code LIKE '11102%') OR (cm.account_id IS NULL AND (cm.movement_type IN ('بنك', 'شيك', 'تحويل بنكي') OR cm.payment_method IN ('تحويل بنكي', 'BANK_TRANSFER'))))");
-    } else if (type === 'نقدي') {
-      conditions.push("((cm.account_id IS NOT NULL AND a.code LIKE '11101%') OR (cm.account_id IS NULL AND (cm.movement_type IN ('نقدي', 'صندوق', 'CASH') OR cm.payment_method IN ('نقدي', 'CASH'))))");
-    }
-    if (from_date) {
-      conditions.push('cm.date >= ?');
-      params.push(from_date);
-    }
-    if (to_date) {
-      conditions.push('cm.date <= ?');
-      params.push(to_date);
-    }
-
-    if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    sql += ' ORDER BY cm.date DESC, cm.id DESC';
-    if (!all && all !== 'true') {
-      sql += ' LIMIT 100';
-    }
-
-    const movements = await query(sql, params);
-
-    // ملخص الحركة
-    let summarySql = `
-      SELECT 
-        (SELECT previous_balance FROM cash_movements ORDER BY id ASC LIMIT 1) as initial_balance,
-        SUM(cash_in) as total_cash_in,
-        SUM(cash_out) as total_cash_out,
-        SUM(withdrawals) as total_withdrawals,
-        (SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1) as current_balance
-      FROM cash_movements
-    `;
-    let summaryConditions = [];
-    let summaryParams = [];
-    if (type === 'بنك') {
-      summaryConditions.push("((account_id IS NOT NULL AND account_id IN (SELECT id FROM accounts WHERE code LIKE '11102%')) OR (account_id IS NULL AND (movement_type IN ('بنك', 'شيك', 'تحويل بنكي') OR payment_method IN ('تحويل بنكي', 'BANK_TRANSFER'))))");
-    } else if (type === 'نقدي') {
-      summaryConditions.push("((account_id IS NOT NULL AND account_id IN (SELECT id FROM accounts WHERE code LIKE '11101%')) OR (account_id IS NULL AND (movement_type IN ('نقدي', 'صندوق', 'CASH') OR payment_method IN ('نقدي', 'CASH'))))");
-    }
-    if (from_date) {
-      summaryConditions.push('date >= ?');
-      summaryParams.push(from_date);
-    }
-    if (to_date) {
-      summaryConditions.push('date <= ?');
-      summaryParams.push(to_date);
-    }
-    if (summaryConditions.length > 0) {
-      summarySql += ' WHERE ' + summaryConditions.join(' AND ');
-    }
-
-    const summary = await get(summarySql, summaryParams) || { 
-      initial_balance: 0, 
-      total_cash_in: 0, 
-      total_cash_out: 0, 
-      total_withdrawals: 0, 
-      current_balance: 0 
-    };
-
-    // حساب الرصيد لكل صندوق أو بنك على حدة، ثم جمع أرصدة الحسابات.
-    const summaryRows = await query(`SELECT id, account_id, movement_type, previous_balance, current_balance FROM cash_movements${summaryConditions.length ? ' WHERE ' + summaryConditions.join(' AND ') : ''} ORDER BY id ASC`, summaryParams);
-    const balances = new Map();
-    for (const row of summaryRows) {
-      const key = row.account_id == null ? `legacy:${row.movement_type || 'نقدي'}` : `account:${row.account_id}`;
-      if (!balances.has(key)) balances.set(key, { initial: Number(row.previous_balance) || 0, current: 0 });
-      balances.get(key).current = Number(row.current_balance) || 0;
-    }
-    summary.initial_balance = [...balances.values()].reduce((total, item) => total + item.initial, 0);
-    summary.current_balance = [...balances.values()].reduce((total, item) => total + item.current, 0);
-    res.json({ success: true, data: movements, summary });
+    const { getCashAccountActivity } = require('../services/cashAccountActivity');
+    const ledger = require('../services/reportingLedger');
+    res.json(await getCashAccountActivity(ledger, req.query));
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب حركة الصندوق', error: err.message });
   }

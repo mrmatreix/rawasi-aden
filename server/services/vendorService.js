@@ -1,3 +1,4 @@
+const {nextPartyNumber,validateStatus} = require('./partyRegistryService');
 /**
  * server/services/vendorService.js
  * 
@@ -187,6 +188,7 @@ class VendorService {
   // 3. إنشاء مورد جديد مع التحقق والتشفير المصرفي (Create Vendor)
   // =========================================================================
   async createVendor(data, user = null) {
+    validateStatus(data.status || 'active');
     const vendorModel = new Vendor(data);
     const validation = vendorModel.validate();
 
@@ -213,14 +215,14 @@ class VendorService {
 
     const insertSql = `
       INSERT INTO suppliers (
-        account_id, name, company_name, industry_category, contact_person,
+        party_no, account_id, name, company_name, industry_category, contact_person,
         phone, phone_number, email, address,
         bank_name, bank_account_no, bank_iban, bank_details_encrypted,
         default_currency, currency, supply_lead_time_days,
         payment_document_type, status, tax_id, commercial_reg_no,
         credit_limit, balance, invoice_attachment, notes, created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?,
@@ -258,7 +260,7 @@ class VendorService {
 
     await this.ensureCategoryExists(vendorModel.industry_category);
 
-    const result = await run(insertSql, params);
+    const result = await transaction(async tx => { const number=await nextPartyNumber(tx,'supplier'); return tx.run(insertSql,[number,...params]); });
     const newId = result.lastInsertRowid || result.insertId;
 
     return this.getVendorProfile(newId, { includeRecent: false });
@@ -274,6 +276,7 @@ class VendorService {
     const existing = await get('SELECT * FROM suppliers WHERE id = ?', [id]);
     if (!existing) throw new Error('المورد المطلوب تعديله غير موجود.');
 
+    if(data.status !== undefined) validateStatus(data.status);
     const merged = { ...existing, ...data };
     const vendorModel = new Vendor(merged);
     const validation = vendorModel.validate();
@@ -424,10 +427,9 @@ class VendorService {
           { code: 'USD', name: 'دولار أمريكي', symbol: '$' }
         ],
         statuses: [
-          { code: 'active', name: 'نشط 🟢' },
-          { code: 'suspended', name: 'معلق 🟡' },
-          { code: 'under_review', name: 'قيد المراجعة 🔵' },
-          { code: 'blacklisted', name: 'محظور ⛔' }
+          { code: 'active', name: 'نشط' },
+          { code: 'inactive', name: 'موقف' },
+          { code: 'suspended', name: 'معلق' }
         ]
       }
     };

@@ -29,9 +29,9 @@ class UnifiedBackupEngine {
     this.isExecuting = false;
     this.currentOperation = null;
     this.defaultStorageDir = this.resolveStorageDirectory();
-    this.projectsDir = path.resolve(__dirname, '..', '..', 'ملفات_المشاريع');
-    this.uploadsDir = path.resolve(__dirname, '..', '..', 'uploads');
-    this.scratchDir = path.resolve(__dirname, '..', '..', 'scratch');
+    this.projectsDir = require('../config/environment').storage.projects;
+    this.uploadsDir = require('../config/environment').storage.uploads;
+    this.scratchDir = require('../config/environment').storage.scratch;
 
     this.ensureDirectories();
   }
@@ -61,7 +61,7 @@ class UnifiedBackupEngine {
     }
 
     // 4. المسار الافتراضي المحلي داخل المشروع
-    return path.resolve(__dirname, '..', 'database', 'backups');
+    return require('../config/environment').storage.backups;
   }
 
   /**
@@ -203,6 +203,9 @@ class UnifiedBackupEngine {
         return { valid: false, error: `فشل فحص نزاهة قاعدة البيانات: ${integrityResult}` };
       }
 
+      const foreignKeyErrors=tempDb.prepare('PRAGMA foreign_key_check').all();
+      if(foreignKeyErrors.length)return {valid:false,error:'النسخة تحتوي روابط غير مكتملة'};
+
       // 2. فحص وجود الجداول المحاسبية والأساسية
       const tablesStmt = tempDb.prepare("SELECT name FROM sqlite_master WHERE type='table';");
       const tables = tablesStmt.all().map(r => r.name);
@@ -248,6 +251,8 @@ class UnifiedBackupEngine {
       } catch (e) {}
 
       stats.is_balanced = isBalanced;
+      const unbalanced = tempDb.prepare('SELECT entry_id FROM journal_entry_lines GROUP BY entry_id HAVING ABS(SUM(debit)-SUM(credit)) > 0.05 LIMIT 1').get();
+      if (!isBalanced || unbalanced) return {valid:false,error:'النسخة تحتوي قيوداً غير متوازنة'};
 
       return {
         valid: true,
@@ -291,7 +296,7 @@ class UnifiedBackupEngine {
     const backupUid = `BCK-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
-    const timestampStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const timestampStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}_${crypto.randomUUID().slice(0,8)}`;
 
     let tempFilePath = null;
     let finalFilePath = null;
@@ -312,6 +317,7 @@ class UnifiedBackupEngine {
         console.warn('⚠️ [BackupEngine] WAL Checkpoint note:', cpErr.message);
       }
 
+      if(getActiveEngine()!=='sqlite')throw new Error('Use a verified MySQL backup procedure for this engine');
       const sourceDb = dbPath || path.resolve(__dirname, '..', 'database', 'rawasi_aden.db');
       if (!fs.existsSync(sourceDb)) {
         throw new Error(`ملف قاعدة البيانات المصدر غير موجود في المسار: ${sourceDb}`);
@@ -325,7 +331,7 @@ class UnifiedBackupEngine {
 
       if (scope === 'database_only') {
         // نسخ قاعدة البيانات أولاً إلى المسار المؤقت
-        fs.copyFileSync(sourceDb, tempFilePath);
+        await require('../database/db').backupSnapshot(tempFilePath);
 
         // خطوة 3: التحقق الصارم من سلامة النسخة المؤقتة قبل اعتمادها
         verificationReport = this.verifySqliteFileIntegrity(tempFilePath);
@@ -344,14 +350,17 @@ class UnifiedBackupEngine {
         }
       } else {
         // حزمة شاملة (قاعدة البيانات + المرفقات + ملفات المشاريع)
-        const dbVerification = this.verifySqliteFileIntegrity(sourceDb);
+        const snapshot=path.join(targetDir,'.snapshot_'+backupUid+'.db');
+        await require('../database/db').backupSnapshot(snapshot);
+        const dbVerification = this.verifySqliteFileIntegrity(snapshot);
         if (!dbVerification.valid) {
           throw new Error(`قاعدة البيانات الحالية تحتوي على مشكلة نزاهة: ${dbVerification.error}`);
         }
         verificationReport = dbVerification;
 
         const zip = new AdmZip();
-        zip.addLocalFile(sourceDb, 'database');
+        zip.addFile('database/rawasi_aden.db',fs.readFileSync(snapshot));
+        fs.unlinkSync(snapshot);
 
         // تضمين ملفات المشاريع والمستندات إن وجدت
         if (fs.existsSync(this.projectsDir)) {
@@ -376,8 +385,9 @@ class UnifiedBackupEngine {
           scope,
           encrypted: Boolean(encrypt),
           stats: dbVerification.stats,
-          db_sha256: this.computeSha256(sourceDb)
+          db_sha256: this.computeSha256(zip.getEntry('database/rawasi_aden.db').getData())
         };
+        manifest.file_hashes = Object.fromEntries(zip.getEntries().filter(entry=>!entry.isDirectory).map(entry=>[entry.entryName,this.computeSha256(entry.getData())]));
         zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
 
         const zipBuffer = zip.toBuffer();
@@ -670,6 +680,7 @@ class UnifiedBackupEngine {
     user = 'admin',
     req = null
   } = {}) {
+    if (!require('../config/environment').isDev) throw new Error('Cloud restore requires offline maintenance; use the documented restore procedure');
     if (!fileNameOrId) {
       throw new Error('يرجى تحديد معرف أو اسم ملف النسخة الاحتياطية');
     }
@@ -729,7 +740,7 @@ class UnifiedBackupEngine {
       // خطوة 2: إنشاء نسخة حماية طارئة من قاعدة البيانات الحالية
       if (fs.existsSync(liveDbPath)) {
         try { await exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch (e) {}
-        fs.copyFileSync(liveDbPath, safetySnapshotPath);
+        await require('../database/db').backupSnapshot(safetySnapshotPath);
         console.log(`🛡️ [BackupEngine] تم حفظ نسخة الحماية الطارئة: ${safetySnapshotName}`);
       }
 
@@ -758,14 +769,14 @@ class UnifiedBackupEngine {
         entries.forEach(e => {
           if (e.entryName.startsWith('ملفات_المشاريع/') && !e.isDirectory) {
             const rel = e.entryName.replace('ملفات_المشاريع/', '');
-            const dest = path.join(this.projectsDir, rel);
+            const dest = require('../middleware/fileAccess').safePath(this.projectsDir,rel,{existing:false});
             const parent = path.dirname(dest);
             if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
             fs.writeFileSync(dest, e.getData());
           }
           if (e.entryName.startsWith('uploads/') && !e.isDirectory) {
             const rel = e.entryName.replace('uploads/', '');
-            const dest = path.join(this.uploadsDir, rel);
+            const dest = require('../middleware/fileAccess').safePath(this.uploadsDir,rel,{existing:false});
             const parent = path.dirname(dest);
             if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
             fs.writeFileSync(dest, e.getData());

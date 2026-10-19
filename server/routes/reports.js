@@ -19,6 +19,31 @@ const reportingService = require('../services/reportingService');
 const contractingService = require('../services/contractingAccountingService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
+const { context: reportContext, parseFilters, transformReport, addAccountDetails } = require('../services/reportFilterService');
+const reportDb = require('../database/db');
+router.use(async (req, res, next) => {
+  const name = req.path.split('/')[1];
+  if (req.method !== 'GET' || !['trial-balance','income-statement','profit-loss','balance-sheet','cash-flow','account-movement','project-budget','projects-profitability','cost-centers-profitability','client-statement','supplier-statement'].includes(name)) return next();
+  try {
+    const filters = parseFilters(req.query);
+    const [chart, currencies, center] = await Promise.all([
+      reportDb.query('SELECT id,code,name,type,parent_id,level FROM accounts ORDER BY code'),
+      reportDb.query("SELECT * FROM currencies WHERE COALESCE(status, 'active') = 'active'"),
+      filters.cost_center_id ? reportDb.get('SELECT id FROM cost_centers WHERE id = ?', [filters.cost_center_id]) : Promise.resolve(true)
+    ]);
+    const currency = currencies.find(row => row.code === filters.currency);
+    Object.defineProperty(filters, 'rates', { value: new Map(currencies.flatMap(row => [[row.code, Number(row.rate_to_base)], [row.symbol, Number(row.rate_to_base)]])) });
+    if (!currency || !center || !(Number(currency.rate_to_base) > 0)) return res.status(400).json({ success: false, message: 'عملة التقرير أو سعر الصرف أو مركز التكلفة غير صالح' });
+    filters.rate = Number(currency.rate_to_base); filters.symbol = currency.symbol || currency.code;
+    const send = res.json.bind(res);
+    res.json = async body => {
+      try { await addAccountDetails(body, name, req.query, require('../services/reportingLedger')); return send(transformReport(body, filters, chart)); }
+      catch (error) { console.error('[Report details]', error); res.status(500); return send({ success: false, message: 'تعذر إعداد تفاصيل الحسابات للتقرير' }); }
+    };
+    reportContext.run(filters, next);
+  } catch (error) { res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+});
+
 /**
  * التحقق التقويمي الصارم من التاريخ بصيغة YYYY-MM-DD
  * يرفض التواريخ المستحيلة كـ 2026-99-99 أو 2026-02-31
@@ -231,6 +256,16 @@ router.get('/cash-flow', requirePermission('accounting:view,reports:view,cash:vi
  * 7. تقرير ربحية المشاريع المحاسبية المعترف بها
  * GET /api/reports/projects-profitability?from_date=...&to_date=...&project_id=...
  */
+router.get('/project-budget', requirePermission('projects:view,reports:view'), async (req,res)=>{
+  try {
+    const as_of_date = validateDate(req.query.as_of_date || req.query.to_date, 'تاريخ تقرير الموازنة');
+    const project_id = req.query.project_id ? Number(req.query.project_id) : null;
+    if (req.query.project_id && (!Number.isInteger(project_id) || project_id<=0)) return res.status(400).json({success:false,message:'المشروع المحدد غير صالح'});
+    const allowedProjects = req.user?.role === 'admin' || req.user?.username === 'admin' ? ['*'] : parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
+    res.json(await require('../services/projectBudgetReportService').getProjectBudget({as_of_date,project_id,allowedProjects}));
+  } catch(error) { if(error.statusCode) return res.status(error.statusCode).json({success:false,message:error.message}); handleReportError(error,res,'موازنة المشروع'); }
+});
+
 router.get('/projects-profitability', requirePermission('projects:view,reports:view'), async (req, res) => {
   try {
     const { from_date, to_date } = parseAndValidateDates(req.query);

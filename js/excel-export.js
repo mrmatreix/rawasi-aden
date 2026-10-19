@@ -14,6 +14,7 @@
  */
 
 const ExcelExporter = {
+  financialTypeLabel(value) { return (typeof FinancialLabels !== 'undefined' ? FinancialLabels : require('./financial-labels')).type(value); },
   // جلب معلومات الشركة وإعدادات الترويسة
   getCompanyInfo() {
     let companyName = 'شركة رواسي عدن للهندسة والمقاولات';
@@ -31,15 +32,41 @@ const ExcelExporter = {
     return { companyName, phone, slogan };
   },
 
+  englishDigits(value) {
+    return String(value).replace(/[٠-٩]/g, char => String(char.charCodeAt(0) - 1632))
+      .replace(/[۰-۹]/g, char => String(char.charCodeAt(0) - 1776))
+      .replace(/٬/g, ',').replace(/٫/g, '.').replace(/−/g, '-');
+  },
+
+  normalizeExportHtml(html) {
+    return html.replace(/(<[^>]+>)|([^<]+)/g, (match, tag, text) => tag || this.englishDigits(text))
+      .replace(/<(td|th)\b([^>]*)>([\s\S]*?)<\/\1>/gi, (match, tag, attrs, content) => {
+        const plain = content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        const number = plain.replace(/(?:\b(?:YER|SAR|USD)\b|ر\.?\s*[يس]\.?|[$﷼])/gi, '').trim();
+        if (!number || !/^[+-]?[\d,]+(?:\.\d+)?$/.test(number)) return match;
+        const numeric = Number(number.replace(/,/g, ''));
+        const numericAttribute = /class\s*=\s*["'][^"']*\bcurrency\b/.test(attrs) ? ` x:num="${numeric}"` : '';
+        return `<${tag}${attrs}${numericAttribute}>${number}</${tag}>`;
+      });
+  },
+
   formatNum(val) {
     if (val === undefined || val === null || val === '') return '0';
-    const num = Number(String(val).replace(/[^\d.-]/g, ''));
+    const num = Number(this.englishDigits(val).replace(/[^\d.-]/g, ''));
     if (isNaN(num)) return '0';
     return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   },
 
   // تنزيل ملف Excel بتنسيق XML/HTML Spreadsheet المعتمد من Microsoft Office
   download(htmlBody, filename, worksheetName = 'التقرير المالي') {
+    if (typeof Reports !== 'undefined') {
+      const report = Reports.lastReportData?.[Reports.activeReportTab];
+      if (report?.meta) {
+        const summary = Reports.describeReportFilters(report.meta).replace(/[&<>]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[char]));
+        htmlBody = '<p>' + summary + '</p>' + htmlBody + Reports.accountDetailsHtml(report.data);
+      }
+    }
+    htmlBody = this.normalizeExportHtml(htmlBody);
     const cleanFilename = (filename || 'تقرير_رواسي_عدن').replace(/[\\/:*?"<>|]/g, '_') + '.xls';
 
     const excelTemplate = `
@@ -87,7 +114,7 @@ const ExcelExporter = {
           .card-profit { background-color: #fffbeb; color: #b45309; font-weight: bold; }
           .row-total { background-color: #f1f5f9; font-weight: bold; font-size: 11pt; border-top: 2pt solid #0f2744; border-bottom: 2pt solid #0f2744; }
           .num { mso-number-format: "\\#\\,\\#\\#0\\.00"; text-align: left; font-family: 'Consolas', monospace; }
-          .currency { mso-number-format: "\\#\\,\\#\\#0\\.00\\ \\\"ر\\.ي\\\""; text-align: left; font-family: 'Consolas', monospace; font-weight: bold; }
+          .currency { mso-number-format: "[$-409]#,##0.00"; direction: ltr; text-align: left; font-family: Consolas, monospace; font-weight: bold; }
           .pct { mso-number-format: "0\\.0%"; text-align: center; font-weight: bold; }
           .date-cell { mso-number-format: "yyyy\\-mm\\-dd"; text-align: center; }
           .sig-row td { border: none; padding-top: 25px; padding-bottom: 5px; font-weight: bold; text-align: center; color: #475569; }
@@ -210,6 +237,11 @@ const ExcelExporter = {
   // =========================================================================
   // 2. تصدير ميزان المراجعة بالأرصدة والمجاميع (Trial Balance)
   // =========================================================================
+  exportProjectBudget(apiData) {
+    if (!apiData?.success) return;
+    const html = '<h2>موازنة المشروع — التقديري مقابل الفعلي</h2><p>حتى تاريخ: '+apiData.meta.as_of_date+'</p>'+Reports.budgetReportHtml(apiData.data,value=>this.formatNum(value));
+    this.download(html,'موازنة_المشروع_'+apiData.meta.as_of_date,'موازنة المشروع');
+  },
   exportTrialBalance(apiData = null) {
     const { companyName, slogan } = this.getCompanyInfo();
     const d = (apiData && apiData.data) ? apiData.data : (window.Reports?.lastReportData['trial-balance']?.data || {});
@@ -225,7 +257,7 @@ const ExcelExporter = {
           <tr class="${i % 2 === 1 ? 'row-alt' : ''}">
             <td class="text-center font-bold">${a.code || '-'}</td>
             <td class="font-bold">${a.name || '-'}</td>
-            <td class="text-center">${a.type || '-'}</td>
+            <td class="text-center">${this.financialTypeLabel(a.type)}</td>
             <td class="currency">${this.formatNum(a.opening_debit || 0)}</td>
             <td class="currency">${this.formatNum(a.opening_credit || 0)}</td>
             <td class="currency" style="color: #047857;">${this.formatNum(a.period_debit || 0)}</td>
@@ -242,7 +274,7 @@ const ExcelExporter = {
         <tr><td colspan="9" class="hdr-title">مـيـزان الـمـراجـعـة بالأرصـدة والـمـجـامـيـع (Trial Balance)</td></tr>
         <tr>
           <td colspan="9" class="hdr-meta">
-            الفترة: من <strong>${fromDate}</strong> إلى <strong>${toDate}</strong> | المصدر: <strong>الحسابات الفرعية الأخيرة (Leaf Accounts Only)</strong> | ${slogan}
+            الفترة: من <strong>${fromDate}</strong> إلى <strong>${toDate}</strong> | المصدر: <strong>حسب مستوى الحسابات المحدد في خيارات التقرير</strong> | ${slogan}
           </td>
         </tr>
         <tr><td colspan="9" style="border:none; height: 12px;"></td></tr>
@@ -421,8 +453,8 @@ const ExcelExporter = {
         </tr>
         <tr><td colspan="4" style="border:none; height: 12px;"></td></tr>
         <tr>
-          <th colspan="2" style="background-color: #047857; width: 50%;">الأصــول والـمـوجــودات (1 - Assets)</th>
-          <th colspan="2" style="background-color: #b91c1c; width: 50%;">الالتـزامـات وحـقـوق المـلـكـيـة (2 - Liabilities & Equity)</th>
+          <th colspan="2" style="background-color: #047857; width: 50%;">الأصــول والـمـوجــودات (1)</th>
+          <th colspan="2" style="background-color: #b91c1c; width: 50%;">الالتـزامـات وحـقـوق المـلـكـيـة (2)</th>
         </tr>
         <tr>
           <th style="width: 32%;">اسم الحساب (الفرعي الأخير)</th>
@@ -640,7 +672,7 @@ const ExcelExporter = {
       <tr class="${i % 2 === 1 ? 'row-alt' : ''}">
         <td class="text-center font-bold">${c.code || '-'}</td>
         <td class="font-bold">${c.name || '-'}</td>
-        <td class="text-center">${c.type || '-'}</td>
+        <td class="text-center">${this.financialTypeLabel(c.type)}</td>
         <td>${c.project_name || '-'}</td>
         <td class="currency" style="color: #0284c7;">${this.formatNum(c.total_revenue || 0)}</td>
         <td class="currency" style="color: #b91c1c;">${this.formatNum(c.total_expense || 0)}</td>
@@ -859,7 +891,7 @@ const ExcelExporter = {
   }
 };
 
-window.ExcelExporter = ExcelExporter;
+if (typeof window !== 'undefined') window.ExcelExporter = ExcelExporter;
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = ExcelExporter;
 }

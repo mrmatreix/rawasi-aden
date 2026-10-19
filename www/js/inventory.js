@@ -58,6 +58,7 @@ const Inventory = {
 
   switchTab(tabKey) {
     this.activeTab = tabKey;
+    if (typeof Sidebar !== 'undefined' && App.activeView === 'inventory') Sidebar.sync('inventory', tabKey);
     const tabs = ['items', 'audits', 'quarantine', 'returns', 'transfers', 'events'];
     tabs.forEach(t => {
       const content = document.getElementById(`tabContent-${t}`);

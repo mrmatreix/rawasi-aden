@@ -10,7 +10,7 @@
  * - خالية تماماً من أي أرقام وهمية أو افتراضية مصطنعة (Zero Magic Numbers)
  */
 
-const { query, get } = require('../database/db');
+const { query, get } = require('./reportingLedger');
 
 class CashFlowReportService {
   /**
@@ -147,26 +147,23 @@ class CashFlowReportService {
 
         if (netCashChangeInEntry > 0) {
           // تدفق نقد داخل (Inflow)
-          if (activity === 'investing') investingInflows.push({ item: itemDesc, amount: allocatedCashAmount, entry_no: entry.entry_no });
-          else if (activity === 'financing') financingInflows.push({ item: itemDesc, amount: allocatedCashAmount, entry_no: entry.entry_no });
-          else operatingInflows.push({ item: itemDesc, amount: allocatedCashAmount, entry_no: entry.entry_no });
+          if (activity === 'investing') investingInflows.push({ item: itemDesc, id: line.account_id, code: line.account_code, name: line.account_name, amount: allocatedCashAmount, entry_no: entry.entry_no });
+          else if (activity === 'financing') financingInflows.push({ item: itemDesc, id: line.account_id, code: line.account_code, name: line.account_name, amount: allocatedCashAmount, entry_no: entry.entry_no });
+          else operatingInflows.push({ item: itemDesc, id: line.account_id, code: line.account_code, name: line.account_name, amount: allocatedCashAmount, entry_no: entry.entry_no });
         } else {
           // تدفق نقد خارج (Outflow)
-          if (activity === 'investing') investingOutflows.push({ item: itemDesc, amount: allocatedCashAmount, entry_no: entry.entry_no });
-          else if (activity === 'financing') financingOutflows.push({ item: itemDesc, amount: allocatedCashAmount, entry_no: entry.entry_no });
-          else operatingOutflows.push({ item: itemDesc, amount: allocatedCashAmount, entry_no: entry.entry_no });
+          if (activity === 'investing') investingOutflows.push({ item: itemDesc, id: line.account_id, code: line.account_code, name: line.account_name, amount: allocatedCashAmount, entry_no: entry.entry_no });
+          else if (activity === 'financing') financingOutflows.push({ item: itemDesc, id: line.account_id, code: line.account_code, name: line.account_name, amount: allocatedCashAmount, entry_no: entry.entry_no });
+          else operatingOutflows.push({ item: itemDesc, id: line.account_id, code: line.account_code, name: line.account_name, amount: allocatedCashAmount, entry_no: entry.entry_no });
         }
       }
     }
 
     // تجميع البنود المتشابهة لتنظيم التقرير
-    const aggregateItems = (items) => {
-      const map = {};
-      items.forEach(it => {
-        const key = it.item.split(' (')[0];
-        map[key] = (map[key] || 0) + it.amount;
-      });
-      return Object.keys(map).map(k => ({ item: k, amount: Math.round(map[k] * 100) / 100 }));
+    const aggregateItems = items => {
+      const map = new Map();
+      for (const row of items) { const key = String(row.id); const item = map.get(key) || { id: row.id, code: row.code, name: row.name, item: row.code + ' - ' + row.name, amount: 0 }; item.amount = Math.round((item.amount + row.amount) * 100) / 100; map.set(key, item); }
+      return [...map.values()];
     };
 
     const aggOpIn = aggregateItems(operatingInflows);

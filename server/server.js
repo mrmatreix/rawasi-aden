@@ -3,13 +3,25 @@ const cors = require('cors');
 const path = require('path');
 
 const config = require('./config/environment');
+config.validateProduction();
+const database = require('./database/db');
+const { securityHeaders, corsOptions, originGuard, createRateLimiter } = require('./middleware/httpSecurity');
+const { publicFiles } = require('./middleware/fileAccess');
 
 // إعداد تطبيق Express
 const app = express();
 const PORT = config.port;
 
 // البرمجيات الوسيطة (Middleware)
-app.use(cors());
+app.disable('x-powered-by');
+app.set('trust proxy', config.isProd ? 1 : false);
+app.use(securityHeaders);
+app.use(cors(corsOptions()));
+app.use('/api', originGuard);
+app.use('/api/auth', createRateLimiter({max:40,windowMs:60000}));
+app.use('/api/client-portal/auth', createRateLimiter({max:40,windowMs:60000}));
+const serviceSubmissions = createRateLimiter({max:12,windowMs:15*60*1000});
+app.use('/api/client-portal/services/requests', (req,res,next)=>req.method==='POST'?serviceSubmissions(req,res,next):next());
 // أرشفة الماسح الضوئي ترسل PDF/صورة بصيغة Base64 (حتى 25MB)،
 // لذلك نحتاج هامشاً فوق الحجم الأصلي بسبب زيادة Base64 بنحو الثلث.
 app.use(express.json({ limit: '40mb' }));
@@ -22,15 +34,14 @@ app.use((req, res, next) => {
   next();
 });
 
-const { verifyCsrfToken, requireAuth } = require('./middleware/security');
+const { verifyCsrfToken, requireAuth, requirePermission } = require('./middleware/security');
 
-// خدمة تطبيق وبوابة العملاء المخصص (Client App Portal)
-app.use('/client-app', express.static(path.join(__dirname, '../client-app/www')));
-
-// خدمة الملفات الثابتة للواجهة الأمامية النظام الرئيسي (HTML, CSS, JS, Images)
-const publicDir = path.join(__dirname, '..');
-app.use(express.static(publicDir));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+publicFiles(app);
+app.use('/uploads', require('./routes/private_uploads'));
+app.use('/api', async (_req,res,next) => {
+  try { await database.ready; if(database.getDatabaseState().state !== 'ready') throw new Error('not ready'); next(); }
+  catch { res.status(503).json({success:false,message:'قاعدة البيانات غير جاهزة'}); }
+});
 
 // حماية مسارات الـ API بـ CSRF Token
 app.use('/api', verifyCsrfToken);
@@ -53,6 +64,7 @@ app.use('/api/accounting', requireAuth, require('./routes/accounting'));
 app.use('/api/reports/payments', requireAuth, require('./routes/payment_reports'));
 app.use('/api/reports', requireAuth, require('./routes/reports'));
 app.use('/api/clients', requireAuth, require('./routes/clients'));
+app.use('/api/supporting-documents', requireAuth, require('./routes/supporting_documents'));
 app.use('/api/suppliers', requireAuth, require('./routes/suppliers'));
 app.use('/api/vendors', requireAuth, require('./routes/suppliers'));
 app.use('/api/settings', requireAuth, require('./routes/settings'));
@@ -76,18 +88,17 @@ app.use('/api/admin/client-users', requireAuth, require('./routes/admin_client_u
 
 // مسار توثيق الـ API التفاعلي ومواصفة OpenAPI 3.0
 const docsModule = require('./routes/docs');
-app.use('/api', docsModule.router);
-app.get('/api-docs', (_req, res) => res.send(docsModule.renderDocsHtml()));
+app.use('/api', (req,res,next) => /^\/(?:openapi|docs)(?:\/|$)/.test(req.path) ? requireAuth(req,res,()=>requirePermission('settings:users')(req,res,next)) : next(), docsModule.router);
+app.get('/api-docs', requireAuth, requirePermission('settings:users'), (_req, res) => res.send(docsModule.renderDocsHtml()));
 
-// نقطة فحص صحة النظام
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'online',
-    system: config.appName,
-    version: config.version,
-    environment: config.env,
-    timestamp: new Date().toISOString()
-  });
+// Readiness checks the selected engine rather than returning a constant status.
+app.get(['/api/health','/api/ready'], async (_req,res) => {
+  let timer;
+  try {
+    await Promise.race([database.get('SELECT 1 AS ready'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),3000);})]);
+    res.json({status:'online',ready:true,version:config.version,timestamp:new Date().toISOString()});
+  } catch { res.status(503).json({status:'unavailable',ready:false}); }
+  finally { clearTimeout(timer); }
 });
 
 // نقطة فحص إصدار النظام والبيئة التشغيلية
@@ -110,7 +121,7 @@ app.all('/api/*', (req, res) => {
 });
 
 // صفحة فحص وتشخيص اتصال WebSocket المباشر في حال تم طلبه عبر HTTP
-app.get(['/ws/alerts', '/ws/contracts', '/ws'], (req, res) => {
+app.get(['/ws/alerts', '/ws/contracts', '/ws'], requireAuth, (req, res) => {
   if (req.headers.accept && req.headers.accept.includes('application/json')) {
     return res.json({
       status: 'active',
@@ -119,7 +130,7 @@ app.get(['/ws/alerts', '/ws/contracts', '/ws'], (req, res) => {
       message: 'خادم WebSocket للتنبيهات التعاقدية الذكية يعمل بنجاح.'
     });
   }
-  const host = req.headers.host || `localhost:${PORT}`;
+  const host = String(req.headers.host || `localhost:${PORT}`).replace(/[^a-zA-Z0-9.:[\]-]/g,'');
   res.send(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -167,10 +178,14 @@ app.get(['/ws/alerts', '/ws/contracts', '/ws'], (req, res) => {
       log.scrollTop = log.scrollHeight;
     }
 
-    function init() {
+    async function init() {
       addLog('جاري الاتصال بـ ' + wsUrl + ' ...', '#94a3b8');
       try {
-        ws = new WebSocket(wsUrl);
+        const token = localStorage.getItem('rawasi_token') || sessionStorage.getItem('rawasi_token') || '';
+        const response = await fetch('/api/auth/realtime-ticket',{method:'POST',headers:{Authorization:'Bearer '+token}});
+        const data = await response.json();
+        if(!response.ok || !data.ticket) throw new Error('سجل الدخول أولاً');
+        ws = new WebSocket(wsUrl,['rawasi-auth','ticket.'+data.ticket]);
         ws.onopen = () => {
           badge.className = 'badge badge-ok';
           badge.innerHTML = '🟢 متصل بنجاح (WebSocket Online)';
@@ -214,26 +229,11 @@ app.get(['/ws/alerts', '/ws/contracts', '/ws'], (req, res) => {
 </html>`);
 });
 
-// المسار الافتراضي يوجه لصفحة النظام الرئيسية
-app.get('*', (req, res) => {
-  res.sendFile(path.join(publicDir, 'index.html'));
-});
-
-// معالجة الأخطاء غير المتوقعة لضمان استمرار الخادم دائماً
-process.on('uncaughtException', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error('===========================================================');
-    console.error(`⚠️  [Port Conflict] Port ${PORT} is already in use!`);
-    console.error(`👉 Another instance of Rawasi Aden is already running.`);
-    console.error(`🌐 Access your system directly at: http://localhost:${PORT}`);
-    console.error('===========================================================');
-    process.exit(0);
-  }
-  console.error('⚠️ [Server] Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('⚠️ [Server] Unhandled Rejection:', reason);
+app.use((_req,res)=>res.status(404).json({success:false,message:'المسار غير موجود'}));
+app.use((error,_req,res,_next)=>{
+  const status=Number(error.statusCode||error.status)||500;
+  if(status>=500)console.error('Request failed:',error.code||error.name);
+  if(!res.headersSent)res.status(status).json({success:false,message:status>=500?'تعذر إتمام الطلب':'الطلب غير صالح'});
 });
 
 if (require.main === module) {
@@ -249,12 +249,31 @@ if (require.main === module) {
   }
 
   // تشغيل الخادم
-  server.listen(PORT, '0.0.0.0', () => {
+  const sockets = new Set();
+  server.on('connection', socket => { sockets.add(socket); socket.on('close',()=>sockets.delete(socket)); });
+  server.requestTimeout=120000; server.headersTimeout=65000;
+  let stopping=false;
+  async function shutdown(exitCode=0) {
+    if(stopping)return; stopping=true;
+    try { require('./services/backupSchedulerService').stop(); require('./services/materialAuditScheduler').stop(); } catch {}
+    const timeout=setTimeout(()=>{for(const socket of sockets)socket.destroy();},10000); timeout.unref();
+    await new Promise(resolve=>server.close(resolve));
+    clearTimeout(timeout);
+    try { await database.closeDatabase(); } catch {}
+    process.exit(exitCode);
+  }
+  process.once('SIGTERM',()=>shutdown(0)); process.once('SIGINT',()=>shutdown(0));
+  process.once('uncaughtException',error=>{console.error('Fatal server error:',error.code||error.name);shutdown(1);});
+  process.once('unhandledRejection',error=>{console.error('Fatal async error:',error?.code||error?.name||'unknown');shutdown(1);});
+  database.ready.then(()=>server.listen(PORT, '0.0.0.0', () => {
+    if (process.send) process.send({type:'ready',port:server.address().port});
     console.log('===========================================================');
     console.log(`🚀 Rawasi Aden System Server is Running!`);
     console.log(`🌐 System URL: http://localhost:${PORT}`);
     console.log(`💼 Port:       ${PORT}`);
     console.log('===========================================================');
+
+    if (!config.schedulersEnabled) return;
 
     // بدء خدمة الجدولة التلقائية للنسخ الاحتياطي
     try {
@@ -281,22 +300,23 @@ if (require.main === module) {
     } catch (e) {
       console.error('⚠️ [ContractAlertsScheduler] Failed to load contractAlertsService:', e.message);
     }
-  });
+
+  })).catch(error=>{console.error('Startup failed:',error.code||error.name);process.exitCode=1;});
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error('===========================================================');
       console.error(`⚠️  [Port Conflict] Port ${PORT} is already running!`);
-      console.error(`🌐 The system is ready at: http://localhost:${PORT}`);
+      console.error('Startup refused because the configured port is occupied.');
       console.error('===========================================================');
-      process.exit(0);
+      process.exit(1);
     } else {
       console.error('⚠️ [Server] Listen error:', err.message);
+      shutdown(1);
     }
   });
 
-  // مؤقت للحفاظ على حيوية الخادم ومنع الإغلاق التلقائي
-  setInterval(() => {}, 1000 * 60 * 60);
+
 }
 
 module.exports = app;

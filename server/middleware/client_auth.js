@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../database/db');
 
 // مفتاح توقيع JWT مخصص ومنفصل تماماً لبوابة العملاء
-const CLIENT_JWT_SECRET = process.env.CLIENT_JWT_SECRET || 'rawasi_aden_client_secret_key_2026_secured';
+const CLIENT_JWT_SECRET = require('../config/environment').secret('CLIENT_JWT_SECRET');
 
 // ==========================================
 // 1. محدد معدل الطلبات للعملاء (Rate Limiting)
@@ -19,9 +19,9 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 200;
 
 function checkClientRateLimit(req, res, next) {
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
   const token = req.headers.authorization ? req.headers.authorization.split(' ')[1] : '';
-  const key = `client_rl_${ip}_${token.slice(-10)}`;
+  const key = `client_rl_${ip}`;
   const now = Date.now();
 
   let entry = clientRateLimitMap.get(key);
@@ -79,7 +79,7 @@ async function requireClientAuth(req, res, next) {
     // فك تشفير وفحص الـ JWT
     let decoded;
     try {
-      decoded = jwt.verify(token, CLIENT_JWT_SECRET);
+      decoded = jwt.verify(token, CLIENT_JWT_SECRET, { algorithms: ['HS256'] });
     } catch (jwtErr) {
       if (jwtErr.name === 'TokenExpiredError') {
         return res.status(401).json({
