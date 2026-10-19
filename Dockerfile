@@ -23,4 +23,5 @@ COPY server ./server
 COPY scripts/restore_bundle.js scripts/rotate_bank_key.js ./scripts/
 RUN mkdir -p /data && chown node:node /data /app
 USER node
-CMD ["npm", "start"]
+# Node must receive SIGTERM as PID 1 instead of relying on npm's signal forwarding.
+CMD ["node", "server/server.js"]

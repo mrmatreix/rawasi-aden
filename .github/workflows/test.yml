@@ -36,7 +36,7 @@ jobs:
           done
           curl --fail http://127.0.0.1:3100/api/ready
           test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/server/database/rawasi_aden.db)" = 404
-          docker stop --time 15 rawasi-ci
+          docker stop --timeout 15 rawasi-ci
           test "$(docker inspect --format '{{.State.ExitCode}}' rawasi-ci)" = 0
           docker start rawasi-ci
           for attempt in $(seq 1 30); do

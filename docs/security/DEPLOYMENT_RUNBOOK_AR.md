@@ -26,7 +26,7 @@
 | Root Directory | جذر المستودع |
 | البناء | Dockerfile؛ ينفذ npm ci ثم npm run build داخل مرحلة البناء |
 | Node | 24.x بحسب engines؛ صورة node:24-bookworm-slim |
-| التشغيل | npm start |
+| التشغيل | Docker CMD: node server/server.js مباشرة لاستقبال SIGTERM؛ يبقى npm start متاحاً محلياً. لا تضع تجاوزاً يعيد npm كعملية PID 1 |
 | عنوان الاستماع | 0.0.0.0 وPORT الذي توفره Railway |
 | قاعدة البيانات | SQLite حالياً؛ لا يعتمد MySQL قبل اختبار مستقل |
 | Volume | /data، منفصل عن /app، مع صلاحية الكتابة للمستخدم node داخل الصورة |
