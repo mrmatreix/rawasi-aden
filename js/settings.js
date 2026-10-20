@@ -4743,19 +4743,19 @@ const Settings = {
   },
 
   toggleCloudProviderFields() {
-    const pVal = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const pVal = document.getElementById('cfgCloudProvider')?.value || 'not_configured';
     const endGrp = document.getElementById('grpCloudEndpoint');
     const tokGrp = document.getElementById('grpCloudToken');
     const fldGrp = document.getElementById('grpCloudFolder');
 
-    if (endGrp) endGrp.style.display = (pVal === 's3_webhook') ? 'block' : 'none';
-    if (tokGrp) tokGrp.style.display = (pVal === 's3_webhook') ? 'block' : 'none';
+    if (endGrp) endGrp.style.display = (pVal === 'offsite_webhook' || pVal === 's3_webhook') ? 'block' : 'none';
+    if (tokGrp) tokGrp.style.display = (pVal === 'offsite_webhook' || pVal === 's3_webhook') ? 'block' : 'none';
     if (fldGrp) fldGrp.style.display = (pVal === 'local_cloud_folder') ? 'block' : 'none';
   },
 
   async saveCloudSyncConfig(e) {
     if (e && e.preventDefault) e.preventDefault();
-    const provider = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const provider = document.getElementById('cfgCloudProvider')?.value || 'not_configured';
     const endpointUrl = document.getElementById('cfgCloudEndpoint')?.value?.trim() || '';
     const authToken = document.getElementById('cfgCloudToken')?.value?.trim() || '';
     const syncedFolder = document.getElementById('cfgCloudFolder')?.value?.trim() || '';
@@ -4790,7 +4790,7 @@ const Settings = {
   async testCloudConnection() {
     const btn = document.getElementById('btnTestCloudConn');
     const resBox = document.getElementById('cloudConnectionTestResult');
-    const provider = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const provider = document.getElementById('cfgCloudProvider')?.value || 'not_configured';
     const endpointUrl = document.getElementById('cfgCloudEndpoint')?.value?.trim() || '';
     const authToken = document.getElementById('cfgCloudToken')?.value?.trim() || '';
     const syncedFolder = document.getElementById('cfgCloudFolder')?.value?.trim() || '';
