@@ -344,7 +344,19 @@ router.post('/auth/forgot-password', async (req, res) => {
 router.get('/services', async (req, res) => {
   try {
     const services = await db.query(`
-      SELECT id, code, title, category, description, icon, display_order
+      SELECT id, code, title,
+        CASE category
+          WHEN 'التصميم والإشراف' THEN 'design'
+          WHEN 'المقاولات' THEN 'execution'
+          WHEN 'ترميم وصيانة' THEN 'finishing'
+          WHEN 'تشطيبات' THEN 'finishing'
+          WHEN 'أنظمة' THEN 'systems'
+          WHEN 'بنية تحتية' THEN 'infrastructure'
+          WHEN 'استشارات' THEN 'consulting'
+          WHEN 'توريد' THEN 'supply'
+          WHEN 'survey' THEN 'infrastructure'
+          ELSE category END AS category,
+        description, icon, display_order
       FROM engineering_services
       WHERE is_active = 1
       ORDER BY CASE category

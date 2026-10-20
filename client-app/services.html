@@ -922,7 +922,8 @@
         }
 
         if (res && res.success && Array.isArray(res.services)) {
-          allServices = res.services;
+          const categoryRank = { design: 10, execution: 20, finishing: 30, systems: 40, infrastructure: 50, consulting: 60, supply: 70, general: 90 };
+          allServices = [...res.services].sort((a, b) => (categoryRank[a.category] || 90) - (categoryRank[b.category] || 90) || Number(a.display_order || 0) - Number(b.display_order || 0) || Number(a.id) - Number(b.id));
           renderServices();
         } else {
           throw new Error(res?.message || 'تعذر تحميل الخدمات');

@@ -11,6 +11,8 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../database/db');
 const { logAudit } = require('../services/auditService');
+const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
+const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
 
 /**
  * GET /api/admin/client-users
@@ -111,7 +113,7 @@ router.post('/services-catalog', async (req, res) => {
     const result = await db.run(`
       INSERT INTO engineering_services (code, title, category, description, icon, is_active, display_order)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, Number(display_order) || 0]);
+    `, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, parseDisplayOrder(display_order)]);
     const serviceId = result.lastID || result.lastInsertRowid || result.insertId || result.id;
     await logAudit(req, { action: 'ENGINEERING_SERVICE_CREATE', entity_type: 'engineering_services', entity_id: serviceId, details: `إضافة خدمة للبوابة: ${cleanTitle}` });
     res.status(201).json({ success: true, id: serviceId, message: 'تمت إضافة الخدمة وستظهر للزوار عند تفعيلها' });
@@ -177,7 +179,7 @@ router.put('/services-catalog/:id', async (req, res) => {
     const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 50) || null;
     const duplicate = cleanCode ? await db.get('SELECT id FROM engineering_services WHERE code = ? AND id != ?', [cleanCode, id]) : null;
     if (duplicate) return res.status(409).json({ success: false, message: 'رمز الخدمة مستخدم مسبقاً' });
-    await db.run(`UPDATE engineering_services SET code = ?, title = ?, category = ?, description = ?, icon = ?, is_active = ?, display_order = ? WHERE id = ?`, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, Number(display_order) || 0, id]);
+    await db.run(`UPDATE engineering_services SET code = ?, title = ?, category = ?, description = ?, icon = ?, is_active = ?, display_order = ? WHERE id = ?`, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, parseDisplayOrder(display_order), id]);
     await logAudit(req, { action: 'ENGINEERING_SERVICE_UPDATE', entity_type: 'engineering_services', entity_id: id, details: `تعديل خدمة البوابة: ${existing.title} → ${cleanTitle}` });
     res.json({ success: true, message: 'تم حفظ تعديل الخدمة' });
   } catch (err) {
