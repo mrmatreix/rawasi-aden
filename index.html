@@ -13,9 +13,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261019-tfzi">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261019-tfzi">
-  <link rel="stylesheet" href="css/sidebar.css?v=1.0.0.20261019-tfzi">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261020-3yca">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261020-3yca">
+  <link rel="stylesheet" href="css/sidebar.css?v=1.0.0.20261020-3yca">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -7359,7 +7359,7 @@
               <div>
                 <h4 style="margin: 0; font-size: 0.92rem; color: var(--gold-light); font-weight: 700;">التحقق بخطوتين (2FA) - رمز الأمان (PIN)</h4>
                 <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
-                  حماية متقدمة للحساب برمز سري PIN مكون من 6 أرقام. يمكنك تغيير الرمز أو توليد رمز جديد في أي وقت.
+                  رمز PIN خاص من 6 أرقام. عند تعديل مستخدم، اترك الحقل فارغاً للاحتفاظ بالرمز الحالي؛ لا يظهر الرمز المحفوظ.
                 </div>
               </div>
             </div>
@@ -7371,7 +7371,7 @@
 
           <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px;">
             <div style="position: relative; width: 220px;">
-              <input type="password" id="user2FaPinVal" class="form-control" placeholder="123456" maxlength="6" pattern="[0-9]{6}" autocomplete="off" style="font-family: monospace; font-size: 1.15rem; letter-spacing: 5px; text-align: center; font-weight: bold; padding-left: 38px; border-color: rgba(212, 175, 55, 0.45); background: #070c18; color: #fbbf24;" oninput="this.value=this.value.replace(/[٠-٩]/g, d=>'0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)]).replace(/[۰-۹]/g, d=>'0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)]).replace(/[^0-9]/g,'')">
+              <input type="password" id="user2FaPinVal" class="form-control" placeholder="رمز من 6 أرقام" maxlength="6" pattern="[0-9]{6}" autocomplete="new-password" style="font-family: monospace; font-size: 1.15rem; letter-spacing: 5px; text-align: center; font-weight: bold; padding-left: 38px; border-color: rgba(212, 175, 55, 0.45); background: #070c18; color: #fbbf24;" oninput="this.value=this.value.replace(/[٠-٩]/g, d=>'0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)]).replace(/[۰-۹]/g, d=>'0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)]).replace(/[^0-9]/g,'')">
               <button type="button" id="btnToggle2FaEye" onclick="Settings.toggle2FaPinVisibility()" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 1rem; padding: 2px;" title="إظهار / إخفاء الرمز">
                 <span id="user2FaEyeIcon">👁️</span>
               </button>
@@ -7381,12 +7381,8 @@
               🎲 توليد رمز جديد
             </button>
 
-            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.resetDefault2FaPin()" style="border-color: rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 6px 10px; font-size: 0.74rem;" title="إعادة تعيين للرمز الافتراضي 123456">
-              ↺ الافتراضي (123456)
-            </button>
-
             <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
-              <span>💡 كود الطوارئ الدائم: <code style="color: #6ee7b7; font-family: monospace; font-weight: bold; background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">889900</code></span>
+              <span>🔒 لا يوجد رمز افتراضي أو رمز طوارئ عام.</span>
             </div>
           </div>
         </div>
@@ -7396,7 +7392,7 @@
           <div class="permissions-header">
             <h4>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--gold-primary)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-              <span>مصفوفة العمليات والصلاحيات الإجرائية (7 عمليات رئيسية):</span>
+              <span>مصفوفة العمليات والصلاحيات الإجرائية: عرض، إنشاء، تعديل، اعتماد، ترحيل، إلغاء وتصدير</span>
             </h4>
             <div class="perm-quick-btns">
               <button type="button" class="perm-quick-btn" onclick="Settings.selectAllPermissions(true)">تحديد الكل</button>
@@ -7471,6 +7467,10 @@
                 <span>ترحيل القيود لسجل اليومية العامة</span>
               </label>
               <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="accounting:close_period" class="perm-chk">
+                <span>إغلاق وإعادة فتح الفترات المحاسبية</span>
+              </label>
+              <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="accounting:export" class="perm-chk">
                 <span>تصدير القوائم المالية والميزانيات</span>
               </label>
@@ -7490,6 +7490,14 @@
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="revenues:create" class="perm-chk">
                 <span>إصدار وتسجيل سند قبض نقدي أو شيك</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="revenues:view" class="perm-chk">
+                <span>عرض سندات القبض والإيرادات</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="revenues:approve" class="perm-chk">
+                <span>اعتماد سندات القبض قبل الترحيل</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="billing:approve" class="perm-chk">
@@ -7527,6 +7535,10 @@
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="expenses:cancel" class="perm-chk">
                 <span>إلغاء وحذف سند صرف</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="expenses:post" class="perm-chk">
+                <span>ترحيل سند الصرف إلى القيود المحاسبية</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="expenses:export" class="perm-chk">
@@ -7594,6 +7606,14 @@
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="purchases:approve" class="perm-chk">
                 <span>اعتماد ومصادقة أوامر وفواتير الشراء</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="purchases:post" class="perm-chk">
+                <span>ترحيل فاتورة الشراء بعد الاعتماد</span>
+              </label>
+              <label class="perm-checkbox-item">
+                <input type="checkbox" name="userPerm" value="suppliers:view" class="perm-chk">
+                <span>عرض الموردين ومقاولي الباطن وكشوف حساباتهم</span>
               </label>
               <label class="perm-checkbox-item">
                 <input type="checkbox" name="userPerm" value="suppliers:create" class="perm-chk">
@@ -9974,29 +9994,29 @@
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261019-tfzi"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261020-3yca"></script>
   <script src="js/financial-labels.js"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/auth.js?v=1.0.0.20261019-tfzi"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/auth.js?v=1.0.0.20261020-3yca"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/projects.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/accounting.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/inventory.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/hr.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/settings.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/contracts_cashflow.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/sidebar.js?v=1.0.0.20261019-tfzi"></script>
-  <script src="js/app.js?v=1.0.0.20261019-tfzi"></script>
+  <script src="js/reports.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/projects.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/accounting.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/inventory.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/hr.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/settings.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/contracts_cashflow.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/sidebar.js?v=1.0.0.20261020-3yca"></script>
+  <script src="js/app.js?v=1.0.0.20261020-3yca"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261019-tfzi')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261020-3yca')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

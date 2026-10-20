@@ -2483,7 +2483,7 @@ const Settings = {
     // ضبط حقل رمز التحقق 2FA الافتراضي وحالته
     const pinInput = document.getElementById('user2FaPinVal');
     if (pinInput) {
-      pinInput.value = '123456';
+      pinInput.value = '';
       pinInput.type = 'password';
     }
     const tfaEnabledChk = document.getElementById('user2FaEnabledVal');
@@ -2537,7 +2537,9 @@ const Settings = {
     // تعبئة حقل رمز التحقق بخطوتين (2FA PIN) وحالته للمستخدم الحالي
     const editPinInput = document.getElementById('user2FaPinVal');
     if (editPinInput) {
-      editPinInput.value = user.two_factor_pin || (user.role === 'admin' || user.username === 'admin' ? '123456' : '123456');
+      // PINs are write-only: leaving this field blank keeps the saved PIN.
+      editPinInput.value = '';
+      editPinInput.placeholder = user.two_factor_configured ? '••••••  اتركه فارغاً للاحتفاظ بالرمز الحالي' : 'أدخل رمزاً من 6 أرقام';
       editPinInput.type = 'password';
     }
     const editTfaEnabledChk = document.getElementById('user2FaEnabledVal');
@@ -2633,8 +2635,8 @@ const Settings = {
   resetDefault2FaPin() {
     const pinInput = document.getElementById('user2FaPinVal');
     if (!pinInput) return;
-    pinInput.value = '123456';
-    App.showToast('تمت إعادة تعيين الرمز للافتراضي: 123456', 'info');
+    pinInput.value = '';
+    App.showToast('لا يوجد رمز افتراضي؛ أدخل رمزاً خاصاً أو استخدم زر التوليد.', 'info');
   },
 
   // تعبئة وضبط خيارات الأمان والجلسات في البطاقة الخضراء
@@ -3029,7 +3031,7 @@ const Settings = {
       }
 
       // إذا كان المستخدم قيد التعديل ولديه جهاز معتمد مسجل، نحافظ على بيانات الجهاز المعتمد
-      const editUserId = document.getElementById('userId')?.value;
+      const editUserId = document.getElementById('userIdVal')?.value;
       if (editUserId && userSecuritySettings) {
         const existingUser = this._cachedUsers?.find(u => String(u.id) === String(editUserId));
         let prevSec = {};
@@ -3071,15 +3073,18 @@ const Settings = {
         .trim();
     };
 
-    const twoFactorPin = normalizeDigits(pinInput ? pinInput.value : '123456');
+    const twoFactorPin = normalizeDigits(pinInput ? pinInput.value : '');
     const twoFactorEnabled = tfaEnabledChk ? (tfaEnabledChk.checked ? 1 : 0) : 1;
 
-    if (twoFactorEnabled && twoFactorPin) {
-      if (!/^\d{6}$/.test(twoFactorPin)) {
-        App.showToast('رمز التحقق بخطوتين (PIN) يجب أن يتكون من 6 أرقام تماماً', 'warning');
-        if (pinInput) pinInput.focus();
-        return;
-      }
+    if (twoFactorPin && !/^\d{6}$/.test(twoFactorPin)) {
+      App.showToast('رمز التحقق بخطوتين (PIN) يجب أن يتكون من 6 أرقام تماماً', 'warning');
+      if (pinInput) pinInput.focus();
+      return;
+    }
+    if (twoFactorEnabled && !id && !twoFactorPin) {
+      App.showToast('أدخل رمز PIN خاصاً من 6 أرقام لتفعيل التحقق بخطوتين للمستخدم الجديد', 'warning');
+      if (pinInput) pinInput.focus();
+      return;
     }
 
     // قراءة وتحديد نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects)
@@ -3100,12 +3105,14 @@ const Settings = {
       email,
       status,
       permissions: finalPerms,
-      two_factor_pin: twoFactorPin || '123456',
       two_factor_enabled: twoFactorEnabled,
       branch_id: branch_id ? Number(branch_id) : null,
       department_id: department_id ? Number(department_id) : null,
       allowed_projects
     };
+
+    // On edit, omit a blank PIN so the database keeps the existing secret.
+    if (twoFactorPin) payload.two_factor_pin = twoFactorPin;
 
     if (userSecuritySettings !== undefined) {
       payload.security_settings = userSecuritySettings;
