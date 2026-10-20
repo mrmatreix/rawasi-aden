@@ -535,9 +535,38 @@ router.post('/:id/reset-password', async (req, res) => {
   }
 });
 
+const makeTempPassword = () => `Rawasi#${crypto.randomBytes(5).toString('base64url')}`;
+const makeOtpCode = () => crypto.randomInt(100000, 1000000).toString();
+const buildInviteText = ({ fullName, email, tempPassword, otpCode, portalUrl, message }) => {
+  const greeting = String(message || `مرحباً ${fullName}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.`).trim();
+  return `${greeting}\n\nالبريد: ${email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${portalUrl}`;
+};
+
+// معاينة قابلة للتحرير: لا تحفظ كلمة مرور ولا رمزاً قبل تأكيد الإرسال.
+router.get('/:id/invite-preview', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const user = await db.get(`SELECT id, full_name, email, phone, status FROM client_users WHERE id = ?`, [userId]);
+    if (!user) return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
+    if (user.status !== 'active') return res.status(400).json({ success: false, message: 'لا يمكن إرسال دعوة لحساب غير نشط' });
+    const portalUrl = `${req.protocol}://${req.get('host')}/client-app/`;
+    res.json({
+      success: true,
+      preview: {
+        user_id: user.id, full_name: user.full_name, email: user.email, phone: user.phone,
+        temp_password: makeTempPassword(), otp_code: makeOtpCode(), expiry_days: 7,
+        message: `مرحباً ${user.full_name}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.`,
+        portal_url: portalUrl
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر تجهيز معاينة دعوة التفعيل' });
+  }
+});
+
 /**
  * POST /api/admin/client-users/:id/send-invite
- * توليد ودعوة العميل لتفعيل حسابه ودخوله لأول مرة (Invitation / Temp Access)
+ * يثبت بيانات الدخول فقط بعد مراجعة المدير وتأكيده للإرسال.
  */
 router.post('/:id/send-invite', async (req, res) => {
   try {
@@ -547,23 +576,33 @@ router.post('/:id/send-invite', async (req, res) => {
       return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
     }
 
-    // إنشاء كلمة مرور مؤقتة وتثبيتها
-    const tempPassword = 'Rawasi#' + crypto.randomBytes(3).toString('hex').toUpperCase();
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    if (user.status !== 'active') return res.status(400).json({ success: false, message: 'لا يمكن إرسال دعوة لحساب غير نشط' });
+    const requested = req.body || {};
+    const tempPassword = String(requested.temp_password || makeTempPassword()).trim();
+    const otpCode = String(requested.otp_code || makeOtpCode()).trim();
+    const expiryDays = Math.max(1, Math.min(30, Number(requested.expiry_days) || 7));
+    const portalUrl = `${req.protocol}://${req.get('host')}/client-app/`;
+    if (tempPassword.length < 10 || tempPassword.length > 128) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور المؤقتة يجب أن تكون بين 10 و128 حرفاً' });
+    }
+    if (!/^\d{6}$/.test(otpCode)) {
+      return res.status(400).json({ success: false, message: 'رمز OTP يجب أن يتكون من 6 أرقام إنجليزية' });
+    }
+    const message = String(requested.message || '').trim().slice(0, 600);
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(tempPassword, salt);
 
     await db.run(`
       UPDATE client_users 
-      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', '+7 days'), updated_at = CURRENT_TIMESTAMP 
+      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', ?), updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [hash, otpCode, userId]);
+    `, [hash, otpCode, `+${expiryDays} days`, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_INVITE_SENT',
       entity_type: 'client_users',
       entity_id: userId,
-      details: `تم إصداره وتجهيز دعوة تفعيل جديدة لحساب العميل: ${user.full_name}`
+      details: `تم اعتماد وتجهيز دعوة تفعيل جديدة لحساب العميل: ${user.full_name} (صلاحية رمز التفعيل: ${expiryDays} أيام)`
     });
 
     res.json({
@@ -576,8 +615,9 @@ router.post('/:id/send-invite', async (req, res) => {
         phone: user.phone,
         temp_password: tempPassword,
         otp_code: otpCode,
-        portal_url: `${req.protocol}://${req.get('host')}/client-app/`,
-        whatsapp_share_text: `مرحباً ${user.full_name}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.\n\nالبريد: ${user.email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${req.protocol}://${req.get('host')}/client-app/`
+        portal_url: portalUrl,
+        expiry_days: expiryDays,
+        whatsapp_share_text: buildInviteText({ fullName: user.full_name, email: user.email, tempPassword, otpCode, portalUrl, message })
       }
     });
   } catch (err) {
