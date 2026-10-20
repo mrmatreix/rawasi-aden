@@ -20,7 +20,7 @@ COPY --from=build /app/www ./
 COPY --from=build /app/views ./views
 COPY --from=build /app/client-app/www ./client-app/www
 COPY server ./server
-COPY scripts/restore_bundle.js scripts/rotate_bank_key.js ./scripts/
+COPY scripts/restore_bundle.js scripts/rotate_bank_key.js scripts/init_staging_database.js ./scripts/
 RUN mkdir -p /data && chown node:node /data /app
 USER node
 # Node must receive SIGTERM as PID 1 instead of relying on npm's signal forwarding.
