@@ -566,16 +566,25 @@
           <i class="fa-solid fa-border-all"></i> جميع الخدمات
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('design', this)">
-          <i class="fa-solid fa-pencil-ruler"></i> التصاميم الهندسية و 3D
+          <i class="fa-solid fa-pencil-ruler"></i> التصميم والإشراف
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('execution', this)">
-          <i class="fa-solid fa-trowel-bricks"></i> المقاولات والبناء والتشطيب
+          <i class="fa-solid fa-trowel-bricks"></i> المقاولات والتنفيذ
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('finishing', this)">
+          <i class="fa-solid fa-paint-roller"></i> الترميم والتشطيبات
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('systems', this)">
+          <i class="fa-solid fa-bolt"></i> الأنظمة والطاقة
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('infrastructure', this)">
+          <i class="fa-solid fa-map-location-dot"></i> البنية التحتية والمساحة
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('consulting', this)">
-          <i class="fa-solid fa-clipboard-check"></i> الإشراف والاستشارات والكميات
+          <i class="fa-solid fa-clipboard-check"></i> الاستشارات والتراخيص
         </button>
-        <button class="filter-pill" onclick="setCategoryFilter('survey', this)">
-          <i class="fa-solid fa-map-location-dot"></i> المساحة ورفع المواقع
+        <button class="filter-pill" onclick="setCategoryFilter('supply', this)">
+          <i class="fa-solid fa-truck-fast"></i> التوريد والتركيب
         </button>
       </div>
 
@@ -984,10 +993,13 @@
 
     function getCategoryLabel(cat) {
       switch(cat) {
-        case 'design': return 'تصميم وإظهار 3D';
-        case 'execution': return 'تنفيذ ومقاولات';
-        case 'consulting': return 'إشراف واستشارات';
-        case 'survey': return 'مساحة ومواقع';
+        case 'design': return 'تصميم وإشراف هندسي';
+        case 'execution': return 'مقاولات وتنفيذ مبانٍ';
+        case 'finishing': return 'ترميم وتشطيبات وديكور';
+        case 'systems': return 'أنظمة وطاقة وتكييف';
+        case 'infrastructure': return 'بنية تحتية ومساحة';
+        case 'consulting': return 'استشارات وتراخيص ومقايسات';
+        case 'supply': return 'توريد وتركيب';
         default: return 'خدمات عامة';
       }
     }

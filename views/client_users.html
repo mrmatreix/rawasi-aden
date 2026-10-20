@@ -1000,7 +1000,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label class="block text-xs font-bold text-slate-300 mb-1.5">اسم الخدمة *</label><input id="serviceTitle" required maxlength="200" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm" placeholder="مثال: التصميم والإشراف الهندسي"></div>
           <div><label class="block text-xs font-bold text-slate-300 mb-1.5">رمز الخدمة</label><input id="serviceCode" maxlength="50" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono" placeholder="DESIGN-01"></div>
-          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">التصنيف</label><input id="serviceCategory" maxlength="100" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm" placeholder="تصميم / مقاولات / استشارات"></div>
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">نوع الخدمة</label><select id="serviceCategory" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm"><option value="design">تصميم وإشراف هندسي</option><option value="execution">مقاولات وتنفيذ مبانٍ</option><option value="finishing">ترميم وتشطيبات وديكور</option><option value="systems">أنظمة كهرباء وطاقة وتكييف</option><option value="infrastructure">بنية تحتية ومساحة</option><option value="consulting">استشارات وتراخيص ومقايسات</option><option value="supply">توريد وتركيب</option><option value="general">خدمات عامة</option></select></div>
           <div><label class="block text-xs font-bold text-slate-300 mb-1.5">أيقونة Font Awesome</label><input id="serviceIcon" maxlength="100" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono" value="fa-solid fa-compass-drafting"></div>
           <div><label class="block text-xs font-bold text-slate-300 mb-1.5">ترتيب الظهور</label><input id="serviceOrder" type="number" value="0" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm"></div>
           <label class="flex items-center gap-2 mt-6 text-sm font-bold text-slate-200"><input id="serviceActive" type="checkbox" checked class="accent-emerald-400 w-4 h-4"> ظاهرة للزوار الآن</label>
@@ -1666,6 +1666,11 @@
     let servicesCatalog = [];
 
     const serviceCatalogEscape = (value) => String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+    const serviceCategoryLabel = (category) => ({
+      design: 'تصميم وإشراف هندسي', execution: 'مقاولات وتنفيذ مبانٍ', finishing: 'ترميم وتشطيبات وديكور',
+      systems: 'أنظمة كهرباء وطاقة وتكييف', infrastructure: 'بنية تحتية ومساحة', consulting: 'استشارات وتراخيص ومقايسات',
+      supply: 'توريد وتركيب', general: 'خدمات عامة'
+    }[category] || category || 'خدمات عامة');
 
     async function loadServicesCatalog() {
       const container = document.getElementById('servicesCatalogList');
@@ -1682,7 +1687,7 @@
         }
         container.innerHTML = servicesCatalog.map(service => `
           <article class="rounded-2xl p-4 border ${Number(service.is_active) ? 'border-emerald-500/35 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/55 opacity-75'}">
-            <div class="flex items-start justify-between gap-3"><div class="flex gap-3"><div class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 text-emerald-300 flex items-center justify-center text-lg"><i class="${serviceCatalogEscape(service.icon || 'fa-solid fa-compass-drafting')}"></i></div><div><h3 class="font-extrabold text-slate-100 text-sm">${serviceCatalogEscape(service.title)}</h3><p class="text-[11px] text-slate-400 mt-1">${serviceCatalogEscape(service.category || 'عام')} · ${serviceCatalogEscape(service.code || 'بدون رمز')}</p></div></div><span class="text-[10px] px-2 py-1 rounded-full font-bold ${Number(service.is_active) ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}">${Number(service.is_active) ? 'ظاهرة للزوار' : 'مخفية'}</span></div>
+            <div class="flex items-start justify-between gap-3"><div class="flex gap-3"><div class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 text-emerald-300 flex items-center justify-center text-lg"><i class="${serviceCatalogEscape(service.icon || 'fa-solid fa-compass-drafting')}"></i></div><div><h3 class="font-extrabold text-slate-100 text-sm">${serviceCatalogEscape(service.title)}</h3><p class="text-[11px] text-slate-400 mt-1">${serviceCatalogEscape(serviceCategoryLabel(service.category))} · ${serviceCatalogEscape(service.code || 'بدون رمز')}</p></div></div><span class="text-[10px] px-2 py-1 rounded-full font-bold ${Number(service.is_active) ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}">${Number(service.is_active) ? 'ظاهرة للزوار' : 'مخفية'}</span></div>
             <p class="text-xs leading-6 text-slate-400 mt-3 min-h-[3rem]">${serviceCatalogEscape(service.description || 'لا يوجد وصف للخدمة بعد.')}</p>
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-slate-700/60"><span class="text-[11px] text-slate-500">الترتيب: ${Number(service.display_order) || 0}</span><div class="flex gap-2"><button onclick="openServiceModal(${Number(service.id)})" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"><i class="fa-solid fa-pen ml-1"></i>تعديل</button><button onclick="deleteServiceCatalog(${Number(service.id)})" class="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold"><i class="fa-solid fa-trash ml-1"></i>حذف</button></div></div>
           </article>`).join('');
@@ -1709,7 +1714,10 @@
       document.getElementById('serviceModalTitle').innerHTML = `<i class="fa-solid fa-briefcase text-emerald-400 ml-2"></i>${service ? 'تعديل خدمة للزوار' : 'إضافة خدمة للزوار'}`;
       document.getElementById('serviceTitle').value = service?.title || '';
       document.getElementById('serviceCode').value = service?.code || '';
-      document.getElementById('serviceCategory').value = service?.category || 'general';
+      const categorySelect = document.getElementById('serviceCategory');
+      const categoryValue = service?.category || 'general';
+      if (![...categorySelect.options].some(option => option.value === categoryValue)) categorySelect.add(new Option(categoryValue, categoryValue));
+      categorySelect.value = categoryValue;
       document.getElementById('serviceDescription').value = service?.description || '';
       document.getElementById('serviceIcon').value = service?.icon || 'fa-solid fa-compass-drafting';
       document.getElementById('serviceOrder').value = service?.display_order || 0;

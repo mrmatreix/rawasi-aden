@@ -347,7 +347,10 @@ router.get('/services', async (req, res) => {
       SELECT id, code, title, category, description, icon, display_order
       FROM engineering_services
       WHERE is_active = 1
-      ORDER BY display_order ASC, id ASC
+      ORDER BY CASE category
+        WHEN 'design' THEN 10 WHEN 'execution' THEN 20 WHEN 'finishing' THEN 30
+        WHEN 'systems' THEN 40 WHEN 'infrastructure' THEN 50 WHEN 'consulting' THEN 60
+        WHEN 'supply' THEN 70 ELSE 90 END, display_order ASC, id ASC
     `);
 
     res.json({

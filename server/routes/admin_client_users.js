@@ -88,7 +88,10 @@ router.get('/services-catalog', async (req, res) => {
     const services = await db.query(`
       SELECT id, code, title, category, description, icon, is_active, display_order, created_at
       FROM engineering_services
-      ORDER BY display_order ASC, id ASC
+      ORDER BY CASE category
+        WHEN 'design' THEN 10 WHEN 'execution' THEN 20 WHEN 'finishing' THEN 30
+        WHEN 'systems' THEN 40 WHEN 'infrastructure' THEN 50 WHEN 'consulting' THEN 60
+        WHEN 'supply' THEN 70 ELSE 90 END, display_order ASC, id ASC
     `);
     res.json({ success: true, services: services || [] });
   } catch (err) {
@@ -120,35 +123,43 @@ router.post('/services-catalog', async (req, res) => {
 
 // كتالوج جاهز قابل للإدراج مرة واحدة؛ لا يستبدل الخدمات أو التعديلات الموجودة.
 const RECOMMENDED_VISITOR_SERVICES = [
-  ['ARCH-DESIGN', 'التصميم المعماري والإنشائي', 'التصميم والإشراف', 'إعداد المخططات المعمارية والإنشائية المتكاملة وفق احتياج المشروع والمتطلبات الفنية.', 'fa-solid fa-compass-drafting', 10],
-  ['ENG-SUPERVISION', 'الإشراف الهندسي وإدارة المشاريع', 'التصميم والإشراف', 'متابعة التنفيذ وضبط الجودة والبرنامج الزمني والتنسيق بين أطراف المشروع.', 'fa-solid fa-helmet-safety', 20],
-  ['GENERAL-CONTRACT', 'المقاولات العامة وتسليم المفتاح', 'المقاولات', 'تنفيذ المشروع كاملاً من التجهيز وحتى التسليم وفق المواصفات والاتفاق المعتمد.', 'fa-solid fa-building', 30],
-  ['BUILD-CONSTRUCT', 'تنفيذ المباني السكنية والتجارية', 'المقاولات', 'تنفيذ الفلل والمباني والمنشآت التجارية بأعمال إنشائية منظمة ومتابعة مستمرة.', 'fa-solid fa-city', 40],
-  ['RENOVATION', 'الترميم والتأهيل والصيانة', 'ترميم وصيانة', 'معالجة وتجديد المباني القائمة وتحسين كفاءتها ومظهرها.', 'fa-solid fa-screwdriver-wrench', 50],
-  ['FINISHING', 'التشطيبات الداخلية والخارجية', 'تشطيبات', 'أعمال التشطيبات المتكاملة للأسقف والجدران والأرضيات والواجهات.', 'fa-solid fa-paint-roller', 60],
-  ['INTERIOR-DESIGN', 'التصميم والديكور الداخلي', 'تشطيبات', 'تصميم المساحات الداخلية واختيار الخامات والألوان وتنفيذ الديكور.', 'fa-solid fa-couch', 70],
-  ['WATER-SEWER', 'شبكات المياه والصرف الصحي', 'بنية تحتية', 'تصميم وتنفيذ شبكات المياه والصرف والتوصيلات الداخلية والخارجية.', 'fa-solid fa-faucet-drip', 80],
-  ['ELECTRICAL', 'الأعمال الكهربائية', 'أنظمة', 'تنفيذ التمديدات واللوحات والإنارة وأنظمة الحماية الكهربائية.', 'fa-solid fa-bolt', 90],
-  ['SOLAR-ENERGY', 'أنظمة الطاقة الشمسية', 'أنظمة', 'تصميم وتركيب حلول الطاقة الشمسية المناسبة للمباني والمنشآت.', 'fa-solid fa-solar-panel', 100],
-  ['HVAC-FIRE', 'التكييف والتهوية وأنظمة الحريق', 'أنظمة', 'حلول التكييف والتهوية والإنذار والإطفاء بما يلائم المشروع.', 'fa-solid fa-temperature-arrow-down', 110],
-  ['PERMITS', 'المخططات والتراخيص الهندسية', 'استشارات', 'إعداد المخططات والملفات المطلوبة للإجراءات والتراخيص الهندسية.', 'fa-solid fa-file-signature', 120],
-  ['QUANTITY-SURVEY', 'حصر الكميات وإعداد المقايسات', 'استشارات', 'إعداد جداول الكميات والمواصفات والتكلفة التقديرية للمشروع.', 'fa-solid fa-ruler-combined', 130],
-  ['FEASIBILITY', 'دراسات الجدوى والتسعير الفني', 'استشارات', 'تحليل الاحتياجات والتكلفة والبدائل وإعداد عرض فني أولي.', 'fa-solid fa-chart-line', 140],
-  ['SURVEY', 'الرفع المساحي وتخطيط المواقع', 'بنية تحتية', 'رفع الموقع وتحديد المناسيب والحدود وتجهيز بيانات التخطيط والتنفيذ.', 'fa-solid fa-map-location-dot', 150],
-  ['SUPPLY-INSTALL', 'توريد وتركيب المواد والمعدات', 'توريد', 'توريد وتركيب المواد والمعدات ذات الصلة بالمشروع حسب المواصفات المعتمدة.', 'fa-solid fa-truck-fast', 160]
+  ['ARCH-DESIGN', 'التصميم المعماري والإنشائي', 'design', 'إعداد المخططات المعمارية والإنشائية المتكاملة وفق احتياج المشروع والمتطلبات الفنية.', 'fa-solid fa-compass-drafting', 10],
+  ['ENG-SUPERVISION', 'الإشراف الهندسي وإدارة المشاريع', 'design', 'متابعة التنفيذ وضبط الجودة والبرنامج الزمني والتنسيق بين أطراف المشروع.', 'fa-solid fa-helmet-safety', 20],
+  ['GENERAL-CONTRACT', 'المقاولات العامة وتسليم المفتاح', 'execution', 'تنفيذ المشروع كاملاً من التجهيز وحتى التسليم وفق المواصفات والاتفاق المعتمد.', 'fa-solid fa-building', 30],
+  ['BUILD-CONSTRUCT', 'تنفيذ المباني السكنية والتجارية', 'execution', 'تنفيذ الفلل والمباني والمنشآت التجارية بأعمال إنشائية منظمة ومتابعة مستمرة.', 'fa-solid fa-city', 40],
+  ['RENOVATION', 'الترميم والتأهيل والصيانة', 'finishing', 'معالجة وتجديد المباني القائمة وتحسين كفاءتها ومظهرها.', 'fa-solid fa-screwdriver-wrench', 50],
+  ['FINISHING', 'التشطيبات الداخلية والخارجية', 'finishing', 'أعمال التشطيبات المتكاملة للأسقف والجدران والأرضيات والواجهات.', 'fa-solid fa-paint-roller', 60],
+  ['INTERIOR-DESIGN', 'التصميم والديكور الداخلي', 'finishing', 'تصميم المساحات الداخلية واختيار الخامات والألوان وتنفيذ الديكور.', 'fa-solid fa-couch', 70],
+  ['WATER-SEWER', 'شبكات المياه والصرف الصحي', 'infrastructure', 'تصميم وتنفيذ شبكات المياه والصرف والتوصيلات الداخلية والخارجية.', 'fa-solid fa-faucet-drip', 80],
+  ['ELECTRICAL', 'الأعمال الكهربائية', 'systems', 'تنفيذ التمديدات واللوحات والإنارة وأنظمة الحماية الكهربائية.', 'fa-solid fa-bolt', 90],
+  ['SOLAR-ENERGY', 'أنظمة الطاقة الشمسية', 'systems', 'تصميم وتركيب حلول الطاقة الشمسية المناسبة للمباني والمنشآت.', 'fa-solid fa-solar-panel', 100],
+  ['HVAC-FIRE', 'التكييف والتهوية وأنظمة الحريق', 'systems', 'حلول التكييف والتهوية والإنذار والإطفاء بما يلائم المشروع.', 'fa-solid fa-temperature-arrow-down', 110],
+  ['PERMITS', 'المخططات والتراخيص الهندسية', 'consulting', 'إعداد المخططات والملفات المطلوبة للإجراءات والتراخيص الهندسية.', 'fa-solid fa-file-signature', 120],
+  ['QUANTITY-SURVEY', 'حصر الكميات وإعداد المقايسات', 'consulting', 'إعداد جداول الكميات والمواصفات والتكلفة التقديرية للمشروع.', 'fa-solid fa-ruler-combined', 130],
+  ['FEASIBILITY', 'دراسات الجدوى والتسعير الفني', 'consulting', 'تحليل الاحتياجات والتكلفة والبدائل وإعداد عرض فني أولي.', 'fa-solid fa-chart-line', 140],
+  ['SURVEY', 'الرفع المساحي وتخطيط المواقع', 'infrastructure', 'رفع الموقع وتحديد المناسيب والحدود وتجهيز بيانات التخطيط والتنفيذ.', 'fa-solid fa-map-location-dot', 150],
+  ['SUPPLY-INSTALL', 'توريد وتركيب المواد والمعدات', 'supply', 'توريد وتركيب المواد والمعدات ذات الصلة بالمشروع حسب المواصفات المعتمدة.', 'fa-solid fa-truck-fast', 160]
 ];
 
 router.post('/services-catalog/add-recommended', async (req, res) => {
   try {
     let added = 0;
+    let normalized = 0;
+    const legacyCategories = new Set(['التصميم والإشراف', 'المقاولات', 'ترميم وصيانة', 'تشطيبات', 'بنية تحتية', 'أنظمة', 'استشارات', 'توريد', 'survey']);
     for (const [code, title, category, description, icon, displayOrder] of RECOMMENDED_VISITOR_SERVICES) {
-      const exists = await db.get('SELECT id FROM engineering_services WHERE code = ?', [code]);
-      if (exists) continue;
+      const exists = await db.get('SELECT id, category FROM engineering_services WHERE code = ?', [code]);
+      if (exists) {
+        if (legacyCategories.has(exists.category)) {
+          await db.run('UPDATE engineering_services SET category = ? WHERE id = ?', [category, exists.id]);
+          normalized += 1;
+        }
+        continue;
+      }
       await db.run(`INSERT INTO engineering_services (code, title, category, description, icon, is_active, display_order) VALUES (?, ?, ?, ?, ?, 1, ?)`, [code, title, category, description, icon, displayOrder]);
       added += 1;
     }
-    await logAudit(req, { action: 'ENGINEERING_SERVICE_RECOMMENDED_SEED', entity_type: 'engineering_services', entity_id: null, details: `إضافة ${added} خدمة مقترحة إلى كتالوج الزوار` });
-    res.json({ success: true, added, total: RECOMMENDED_VISITOR_SERVICES.length, message: added ? `تمت إضافة ${added} خدمة مقترحة` : 'جميع الخدمات المقترحة موجودة مسبقاً' });
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_RECOMMENDED_SEED', entity_type: 'engineering_services', entity_id: null, details: `إضافة ${added} خدمة مقترحة وتوحيد ${normalized} نوع خدمة في كتالوج الزوار` });
+    res.json({ success: true, added, normalized, total: RECOMMENDED_VISITOR_SERVICES.length, message: added ? `تمت إضافة ${added} خدمة مقترحة وتنسيق ${normalized} خدمة` : normalized ? `تم تنسيق أنواع ${normalized} خدمة موجودة` : 'جميع الخدمات المقترحة موجودة ومنسقة مسبقاً' });
   } catch (err) {
     console.error('Add recommended services error:', err);
     res.status(500).json({ success: false, message: 'تعذر إضافة الخدمات المقترحة' });
