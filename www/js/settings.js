@@ -481,10 +481,66 @@ const Settings = {
         setCheck('printFinShowReconcileBadge', cfg.fin_show_reconcile_badge);
 
         this.updatePrintPreview();
+        this.loadPrintProfiles();
       }
     } catch (e) {
       console.error('Error loading print settings:', e);
     }
+  },
+
+  serializePrintForm() {
+    const config = {};
+    document.querySelectorAll('#printSettingsForm input, #printSettingsForm select, #printSettingsForm textarea').forEach(el => {
+      if (!el.id || el.id.startsWith('printProfile') || el.type === 'submit' || el.type === 'button') return;
+      config[el.id] = el.type === 'checkbox' ? Boolean(el.checked) : el.value;
+    });
+    return config;
+  },
+
+  applyPrintForm(config) {
+    Object.entries(config || {}).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.type === 'checkbox') el.checked = Boolean(value);
+      else el.value = value;
+    });
+    this.updatePrintPreview();
+  },
+
+  async loadPrintProfiles() {
+    try {
+      const res = await fetch('/api/settings/print-profiles');
+      const json = await res.json();
+      if (!json.success) return;
+      const select = document.getElementById('printProfileSelect');
+      if (select) select.innerHTML = '<option value="">الإعدادات الحالية</option>' + json.data.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      const audit = document.getElementById('printProfileAudit');
+      if (audit) audit.textContent = json.audit?.length ? `آخر العمليات: ${json.audit.map(a => `${a.action} «${a.profile_name}» بواسطة ${a.actor}`).join(' • ')}` : 'لم يُحفظ قالب مستقل بعد.';
+    } catch (err) { console.warn('Print profile loading failed', err); }
+  },
+
+  async savePrintProfile() {
+    const name = document.getElementById('printProfileName')?.value.trim();
+    if (!name) return App.showToast('اكتب اسم القالب أولاً', 'warning');
+    try {
+      const res = await fetch('/api/settings/print-profiles', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ name, config:this.serializePrintForm() }) });
+      const json = await res.json();
+      if (!json.success) return App.showToast(json.message || 'تعذر حفظ القالب', 'error');
+      App.showToast(json.message, 'success');
+      await this.loadPrintProfiles();
+    } catch { App.showToast('تعذر الاتصال لحفظ القالب', 'error'); }
+  },
+
+  async applyPrintProfile(id) {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/settings/print-profiles/${encodeURIComponent(id)}`);
+      const json = await res.json();
+      if (!json.success) return App.showToast(json.message || 'تعذر تطبيق القالب', 'error');
+      this.applyPrintForm(json.data.config);
+      const name = document.getElementById('printProfileName'); if (name) name.value = json.data.name;
+      App.showToast(`تم تحميل قالب «${json.data.name}». اضغط حفظ وتطبيق لاعتماده.`, 'info');
+    } catch { App.showToast('تعذر تحميل القالب', 'error'); }
   },
 
   async savePrintSettings(e) {
