@@ -957,7 +957,11 @@
           <div><label class="block text-xs font-bold text-slate-300 mb-1.5">رمز OTP</label><input id="inviteOtp" type="text" inputmode="numeric" maxlength="6" oninput="this.value=this.value.replace(/[^0-9]/g,''); refreshInvitePreview()" class="w-full custom-input rounded-xl px-3 py-2.5 text-xs font-mono tracking-[0.3em] focus:outline-none" autocomplete="off"></div>
           <div><label class="block text-xs font-bold text-slate-300 mb-1.5">صلاحية رمز التفعيل</label><select id="inviteExpiryDays" class="w-full custom-input rounded-xl px-3 py-2.5 text-xs focus:outline-none"><option value="1">يوم واحد</option><option value="3">3 أيام</option><option value="7">7 أيام</option><option value="14">14 يوماً</option><option value="30">30 يوماً</option></select></div>
         </div>
-        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">معاينة رسالة واتساب</label><textarea id="inviteSharePreview" rows="8" readonly class="w-full rounded-xl p-3 text-xs leading-6 bg-slate-950/70 border border-slate-700/80 text-slate-300 focus:outline-none" dir="rtl"></textarea></div>
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-1.5"><label class="block text-xs font-bold text-slate-300">نص رسالة واتساب — قابل للتحرير</label><button type="button" onclick="resetInviteShareText()" class="text-[11px] text-emerald-300 hover:text-emerald-200"><i class="fa-solid fa-rotate-left ml-1"></i>إعادة التوليد من البيانات</button></div>
+          <textarea id="inviteSharePreview" rows="8" oninput="markInvitePreviewEdited()" class="w-full rounded-xl p-3 text-xs leading-6 bg-slate-950/70 border border-slate-700/80 text-slate-300 focus:outline-none focus:border-emerald-400/70" dir="rtl" maxlength="2500"></textarea>
+          <p id="inviteCredentialWarning" class="hidden mt-2 text-[11px] text-amber-300 leading-5"><i class="fa-solid fa-triangle-exclamation ml-1"></i>النص المعدل لا يحتوي كل بيانات الدخول الحالية. يمكنك الإرسال، لكن تأكد من أن العميل سيستلم بياناته بطريقة آمنة.</p>
+        </div>
       </div>
       <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-700/80 bg-slate-900/60"><button type="button" onclick="closeInviteModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700">إلغاء</button><button type="button" id="btnConfirmInvite" onclick="confirmAndSendInvite()" class="px-5 py-2 rounded-xl text-xs font-extrabold text-slate-950 bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 shadow-lg shadow-emerald-500/20"><i class="fa-solid fa-paper-plane"></i> اعتماد وفتح واتساب</button></div>
     </div>
@@ -1357,19 +1361,40 @@
     }
 
     let inviteDraft = null;
+    let invitePreviewCustomized = false;
 
     function closeInviteModal() {
       document.getElementById('inviteModal').classList.add('hidden');
       inviteDraft = null;
+      invitePreviewCustomized = false;
     }
 
-    function refreshInvitePreview() {
+    function refreshInvitePreview(force = false) {
       if (!inviteDraft) return;
+      if (invitePreviewCustomized && !force) return;
       const message = document.getElementById('inviteMessage').value.trim();
       const password = document.getElementById('invitePassword').value;
       const otp = document.getElementById('inviteOtp').value;
       const preview = document.getElementById('inviteSharePreview');
       preview.value = `${message}\n\nالبريد: ${inviteDraft.email}\nكلمة المرور المؤقتة: ${password}\nرمز الأمان (OTP): ${otp}\nرابط الدخول: ${inviteDraft.portal_url}`;
+      updateInviteCredentialWarning();
+    }
+
+    function markInvitePreviewEdited() {
+      invitePreviewCustomized = true;
+      updateInviteCredentialWarning();
+    }
+
+    function resetInviteShareText() {
+      invitePreviewCustomized = false;
+      refreshInvitePreview(true);
+    }
+
+    function updateInviteCredentialWarning() {
+      if (!inviteDraft) return;
+      const preview = document.getElementById('inviteSharePreview').value;
+      const required = [inviteDraft.email, document.getElementById('invitePassword').value, document.getElementById('inviteOtp').value, inviteDraft.portal_url];
+      document.getElementById('inviteCredentialWarning').classList.toggle('hidden', required.every(value => value && preview.includes(value)));
     }
 
     async function sendInvite(id) {
@@ -1383,8 +1408,9 @@
           document.getElementById('invitePassword').value = inviteDraft.temp_password;
           document.getElementById('inviteOtp').value = inviteDraft.otp_code;
           document.getElementById('inviteExpiryDays').value = inviteDraft.expiry_days;
+          invitePreviewCustomized = false;
           document.getElementById('inviteModal').classList.remove('hidden');
-          refreshInvitePreview();
+          refreshInvitePreview(true);
         } else {
           showToast(data.message || 'تعذر تجهيز معاينة الدعوة', 'error');
         }
@@ -1400,12 +1426,15 @@
         message: document.getElementById('inviteMessage').value.trim(),
         temp_password: document.getElementById('invitePassword').value,
         otp_code: document.getElementById('inviteOtp').value,
-        expiry_days: document.getElementById('inviteExpiryDays').value
+        expiry_days: document.getElementById('inviteExpiryDays').value,
+        whatsapp_share_text: document.getElementById('inviteSharePreview').value.trim()
       };
-      if (payload.temp_password.length < 10 || !/^\d{6}$/.test(payload.otp_code)) {
+      if (payload.temp_password.length < 10 || !/^\d{6}$/.test(payload.otp_code) || !payload.whatsapp_share_text) {
         showToast('تحقق من كلمة المرور المؤقتة ورمز OTP المكوّن من 6 أرقام', 'error');
         return;
       }
+      const requiredValues = [inviteDraft.email, payload.temp_password, payload.otp_code, inviteDraft.portal_url];
+      if (!requiredValues.every(value => payload.whatsapp_share_text.includes(value)) && !window.confirm('رسالة واتساب لا تحتوي جميع بيانات الدخول الحالية. هل تريد اعتمادها كما هي؟')) return;
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري اعتماد الدعوة...';
       try {

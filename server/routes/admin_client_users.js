@@ -589,6 +589,11 @@ router.post('/:id/send-invite', async (req, res) => {
       return res.status(400).json({ success: false, message: 'رمز OTP يجب أن يتكون من 6 أرقام إنجليزية' });
     }
     const message = String(requested.message || '').trim().slice(0, 600);
+    const defaultShareText = buildInviteText({ fullName: user.full_name, email: user.email, tempPassword, otpCode, portalUrl, message });
+    const whatsappShareText = String(requested.whatsapp_share_text || defaultShareText).trim().slice(0, 2500);
+    if (!whatsappShareText) {
+      return res.status(400).json({ success: false, message: 'نص رسالة واتساب لا يمكن أن يكون فارغاً' });
+    }
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(tempPassword, salt);
 
@@ -617,7 +622,7 @@ router.post('/:id/send-invite', async (req, res) => {
         otp_code: otpCode,
         portal_url: portalUrl,
         expiry_days: expiryDays,
-        whatsapp_share_text: buildInviteText({ fullName: user.full_name, email: user.email, tempPassword, otpCode, portalUrl, message })
+        whatsapp_share_text: whatsappShareText
       }
     });
   } catch (err) {
