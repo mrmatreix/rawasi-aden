@@ -80,6 +80,80 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// =========================================================================
+// كتالوج الخدمات المعروضة للزوار والعملاء في بوابة العملاء
+// =========================================================================
+router.get('/services-catalog', async (req, res) => {
+  try {
+    const services = await db.query(`
+      SELECT id, code, title, category, description, icon, is_active, display_order, created_at
+      FROM engineering_services
+      ORDER BY display_order ASC, id ASC
+    `);
+    res.json({ success: true, services: services || [] });
+  } catch (err) {
+    console.error('Fetch services catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر تحميل كتالوج الخدمات' });
+  }
+});
+
+router.post('/services-catalog', async (req, res) => {
+  try {
+    const { code, title, category, description, icon, display_order, is_active } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    if (!cleanTitle || cleanTitle.length > 200) return res.status(400).json({ success: false, message: 'اسم الخدمة مطلوب وبحد أقصى 200 حرف' });
+    const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 50) || null;
+    const duplicate = cleanCode ? await db.get('SELECT id FROM engineering_services WHERE code = ?', [cleanCode]) : null;
+    if (duplicate) return res.status(409).json({ success: false, message: 'رمز الخدمة مستخدم مسبقاً' });
+    const result = await db.run(`
+      INSERT INTO engineering_services (code, title, category, description, icon, is_active, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, Number(display_order) || 0]);
+    const serviceId = result.lastID || result.lastInsertRowid || result.insertId || result.id;
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_CREATE', entity_type: 'engineering_services', entity_id: serviceId, details: `إضافة خدمة للبوابة: ${cleanTitle}` });
+    res.status(201).json({ success: true, id: serviceId, message: 'تمت إضافة الخدمة وستظهر للزوار عند تفعيلها' });
+  } catch (err) {
+    console.error('Create service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر إضافة الخدمة' });
+  }
+});
+
+router.put('/services-catalog/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT id, title FROM engineering_services WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'الخدمة غير موجودة' });
+    const { code, title, category, description, icon, display_order, is_active } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    if (!cleanTitle || cleanTitle.length > 200) return res.status(400).json({ success: false, message: 'اسم الخدمة مطلوب وبحد أقصى 200 حرف' });
+    const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 50) || null;
+    const duplicate = cleanCode ? await db.get('SELECT id FROM engineering_services WHERE code = ? AND id != ?', [cleanCode, id]) : null;
+    if (duplicate) return res.status(409).json({ success: false, message: 'رمز الخدمة مستخدم مسبقاً' });
+    await db.run(`UPDATE engineering_services SET code = ?, title = ?, category = ?, description = ?, icon = ?, is_active = ?, display_order = ? WHERE id = ?`, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, Number(display_order) || 0, id]);
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_UPDATE', entity_type: 'engineering_services', entity_id: id, details: `تعديل خدمة البوابة: ${existing.title} → ${cleanTitle}` });
+    res.json({ success: true, message: 'تم حفظ تعديل الخدمة' });
+  } catch (err) {
+    console.error('Update service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر تعديل الخدمة' });
+  }
+});
+
+router.delete('/services-catalog/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT id, title FROM engineering_services WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'الخدمة غير موجودة' });
+    const used = await db.get('SELECT COUNT(*) AS count FROM service_request_items WHERE service_id = ?', [id]);
+    if (Number(used?.count || 0) > 0) return res.status(409).json({ success: false, message: 'لا يمكن حذف خدمة مرتبطة بطلبات سابقة؛ أخفها بدلاً من ذلك' });
+    await db.run('DELETE FROM engineering_services WHERE id = ?', [id]);
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_DELETE', entity_type: 'engineering_services', entity_id: id, details: `حذف خدمة غير مستخدمة من البوابة: ${existing.title}` });
+    res.json({ success: true, message: 'تم حذف الخدمة' });
+  } catch (err) {
+    console.error('Delete service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر حذف الخدمة' });
+  }
+});
+
 /**
  * GET /api/admin/client-users/messages
  * جلب جميع رسائل واستفسارات العملاء للإدارة مع الفلترة والإحصائيات
