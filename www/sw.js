@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rawasi-aden-1.0.0.20261020-x3d5';
+const CACHE_NAME = 'rawasi-aden-1.0.0.20261020-2ln3';
 const STATIC_ASSETS = [
   './',
   './index.html',
