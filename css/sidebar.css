@@ -38,7 +38,7 @@
 .sidebar-empty { padding:14px 5px; color:var(--text-secondary); font-size:.78rem; text-align:center; }
 .sidebar [hidden] { display:none !important; }
 .sidebar :is(a,button,input):focus-visible { outline:2px solid var(--gold-primary); outline-offset:3px; }
-body.light-mode .sidebar { background:linear-gradient(175deg,#fff,#f2f5fa); }
+body.light-mode .sidebar { background:linear-gradient(175deg,#fff,#edf3f8); }
 body.light-mode .sidebar-nav .nav-group-header { background:#fff; border-color:#e0e6ef; }
 body.light-mode .nav-group-icon { color:#526886; background:#edf2f8; }
 body.light-mode .sidebar-nav .nav-sub-item.active { color:#805e09; }

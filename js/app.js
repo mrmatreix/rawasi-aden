@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261020-f0xy',
+  assetVersion: '1.0.0.20261020-52u4',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261020-f0xy',
-    projects: 'js/projects.js?v=1.0.0.20261020-f0xy',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261020-f0xy',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261020-f0xy',
-    accounting: 'js/accounting.js?v=1.0.0.20261020-f0xy',
-    hr: 'js/hr.js?v=1.0.0.20261020-f0xy',
-    reports: 'js/reports.js?v=1.0.0.20261020-f0xy',
-    inventory: 'js/inventory.js?v=1.0.0.20261020-f0xy',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261020-f0xy',
-    settings: 'js/settings.js?v=1.0.0.20261020-f0xy',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261020-f0xy',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261020-f0xy'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261020-52u4',
+    projects: 'js/projects.js?v=1.0.0.20261020-52u4',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261020-52u4',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261020-52u4',
+    accounting: 'js/accounting.js?v=1.0.0.20261020-52u4',
+    hr: 'js/hr.js?v=1.0.0.20261020-52u4',
+    reports: 'js/reports.js?v=1.0.0.20261020-52u4',
+    inventory: 'js/inventory.js?v=1.0.0.20261020-52u4',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261020-52u4',
+    settings: 'js/settings.js?v=1.0.0.20261020-52u4',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261020-52u4',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261020-52u4'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -297,34 +297,43 @@ const App = {
   // 🌙☀️ تبديل الوضع الليلي / النهاري
   // ============================================
   initTheme() {
-    // استرجاع الوضع المحفوظ من localStorage
+    // استرجاع الوضع المحفوظ: ليلي أو نهاري أو تلقائي حسب تفضيل الجهاز.
     const savedTheme = localStorage.getItem('rawasi_theme') || 'dark';
     this.applyTheme(savedTheme);
+    if (!this._themeMediaQuery && window.matchMedia) {
+      this._themeMediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+      this._themeMediaQuery.addEventListener('change', () => {
+        if ((localStorage.getItem('rawasi_theme') || 'dark') === 'system') this.applyTheme('system');
+      });
+    }
   },
 
   toggleTheme() {
-    const isLight = document.body.classList.contains('light-mode');
-    const newTheme = isLight ? 'dark' : 'light';
+    const currentTheme = localStorage.getItem('rawasi_theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : (currentTheme === 'light' ? 'system' : 'dark');
     localStorage.setItem('rawasi_theme', newTheme);
     this.applyTheme(newTheme);
 
-    // تلميح مرئي للمستخدم
-    const label = newTheme === 'light' ? 'نهاري' : 'ليلي';
+    const label = newTheme === 'light' ? 'نهاري' : (newTheme === 'system' ? 'تلقائي حسب الجهاز' : 'ليلي');
     this.showToast(`تم التبديل إلى الوضع ${label} ✨`, 'info');
   },
 
   applyTheme(theme) {
-    const isLight = theme === 'light';
+    const isSystem = theme === 'system';
+    const isLight = theme === 'light' || (isSystem && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
     document.body.classList.toggle('light-mode', isLight);
     document.documentElement.classList.toggle('light-mode', isLight);
+    document.body.classList.toggle('system-theme', isSystem);
+    document.documentElement.classList.toggle('system-theme', isSystem);
+    document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
 
-    // تحديث نص وأيقونة زر التبديل
     const label = document.getElementById('themeToggleLabel');
-    if (label) label.textContent = isLight ? 'نهاري' : 'ليلي';
+    if (label) label.textContent = isSystem ? 'تلقائي' : (isLight ? 'نهاري' : 'ليلي');
+    const button = document.getElementById('btnThemeToggle');
+    if (button) button.setAttribute('title', `المظهر الحالي: ${isSystem ? 'تلقائي حسب الجهاز' : (isLight ? 'نهاري' : 'ليلي')} — انقر للتبديل`);
 
-    // تحديث meta theme-color للمتصفح
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', isLight ? '#16304f' : '#0f172a');
+    if (meta) meta.setAttribute('content', isLight ? '#f5f7fa' : '#08111f');
   },
 
   // التحكم بالقوائم الشجرية المنسدلة (Accordion Groups)
