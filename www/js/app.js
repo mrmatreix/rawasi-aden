@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261020-n70l',
+  assetVersion: '1.0.0.20261020-qtig',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261020-n70l',
-    projects: 'js/projects.js?v=1.0.0.20261020-n70l',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261020-n70l',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261020-n70l',
-    accounting: 'js/accounting.js?v=1.0.0.20261020-n70l',
-    hr: 'js/hr.js?v=1.0.0.20261020-n70l',
-    reports: 'js/reports.js?v=1.0.0.20261020-n70l',
-    inventory: 'js/inventory.js?v=1.0.0.20261020-n70l',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261020-n70l',
-    settings: 'js/settings.js?v=1.0.0.20261020-n70l',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261020-n70l',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261020-n70l'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261020-qtig',
+    projects: 'js/projects.js?v=1.0.0.20261020-qtig',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261020-qtig',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261020-qtig',
+    accounting: 'js/accounting.js?v=1.0.0.20261020-qtig',
+    hr: 'js/hr.js?v=1.0.0.20261020-qtig',
+    reports: 'js/reports.js?v=1.0.0.20261020-qtig',
+    inventory: 'js/inventory.js?v=1.0.0.20261020-qtig',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261020-qtig',
+    settings: 'js/settings.js?v=1.0.0.20261020-qtig',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261020-qtig',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261020-qtig'
   },
   _loadedModules: {},
   _loadingPromises: {},
