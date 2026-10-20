@@ -632,8 +632,10 @@ router.post('/:id/reset-password', async (req, res) => {
     const userId = parseInt(req.params.id, 10);
     const { new_password } = req.body;
 
-    if (!new_password || String(new_password).length < 6) {
-      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل' });
+    const password = String(new_password || '');
+    const characterGroups = [/[a-zA-Z]/, /\d/, /[^a-zA-Z\d]/].filter(pattern => pattern.test(password)).length;
+    if (password.length < 10 || characterGroups < 2) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 10 أحرف على الأقل وتحتوي على نوعين من الأحرف أو الأرقام أو الرموز' });
     }
 
     const user = await db.get(`SELECT id, full_name, email FROM client_users WHERE id = ?`, [userId]);
@@ -642,9 +644,9 @@ router.post('/:id/reset-password', async (req, res) => {
     }
 
     const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(String(new_password), salt);
+    const hash = bcrypt.hashSync(password, salt);
 
-    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
+    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, otp_code = NULL, otp_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_PASSWORD_RESET',
@@ -653,7 +655,7 @@ router.post('/:id/reset-password', async (req, res) => {
       details: `تمت إعادة تعيين كلمة المرور لحساب العميل: ${user.full_name} (${user.email})`
     });
 
-    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور بنجاح وإبطال الجلسات السابقة' });
+    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور وإلغاء ربط الجهاز ورمز التحقق السابقين' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إعادة تعيين كلمة المرور' });
   }

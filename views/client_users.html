@@ -991,6 +991,24 @@
     </div>
   </div>
 
+  <!-- إعادة تعيين كلمة مرور حساب العميل: نافذة داخلية بدلاً من prompt المتصفح -->
+  <div id="resetPasswordModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="resetPasswordModalTitle">
+    <div class="glass-card w-full max-w-md rounded-2xl border border-amber-500/40 shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700/80 bg-slate-900/75">
+        <div><h3 id="resetPasswordModalTitle" class="text-base font-extrabold text-white"><i class="fa-solid fa-key text-amber-400 ml-2"></i>إعادة تعيين كلمة المرور</h3><p id="resetPasswordRecipient" class="text-xs text-slate-400 mt-1"></p></div>
+        <button type="button" onclick="closeResetPasswordModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700" aria-label="إغلاق">×</button>
+      </div>
+      <form class="p-5 space-y-4" onsubmit="submitPasswordReset(event)">
+        <input id="resetPasswordUserId" type="hidden">
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100 leading-6"><i class="fa-solid fa-shield-halved ml-1"></i>سيُلغى ربط الجهاز ورمز التحقق الحاليان. سلّم كلمة المرور للعميل عبر قناة موثوقة فقط، ولا تضعها في رسالة عامة.</div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور المؤقتة الجديدة</label><div class="flex gap-2"><input id="resetPasswordValue" type="text" required minlength="10" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="10 أحرف أو أكثر"><button type="button" onclick="generateTemporaryPassword()" class="px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap">توليد</button></div><p class="text-[11px] text-slate-500 mt-1.5">استخدم 10 أحرف على الأقل، مع حروف وأرقام ورمز.</p></div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">تأكيد كلمة المرور</label><input id="resetPasswordConfirm" type="text" required minlength="10" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="أعد إدخال كلمة المرور"></div>
+        <div id="resetPasswordError" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"></div>
+        <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closeResetPasswordModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold">إلغاء</button><button id="resetPasswordSubmitBtn" type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-extrabold"><i class="fa-solid fa-key ml-1"></i>اعتماد إعادة التعيين</button></div>
+      </form>
+    </div>
+  </div>
+
   <!-- إضافة وتحرير خدمة للزوار -->
   <div id="serviceModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true">
     <div class="glass-card w-full max-w-xl rounded-2xl border border-emerald-500/35 shadow-2xl overflow-hidden">
@@ -1384,9 +1402,51 @@
       }
     }
 
-    async function resetPassword(id) {
-      const newPass = prompt('أدخل كلمة المرور الجديدة للحساب (6 أحرف على الأقل):');
-      if (!newPass) return;
+    function showResetPasswordError(message = '') {
+      const error = document.getElementById('resetPasswordError');
+      error.textContent = message;
+      error.classList.toggle('hidden', !message);
+    }
+
+    function openResetPasswordModal(id) {
+      const user = allUsers.find(item => Number(item.id) === Number(id));
+      if (!user) return showToast('تعذر العثور على بيانات هذا المستخدم، حدّث القائمة وحاول مجدداً', 'error');
+      document.getElementById('resetPasswordUserId').value = user.id;
+      document.getElementById('resetPasswordRecipient').textContent = `${user.full_name} — ${user.email}`;
+      document.getElementById('resetPasswordValue').value = '';
+      document.getElementById('resetPasswordConfirm').value = '';
+      showResetPasswordError('');
+      document.getElementById('resetPasswordModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('resetPasswordValue').focus(), 80);
+    }
+
+    function closeResetPasswordModal() {
+      document.getElementById('resetPasswordModal').classList.add('hidden');
+      showResetPasswordError('');
+    }
+
+    function generateTemporaryPassword() {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+      const bytes = new Uint32Array(14);
+      crypto.getRandomValues(bytes);
+      const value = Array.from(bytes, n => alphabet[n % alphabet.length]).join('');
+      document.getElementById('resetPasswordValue').value = value;
+      document.getElementById('resetPasswordConfirm').value = value;
+      showResetPasswordError('');
+    }
+
+    async function submitPasswordReset(event) {
+      event.preventDefault();
+      const id = document.getElementById('resetPasswordUserId').value;
+      const newPass = document.getElementById('resetPasswordValue').value;
+      const confirmPass = document.getElementById('resetPasswordConfirm').value;
+      if (newPass.length < 10) return showResetPasswordError('كلمة المرور المؤقتة يجب أن تكون 10 أحرف على الأقل.');
+      if (newPass !== confirmPass) return showResetPasswordError('تأكيد كلمة المرور غير مطابق.');
+      const submitButton = document.getElementById('resetPasswordSubmitBtn');
+      const originalText = submitButton.innerHTML;
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin ml-1"></i> جاري الاعتماد...';
+      showResetPasswordError('');
       try {
         const res = await fetch(`/api/admin/client-users/${id}/reset-password`, {
           method: 'POST',
@@ -1396,13 +1456,19 @@
         const data = await res.json();
         if (data.success) {
           showToast(data.message || 'تمت إعادة تعيين كلمة المرور بنجاح', 'success');
+          closeResetPasswordModal();
         } else {
-          showToast(data.message || 'خطأ في إعادة تعيين كلمة المرور', 'error');
+          showResetPasswordError(data.message || 'خطأ في إعادة تعيين كلمة المرور');
         }
       } catch (e) {
-        showToast('خطأ في الاتصال أثناء إعادة التعيين', 'error');
+        showResetPasswordError('خطأ في الاتصال أثناء إعادة التعيين');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
       }
     }
+
+    function resetPassword(id) { openResetPasswordModal(id); }
 
     let inviteDraft = null;
     let invitePreviewCustomized = false;
