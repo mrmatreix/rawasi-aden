@@ -1001,8 +1001,8 @@
       <form class="p-5 space-y-4" onsubmit="submitPasswordReset(event)">
         <input id="resetPasswordUserId" type="hidden">
         <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100 leading-6"><i class="fa-solid fa-shield-halved ml-1"></i>سيُلغى ربط الجهاز ورمز التحقق الحاليان. سلّم كلمة المرور للعميل عبر قناة موثوقة فقط، ولا تضعها في رسالة عامة.</div>
-        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور المؤقتة الجديدة</label><div class="flex gap-2"><input id="resetPasswordValue" type="text" required minlength="10" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="10 أحرف أو أكثر"><button type="button" onclick="generateTemporaryPassword()" class="px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap">توليد</button></div><p class="text-[11px] text-slate-500 mt-1.5">استخدم 10 أحرف على الأقل، مع حروف وأرقام ورمز.</p></div>
-        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">تأكيد كلمة المرور</label><input id="resetPasswordConfirm" type="text" required minlength="10" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="أعد إدخال كلمة المرور"></div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور المؤقتة الجديدة</label><div class="flex gap-2"><input id="resetPasswordValue" type="text" required minlength="6" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="6 خانات أو أكثر"><button type="button" onclick="generateTemporaryPassword()" class="px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap">توليد</button></div><p class="text-[11px] text-slate-500 mt-1.5">استخدم 6 خانات على الأقل، ويُفضّل مزج الحروف والأرقام.</p></div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">تأكيد كلمة المرور</label><input id="resetPasswordConfirm" type="text" required minlength="6" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="أعد إدخال كلمة المرور"></div>
         <div id="resetPasswordError" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"></div>
         <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closeResetPasswordModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold">إلغاء</button><button id="resetPasswordSubmitBtn" type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-extrabold"><i class="fa-solid fa-key ml-1"></i>اعتماد إعادة التعيين</button></div>
       </form>
@@ -1427,7 +1427,7 @@
 
     function generateTemporaryPassword() {
       const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
-      const bytes = new Uint32Array(14);
+      const bytes = new Uint32Array(6);
       crypto.getRandomValues(bytes);
       const value = Array.from(bytes, n => alphabet[n % alphabet.length]).join('');
       document.getElementById('resetPasswordValue').value = value;
@@ -1440,7 +1440,7 @@
       const id = document.getElementById('resetPasswordUserId').value;
       const newPass = document.getElementById('resetPasswordValue').value;
       const confirmPass = document.getElementById('resetPasswordConfirm').value;
-      if (newPass.length < 10) return showResetPasswordError('كلمة المرور المؤقتة يجب أن تكون 10 أحرف على الأقل.');
+      if (newPass.length < 6) return showResetPasswordError('كلمة المرور المؤقتة يجب أن تكون 6 خانات على الأقل.');
       if (newPass !== confirmPass) return showResetPasswordError('تأكيد كلمة المرور غير مطابق.');
       const submitButton = document.getElementById('resetPasswordSubmitBtn');
       const originalText = submitButton.innerHTML;

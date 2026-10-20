@@ -633,9 +633,8 @@ router.post('/:id/reset-password', async (req, res) => {
     const { new_password } = req.body;
 
     const password = String(new_password || '');
-    const characterGroups = [/[a-zA-Z]/, /\d/, /[^a-zA-Z\d]/].filter(pattern => pattern.test(password)).length;
-    if (password.length < 10 || characterGroups < 2) {
-      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 10 أحرف على الأقل وتحتوي على نوعين من الأحرف أو الأرقام أو الرموز' });
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تتكون من 6 خانات على الأقل' });
     }
 
     const user = await db.get(`SELECT id, full_name, email FROM client_users WHERE id = ?`, [userId]);
