@@ -2461,7 +2461,8 @@ const Accounting = {
     document.getElementById('clientPartyNo').value = '';
     document.getElementById('clientModalTitle').textContent = 'إضافة عميل جديد';
     document.getElementById('clientStatusGroup').hidden = true;
-    document.getElementById('clientPrevBal').disabled = false;
+    document.getElementById('clientPrevBal').disabled = true;
+    document.getElementById('clientOpeningBalanceGroup').hidden = true;
     App.openModal('newClientModal');
   },
 
@@ -2473,6 +2474,7 @@ const Accounting = {
       const client = json.data;
       this.openNewClientModal();
       document.getElementById('clientEditId').value = id;
+      document.getElementById('clientOpeningBalanceGroup').hidden = false;
       document.getElementById('clientPartyNo').value = client.party_no || '';
       document.getElementById('clientModalTitle').textContent = 'تعديل بيانات العميل';
       document.getElementById('clientStatusGroup').hidden = false;
@@ -2517,7 +2519,7 @@ const Accounting = {
         method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name, company, phone, email, address, previous_balance: editId ? undefined : previous_balance, currency, notes,
+          name, company, phone, email, address, previous_balance: editId ? undefined : 0, currency, notes,
           status: editId ? document.getElementById('clientStatus').value : undefined,
           account_code: '12301001'
         })
@@ -3013,7 +3015,17 @@ const Accounting = {
     if (modal) modal.style.display = 'none';
   },
 
+  setSupplierCreationMode(isNew) {
+    for (const [id, display] of [['supplierPaymentPolicyFields', 'grid'], ['supplierAdditionalFields', 'block']]) {
+      const section = document.getElementById(id);
+      if (section) { section.hidden = isNew; section.style.display = isNew ? 'none' : display; }
+    }
+    const paymentType = document.getElementById('suppPaymentDocType');
+    if (paymentType) { paymentType.disabled = isNew; paymentType.required = !isNew; }
+  },
+
   openNewSupplierModal(targetSelectId = null) {
+    this.setSupplierCreationMode(true);
     this._targetSupplierSelectId = targetSelectId;
     const form = document.getElementById('newSupplierForm');
     if (form) form.reset();
@@ -3061,6 +3073,7 @@ const Accounting = {
 
   async openEditSupplierModal(supplierId) {
     if (!supplierId) return;
+    this.setSupplierCreationMode(false);
     const form = document.getElementById('newSupplierForm');
     if (form) form.reset();
 
@@ -3307,6 +3320,11 @@ const Accounting = {
       delete payload.balance;
       delete payload.bank_iban;
       delete payload.supply_lead_time_days;
+      if (!isEdit) {
+        delete payload.payment_document_type;
+        delete payload.invoice_attachment;
+        delete payload.notes;
+      }
       payload.status = isEdit ? document.getElementById('supplierStatus').value : 'active';
       const res = await fetch(url, {
         method,

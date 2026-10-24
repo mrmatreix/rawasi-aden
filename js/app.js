@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261020-qtig',
+  assetVersion: '1.0.0.20261024-8otl',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261020-qtig',
-    projects: 'js/projects.js?v=1.0.0.20261020-qtig',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261020-qtig',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261020-qtig',
-    accounting: 'js/accounting.js?v=1.0.0.20261020-qtig',
-    hr: 'js/hr.js?v=1.0.0.20261020-qtig',
-    reports: 'js/reports.js?v=1.0.0.20261020-qtig',
-    inventory: 'js/inventory.js?v=1.0.0.20261020-qtig',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261020-qtig',
-    settings: 'js/settings.js?v=1.0.0.20261020-qtig',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261020-qtig',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261020-qtig'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261024-8otl',
+    projects: 'js/projects.js?v=1.0.0.20261024-8otl',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261024-8otl',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261024-8otl',
+    accounting: 'js/accounting.js?v=1.0.0.20261024-8otl',
+    hr: 'js/hr.js?v=1.0.0.20261024-8otl',
+    reports: 'js/reports.js?v=1.0.0.20261024-8otl',
+    inventory: 'js/inventory.js?v=1.0.0.20261024-8otl',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261024-8otl',
+    settings: 'js/settings.js?v=1.0.0.20261024-8otl',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261024-8otl',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261024-8otl'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -1210,9 +1210,6 @@ const App = {
             <div style="display: flex; gap: 8px; margin-top: 10px;">
               <button class="btn btn-primary btn-sm" onclick="Accounting.openEditSupplierModal(${v.id}); App.closeModal('dynamicAppModal');">
                 <i class="fa fa-edit"></i> تعديل بيانات المورد
-              </button>
-              <button class="btn btn-secondary btn-sm" onclick="Reports.showSupplierStatement(${v.id}); App.closeModal('dynamicAppModal');">
-                <i class="fa fa-file-text-o"></i> كشف الحساب
               </button>
             </div>
           </div>

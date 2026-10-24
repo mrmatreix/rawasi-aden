@@ -13,9 +13,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261020-qtig">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261020-qtig">
-  <link rel="stylesheet" href="css/sidebar.css?v=1.0.0.20261020-qtig">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261024-8otl">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261024-8otl">
+  <link rel="stylesheet" href="css/sidebar.css?v=1.0.0.20261024-8otl">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -5400,7 +5400,7 @@
             <label>البريد الإلكتروني</label>
             <input type="email" id="clientEmail" class="form-control" placeholder="client@example.com">
           </div>
-          <div class="form-group">
+          <div class="form-group" id="clientOpeningBalanceGroup" hidden>
             <label>رصيد افتتاحي سابق</label>
             <input type="number" id="clientPrevBal" class="form-control" value="0" min="0">
           </div>
@@ -6059,7 +6059,7 @@
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-top: 10px;">
+          <div id="supplierPaymentPolicyFields" hidden style="display: none; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-top: 10px;">
             <div class="form-group">
               <label>توضيح نوع الصرف ومستند الدفع <span style="color: var(--accent-red, #ef4444);">*</span></label>
               <select id="suppPaymentDocType" class="form-control" required>
@@ -6079,6 +6079,7 @@
           </div>
         </div>
 
+<div id="supplierAdditionalFields" hidden style="display: none;">
         <p style="color: var(--text-secondary); font-size: 0.8rem;">التجميعات التالية للعرض فقط وتُحسب من الفواتير والسندات المرتبطة بالمورد؛ تبدأ بصفر للمورد الجديد.</p>
         <!-- القسم 3: التجميعات المالية التلقائية (Real-time Live Aggregations) -->
         <div id="suppFinancialsSummaryCard" style="background: rgba(15, 23, 42, 0.7); border: 1px dashed var(--border-color, #334155); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
@@ -6164,6 +6165,7 @@
           <textarea id="suppNotes" class="form-control" rows="2" placeholder="ملاحظات حول المورد، شروط الدفع، موقع التسليم..."></textarea>
         </div>
 
+</div>
         <div class="modal-footer" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color, #334155); display: flex; justify-content: flex-end; gap: 10px;">
           <button type="submit" class="btn btn-primary" id="btnSaveSupplier">
             <i class="fa fa-save"></i> حفظ بيانات المورد
@@ -10006,29 +10008,29 @@
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261020-qtig"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261024-8otl"></script>
   <script src="js/financial-labels.js"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/auth.js?v=1.0.0.20261020-qtig"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/auth.js?v=1.0.0.20261024-8otl"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/projects.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/accounting.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/inventory.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/hr.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/settings.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/contracts_cashflow.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/sidebar.js?v=1.0.0.20261020-qtig"></script>
-  <script src="js/app.js?v=1.0.0.20261020-qtig"></script>
+  <script src="js/reports.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/projects.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/accounting.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/inventory.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/hr.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/settings.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/contracts_cashflow.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/sidebar.js?v=1.0.0.20261024-8otl"></script>
+  <script src="js/app.js?v=1.0.0.20261024-8otl"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261020-qtig')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261024-8otl')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً
