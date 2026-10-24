@@ -49,7 +49,9 @@ function initSqliteInstance() {
   if (!sqliteDb) {
     sqliteDb = new DatabaseSync(sqlitePath);
     sqliteDb.exec('PRAGMA foreign_keys = ON;');
-    sqliteDb.exec('PRAGMA journal_mode = WAL;');
+    // Railway volumes use durable mounted storage; DELETE avoids WAL lock stalls
+    // there while local development retains WAL's concurrency benefits.
+    sqliteDb.exec(runtime.isDev ? 'PRAGMA journal_mode = WAL;' : 'PRAGMA journal_mode = DELETE;');
     sqliteDb.exec('PRAGMA busy_timeout = 10000;');
   }
   return sqliteDb;

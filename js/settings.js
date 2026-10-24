@@ -481,10 +481,66 @@ const Settings = {
         setCheck('printFinShowReconcileBadge', cfg.fin_show_reconcile_badge);
 
         this.updatePrintPreview();
+        this.loadPrintProfiles();
       }
     } catch (e) {
       console.error('Error loading print settings:', e);
     }
+  },
+
+  serializePrintForm() {
+    const config = {};
+    document.querySelectorAll('#printSettingsForm input, #printSettingsForm select, #printSettingsForm textarea').forEach(el => {
+      if (!el.id || el.id.startsWith('printProfile') || el.type === 'submit' || el.type === 'button') return;
+      config[el.id] = el.type === 'checkbox' ? Boolean(el.checked) : el.value;
+    });
+    return config;
+  },
+
+  applyPrintForm(config) {
+    Object.entries(config || {}).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.type === 'checkbox') el.checked = Boolean(value);
+      else el.value = value;
+    });
+    this.updatePrintPreview();
+  },
+
+  async loadPrintProfiles() {
+    try {
+      const res = await fetch('/api/settings/print-profiles');
+      const json = await res.json();
+      if (!json.success) return;
+      const select = document.getElementById('printProfileSelect');
+      if (select) select.innerHTML = '<option value="">الإعدادات الحالية</option>' + json.data.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      const audit = document.getElementById('printProfileAudit');
+      if (audit) audit.textContent = json.audit?.length ? `آخر العمليات: ${json.audit.map(a => `${a.action} «${a.profile_name}» بواسطة ${a.actor}`).join(' • ')}` : 'لم يُحفظ قالب مستقل بعد.';
+    } catch (err) { console.warn('Print profile loading failed', err); }
+  },
+
+  async savePrintProfile() {
+    const name = document.getElementById('printProfileName')?.value.trim();
+    if (!name) return App.showToast('اكتب اسم القالب أولاً', 'warning');
+    try {
+      const res = await fetch('/api/settings/print-profiles', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ name, config:this.serializePrintForm() }) });
+      const json = await res.json();
+      if (!json.success) return App.showToast(json.message || 'تعذر حفظ القالب', 'error');
+      App.showToast(json.message, 'success');
+      await this.loadPrintProfiles();
+    } catch { App.showToast('تعذر الاتصال لحفظ القالب', 'error'); }
+  },
+
+  async applyPrintProfile(id) {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/settings/print-profiles/${encodeURIComponent(id)}`);
+      const json = await res.json();
+      if (!json.success) return App.showToast(json.message || 'تعذر تطبيق القالب', 'error');
+      this.applyPrintForm(json.data.config);
+      const name = document.getElementById('printProfileName'); if (name) name.value = json.data.name;
+      App.showToast(`تم تحميل قالب «${json.data.name}». اضغط حفظ وتطبيق لاعتماده.`, 'info');
+    } catch { App.showToast('تعذر تحميل القالب', 'error'); }
   },
 
   async savePrintSettings(e) {
@@ -2483,7 +2539,7 @@ const Settings = {
     // ضبط حقل رمز التحقق 2FA الافتراضي وحالته
     const pinInput = document.getElementById('user2FaPinVal');
     if (pinInput) {
-      pinInput.value = '123456';
+      pinInput.value = '';
       pinInput.type = 'password';
     }
     const tfaEnabledChk = document.getElementById('user2FaEnabledVal');
@@ -2537,7 +2593,9 @@ const Settings = {
     // تعبئة حقل رمز التحقق بخطوتين (2FA PIN) وحالته للمستخدم الحالي
     const editPinInput = document.getElementById('user2FaPinVal');
     if (editPinInput) {
-      editPinInput.value = user.two_factor_pin || (user.role === 'admin' || user.username === 'admin' ? '123456' : '123456');
+      // PINs are write-only: leaving this field blank keeps the saved PIN.
+      editPinInput.value = '';
+      editPinInput.placeholder = user.two_factor_configured ? '••••••  اتركه فارغاً للاحتفاظ بالرمز الحالي' : 'أدخل رمزاً من 6 أرقام';
       editPinInput.type = 'password';
     }
     const editTfaEnabledChk = document.getElementById('user2FaEnabledVal');
@@ -2633,8 +2691,8 @@ const Settings = {
   resetDefault2FaPin() {
     const pinInput = document.getElementById('user2FaPinVal');
     if (!pinInput) return;
-    pinInput.value = '123456';
-    App.showToast('تمت إعادة تعيين الرمز للافتراضي: 123456', 'info');
+    pinInput.value = '';
+    App.showToast('لا يوجد رمز افتراضي؛ أدخل رمزاً خاصاً أو استخدم زر التوليد.', 'info');
   },
 
   // تعبئة وضبط خيارات الأمان والجلسات في البطاقة الخضراء
@@ -3029,7 +3087,7 @@ const Settings = {
       }
 
       // إذا كان المستخدم قيد التعديل ولديه جهاز معتمد مسجل، نحافظ على بيانات الجهاز المعتمد
-      const editUserId = document.getElementById('userId')?.value;
+      const editUserId = document.getElementById('userIdVal')?.value;
       if (editUserId && userSecuritySettings) {
         const existingUser = this._cachedUsers?.find(u => String(u.id) === String(editUserId));
         let prevSec = {};
@@ -3071,15 +3129,18 @@ const Settings = {
         .trim();
     };
 
-    const twoFactorPin = normalizeDigits(pinInput ? pinInput.value : '123456');
+    const twoFactorPin = normalizeDigits(pinInput ? pinInput.value : '');
     const twoFactorEnabled = tfaEnabledChk ? (tfaEnabledChk.checked ? 1 : 0) : 1;
 
-    if (twoFactorEnabled && twoFactorPin) {
-      if (!/^\d{6}$/.test(twoFactorPin)) {
-        App.showToast('رمز التحقق بخطوتين (PIN) يجب أن يتكون من 6 أرقام تماماً', 'warning');
-        if (pinInput) pinInput.focus();
-        return;
-      }
+    if (twoFactorPin && !/^\d{6}$/.test(twoFactorPin)) {
+      App.showToast('رمز التحقق بخطوتين (PIN) يجب أن يتكون من 6 أرقام تماماً', 'warning');
+      if (pinInput) pinInput.focus();
+      return;
+    }
+    if (twoFactorEnabled && !id && !twoFactorPin) {
+      App.showToast('أدخل رمز PIN خاصاً من 6 أرقام لتفعيل التحقق بخطوتين للمستخدم الجديد', 'warning');
+      if (pinInput) pinInput.focus();
+      return;
     }
 
     // قراءة وتحديد نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects)
@@ -3100,12 +3161,14 @@ const Settings = {
       email,
       status,
       permissions: finalPerms,
-      two_factor_pin: twoFactorPin || '123456',
       two_factor_enabled: twoFactorEnabled,
       branch_id: branch_id ? Number(branch_id) : null,
       department_id: department_id ? Number(department_id) : null,
       allowed_projects
     };
+
+    // On edit, omit a blank PIN so the database keeps the existing secret.
+    if (twoFactorPin) payload.two_factor_pin = twoFactorPin;
 
     if (userSecuritySettings !== undefined) {
       payload.security_settings = userSecuritySettings;
@@ -4680,19 +4743,19 @@ const Settings = {
   },
 
   toggleCloudProviderFields() {
-    const pVal = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const pVal = document.getElementById('cfgCloudProvider')?.value || 'not_configured';
     const endGrp = document.getElementById('grpCloudEndpoint');
     const tokGrp = document.getElementById('grpCloudToken');
     const fldGrp = document.getElementById('grpCloudFolder');
 
-    if (endGrp) endGrp.style.display = (pVal === 's3_webhook') ? 'block' : 'none';
-    if (tokGrp) tokGrp.style.display = (pVal === 's3_webhook') ? 'block' : 'none';
+    if (endGrp) endGrp.style.display = (pVal === 'offsite_webhook' || pVal === 's3_webhook') ? 'block' : 'none';
+    if (tokGrp) tokGrp.style.display = (pVal === 'offsite_webhook' || pVal === 's3_webhook') ? 'block' : 'none';
     if (fldGrp) fldGrp.style.display = (pVal === 'local_cloud_folder') ? 'block' : 'none';
   },
 
   async saveCloudSyncConfig(e) {
     if (e && e.preventDefault) e.preventDefault();
-    const provider = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const provider = document.getElementById('cfgCloudProvider')?.value || 'not_configured';
     const endpointUrl = document.getElementById('cfgCloudEndpoint')?.value?.trim() || '';
     const authToken = document.getElementById('cfgCloudToken')?.value?.trim() || '';
     const syncedFolder = document.getElementById('cfgCloudFolder')?.value?.trim() || '';
@@ -4727,7 +4790,7 @@ const Settings = {
   async testCloudConnection() {
     const btn = document.getElementById('btnTestCloudConn');
     const resBox = document.getElementById('cloudConnectionTestResult');
-    const provider = document.getElementById('cfgCloudProvider')?.value || 'cloud_vault';
+    const provider = document.getElementById('cfgCloudProvider')?.value || 'not_configured';
     const endpointUrl = document.getElementById('cfgCloudEndpoint')?.value?.trim() || '';
     const authToken = document.getElementById('cfgCloudToken')?.value?.trim() || '';
     const syncedFolder = document.getElementById('cfgCloudFolder')?.value?.trim() || '';

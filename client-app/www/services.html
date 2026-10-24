@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>خدمات مكتب الهندسة والمقاولات - شركة رواسي عدن</title>
   
   <!-- FontAwesome Icons -->
@@ -508,6 +508,51 @@
       from { opacity: 0; transform: scale(0.92); }
       to { opacity: 1; transform: scale(1); }
     }
+
+    /* تجربة Android أولاً: لمسات أكبر، تمرير سلس، ومساحات آمنة للشاشات ذات الحافة. */
+    * { -webkit-tap-highlight-color: transparent; }
+    html { scroll-behavior: smooth; }
+    body { min-height: 100dvh; overscroll-behavior-y: contain; }
+    button, a, input, textarea, select { touch-action: manipulation; }
+    .services-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .services-actions .btn { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; }
+    @media (max-width: 768px) {
+      .services-page-container { padding: max(12px, env(safe-area-inset-top)) 12px calc(98px + env(safe-area-inset-bottom)); }
+      .services-top-bar { align-items: flex-start; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; }
+      .brand-guest-header { gap: 8px; min-width: 0; }
+      .brand-logo-small { width: 42px; height: 42px; border-radius: 13px; padding: 5px; flex-shrink: 0; }
+      .brand-guest-header h2 { font-size: 0.96rem !important; white-space: nowrap; }
+      .mode-badge { padding: 3px 8px; font-size: 0.65rem; }
+      .services-actions { gap: 6px; }
+      .services-actions .btn { width: 42px; min-width: 42px; padding: 0; font-size: 0; border-radius: 12px !important; }
+      .services-actions .btn i { font-size: 0.9rem; margin: 0; }
+      .services-actions .btn span { display: none; }
+      .services-hero { border-radius: 18px; padding: 19px 16px 16px; margin-bottom: 16px; }
+      .hero-heading { font-size: 1.08rem; gap: 7px; line-height: 1.45; }
+      .hero-subtext { font-size: 0.78rem; line-height: 1.7; margin-bottom: 12px; }
+      .form-input-srv { height: 52px; font-size: 16px; border-radius: 14px; }
+      .filter-pills-container { margin: 0 -12px 16px; padding: 0 12px 8px; gap: 7px; scroll-snap-type: x proximity; }
+      .filter-pill { min-height: 42px; padding: 8px 13px; font-size: 0.74rem; scroll-snap-align: start; }
+      .services-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 22px; }
+      .service-card { min-height: 188px; border-radius: 18px; padding: 16px; box-shadow: 0 7px 18px rgba(0,0,0,.22); }
+      .service-card:active { transform: scale(.985); }
+      .service-card-top { margin-bottom: 10px; }
+      .service-icon-box { width: 46px; height: 46px; border-radius: 14px; font-size: 1.2rem; }
+      .service-check-indicator { width: 30px; height: 30px; }
+      .service-title { font-size: 1rem; margin-bottom: 6px; }
+      .service-desc { font-size: .78rem; line-height: 1.65; margin-bottom: 13px; }
+      .service-card-footer { padding-top: 10px; }
+      .service-select-btn { min-height: 36px; padding: 6px 12px; font-size: .75rem; }
+      .selected-summary-bar { top: 8px; padding: 11px 12px; border-radius: 16px; margin-bottom: 16px; }
+      .selected-summary-header { flex-wrap: nowrap; }
+      .selected-count-badge { font-size: .8rem; }
+      .selected-summary-header .btn { min-height: 42px !important; padding: 0 12px !important; font-size: .78rem !important; white-space: nowrap; }
+      .form-box { padding: 18px 14px; border-radius: 18px; }
+      .form-grid-2 { grid-template-columns: 1fr; gap: 0; }
+      .btn-submit-request { min-height: 54px; font-size: .96rem; }
+    }
+    @media (min-width: 769px) and (max-width: 980px) { .services-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
   </style>
 </head>
 <body>
@@ -528,7 +573,7 @@
         </div>
       </div>
 
-      <div style="display: flex; gap: 8px;">
+      <div class="services-actions">
         <button onclick="openTrackModal()" class="btn btn-outline btn-sm" style="border-radius: 12px; font-size: 0.78rem;">
           <i class="fa-solid fa-magnifying-glass text-gold"></i> متابعة طلب
         </button>
@@ -566,16 +611,25 @@
           <i class="fa-solid fa-border-all"></i> جميع الخدمات
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('design', this)">
-          <i class="fa-solid fa-pencil-ruler"></i> التصاميم الهندسية و 3D
+          <i class="fa-solid fa-pencil-ruler"></i> التصميم والإشراف
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('execution', this)">
-          <i class="fa-solid fa-trowel-bricks"></i> المقاولات والبناء والتشطيب
+          <i class="fa-solid fa-trowel-bricks"></i> المقاولات والتنفيذ
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('finishing', this)">
+          <i class="fa-solid fa-paint-roller"></i> الترميم والتشطيبات
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('systems', this)">
+          <i class="fa-solid fa-bolt"></i> الأنظمة والطاقة
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('infrastructure', this)">
+          <i class="fa-solid fa-map-location-dot"></i> البنية التحتية والمساحة
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('consulting', this)">
-          <i class="fa-solid fa-clipboard-check"></i> الإشراف والاستشارات والكميات
+          <i class="fa-solid fa-clipboard-check"></i> الاستشارات والتراخيص
         </button>
-        <button class="filter-pill" onclick="setCategoryFilter('survey', this)">
-          <i class="fa-solid fa-map-location-dot"></i> المساحة ورفع المواقع
+        <button class="filter-pill" onclick="setCategoryFilter('supply', this)">
+          <i class="fa-solid fa-truck-fast"></i> التوريد والتركيب
         </button>
       </div>
 
@@ -913,7 +967,8 @@
         }
 
         if (res && res.success && Array.isArray(res.services)) {
-          allServices = res.services;
+          const categoryRank = { design: 10, execution: 20, finishing: 30, systems: 40, infrastructure: 50, consulting: 60, supply: 70, general: 90 };
+          allServices = [...res.services].sort((a, b) => (categoryRank[a.category] || 90) - (categoryRank[b.category] || 90) || Number(a.display_order || 0) - Number(b.display_order || 0) || Number(a.id) - Number(b.id));
           renderServices();
         } else {
           throw new Error(res?.message || 'تعذر تحميل الخدمات');
@@ -984,10 +1039,13 @@
 
     function getCategoryLabel(cat) {
       switch(cat) {
-        case 'design': return 'تصميم وإظهار 3D';
-        case 'execution': return 'تنفيذ ومقاولات';
-        case 'consulting': return 'إشراف واستشارات';
-        case 'survey': return 'مساحة ومواقع';
+        case 'design': return 'تصميم وإشراف هندسي';
+        case 'execution': return 'مقاولات وتنفيذ مبانٍ';
+        case 'finishing': return 'ترميم وتشطيبات وديكور';
+        case 'systems': return 'أنظمة وطاقة وتكييف';
+        case 'infrastructure': return 'بنية تحتية ومساحة';
+        case 'consulting': return 'استشارات وتراخيص ومقايسات';
+        case 'supply': return 'توريد وتركيب';
         default: return 'خدمات عامة';
       }
     }

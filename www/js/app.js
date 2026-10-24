@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261019-tfzi',
+  assetVersion: '1.0.0.20261024-8otl',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261019-tfzi',
-    projects: 'js/projects.js?v=1.0.0.20261019-tfzi',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261019-tfzi',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261019-tfzi',
-    accounting: 'js/accounting.js?v=1.0.0.20261019-tfzi',
-    hr: 'js/hr.js?v=1.0.0.20261019-tfzi',
-    reports: 'js/reports.js?v=1.0.0.20261019-tfzi',
-    inventory: 'js/inventory.js?v=1.0.0.20261019-tfzi',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261019-tfzi',
-    settings: 'js/settings.js?v=1.0.0.20261019-tfzi',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261019-tfzi',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261019-tfzi'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261024-8otl',
+    projects: 'js/projects.js?v=1.0.0.20261024-8otl',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261024-8otl',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261024-8otl',
+    accounting: 'js/accounting.js?v=1.0.0.20261024-8otl',
+    hr: 'js/hr.js?v=1.0.0.20261024-8otl',
+    reports: 'js/reports.js?v=1.0.0.20261024-8otl',
+    inventory: 'js/inventory.js?v=1.0.0.20261024-8otl',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261024-8otl',
+    settings: 'js/settings.js?v=1.0.0.20261024-8otl',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261024-8otl',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261024-8otl'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -297,34 +297,43 @@ const App = {
   // 🌙☀️ تبديل الوضع الليلي / النهاري
   // ============================================
   initTheme() {
-    // استرجاع الوضع المحفوظ من localStorage
+    // استرجاع الوضع المحفوظ: ليلي أو نهاري أو تلقائي حسب تفضيل الجهاز.
     const savedTheme = localStorage.getItem('rawasi_theme') || 'dark';
     this.applyTheme(savedTheme);
+    if (!this._themeMediaQuery && window.matchMedia) {
+      this._themeMediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+      this._themeMediaQuery.addEventListener('change', () => {
+        if ((localStorage.getItem('rawasi_theme') || 'dark') === 'system') this.applyTheme('system');
+      });
+    }
   },
 
   toggleTheme() {
-    const isLight = document.body.classList.contains('light-mode');
-    const newTheme = isLight ? 'dark' : 'light';
+    const currentTheme = localStorage.getItem('rawasi_theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : (currentTheme === 'light' ? 'system' : 'dark');
     localStorage.setItem('rawasi_theme', newTheme);
     this.applyTheme(newTheme);
 
-    // تلميح مرئي للمستخدم
-    const label = newTheme === 'light' ? 'نهاري' : 'ليلي';
+    const label = newTheme === 'light' ? 'نهاري' : (newTheme === 'system' ? 'تلقائي حسب الجهاز' : 'ليلي');
     this.showToast(`تم التبديل إلى الوضع ${label} ✨`, 'info');
   },
 
   applyTheme(theme) {
-    const isLight = theme === 'light';
+    const isSystem = theme === 'system';
+    const isLight = theme === 'light' || (isSystem && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
     document.body.classList.toggle('light-mode', isLight);
     document.documentElement.classList.toggle('light-mode', isLight);
+    document.body.classList.toggle('system-theme', isSystem);
+    document.documentElement.classList.toggle('system-theme', isSystem);
+    document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
 
-    // تحديث نص وأيقونة زر التبديل
     const label = document.getElementById('themeToggleLabel');
-    if (label) label.textContent = isLight ? 'نهاري' : 'ليلي';
+    if (label) label.textContent = isSystem ? 'تلقائي' : (isLight ? 'نهاري' : 'ليلي');
+    const button = document.getElementById('btnThemeToggle');
+    if (button) button.setAttribute('title', `المظهر الحالي: ${isSystem ? 'تلقائي حسب الجهاز' : (isLight ? 'نهاري' : 'ليلي')} — انقر للتبديل`);
 
-    // تحديث meta theme-color للمتصفح
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', isLight ? '#16304f' : '#0f172a');
+    if (meta) meta.setAttribute('content', isLight ? '#f5f7fa' : '#08111f');
   },
 
   // التحكم بالقوائم الشجرية المنسدلة (Accordion Groups)
@@ -1201,9 +1210,6 @@ const App = {
             <div style="display: flex; gap: 8px; margin-top: 10px;">
               <button class="btn btn-primary btn-sm" onclick="Accounting.openEditSupplierModal(${v.id}); App.closeModal('dynamicAppModal');">
                 <i class="fa fa-edit"></i> تعديل بيانات المورد
-              </button>
-              <button class="btn btn-secondary btn-sm" onclick="Reports.showSupplierStatement(${v.id}); App.closeModal('dynamicAppModal');">
-                <i class="fa fa-file-text-o"></i> كشف الحساب
               </button>
             </div>
           </div>

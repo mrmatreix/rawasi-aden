@@ -6,17 +6,17 @@
 
 :root {
   /* لوحة الألوان الفاخرة - الوضع الليلي (Dark Mode - الافتراضي) */
-  --bg-main: #09111e;
-  --bg-surface: #0f1c30;
-  --bg-card: #152640;
-  --bg-card-hover: #1b3052;
-  --border-color: #223a5e;
+  --bg-main: #08111f;
+  --bg-surface: #101d30;
+  --bg-card: #14243b;
+  --bg-card-hover: #1a304d;
+  --border-color: #294263;
   --border-light: rgba(255, 255, 255, 0.08);
 
   /* الألوان المميزة (Gold & Accents) */
-  --gold-primary: #d4af37;
-  --gold-light: #f3cf65;
-  --gold-dark: #b8911c;
+  --gold-primary: #d6ad35;
+  --gold-light: #f6d878;
+  --gold-dark: #ae8314;
   --gold-glow: rgba(212, 175, 55, 0.25);
 
   --accent-blue: #38bdf8;
@@ -28,8 +28,8 @@
 
   /* النصوص */
   --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-secondary: #a8b8cc;
+  --text-muted: #7e91aa;
   --text-gold: #f3cf65;
 
   /* الظلال والانتقالات */
@@ -54,16 +54,16 @@
    ====================================================== */
 html.light-mode,
 body.light-mode {
-  --bg-main: #f0f4f8;
+  --bg-main: #f5f7fa;
   --bg-surface: #ffffff;
   --bg-card: #ffffff;
-  --bg-card-hover: #f8fafc;
-  --border-color: #d1d9e0;
-  --border-light: rgba(0, 0, 0, 0.08);
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
-  --text-gold: #b8911c;
+  --bg-card-hover: #edf3f8;
+  --border-color: #d8e1ec;
+  --border-light: rgba(20, 33, 61, 0.10);
+  --text-primary: #14213d;
+  --text-secondary: #52657d;
+  --text-muted: #718096;
+  --text-gold: #8a6208;
   --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.18);
@@ -77,8 +77,8 @@ body.light-mode .app-header {
 }
 
 body.light-mode .sidebar {
-  background: #1a2e4a !important;
-  border-color: #2a4570 !important;
+  background: linear-gradient(175deg, #ffffff 0%, #edf3f8 100%) !important;
+  border-color: #d8e1ec !important;
 }
 
 body.light-mode .app-footer {
@@ -135,7 +135,7 @@ body.light-mode .notif-dropdown-header {
 }
 
 body.light-mode .kpi-value {
-  color: #1e293b;
+  color: #14213d;
 }
 
 body.light-mode .badge,
@@ -740,7 +740,8 @@ body {
 }
 
 .theme-icon-dark,
-.theme-icon-light {
+.theme-icon-light,
+.theme-icon-system {
   font-size: 1rem;
   transition: transform 0.4s ease, opacity 0.3s ease;
 }
@@ -748,6 +749,7 @@ body {
 /* الوضع الليلي (افتراضي): إظهار الهلال وإخفاء الشمس */
 .theme-icon-dark { display: inline; }
 .theme-icon-light { display: none; }
+.theme-icon-system { display: none; font-size: 1.05rem; }
 
 .theme-toggle-label {
   font-size: 0.8rem;
@@ -758,8 +760,8 @@ body {
 
 /* عندما يكون الوضع النهاري مفعلاً */
 body.light-mode .theme-toggle-btn {
-  background: rgba(30, 58, 95, 0.15);
-  border-color: rgba(30, 58, 95, 0.4);
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.38);
   color: #ffffff;
 }
 
@@ -771,6 +773,22 @@ body.light-mode .theme-toggle-btn:hover {
 
 body.light-mode .theme-icon-dark { display: none; }
 body.light-mode .theme-icon-light { display: inline; }
+body.system-theme .theme-icon-dark,
+body.system-theme .theme-icon-light { display: none; }
+body.system-theme .theme-icon-system { display: inline; }
+
+/* تسلسل بصري موحّد: الذهب للإجراء الأساسي، والألوان الأخرى للحالة فقط. */
+.btn-primary { box-shadow: 0 4px 12px rgba(214, 173, 53, 0.18); }
+.panel-card, .kpi-card { border-color: var(--border-color); }
+.kpi-card:hover, .panel-card:hover { border-color: color-mix(in srgb, var(--gold-primary) 42%, var(--border-color)); }
+body.light-mode .sidebar-navigation-heading,
+body.light-mode .sidebar-nav .nav-group-header,
+body.light-mode .sidebar-nav .nav-sub-item { color: var(--text-primary); }
+body.light-mode .sidebar-nav .nav-group-description,
+body.light-mode .sidebar-nav .nav-sub-header,
+body.light-mode .sidebar-nav .nav-sub-item:not(.active) { color: var(--text-secondary); }
+body.light-mode .sidebar-nav .nav-group.open > .nav-group-header,
+body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { background: rgba(214, 173, 53, 0.10); }
 
 /* تخطيط التطبيق الرئيسي (Layout) */
 .app-container {

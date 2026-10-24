@@ -157,6 +157,10 @@
 
     <!-- Main Tabs Switcher -->
     <div class="flex flex-wrap items-center gap-3 mb-6 border-b border-slate-700/80 pb-4">
+      <button id="tabServicesBtn" onclick="switchMainTab('services')" class="px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700 hover:border-amber-500/40">
+        <i class="fa-solid fa-briefcase text-emerald-400"></i>
+        <span>خدمات الشركة للزوار</span>
+      </button>
       <button id="tabUsersBtn" onclick="switchMainTab('users')" class="px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20">
         <i class="fa-solid fa-users"></i>
         <span>حسابات ومستخدمو البوابة</span>
@@ -456,6 +460,26 @@
           </table>
         </div>
 
+      </div>
+    </div>
+
+    <!-- View 4: الخدمات المعروضة للزائر في بوابة العملاء -->
+    <div id="viewServicesSection" class="hidden">
+      <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-emerald-500/25 mb-10">
+        <div class="p-5 border-b border-slate-700/80 bg-slate-900/60 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div>
+            <h2 class="text-base font-extrabold text-white"><i class="fa-solid fa-briefcase text-emerald-400 ml-2"></i>كتالوج الخدمات الظاهر للزائر</h2>
+            <p class="text-xs text-slate-400 mt-1">الخدمات النشطة تظهر فوراً في «الدخول كزائر» ضمن بوابة العملاء.</p>
+          </div>
+          <div class="flex gap-2 w-full md:w-auto">
+            <button onclick="loadServicesCatalog()" class="flex-1 md:flex-none px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 text-xs"><i class="fa-solid fa-rotate ml-1"></i>تحديث</button>
+            <button onclick="addRecommendedServices()" class="flex-1 md:flex-none px-4 py-2.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-extrabold rounded-xl border border-sky-400/35 text-xs"><i class="fa-solid fa-wand-magic-sparkles ml-1"></i>إضافة الخدمات المقترحة</button>
+            <button onclick="openServiceModal()" class="flex-1 md:flex-none px-4 py-2.5 bg-gradient-to-r from-emerald-400 to-emerald-500 text-slate-950 font-extrabold rounded-xl text-xs shadow-lg shadow-emerald-500/20"><i class="fa-solid fa-plus ml-1"></i>إضافة خدمة</button>
+          </div>
+        </div>
+        <div id="servicesCatalogList" class="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div class="col-span-full text-center py-10 text-slate-400"><i class="fa-solid fa-spinner fa-spin text-2xl text-emerald-400 mb-2"></i><div>جاري تحميل الخدمات...</div></div>
+        </div>
       </div>
     </div>
 
@@ -942,6 +966,69 @@
     </div>
   </div>
 
+  <!-- مراجعة وتحرير دعوة تفعيل العميل قبل تثبيت بيانات الدخول وإرسالها -->
+  <div id="inviteModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="inviteModalTitle">
+    <div class="glass-card w-full max-w-2xl rounded-2xl border border-emerald-500/40 shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700/80 bg-slate-900/75">
+        <div><h3 id="inviteModalTitle" class="text-base font-extrabold text-white"><i class="fa-solid fa-paper-plane text-emerald-400 ml-2"></i>مراجعة دعوة التفعيل قبل الإرسال</h3><p id="inviteRecipient" class="text-xs text-slate-400 mt-1"></p></div>
+        <button type="button" onclick="closeInviteModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700" aria-label="إغلاق">×</button>
+      </div>
+      <div class="p-5 space-y-4 max-h-[78vh] overflow-y-auto">
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 leading-6">لن تتغير كلمة المرور أو رمز التفعيل في الحساب إلا بعد الضغط على «اعتماد وفتح واتساب».</div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">نص الرسالة الافتتاحية</label><textarea id="inviteMessage" rows="3" oninput="refreshInvitePreview()" class="w-full custom-input rounded-xl p-3 text-xs focus:outline-none" maxlength="600"></textarea></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور المؤقتة</label><input id="invitePassword" type="text" oninput="refreshInvitePreview()" class="w-full custom-input rounded-xl px-3 py-2.5 text-xs font-mono tracking-wide focus:outline-none" autocomplete="off"></div>
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">رمز OTP</label><input id="inviteOtp" type="text" inputmode="numeric" maxlength="6" oninput="this.value=this.value.replace(/[^0-9]/g,''); refreshInvitePreview()" class="w-full custom-input rounded-xl px-3 py-2.5 text-xs font-mono tracking-[0.3em] focus:outline-none" autocomplete="off"></div>
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">صلاحية رمز التفعيل</label><select id="inviteExpiryDays" class="w-full custom-input rounded-xl px-3 py-2.5 text-xs focus:outline-none"><option value="1">يوم واحد</option><option value="3">3 أيام</option><option value="7">7 أيام</option><option value="14">14 يوماً</option><option value="30">30 يوماً</option></select></div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-1.5"><label class="block text-xs font-bold text-slate-300">نص رسالة واتساب — قابل للتحرير</label><button type="button" onclick="resetInviteShareText()" class="text-[11px] text-emerald-300 hover:text-emerald-200"><i class="fa-solid fa-rotate-left ml-1"></i>إعادة التوليد من البيانات</button></div>
+          <textarea id="inviteSharePreview" rows="8" oninput="markInvitePreviewEdited()" class="w-full rounded-xl p-3 text-xs leading-6 bg-slate-950/70 border border-slate-700/80 text-slate-300 focus:outline-none focus:border-emerald-400/70" dir="rtl" maxlength="2500"></textarea>
+          <p id="inviteCredentialWarning" class="hidden mt-2 text-[11px] text-amber-300 leading-5"><i class="fa-solid fa-triangle-exclamation ml-1"></i>النص المعدل لا يحتوي كل بيانات الدخول الحالية. يمكنك الإرسال، لكن تأكد من أن العميل سيستلم بياناته بطريقة آمنة.</p>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-700/80 bg-slate-900/60"><button type="button" onclick="closeInviteModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700">إلغاء</button><button type="button" id="btnConfirmInvite" onclick="confirmAndSendInvite()" class="px-5 py-2 rounded-xl text-xs font-extrabold text-slate-950 bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 shadow-lg shadow-emerald-500/20"><i class="fa-solid fa-paper-plane"></i> اعتماد وفتح واتساب</button></div>
+    </div>
+  </div>
+
+  <!-- إعادة تعيين كلمة مرور حساب العميل: نافذة داخلية بدلاً من prompt المتصفح -->
+  <div id="resetPasswordModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="resetPasswordModalTitle">
+    <div class="glass-card w-full max-w-md rounded-2xl border border-amber-500/40 shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700/80 bg-slate-900/75">
+        <div><h3 id="resetPasswordModalTitle" class="text-base font-extrabold text-white"><i class="fa-solid fa-key text-amber-400 ml-2"></i>إعادة تعيين كلمة المرور</h3><p id="resetPasswordRecipient" class="text-xs text-slate-400 mt-1"></p></div>
+        <button type="button" onclick="closeResetPasswordModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700" aria-label="إغلاق">×</button>
+      </div>
+      <form class="p-5 space-y-4" onsubmit="submitPasswordReset(event)">
+        <input id="resetPasswordUserId" type="hidden">
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100 leading-6"><i class="fa-solid fa-shield-halved ml-1"></i>سيُلغى ربط الجهاز ورمز التحقق الحاليان. سلّم كلمة المرور للعميل عبر قناة موثوقة فقط، ولا تضعها في رسالة عامة.</div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور المؤقتة الجديدة</label><div class="flex gap-2"><input id="resetPasswordValue" type="text" required minlength="6" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="6 خانات أو أكثر"><button type="button" onclick="generateTemporaryPassword()" class="px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap">توليد</button></div><p class="text-[11px] text-slate-500 mt-1.5">استخدم 6 خانات على الأقل، ويُفضّل مزج الحروف والأرقام.</p></div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">تأكيد كلمة المرور</label><input id="resetPasswordConfirm" type="text" required minlength="6" autocomplete="new-password" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono tracking-wide focus:outline-none" placeholder="أعد إدخال كلمة المرور"></div>
+        <div id="resetPasswordError" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"></div>
+        <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closeResetPasswordModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold">إلغاء</button><button id="resetPasswordSubmitBtn" type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-extrabold"><i class="fa-solid fa-key ml-1"></i>اعتماد إعادة التعيين</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- إضافة وتحرير خدمة للزوار -->
+  <div id="serviceModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="glass-card w-full max-w-xl rounded-2xl border border-emerald-500/35 shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700/80"><h3 id="serviceModalTitle" class="font-extrabold text-white"><i class="fa-solid fa-briefcase text-emerald-400 ml-2"></i>إضافة خدمة للزوار</h3><button type="button" onclick="closeServiceModal()" class="text-slate-400 hover:text-white text-xl">×</button></div>
+      <form id="serviceCatalogForm" class="p-5 space-y-4" onsubmit="saveServiceCatalog(event)">
+        <input id="serviceCatalogId" type="hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">اسم الخدمة *</label><input id="serviceTitle" required maxlength="200" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm" placeholder="مثال: التصميم والإشراف الهندسي"></div>
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">رمز الخدمة</label><input id="serviceCode" maxlength="50" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono" placeholder="DESIGN-01"></div>
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">نوع الخدمة</label><select id="serviceCategory" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm"><option value="design">تصميم وإشراف هندسي</option><option value="execution">مقاولات وتنفيذ مبانٍ</option><option value="finishing">ترميم وتشطيبات وديكور</option><option value="systems">أنظمة كهرباء وطاقة وتكييف</option><option value="infrastructure">بنية تحتية ومساحة</option><option value="consulting">استشارات وتراخيص ومقايسات</option><option value="supply">توريد وتركيب</option><option value="general">خدمات عامة</option></select></div>
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">أيقونة Font Awesome</label><input id="serviceIcon" maxlength="100" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm font-mono" value="fa-solid fa-compass-drafting"></div>
+          <div><label class="block text-xs font-bold text-slate-300 mb-1.5">ترتيب الظهور</label><input id="serviceOrder" type="number" value="0" class="w-full custom-input rounded-xl px-3 py-2.5 text-sm"></div>
+          <label class="flex items-center gap-2 mt-6 text-sm font-bold text-slate-200"><input id="serviceActive" type="checkbox" checked class="accent-emerald-400 w-4 h-4"> ظاهرة للزوار الآن</label>
+        </div>
+        <div><label class="block text-xs font-bold text-slate-300 mb-1.5">وصف الخدمة</label><textarea id="serviceDescription" rows="4" maxlength="2000" class="w-full custom-input rounded-xl p-3 text-sm" placeholder="وصف مختصر وواضح لما تقدمه الشركة في هذه الخدمة"></textarea></div>
+        <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closeServiceModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold">إلغاء</button><button id="saveServiceBtn" type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-500 text-slate-950 text-xs font-extrabold">حفظ الخدمة</button></div>
+      </form>
+    </div>
+  </div>
+
   <!-- Page Logic Script -->
   <script>
     let allUsers = [];
@@ -1315,9 +1402,51 @@
       }
     }
 
-    async function resetPassword(id) {
-      const newPass = prompt('أدخل كلمة المرور الجديدة للحساب (6 أحرف على الأقل):');
-      if (!newPass) return;
+    function showResetPasswordError(message = '') {
+      const error = document.getElementById('resetPasswordError');
+      error.textContent = message;
+      error.classList.toggle('hidden', !message);
+    }
+
+    function openResetPasswordModal(id) {
+      const user = allUsers.find(item => Number(item.id) === Number(id));
+      if (!user) return showToast('تعذر العثور على بيانات هذا المستخدم، حدّث القائمة وحاول مجدداً', 'error');
+      document.getElementById('resetPasswordUserId').value = user.id;
+      document.getElementById('resetPasswordRecipient').textContent = `${user.full_name} — ${user.email}`;
+      document.getElementById('resetPasswordValue').value = '';
+      document.getElementById('resetPasswordConfirm').value = '';
+      showResetPasswordError('');
+      document.getElementById('resetPasswordModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('resetPasswordValue').focus(), 80);
+    }
+
+    function closeResetPasswordModal() {
+      document.getElementById('resetPasswordModal').classList.add('hidden');
+      showResetPasswordError('');
+    }
+
+    function generateTemporaryPassword() {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+      const bytes = new Uint32Array(6);
+      crypto.getRandomValues(bytes);
+      const value = Array.from(bytes, n => alphabet[n % alphabet.length]).join('');
+      document.getElementById('resetPasswordValue').value = value;
+      document.getElementById('resetPasswordConfirm').value = value;
+      showResetPasswordError('');
+    }
+
+    async function submitPasswordReset(event) {
+      event.preventDefault();
+      const id = document.getElementById('resetPasswordUserId').value;
+      const newPass = document.getElementById('resetPasswordValue').value;
+      const confirmPass = document.getElementById('resetPasswordConfirm').value;
+      if (newPass.length < 6) return showResetPasswordError('كلمة المرور المؤقتة يجب أن تكون 6 خانات على الأقل.');
+      if (newPass !== confirmPass) return showResetPasswordError('تأكيد كلمة المرور غير مطابق.');
+      const submitButton = document.getElementById('resetPasswordSubmitBtn');
+      const originalText = submitButton.innerHTML;
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin ml-1"></i> جاري الاعتماد...';
+      showResetPasswordError('');
       try {
         const res = await fetch(`/api/admin/client-users/${id}/reset-password`, {
           method: 'POST',
@@ -1327,32 +1456,114 @@
         const data = await res.json();
         if (data.success) {
           showToast(data.message || 'تمت إعادة تعيين كلمة المرور بنجاح', 'success');
+          closeResetPasswordModal();
         } else {
-          showToast(data.message || 'خطأ في إعادة تعيين كلمة المرور', 'error');
+          showResetPasswordError(data.message || 'خطأ في إعادة تعيين كلمة المرور');
         }
       } catch (e) {
-        showToast('خطأ في الاتصال أثناء إعادة التعيين', 'error');
+        showResetPasswordError('خطأ في الاتصال أثناء إعادة التعيين');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
       }
+    }
+
+    function resetPassword(id) { openResetPasswordModal(id); }
+
+    let inviteDraft = null;
+    let invitePreviewCustomized = false;
+
+    function closeInviteModal() {
+      document.getElementById('inviteModal').classList.add('hidden');
+      inviteDraft = null;
+      invitePreviewCustomized = false;
+    }
+
+    function refreshInvitePreview(force = false) {
+      if (!inviteDraft) return;
+      if (invitePreviewCustomized && !force) return;
+      const message = document.getElementById('inviteMessage').value.trim();
+      const password = document.getElementById('invitePassword').value;
+      const otp = document.getElementById('inviteOtp').value;
+      const preview = document.getElementById('inviteSharePreview');
+      preview.value = `${message}\n\nالبريد: ${inviteDraft.email}\nكلمة المرور المؤقتة: ${password}\nرمز الأمان (OTP): ${otp}\nرابط الدخول: ${inviteDraft.portal_url}`;
+      updateInviteCredentialWarning();
+    }
+
+    function markInvitePreviewEdited() {
+      invitePreviewCustomized = true;
+      updateInviteCredentialWarning();
+    }
+
+    function resetInviteShareText() {
+      invitePreviewCustomized = false;
+      refreshInvitePreview(true);
+    }
+
+    function updateInviteCredentialWarning() {
+      if (!inviteDraft) return;
+      const preview = document.getElementById('inviteSharePreview').value;
+      const required = [inviteDraft.email, document.getElementById('invitePassword').value, document.getElementById('inviteOtp').value, inviteDraft.portal_url];
+      document.getElementById('inviteCredentialWarning').classList.toggle('hidden', required.every(value => value && preview.includes(value)));
     }
 
     async function sendInvite(id) {
       try {
-        const res = await fetch(`/api/admin/client-users/${id}/send-invite`, {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' })
-        });
+        const res = await fetch(`/api/admin/client-users/${id}/invite-preview`, { headers: getAuthHeaders() });
         const data = await res.json();
-        if (data.success && data.invite_details) {
-          const inv = data.invite_details;
-          const waUrl = `https://wa.me/${inv.phone ? inv.phone.replace(/[^0-9]/g, '') : ''}?text=${encodeURIComponent(inv.whatsapp_share_text)}`;
-          alert(`✅ تم إصدار بيانات تفعيل الحساب بنجاح!\n\nاسم المستلم: ${inv.full_name}\nالبريد: ${inv.email}\nكلمة المرور المؤقتة: ${inv.temp_password}\nرمز الـ OTP: ${inv.otp_code}\n\nيمكنك نُسخ الرسالة أو المشاركة فوراً عبر واتساب.`);
-          window.open(waUrl, '_blank');
-          loadClientUsers();
+        if (data.success && data.preview) {
+          inviteDraft = data.preview;
+          document.getElementById('inviteRecipient').textContent = `${inviteDraft.full_name} — ${inviteDraft.email}`;
+          document.getElementById('inviteMessage').value = inviteDraft.message;
+          document.getElementById('invitePassword').value = inviteDraft.temp_password;
+          document.getElementById('inviteOtp').value = inviteDraft.otp_code;
+          document.getElementById('inviteExpiryDays').value = inviteDraft.expiry_days;
+          invitePreviewCustomized = false;
+          document.getElementById('inviteModal').classList.remove('hidden');
+          refreshInvitePreview(true);
         } else {
-          showToast(data.message || 'تعذر إصدار رمز الدعوة', 'error');
+          showToast(data.message || 'تعذر تجهيز معاينة الدعوة', 'error');
         }
       } catch (err) {
-        showToast('خطأ في الاتصال أثناء إصدار الدعوة', 'error');
+        showToast('خطأ في الاتصال أثناء تجهيز الدعوة', 'error');
+      }
+    }
+
+    async function confirmAndSendInvite() {
+      if (!inviteDraft) return;
+      const btn = document.getElementById('btnConfirmInvite');
+      const payload = {
+        message: document.getElementById('inviteMessage').value.trim(),
+        temp_password: document.getElementById('invitePassword').value,
+        otp_code: document.getElementById('inviteOtp').value,
+        expiry_days: document.getElementById('inviteExpiryDays').value,
+        whatsapp_share_text: document.getElementById('inviteSharePreview').value.trim()
+      };
+      if (payload.temp_password.length < 10 || !/^\d{6}$/.test(payload.otp_code) || !payload.whatsapp_share_text) {
+        showToast('تحقق من كلمة المرور المؤقتة ورمز OTP المكوّن من 6 أرقام', 'error');
+        return;
+      }
+      const requiredValues = [inviteDraft.email, payload.temp_password, payload.otp_code, inviteDraft.portal_url];
+      if (!requiredValues.every(value => payload.whatsapp_share_text.includes(value)) && !window.confirm('رسالة واتساب لا تحتوي جميع بيانات الدخول الحالية. هل تريد اعتمادها كما هي؟')) return;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري اعتماد الدعوة...';
+      try {
+        const res = await fetch(`/api/admin/client-users/${inviteDraft.user_id}/send-invite`, {
+          method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.success || !data.invite_details) throw new Error(data.message || 'تعذر اعتماد الدعوة');
+        const inv = data.invite_details;
+        const waUrl = `https://wa.me/${inv.phone ? inv.phone.replace(/[^0-9]/g, '') : ''}?text=${encodeURIComponent(inv.whatsapp_share_text)}`;
+        closeInviteModal();
+        window.open(waUrl, '_blank', 'noopener');
+        showToast('تم اعتماد الدعوة وفتح رسالة واتساب للمراجعة والإرسال', 'success');
+        loadClientUsers();
+      } catch (err) {
+        showToast(err.message || 'تعذر اعتماد الدعوة', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> اعتماد وفتح واتساب';
       }
     }
 
@@ -1518,15 +1729,109 @@
     let allServiceRequests = [];
     let currentServiceRequestId = null;
     let systemEngineers = [];
+    let servicesCatalog = [];
+
+    const serviceCatalogEscape = (value) => String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+    const serviceCategoryLabel = (category) => ({
+      design: 'تصميم وإشراف هندسي', execution: 'مقاولات وتنفيذ مبانٍ', finishing: 'ترميم وتشطيبات وديكور',
+      systems: 'أنظمة كهرباء وطاقة وتكييف', infrastructure: 'بنية تحتية ومساحة', consulting: 'استشارات وتراخيص ومقايسات',
+      supply: 'توريد وتركيب', general: 'خدمات عامة'
+    }[category] || category || 'خدمات عامة');
+
+    async function loadServicesCatalog() {
+      const container = document.getElementById('servicesCatalogList');
+      if (!container) return;
+      container.innerHTML = '<div class="col-span-full text-center py-10 text-slate-400"><i class="fa-solid fa-spinner fa-spin text-2xl text-emerald-400 mb-2"></i><div>جاري تحميل الخدمات...</div></div>';
+      try {
+        const res = await fetch('/api/admin/client-users/services-catalog', { headers: getAuthHeaders() });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        servicesCatalog = data.services || [];
+        if (!servicesCatalog.length) {
+          container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400"><i class="fa-solid fa-briefcase text-3xl text-slate-600 mb-3"></i><div class="font-bold">لا توجد خدمات مضافة بعد</div><div class="text-xs mt-1">أضف أول خدمة لتظهر للزوار في بوابة العملاء.</div></div>';
+          return;
+        }
+        container.innerHTML = servicesCatalog.map(service => `
+          <article class="rounded-2xl p-4 border ${Number(service.is_active) ? 'border-emerald-500/35 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/55 opacity-75'}">
+            <div class="flex items-start justify-between gap-3"><div class="flex gap-3"><div class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 text-emerald-300 flex items-center justify-center text-lg"><i class="${serviceCatalogEscape(service.icon || 'fa-solid fa-compass-drafting')}"></i></div><div><h3 class="font-extrabold text-slate-100 text-sm">${serviceCatalogEscape(service.title)}</h3><p class="text-[11px] text-slate-400 mt-1">${serviceCatalogEscape(serviceCategoryLabel(service.category))} · ${serviceCatalogEscape(service.code || 'بدون رمز')}</p></div></div><span class="text-[10px] px-2 py-1 rounded-full font-bold ${Number(service.is_active) ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}">${Number(service.is_active) ? 'ظاهرة للزوار' : 'مخفية'}</span></div>
+            <p class="text-xs leading-6 text-slate-400 mt-3 min-h-[3rem]">${serviceCatalogEscape(service.description || 'لا يوجد وصف للخدمة بعد.')}</p>
+            <div class="flex items-center justify-between mt-4 pt-3 border-t border-slate-700/60"><span class="text-[11px] text-slate-500">الترتيب: ${Number(service.display_order) || 0}</span><div class="flex gap-2"><button onclick="openServiceModal(${Number(service.id)})" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"><i class="fa-solid fa-pen ml-1"></i>تعديل</button><button onclick="deleteServiceCatalog(${Number(service.id)})" class="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold"><i class="fa-solid fa-trash ml-1"></i>حذف</button></div></div>
+          </article>`).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="col-span-full text-center py-10 text-rose-300"><i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i><div>${serviceCatalogEscape(err.message || 'تعذر تحميل الخدمات')}</div></div>`;
+      }
+    }
+
+    async function addRecommendedServices() {
+      if (!confirm('سيتم إدراج 16 خدمة هندسية ومقاولات مقترحة. لن تُستبدل الخدمات الموجودة أو تعديلاتك الحالية. هل تريد المتابعة؟')) return;
+      try {
+        const res = await fetch('/api/admin/client-users/services-catalog/add-recommended', { method: 'POST', headers: getAuthHeaders() });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        showToast(data.message || 'تمت إضافة الخدمات المقترحة', 'success');
+        loadServicesCatalog();
+      } catch (err) { showToast(err.message || 'تعذر إضافة الخدمات المقترحة', 'error'); }
+    }
+
+    function openServiceModal(id = null) {
+      const service = id ? servicesCatalog.find(item => Number(item.id) === Number(id)) : null;
+      document.getElementById('serviceCatalogForm').reset();
+      document.getElementById('serviceCatalogId').value = service?.id || '';
+      document.getElementById('serviceModalTitle').innerHTML = `<i class="fa-solid fa-briefcase text-emerald-400 ml-2"></i>${service ? 'تعديل خدمة للزوار' : 'إضافة خدمة للزوار'}`;
+      document.getElementById('serviceTitle').value = service?.title || '';
+      document.getElementById('serviceCode').value = service?.code || '';
+      const categorySelect = document.getElementById('serviceCategory');
+      const categoryValue = service?.category || 'general';
+      if (![...categorySelect.options].some(option => option.value === categoryValue)) categorySelect.add(new Option(categoryValue, categoryValue));
+      categorySelect.value = categoryValue;
+      document.getElementById('serviceDescription').value = service?.description || '';
+      document.getElementById('serviceIcon').value = service?.icon || 'fa-solid fa-compass-drafting';
+      document.getElementById('serviceOrder').value = service?.display_order || 0;
+      document.getElementById('serviceActive').checked = service ? Number(service.is_active) === 1 : true;
+      document.getElementById('serviceModal').classList.remove('hidden');
+    }
+
+    function closeServiceModal() { document.getElementById('serviceModal').classList.add('hidden'); }
+
+    async function saveServiceCatalog(event) {
+      event.preventDefault();
+      const id = document.getElementById('serviceCatalogId').value;
+      const button = document.getElementById('saveServiceBtn');
+      const payload = { code: document.getElementById('serviceCode').value, title: document.getElementById('serviceTitle').value, category: document.getElementById('serviceCategory').value, description: document.getElementById('serviceDescription').value, icon: document.getElementById('serviceIcon').value, display_order: document.getElementById('serviceOrder').value, is_active: document.getElementById('serviceActive').checked };
+      button.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/client-users/services-catalog${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        closeServiceModal();
+        showToast(data.message || 'تم حفظ الخدمة', 'success');
+        loadServicesCatalog();
+      } catch (err) { showToast(err.message || 'تعذر حفظ الخدمة', 'error'); }
+      finally { button.disabled = false; }
+    }
+
+    async function deleteServiceCatalog(id) {
+      const service = servicesCatalog.find(item => Number(item.id) === Number(id));
+      if (!service || !confirm(`حذف خدمة «${service.title}»؟ لا يمكن الحذف إذا كانت مرتبطة بطلبات سابقة.`)) return;
+      try {
+        const res = await fetch(`/api/admin/client-users/services-catalog/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        showToast(data.message || 'تم حذف الخدمة', 'success');
+        loadServicesCatalog();
+      } catch (err) { showToast(err.message || 'تعذر حذف الخدمة', 'error'); }
+    }
 
     function switchMainTab(tab) {
       currentMainTab = tab;
       const tabUsersBtn = document.getElementById('tabUsersBtn');
       const tabMessagesBtn = document.getElementById('tabMessagesBtn');
       const tabRequestsBtn = document.getElementById('tabRequestsBtn');
+      const tabServicesBtn = document.getElementById('tabServicesBtn');
       const viewUsers = document.getElementById('viewUsersSection');
       const viewMessages = document.getElementById('viewMessagesSection');
       const viewRequests = document.getElementById('viewRequestsSection');
+      const viewServices = document.getElementById('viewServicesSection');
 
       const activeClass = 'px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20';
       const inactiveClass = 'px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700 hover:border-amber-500/40';
@@ -1534,15 +1839,19 @@
       tabUsersBtn.className = tab === 'users' ? activeClass : inactiveClass;
       tabMessagesBtn.className = tab === 'messages' ? activeClass : inactiveClass;
       if (tabRequestsBtn) tabRequestsBtn.className = tab === 'requests' ? activeClass : inactiveClass;
+      if (tabServicesBtn) tabServicesBtn.className = tab === 'services' ? activeClass : inactiveClass;
 
       viewUsers.classList.toggle('hidden', tab !== 'users');
       viewMessages.classList.toggle('hidden', tab !== 'messages');
       if (viewRequests) viewRequests.classList.toggle('hidden', tab !== 'requests');
+      if (viewServices) viewServices.classList.toggle('hidden', tab !== 'services');
 
       if (tab === 'messages') {
         loadClientMessages();
       } else if (tab === 'requests') {
         loadServiceRequests();
+      } else if (tab === 'services') {
+        loadServicesCatalog();
       }
     }
 
