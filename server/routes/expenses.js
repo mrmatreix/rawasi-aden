@@ -233,8 +233,8 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
         if (bExists) validBankAccId = bExists.id;
       }
     }
-    const finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
-    if (settlementAccount) await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
+    let finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
+    if (settlementAccount) finalCcId = await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
 
     const accId = leafAccount.id;
     const rawCreatorId = req.user?.id || null;

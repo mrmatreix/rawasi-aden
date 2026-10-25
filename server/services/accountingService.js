@@ -94,7 +94,8 @@ const AccountingService = {
   },
 
   async resolveAccountOperationCenter(account, value, db = { get }) {
-    const center = await this.resolveOptionalCostCenter(value, db);
+    const supplied = value !== undefined && value !== null && value !== '';
+    const center = await this.resolveOptionalCostCenter(supplied ? value : account.default_cost_center_id, db);
     if (Number(account.cost_center_required) === 1 && !center) throw Object.assign(new Error('مركز التكلفة إلزامي للحساب ' + account.code + ' - ' + account.name), { statusCode: 400 });
     return center;
   },
@@ -473,8 +474,8 @@ const AccountingService = {
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
-      const finalCcId = await this.resolveAccountOperationCenter(selectedLeafAccount, costCenterId, tx);
-      await this.resolveAccountOperationCenter(opposingAccount, finalCcId, tx);
+      let finalCcId = await this.resolveAccountOperationCenter(selectedLeafAccount, costCenterId, tx);
+      finalCcId = await this.resolveAccountOperationCenter(opposingAccount, finalCcId, tx);
 
       let validProjectId = null;
       if (projectId) {

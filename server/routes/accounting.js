@@ -899,7 +899,9 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
     await FinancialControlService.assertPeriodOpen(entry.date);
 
     // التحقق الصارم من التوازن قبل الترحيل
-    await AccountingService.validateJournalEntryLines(await query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [id]));
+    const entryLines = await query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [id]);
+    const validated = await AccountingService.validateJournalEntryLines(entryLines);
+    const activeLines = entryLines.filter(line => Math.round(Number(line.debit) * 100) || Math.round(Number(line.credit) * 100));
     const diff = Math.abs(Number(entry.total_debit) - Number(entry.total_credit));
     if (diff > 0.001 || Number(entry.total_debit) <= 0) {
       return res.status(400).json({ success: false, message: `⛔ لا يمكن ترحيل قيد غير متزن! الفرق: ${diff}` });
@@ -911,6 +913,7 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
 
     await transaction(async (tx) => {
       const current = await lockFinancialDocument(tx, 'journal_entries', entry.id);
+      for (const [index, line] of validated.sanitizedLines.entries()) await tx.run('UPDATE journal_entry_lines SET cost_center_id = ? WHERE id = ? AND entry_id = ?', [line.cost_center_id, activeLines[index].id, entry.id]);
       if (current.status !== entry.status) throw Object.assign(new Error('تغيّرت حالة المستند؛ حدّث السجل قبل الترحيل'), { statusCode: 409 });
       await tx.run(`
         UPDATE journal_entries
@@ -1342,7 +1345,11 @@ router.get('/cash-movements', async (req, res) => {
   try {
     const { getCashAccountActivity } = require('../services/cashAccountActivity');
     const ledger = require('../services/reportingLedger');
-    res.json(await getCashAccountActivity(ledger, req.query));
+    const result = await getCashAccountActivity(ledger, { ...req.query, all: 'true' });
+    // Keep permanent balances in the summary; the operational list contains only unposted rows.
+    result.data = result.data.filter(row => !row.is_posted);
+    if (req.query.all !== 'true') result.data = result.data.slice(0, 100);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب حركة الصندوق', error: err.message });
   }

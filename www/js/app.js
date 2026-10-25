@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261025-qqqi',
+  assetVersion: '1.0.0.20261025-4bje',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-qqqi',
-    projects: 'js/projects.js?v=1.0.0.20261025-qqqi',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261025-qqqi',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-qqqi',
-    accounting: 'js/accounting.js?v=1.0.0.20261025-qqqi',
-    hr: 'js/hr.js?v=1.0.0.20261025-qqqi',
-    reports: 'js/reports.js?v=1.0.0.20261025-qqqi',
-    inventory: 'js/inventory.js?v=1.0.0.20261025-qqqi',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-qqqi',
-    settings: 'js/settings.js?v=1.0.0.20261025-qqqi',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261025-qqqi',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-qqqi'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-4bje',
+    projects: 'js/projects.js?v=1.0.0.20261025-4bje',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-4bje',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-4bje',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-4bje',
+    hr: 'js/hr.js?v=1.0.0.20261025-4bje',
+    reports: 'js/reports.js?v=1.0.0.20261025-4bje',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-4bje',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-4bje',
+    settings: 'js/settings.js?v=1.0.0.20261025-4bje',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-4bje',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-4bje'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -1547,7 +1547,7 @@ const App = {
       if (tbody && json.success) {
         const list = json.data || [];
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد عمليات مسجلة (${type})</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد عمليات غير مرحلة (${type})</td></tr>`;
           const pag = document.getElementById('cashPagination');
           if (pag) pag.innerHTML = '';
         } else {

@@ -489,8 +489,8 @@ router.post('/', (req, res, next) => {
     const directClientName = req.body.client_name ? String(req.body.client_name).trim() : null;
     const directSupplierName = req.body.supplier_name ? String(req.body.supplier_name).trim() : null;
     const accId = leafAccount.id;
-    const finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
-    if (settlementAccount) await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
+    let finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
+    if (settlementAccount) finalCcId = await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
 
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);

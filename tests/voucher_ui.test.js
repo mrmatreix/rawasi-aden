@@ -7,10 +7,11 @@ test('expense selectors exclude revenue while receipt selectors retain it', () =
     { id: 2, code: '41001001', type: 'revenue' }, { id: 3, code: '11201001', type: 'asset' },
     { id: 4, code: '11701001', type: 'asset', name: 'الإيـرادات المستحقة' },
     { id: 5, code: '21402001', type: 'liability', name: 'الايرادات المدفوعة مقدما' },
-    { id: 6, code: '11801001', type: 'asset', name: 'حساب تابع', parent_id: 7 }];
+    { id: 6, code: '11801001', type: 'asset', name: 'حساب تابع', parent_id: 7 },
+    { id: 8, code: '11101001', type: 'asset' }, { id: 9, code: '11102001', type: 'asset' }];
   const allAccounts = [{ id: 7, code: '11801', type: 'asset', name: 'إيرادات أخرى' }];
-  assert.deepEqual(Accounting.voucherAccounts.call({ accounts, allAccounts }, 'expense').map(a => a.id), [1, 3]);
-  assert.deepEqual(Accounting.voucherAccounts.call({ accounts, allAccounts }, 'receipt').map(a => a.id), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(Accounting.voucherAccounts.call({ accounts, allAccounts }, 'expense').map(a => a.id), [1, 3, 8, 9]);
+  assert.deepEqual(Accounting.voucherAccounts.call({ accounts, allAccounts }, 'receipt').map(a => a.id), [2, 4, 5, 6, 8, 9]);
 });
 
 test('journal table displays the complete multiline general description safely', () => {
