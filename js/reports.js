@@ -1315,6 +1315,7 @@ await this.loadIncomeStatement();
       ? Settings.getReportDocClass(cfg)
       : 'multi-page-report-document border-classic density-medium margins-normal';
 
+    if(typeof Settings!=='undefined'&&Settings.getOperationTitle)reportTitle=Settings.getOperationTitle(({ 'projects-profitability':'project_profitability','cost-centers-profitability':'center_profitability','client-statement':'client_stmt','supplier-statement':'supplier_stmt' })[tab]||tab.replace(/-/g,'_'),reportTitle);
     const headerHtml = (typeof Settings !== 'undefined' && Settings.renderReportHeader)
       ? Settings.renderReportHeader(reportTitle, reportMeta, cfg)
       : `

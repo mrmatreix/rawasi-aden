@@ -143,7 +143,9 @@ Object.assign(Accounting, {
     if (this._voucherExportBusy.has(key)) return;
     this._voucherExportBusy.add(key);
     try {
-      const { title, rows, totals } = await this.voucherRegister(kind);
+      const register = await this.voucherRegister(kind);
+      const { rows, totals }=register;
+      const title=typeof Settings!=='undefined'&&Settings.getOperationTitle?Settings.getOperationTitle(kind==='expense'?'expense_register':'receipt_register',register.title):register.title;
       if (!rows.length) return App.showToast('لا توجد سندات للتصدير', 'warning');
       if (format === 'excel') {
         const book = XLSX.utils.book_new();
@@ -153,7 +155,7 @@ Object.assign(Accounting, {
       } else if (format === 'pdf') {
         const escape = value => this.escapeJournalDescription(String(value ?? ''));
         const columns = Object.keys(rows[0]);
-        document.getElementById('printArea').innerHTML = `<div class="multi-page-report-document font-cairo voucher-register" dir="rtl" style="padding:10mm;background:white;color:#111"><style>@media print{@page{size:A4 landscape}.voucher-register table{font-size:9pt}.voucher-register thead{display:table-header-group}.voucher-register tr{break-inside:avoid}}</style><div class="letterhead-content-wrap"><h2>${title}</h2><p>عدد السندات: ${rows.length} — يشمل جميع صفحات السجل وحالات السندات.</p><table border="1" cellpadding="5" style="width:100%;table-layout:fixed;overflow-wrap:anywhere;border-collapse:collapse"><thead><tr>${columns.map(column => `<th>${escape(column)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(column => `<td style="white-space:pre-wrap;overflow-wrap:anywhere;vertical-align:top">${escape(row[column])}</td>`).join('')}</tr>`).join('')}</tbody></table><p>إجمالي مبالغ السجل حسب العملة: ${[...totals].map(([currency, amount]) => `<span dir="ltr" style="display:inline-block">${App.formatNumber(amount)} ${escape(currency)}</span>`).join(' | ')}</p></div></div>`;
+        document.getElementById('printArea').innerHTML = `<div class="multi-page-report-document font-cairo voucher-register" dir="rtl" style="padding:10mm;background:white;color:#111"><style>@media print{@page{size:A4 landscape}.voucher-register table{font-size:9pt}.voucher-register thead{display:table-header-group}.voucher-register tr{break-inside:avoid}}</style><div class="letterhead-content-wrap"><h2>${escape(title)}</h2><p>عدد السندات: ${rows.length} — يشمل جميع صفحات السجل وحالات السندات.</p><table border="1" cellpadding="5" style="width:100%;table-layout:fixed;overflow-wrap:anywhere;border-collapse:collapse"><thead><tr>${columns.map(column => `<th>${escape(column)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(column => `<td style="white-space:pre-wrap;overflow-wrap:anywhere;vertical-align:top">${escape(row[column])}</td>`).join('')}</tr>`).join('')}</tbody></table><p>إجمالي مبالغ السجل حسب العملة: ${[...totals].map(([currency, amount]) => `<span dir="ltr" style="display:inline-block">${App.formatNumber(amount)} ${escape(currency)}</span>`).join(' | ')}</p></div></div>`;
         window.print();
       }
     } catch (error) { App.showToast(error.message || 'تعذر التصدير', 'error'); }

@@ -1,5 +1,5 @@
 <section id="projectWorkItemsView" class="app-view-section" style="display:none">
- <div class="page-header-row"><h2 class="page-title">هيكلة شجرة بنود الأعمال ومرجعية المقايسات</h2><button class="btn btn-secondary" onclick="ProjectSetup.load()">تحديث</button></div>
+ <div class="page-header-row"><h2 class="page-title">هيكلة شجرة بنود الأعمال ومرجعية المقايسات</h2><button class="btn btn-secondary" onclick="ProjectSetup.exportTable('work_items','pdf')">طباعة PDF</button><button class="btn btn-secondary" onclick="ProjectSetup.exportTable('work_items','excel')">تصدير Excel</button><button class="btn btn-secondary" onclick="ProjectSetup.load()">تحديث</button></div>
  <p>دليل موحد لجميع المشاريع. الأسعار المرجعية بالريال اليمني؛ نسخ البند إلى جدول الكميات لا يغيّر المستندات السابقة.</p>
  <form id="workItemForm" class="panel-card" onsubmit="ProjectSetup.save(event)"><input id="workItemId" type="hidden"><div class="form-grid">
   <div class="form-group"><label for="workItemGroup">تصنيف التكلفة</label><select id="workItemGroup" class="form-control" onchange="ProjectSetup.parents()" required></select></div>
@@ -14,7 +14,7 @@
  <div class="panel-card table-responsive"><table class="custom-table"><thead><tr><th>الرقم</th><th>البند</th><th>الوحدة</th><th>السعر المرجعي (ر.ي)</th><th>الحالة</th><th>الإجراءات</th></tr></thead><tbody id="workItemsBody"></tbody></table></div>
 </section>
 <section id="projectProgressReportView" class="app-view-section" style="display:none">
- <div class="page-header-row"><h2 class="page-title">تقرير المشروعات تحت التنفيذ</h2></div>
+ <div class="page-header-row"><h2 class="page-title">تقرير المشروعات تحت التنفيذ</h2><button class="btn btn-secondary" onclick="ProjectSetup.exportTable('project_progress','pdf')">طباعة PDF</button><button class="btn btn-secondary" onclick="ProjectSetup.exportTable('project_progress','excel')">تصدير Excel</button></div>
  <div class="panel-card"><label for="projectProgressDate">التكلفة الفعلية حتى تاريخ</label><input id="projectProgressDate" type="date" class="form-control"><button class="btn btn-primary" onclick="ProjectSetup.loadProgress()">عرض التقرير</button><p id="projectProgressMethod"></p><p>جميع المبالغ بالريال اليمني. نسبة التكلفة تقديرية ولا تستبدل اعتماد الإنجاز الهندسي.</p></div>
  <div class="panel-card table-responsive"><table class="custom-table"><thead><tr><th>رقم المشروع</th><th>المشروع</th><th>التقديري</th><th>الفعلي المرحل</th><th>المتبقي</th><th>نسبة التكلفة</th><th>الإنجاز المسجل</th></tr></thead><tbody id="projectProgressBody"></tbody></table></div>
 </section>

@@ -333,6 +333,13 @@ const ContractAlertsUI = {
 };
 
 const CashFlowUI = {
+  async exportProjection(format) {
+    if(!Auth.hasPermission('reports:export,accounting:export'))return App.showToast('لا تملك صلاحية الطباعة والتصدير','error');
+    if(!this.data)return App.showToast('اعرض التوقعات أولًا','warning');
+    const title=Settings.getOperationTitle('cash_projection','توقعات التدفق النقدي والسيولة');
+    const html=Settings.renderReportHeader(title,[{label:'الفترة',val:this.data.from_month+' — '+this.data.to_month}])+document.getElementById('cashFlowMonthsTableBody').closest('table').outerHTML+Settings.renderReportFooter();
+    if(format==='excel'){await App.loadModule('excelExport');ExcelExporter.download(html,title,'التوقعات',false);}else{document.getElementById('printArea').innerHTML='<div class="multi-page-report-document" dir="rtl">'+html+'</div>';window.print();}
+  },
   data: null,
   scenarios: null,
   activeScenario: 'realistic',

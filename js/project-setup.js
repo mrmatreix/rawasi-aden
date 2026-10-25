@@ -1,4 +1,14 @@
 const ProjectSetup={
+ async exportTable(kind,format){
+  if(!Auth.hasPermission('projects:export,reports:export'))return App.showToast('لا تملك صلاحية الطباعة والتصدير','error');
+  const target=document.getElementById(kind==='work_items'?'workItemsBody':'projectProgressBody');
+  if(!target?.textContent.trim())return App.showToast('اعرض البيانات أولًا','warning');
+  const title=Settings.getOperationTitle(kind,kind==='work_items'?'شجرة بنود الأعمال ومرجعية المقايسات':'تقرير المشروعات تحت التنفيذ');
+  const table=target.closest('table').cloneNode(true);table.querySelectorAll('button,input,select').forEach(element=>element.remove());if(kind==='work_items')table.querySelectorAll('tr').forEach(row=>{if(row.children.length===6)row.lastElementChild.remove();});if(kind==='work_items')table.querySelectorAll('[colspan="6"]').forEach(cell=>cell.colSpan=5);
+  const html=Settings.renderReportHeader(title)+table.outerHTML+Settings.renderReportSignatures()+Settings.renderReportFooter();
+  if(format==='excel'){await App.loadModule('excelExport');ExcelExporter.download(html,title,'التقرير',false);}
+  else {document.getElementById('printArea').innerHTML='<div class="multi-page-report-document" dir="rtl">'+html+'</div>';window.print();}
+ },
  items:[],groups:{},currencies:[],
  escape(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));},
  number(value){return Number(value||0).toLocaleString('en-US',{maximumFractionDigits:2});},

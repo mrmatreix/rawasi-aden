@@ -106,6 +106,7 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
 // إضافة مستخدم جديد مع الصلاحيات
 router.post('/', requirePermission('settings:users'), async (req, res) => {
   try {
+    if (typeof req.body.password !== 'string' || req.body.password.length < 8 || req.body.password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور يجب أن تكون 8 خانات على الأقل ومطابقة للتأكيد'});
     const { 
       username, password, full_name, role_id, role, email, phone, status = 'active', 
       permissions, security_settings, two_factor_pin, two_factor_enabled,
@@ -162,7 +163,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, 
+      cleanUsername, password_hash, full_name.trim(), roleIdVal || null, roleName, email || '', phone || '', status,
       permsString, secString, cleanPin, tfaEnabled,
       branch_id || 1, branch || 'المركز الرئيسي', department_id || 1, department || 'الإدارة العامة',
       allowedProjectsStr, allowedBranchesStr, allowedDepartmentsStr
@@ -203,6 +204,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
 // تعديل بيانات وصلاحيات مستخدم
 router.put('/:id', requirePermission('settings:users'), async (req, res) => {
   try {
+    if ((req.body.password || req.body.password_confirm) && (typeof req.body.password !== 'string' || req.body.password.length < 8 || req.body.password !== req.body.password_confirm)) return res.status(400).json({success:false,message:'كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل ومطابقة للتأكيد'});
     const userId = parseInt(req.params.id);
     const { 
       username, password, full_name, role_id, role, email, phone, status, 
@@ -225,6 +227,7 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
 
     let roleName = role || user.role;
     let roleIdVal = role_id !== undefined ? role_id : user.role_id;
+    if(role && !role_id)roleIdVal=(await get('SELECT id FROM roles WHERE name=?',[role]))?.id || null;
     if (role_id) {
       const roleObj = await get('SELECT name FROM roles WHERE id = ?', [role_id]);
       if (roleObj) roleName = roleObj.name;

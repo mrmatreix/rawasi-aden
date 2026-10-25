@@ -6,7 +6,17 @@
 
 const express = require('express');
 const router = express.Router();
-router.use(require('../middleware/security').requirePermission('settings:users'));
+router.use((req,res,next)=>{
+  const path=req.path,read=req.method==='GET';let action=read?'view':req.method==='DELETE'?'delete':req.method==='POST'&&path==='/'?'create':'edit';
+  if(path.startsWith('/services-catalog'))action=read?'view':'services';
+  else if(path.startsWith('/messages'))action='messages';
+  else if(path.startsWith('/service-requests'))action=read?'requests_view':path.endsWith('/convert-to-project')?'requests_convert':'requests_edit';
+  else if(path.endsWith('/reset-password'))action='reset_password';
+  else if(path.endsWith('/revoke-sessions'))action='sessions';
+  else if(/\/(invite-preview|send-invite)$/.test(path))action='invite';
+  else if(path.endsWith('/projects')&&!read)action='permissions';
+  require('../middleware/security').requirePermission('settings:users,client_app:'+action)(req,res,next);
+});
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../database/db');
@@ -444,6 +454,7 @@ router.get('/:id/details', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    if (typeof req.body.password !== 'string' || req.body.password.length < 6 || req.body.password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور وتأكيدها غير متطابقين'});
     const { client_id, email, password, full_name, phone, role, status, two_factor_enabled, project_ids } = req.body;
 
     if (!client_id || !email || !password || !full_name) {
@@ -585,6 +596,7 @@ router.put('/:id', async (req, res) => {
     }
 
     const updates = [];
+    if(role&&role!==user.role&&!require('../middleware/security').hasUserPermission(req.user,'settings:users,client_app:permissions'))return res.status(403).json({success:false,message:'تغيير دور حساب العميل يتطلب صلاحية تعيين الصلاحيات'});
     const params = [];
 
     if (full_name) { updates.push('full_name = ?'); params.push(String(full_name).trim()); }
@@ -613,7 +625,7 @@ router.put('/:id', async (req, res) => {
       entity_type: 'client_users',
       entity_id: userId,
       old_values: user,
-      new_values: req.body,
+      new_values: {full_name,phone,role,status,two_factor_enabled},
       details: `تحديث بيانات حساب العميل (${user.full_name}) - الحالة الجديدة: ${status || user.status}`
     });
 
@@ -629,6 +641,7 @@ router.put('/:id', async (req, res) => {
  */
 router.post('/:id/reset-password', async (req, res) => {
   try {
+    if (req.body.new_password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور وتأكيدها غير متطابقين'});
     const userId = parseInt(req.params.id, 10);
     const { new_password } = req.body;
 

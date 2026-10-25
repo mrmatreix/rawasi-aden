@@ -8,15 +8,32 @@ const Settings = {
   _selectedServerBackupName: null,
   _printConfig: null,
   activeTab: 'users',
+  populateAdditionalRoles() {
+    const select=document.getElementById('userRoleVal');
+    for(const [id,role] of Object.entries(SystemCatalog.roles))if(![...select.options].some(option=>option.value===id))select.add(new Option(role.label,id),select.querySelector('option[value="custom"]'));
+  },
+  escapeText(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));},
+  operationTitles(){return Object.fromEntries(SystemCatalog.operations.map(operation=>[operation.id,document.getElementById('operationTitle_'+operation.id)?.value||'']));},
+  renderOperationSettings(titles={}) {
+    const target=document.getElementById('printOperationCatalog');if(!target)return;
+    target.innerHTML=SystemCatalog.operations.map(operation=>'<div class="form-group"><label for="operationTitle_'+operation.id+'">'+this.escapeText(operation.label)+'</label><input class="form-control" maxlength="200" id="operationTitle_'+operation.id+'" placeholder="'+this.escapeText(operation.label)+'" value="'+this.escapeText(titles[operation.id]||'')+'"><button type="button" class="btn btn-secondary btn-sm" onclick="Settings.previewOperation(\''+operation.id+'\')">معاينة</button></div>').join('');
+  },
+  getOperationTitle(id,fallback) {return this.getPrintConfig().operation_titles?.[id]||fallback;},
+  applyTitleOverrides(config){const fields={receipt_title:'receipt',expense_title:'expense',custody_title:'custody',journal_title:'journal',cash_movement_title:'cash_movement',proj_report_title:'project',contract_title:'contract',ipc_title:'ipc',quotation_title:'quotation',change_order_title:'change_order',daily_report_title:'daily_report',handover_title:'handover',client_stmt_title:'client_stmt',supplier_stmt_title:'supplier_stmt',payroll_title:'payroll',pay_slip_title:'payslip',pl_title:'profit_loss',income_stmt_title:'income_statement',balance_sheet_title:'balance_sheet',cash_flow_title:'cash_flow',trial_balance_title:'trial_balance',profitability_title:'project_profitability',inventory_title:'inventory'};for(const [key,id]of Object.entries(fields))if(config.operation_titles?.[id])config[key]=config.operation_titles[id];return config;},
+  previewOperation(id){this._previewDocType='operation:'+id;this.updatePrintPreview();},
+  async exportOperationPreview(){await App.loadModule('excelExport');const preview=document.getElementById('printLivePreviewBox');if(preview)ExcelExporter.download('<p>معاينة توضيحية — ليست مستندًا ماليًا</p>'+preview.innerHTML,'معاينة_قالب','المعاينة',false);},
 
   async init() {
-    await this.loadCompanySettings();
-    await this.loadPrintSettings();
-    await this.loadUsers();
+    if(Auth.hasPermission('settings:company')){await this.loadCompanySettings();await this.loadPrintSettings();}
+    if(Auth.hasPermission('settings:users'))await this.loadUsers();
+    const tabs={users:'settings:users',company:'settings:company',backup:'settings:backup',client_app:'settings:users,client_app:view'};
+    if(!Auth.hasPermission(tabs[this.activeTab]||'settings:company'))this.activeTab=Object.keys(tabs).find(tab=>Auth.hasPermission(tabs[tab]))||'users';
   },
 
   // ================== تبديل تبويبات الإعدادات ==================
   switchTab(tab) {
+    const needed={users:'settings:users',company:'settings:company',print:'settings:company',backup:'settings:backup',client_app:'settings:users,client_app:view'}[tab];
+    if (needed && !Auth.hasPermission(needed)) return App.showToast('لا تملك صلاحية هذا القسم','error');
     this.activeTab = tab;
     if (typeof Sidebar !== 'undefined' && App.activeView === 'settings') Sidebar.sync('settings', tab);
     document.querySelectorAll('.settings-pane').forEach(p => p.style.display = 'none');
@@ -201,7 +218,7 @@ const Settings = {
 
   // ================== تخصيص ورقة الطباعة والتقارير ==================
   getPrintConfig() {
-    if (this._printConfig) return this._printConfig;
+    if (this._printConfig) return this.applyTitleOverrides(this._printConfig);
     const defaults = {
       header_title: 'شركة رواسي عدن للهندسة والمقاولات',
       header_subtitle: 'عدن - الجمهورية اليمنية | هاتف: 773413937',
@@ -289,7 +306,7 @@ const Settings = {
       const cached = localStorage.getItem('rawasi_print_config');
       if (cached) {
         this._printConfig = Object.assign({}, defaults, JSON.parse(cached));
-        return this._printConfig;
+        return this.applyTitleOverrides(this._printConfig);
       }
     } catch (e) {}
 
@@ -386,7 +403,10 @@ const Settings = {
           fin_show_reconcile_badge: s.print_fin_show_reconcile_badge !== undefined ? String(s.print_fin_show_reconcile_badge) : '1'
         };
 
+        try{cfg.operation_titles=JSON.parse(s.print_operation_titles||'{}');}catch{cfg.operation_titles={};}
+        this.renderOperationSettings(cfg.operation_titles);
         this._printConfig = cfg;
+        this._printSettingsLoaded=true;
         localStorage.setItem('rawasi_print_config', JSON.stringify(cfg));
 
         const setInput = (id, val) => {
@@ -481,7 +501,7 @@ const Settings = {
         setCheck('printFinShowReconcileBadge', cfg.fin_show_reconcile_badge);
 
         this.updatePrintPreview();
-        this.loadPrintProfiles();
+        if(Auth.hasPermission('settings:company'))this.loadPrintProfiles();
       }
     } catch (e) {
       console.error('Error loading print settings:', e);
@@ -550,6 +570,7 @@ const Settings = {
     const getChk = (id) => document.getElementById(id)?.checked ? '1' : '0';
 
     const cfg = {
+      print_operation_titles: JSON.stringify(this.operationTitles()),
       print_header_title: getVal('printHeaderTitle', 'شركة رواسي عدن للهندسة والمقاولات'),
       print_header_en: getVal('printHeaderEn', 'Rawasi Aden for Engineering & Contracting'),
       print_header_subtitle: getVal('printHeaderSubtitle', ''),
@@ -718,6 +739,7 @@ const Settings = {
           fin_show_dual_balance: cfg.print_fin_show_dual_balance,
           fin_show_reconcile_badge: cfg.print_fin_show_reconcile_badge
         };
+        this._printConfig.operation_titles=JSON.parse(cfg.print_operation_titles);
         localStorage.setItem('rawasi_print_config', JSON.stringify(this._printConfig));
         this.updatePrintPreview();
         App.showToast('تم حفظ وتطبيق كافة إعدادات أوراق الطباعة والتقارير بنجاح 🖨️✨', 'success');
@@ -731,6 +753,7 @@ const Settings = {
   },
 
   resetDefaultPrintSettings() {
+    this.renderOperationSettings({});
     const defaults = {
       header_title: 'شركة رواسي عدن للهندسة والمقاولات',
       header_en: 'Rawasi Aden for Engineering & Contracting',
@@ -1031,6 +1054,11 @@ const Settings = {
 
   // إنشاء ترويسة التقارير الرسمية الذكية
   renderReportHeader(title, metaItems = [], cfg = null) {
+    const normalized=String(title).replace(/ـ/g,'');
+    const aliases={client_boq:'جدول كميات العميل',audit_boq:'تدقيق جدول الكميات',boq:'جدول الكميات',payslip:'قسيمة راتب',inventory:'جرد وتقييم',project:'تقرير حساب وبيانات المشروع',receipt:'سند قبض',expense:'سند صرف',custody:'عهد',journal:'قيد يوم',cash_movement:'حركة الصندوق',account_movement:'حركة حساب',client_stmt:'كشف حساب عميل',supplier_stmt:'كشف حساب مورد',trial_balance:'ميزان المراجعة',balance_sheet:'الميزانية العمومية',cash_flow:'التدفقات النقدية',project_budget:'موازنة المشروع',quotation:'عرض سعر',contract:'عقد تنفيذ',ipc:'مستخلص',settlement:'الحساب الختامي',change_order:'أمر تغيير',daily_report:'تقرير الموقع اليومي',weekly_report:'الإنجاز الأسبوعي',handover:'محضر استلام',correspondence:'خطاب مراسلة',payroll:'رواتب'};
+    const match=Object.entries(aliases).find(([,label])=>normalized.includes(label));
+    if(match)title=this.getOperationTitle(match[0],title);
+    title=this.escapeText(title);
     const c = cfg || this.getPrintConfig();
     const showLogo = c.show_logo === '1' || c.show_logo === 1 || c.show_logo === true;
     const accent = c.accent_color || '#d4af37';
@@ -1174,6 +1202,12 @@ const Settings = {
   updatePrintPreview() {
     const previewBox = document.getElementById('printLivePreviewBox');
     if (!previewBox) return;
+    if(this._previewDocType?.startsWith('operation:')){
+      const id=this._previewDocType.slice(10),operation=SystemCatalog.operations.find(value=>value.id===id);if(!operation)return;
+      const title=document.getElementById('operationTitle_'+id)?.value||operation.label;
+      const cfg={...this.getPrintConfig(),header_title:document.getElementById('printHeaderTitle')?.value||this.getPrintConfig().header_title,operation_titles:{}};
+      previewBox.innerHTML='<div class="official-report-document">'+this.renderReportHeader(title,[],cfg)+'<p>معاينة توضيحية للقالب — ليست بيانات فعلية أو مستندًا ماليًا.</p><table class="official-report-table"><thead><tr><th>المستند / التقرير</th><th>العملية</th></tr></thead><tbody><tr><td>'+this.escapeText(operation.label)+'</td><td>طباعة PDF / تقرير / تصدير بحسب شاشة المستند</td></tr></tbody></table>'+this.renderReportSignatures(cfg)+this.renderReportFooter(cfg)+'</div>';return;
+    }
 
     const getVal = (id, def = '') => document.getElementById(id)?.value || def;
     const getChk = (id) => document.getElementById(id)?.checked;
@@ -2274,7 +2308,7 @@ const Settings = {
         tbody.innerHTML = this._cachedUsers.map(u => {
           // Role badge class
           let roleBadgeClass = 'badge-role-accountant';
-          let roleTitle = u.role_name || u.role;
+          let roleTitle = SystemCatalog.roles[u.role]?.label || u.role_name || u.role;
           if (u.role === 'admin') {
             roleBadgeClass = 'badge-role-admin';
             roleTitle = 'المدير العام';
@@ -2495,6 +2529,9 @@ const Settings = {
 
   // ================== نافذة إضافة مستخدم جديد ==================
   async openNewUserModal() {
+    this.populateAdditionalRoles();
+    document.getElementById('userPasswordConfirm').value='';
+    document.getElementById('userPasswordConfirm').required=true;
     const titleEl = document.getElementById('userModalTitle');
     if (titleEl) titleEl.textContent = 'إضافة مستخدم جديد وتحديد الصلاحيات';
 
@@ -2561,6 +2598,9 @@ const Settings = {
     const titleEl = document.getElementById('userModalTitle');
     if (titleEl) titleEl.textContent = `تعديل بيانات وصلاحيات المستخدم (${user.full_name})`;
 
+    this.populateAdditionalRoles();
+    document.getElementById('userPasswordConfirm').value='';
+    document.getElementById('userPasswordConfirm').required=false;
     document.getElementById('userIdVal').value = user.id;
     document.getElementById('userNameVal').value = user.full_name || '';
     document.getElementById('userUsernameVal').value = user.username || '';
@@ -2629,7 +2669,7 @@ const Settings = {
       });
       // إذا كانت الصلاحيات مخصصة، نظهر الدور كـ "مخصص" في القائمة
       const totalCheckboxes = document.querySelectorAll('.perm-chk').length;
-      if (roleSelect && perms.length < totalCheckboxes) {
+      if (roleSelect && perms.length < totalCheckboxes && ![...roleSelect.options].some(option => option.value === user.role)) {
         roleSelect.value = 'custom';
       }
     } else if (user.role === 'admin') {
@@ -2908,6 +2948,10 @@ const Settings = {
 
   applyRolePermissionsPreset(role) {
     this.selectAllPermissions(false);
+    if (SystemCatalog.roles[role]) {
+      for (const permission of SystemCatalog.roles[role].permissions) { const box=document.querySelector(`.perm-chk[value="${permission}"]`); if(box)box.checked=true; }
+      return;
+    }
 
     let permsToSelect = [];
 
@@ -2987,6 +3031,8 @@ const Settings = {
     const full_name = document.getElementById('userNameVal')?.value?.trim();
     const username = document.getElementById('userUsernameVal')?.value?.trim();
     const password = document.getElementById('userPasswordVal')?.value;
+    const passwordConfirm = document.getElementById('userPasswordConfirm')?.value || '';
+    if ((!id || password || passwordConfirm) && (!password || password.length < 8 || password !== passwordConfirm)) return App.showToast('أدخل كلمة مرور من 8 خانات على الأقل وتأكيدًا مطابقًا','error');
     const role = document.getElementById('userRoleVal')?.value;
     const phone = document.getElementById('userPhoneVal')?.value?.trim();
     const email = document.getElementById('userEmailVal')?.value?.trim();
@@ -3176,6 +3222,7 @@ const Settings = {
 
     if (password && password.trim().length > 0) {
       payload.password = password;
+      payload.password_confirm = passwordConfirm;
     }
 
     const saveBtn = document.getElementById('btnSaveUser');

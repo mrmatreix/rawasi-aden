@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261025-lzs3',
+  assetVersion: '1.0.0.20261025-jrdo',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,20 +11,20 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    projectSetup: 'js/project-setup.js?v=1.0.0.20261025-lzs3',
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-lzs3',
-    projects: 'js/projects.js?v=1.0.0.20261025-lzs3',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261025-lzs3',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-lzs3',
-    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-lzs3',
-    accounting: 'js/accounting.js?v=1.0.0.20261025-lzs3',
-    hr: 'js/hr.js?v=1.0.0.20261025-lzs3',
-    reports: 'js/reports.js?v=1.0.0.20261025-lzs3',
-    inventory: 'js/inventory.js?v=1.0.0.20261025-lzs3',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-lzs3',
-    settings: 'js/settings.js?v=1.0.0.20261025-lzs3',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261025-lzs3',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-lzs3'
+    projectSetup: 'js/project-setup.js?v=1.0.0.20261025-jrdo',
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-jrdo',
+    projects: 'js/projects.js?v=1.0.0.20261025-jrdo',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-jrdo',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-jrdo',
+    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-jrdo',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-jrdo',
+    hr: 'js/hr.js?v=1.0.0.20261025-jrdo',
+    reports: 'js/reports.js?v=1.0.0.20261025-jrdo',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-jrdo',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-jrdo',
+    settings: 'js/settings.js?v=1.0.0.20261025-jrdo',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-jrdo',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-jrdo'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -97,9 +97,11 @@ const App = {
     };
 
     const modules = viewMap[viewId] || [];
+    if(modules.length&&viewId!=='settings'&&!modules.includes('settings'))modules.unshift('settings');
     for (const mod of modules) {
       await this.loadModule(mod);
     }
+    if(modules.length&&typeof Settings!=='undefined'&&!Settings._printSettingsLoaded)await Settings.loadPrintSettings();
   },
 
   // التحميل الكسول المسبق في أوقات خمول المتصفح (Idle Preload)
@@ -579,8 +581,7 @@ const App = {
       Accounting.loadCashMovement();
       await this.loadCashTable();
     } else if (viewId === 'settings') {
-      Settings.loadCompanySettings();
-      Settings.loadUsers();
+      Settings.switchTab(Settings.activeTab || 'users');
     } else if (viewId === 'contractLifecycle') {
       if (window.ContractAlertsUI && window.ContractAlertsUI.loadDashboard) {
         window.ContractAlertsUI.loadDashboard();
