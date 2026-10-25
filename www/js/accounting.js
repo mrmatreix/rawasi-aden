@@ -4321,7 +4321,7 @@ const Accounting = {
         </td>
         <td>
           <strong style="${isRestricted ? 'text-decoration: line-through;' : ''}">${a.name || a.account_name}</strong>
-          <div style="font-size:0.75rem;color:var(--text-secondary)">نوع الحساب التحليلي: ${{general:"عام",cash:"صندوق",bank:"بنك",employee_receivables:"ذمم موظفين",customers:"عملاء",suppliers:"موردين"}[a.analytical_type] || "عام"}</div>
+          <div style="font-size:0.75rem;color:var(--text-secondary)">رقم الحساب التحليلي: ${this.escapeJournalDescription(String(a.code || a.account_code || ''))}</div><div style="font-size:0.75rem;color:var(--text-secondary)">نوع الحساب التحليلي: ${{general:"عام",cash:"صندوق",bank:"بنك",employee_receivables:"ذمم موظفين",customers:"عملاء",suppliers:"موردين"}[a.analytical_type] || "عام"}</div>
           <div style="font-size: 0.75rem; color: var(--text-secondary);">استخدام مراكز التكلفة: ${Number(a.cost_center_required) === 1 ? 'إلزامي' : 'غير إلزامي'}</div>
         </td>
         <td><span class="badge" style="${typeBadges[a.type || a.account_type] || 'background: #334155; color: #fff;'}">${this.financialTypeLabel(a.type || a.account_type)}</span></td>
@@ -4416,10 +4416,11 @@ const Accounting = {
     document.getElementById(prefix + 'ParentSelect').value = parent ? String(parent.id) : '';
     if (parent) document.getElementById(prefix + 'Type').value = parent.type;
     this.updateAccountCenterRequirement(edit);
+    this.analyticalAccountNumber(edit);
   },
 
   async openNewAccountModal() {
-    document.getElementById('modalAccAnalyticalType').value = 'general';
+    document.getElementById('modalAccAnalyticalType').value = '';
     const c = document.getElementById('modalAccCode');
     const n = document.getElementById('modalAccName');
     const t = document.getElementById('modalAccType');
@@ -4468,6 +4469,7 @@ const Accounting = {
       if (json.success && json.suggested_code) {
         if ((document.getElementById('modalAccParentSelect')?.value || '') !== parent_id) return;
         codeInput.value = json.suggested_code;
+        this.analyticalAccountNumber();
       } else {
         codeInput.value = '';
         App.showToast(json.message || 'تعذر اقتراح رقم الحساب', 'error');
@@ -4523,6 +4525,7 @@ const Accounting = {
 
     document.getElementById('editAccId').value = acc.id;
     document.getElementById('editAccCode').value = acc.code || acc.account_code || '';
+    this.analyticalAccountNumber(true);
     document.getElementById('editAccName').value = acc.name || acc.account_name || '';
     this.populateAccountTypes('editAccType', acc.type || acc.account_type || 'asset');
     if (document.getElementById('editAccStatus')) {
@@ -4968,7 +4971,8 @@ const Accounting = {
   // ================== إدارة الفترات المحاسبية وإغلاق الحسابات ==================
   async openPeriodsModal() {
     let modal = document.getElementById('accountingPeriodsModal');
-    if (!modal) {
+    if (!modal || !document.getElementById('newPeriodFormContainer')) {
+      if (modal) modal.remove();
       modal = document.createElement('div');
       modal.id = 'accountingPeriodsModal';
       modal.className = 'modal-overlay';
@@ -5039,6 +5043,8 @@ const Accounting = {
     }
 
     App.openModal('accountingPeriodsModal');
+    const createPeriodButton = modal.querySelector('button[onclick="Accounting.showNewPeriodForm()"]');
+    if (createPeriodButton) createPeriodButton.hidden = typeof Auth === 'undefined' || !Auth.hasPermission('accounting:create');
     await this.loadPeriodsTable();
   },
 
@@ -5050,47 +5056,21 @@ const Accounting = {
   async loadPeriodsTable() {
     const tbody = document.getElementById('accountingPeriodsTableBody');
     if (!tbody) return;
-
     try {
-      const res = await fetch('/api/accounting/periods');
-      const json = await res.json();
-      if (!json.success || !json.data || json.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">لا توجد فترات محاسبية مسجلة</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = json.data.map(p => {
-        const isClosed = p.status === 'closed';
-        const badge = isClosed 
-          ? `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid #ef4444;">🔒 مغلقة</span>`
-          : `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid #22c55e;">🟢 مفتوحة</span>`;
-
-        let actionBtn = '';
-        if (isClosed) {
-          actionBtn = `<button class="btn btn-sm btn-warning" onclick="Accounting.promptReopenPeriod(${p.id}, '${p.period_name}')" style="padding: 3px 8px; font-size: 0.78rem;">🔓 إعادة فتح</button>`;
-        } else {
-          actionBtn = `<button class="btn btn-sm btn-danger" onclick="Accounting.promptClosePeriod(${p.id}, '${p.period_name}')" style="padding: 3px 8px; font-size: 0.78rem;">🔒 إغلاق الفترة</button>`;
-        }
-
-        const notes = isClosed 
-          ? `أغلقت بواسطة: ${p.closed_by || 'المدير'} ${p.closing_reason ? `(${p.closing_reason})` : ''}`
-          : (p.reopen_reason ? `أعيد فتحها: ${p.reopen_reason}` : 'جاهزة للعمليات');
-
-        return `
-          <tr>
-            <td style="font-weight: bold; color: #fff;">${p.period_name}</td>
-            <td>${p.start_date}</td>
-            <td>${p.end_date}</td>
-            <td>${badge}</td>
-            <td style="font-size: 0.8rem; color: var(--text-secondary);">${notes}</td>
-            <td style="text-align: center;">${actionBtn}</td>
-          </tr>
-        `;
-      }).join('');
-    } catch (e) {
-      console.error(e);
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #f87171;">فشل جلب الفترات المحاسبية</td></tr>';
-    }
+      const response = await fetch('/api/accounting/periods');
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'تعذر تحميل الفترات');
+      this.accountingPeriods = result.data || [];
+      const escape = value => this.escapeJournalDescription(String(value ?? ''));
+      const can = permission => typeof Auth !== 'undefined' && Auth.hasPermission(permission);
+      tbody.innerHTML = this.accountingPeriods.length ? this.accountingPeriods.map(period => {
+        const closed = period.status === 'closed';
+        const action = closed
+          ? (can('accounting:approve') ? '<button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.reopenAccountingPeriod(' + Number(period.id) + ')">إعادة فتح</button>' : '')
+          : (can('accounting:approve,accounting:close_period') ? '<button type="button" class="btn btn-danger btn-sm" onclick="Accounting.openPeriodToClose(' + Number(period.id) + ')">إغلاق الفترة</button>' : '');
+        return '<tr><td>' + escape(period.period_name) + '</td><td>' + escape(period.start_date) + '</td><td>' + escape(period.end_date) + '</td><td>' + (closed ? 'مغلقة' : 'مفتوحة') + '</td><td>' + escape(period.notes || period.reopen_reason || '') + '</td><td>' + action + '</td></tr>';
+      }).join('') : '<tr><td colspan="6">لا توجد فترات محاسبية مسجلة.</td></tr>';
+    } catch (error) { tbody.innerHTML = '<tr><td colspan="6">تعذر تحميل الفترات.</td></tr>'; App.showToast(error.message, 'error'); }
   },
 
   async submitNewPeriod() {
@@ -5098,7 +5078,7 @@ const Accounting = {
     const start_date = document.getElementById('newPeriodStart')?.value;
     const end_date = document.getElementById('newPeriodEnd')?.value;
 
-    if (!period_name || !start_date || !end_date) {
+    if (!period_name || !start_date || !end_date || start_date > end_date) {
       App.showToast('جميع الحقول مطلوبة لإضافة الفترة', 'error');
       return;
     }
@@ -5309,45 +5289,7 @@ const Accounting = {
   // ============================================================
   // 🔒 إدارة الفترات المحاسبية وإقفال الحسابات (Period Closing)
   // ============================================================
-  async loadPeriods() {
-    const tbody = document.getElementById('accountingPeriodsTableBody');
-    if (!tbody) return;
-
-    try {
-      const res = await fetch('/api/accounting/periods');
-      const json = await res.json();
-      if (!json.success || !json.data || json.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">لا توجد فترات محاسبية مسجلة</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = json.data.map(p => {
-        const isClosed = p.status === 'closed';
-        const badge = isClosed
-          ? `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171;">مغلقة رسمياً 🔒</span>`
-          : `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80;">مفتوحة للعمليات 🟢</span>`;
-
-        const actionBtn = isClosed
-          ? `<button type="button" class="btn btn-secondary btn-sm" data-action="reopen-period" data-period-id="${p.id}" onclick="Accounting.reopenPeriod(${p.id})">إعادة فتح 🔓</button>`
-          : `<button type="button" class="btn btn-danger btn-sm" data-action="close-period-modal" data-period-id="${p.id}" data-period-name="${p.period_name}" onclick="Accounting.openClosePeriodModal(${p.id}, '${p.period_name}', '${p.start_date}', '${p.end_date}')">إقفال الفترة 🔒</button>`;
-
-        return `
-          <tr>
-            <td><strong>${p.period_name}</strong></td>
-            <td>${p.fiscal_year}</td>
-            <td>${p.start_date}</td>
-            <td>${p.end_date}</td>
-            <td>${badge}</td>
-            <td style="font-size: 0.85rem; color: var(--text-secondary);">${isClosed ? (p.closed_by || 'المدير المالي') : '—'}</td>
-            <td>${actionBtn}</td>
-          </tr>
-        `;
-      }).join('');
-    } catch (e) {
-      console.error('Error loading periods:', e);
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #f87171;">تعذر تحميل الفترات المحاسبية</td></tr>';
-    }
-  },
+  async loadPeriods() { return this.loadPeriodsTable(); },
 
   openClosePeriodModal(periodId, periodName, startDate = '', endDate = '') {
     let modal = document.getElementById('periodCloseModal');

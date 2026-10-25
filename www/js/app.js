@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261025-4bje',
+  assetVersion: '1.0.0.20261025-v1qr',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,19 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-4bje',
-    projects: 'js/projects.js?v=1.0.0.20261025-4bje',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261025-4bje',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-4bje',
-    accounting: 'js/accounting.js?v=1.0.0.20261025-4bje',
-    hr: 'js/hr.js?v=1.0.0.20261025-4bje',
-    reports: 'js/reports.js?v=1.0.0.20261025-4bje',
-    inventory: 'js/inventory.js?v=1.0.0.20261025-4bje',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-4bje',
-    settings: 'js/settings.js?v=1.0.0.20261025-4bje',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261025-4bje',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-4bje'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-v1qr',
+    projects: 'js/projects.js?v=1.0.0.20261025-v1qr',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-v1qr',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-v1qr',
+    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-v1qr',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-v1qr',
+    hr: 'js/hr.js?v=1.0.0.20261025-v1qr',
+    reports: 'js/reports.js?v=1.0.0.20261025-v1qr',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-v1qr',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-v1qr',
+    settings: 'js/settings.js?v=1.0.0.20261025-v1qr',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-v1qr',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-v1qr'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -72,11 +73,12 @@ const App = {
       dashboard: ['reports', 'projects'],
       projects: ['projects'],
       projectHub: ['projects', 'projectHub', 'tafqeet', 'accounting'],
-      revenues: ['tafqeet', 'accounting'],
-      expenses: ['tafqeet', 'accounting'],
+      revenues: ['tafqeet', 'accounting', 'journalPosting'],
+      expenses: ['tafqeet', 'accounting', 'journalPosting'],
       custody: ['tafqeet', 'accounting'],
       journal: ['tafqeet', 'accounting', 'excelExport'],
-      chartOfAccounts: ['accounting'],
+      chartOfAccounts: ['accounting', 'journalPosting'],
+      journalPosting: ['tafqeet', 'accounting', 'journalPosting'],
       costCenters: ['accounting'],
       currencies: ['accounting'],
       clients: ['tafqeet', 'accounting', 'reports'],
@@ -435,7 +437,7 @@ const App = {
     } else if (viewId === 'projectHub' && typeof ProjectHub !== 'undefined' && !ProjectHub._initialized && ProjectHub.init) {
       await ProjectHub.init();
       ProjectHub._initialized = true;
-    } else if (['revenues', 'expenses', 'custody', 'journal', 'chartOfAccounts', 'costCenters', 'currencies', 'cash'].includes(viewId)) {
+    } else if (['revenues', 'expenses', 'custody', 'journal', 'chartOfAccounts', 'costCenters', 'currencies', 'cash', 'journalPosting'].includes(viewId)) {
       if (typeof Accounting !== 'undefined' && !Accounting._initialized && Accounting.init) {
         await Accounting.init();
         Accounting._initialized = true;
@@ -487,7 +489,7 @@ const App = {
     if (typeof Sidebar !== 'undefined') Sidebar.sync(viewId);
 
     // تحديث أزرار شريط التنقل السفلي للهواتف
-    const accountingViews = ['journal', 'revenues', 'expenses', 'custody', 'chartOfAccounts', 'costCenters', 'currencies', 'cash'];
+    const accountingViews = ['journal', 'revenues', 'expenses', 'custody', 'chartOfAccounts', 'costCenters', 'currencies', 'cash', 'journalPosting'];
     const projectViews = ['projects', 'projectHub'];
 
     document.querySelectorAll('.bottom-nav-item').forEach(btn => {
@@ -554,6 +556,8 @@ const App = {
       this.loadCustodyTable();
     } else if (viewId === 'journal') {
       Accounting.loadJournalEntries();
+    } else if (viewId === 'journalPosting') {
+      await Accounting.initJournalPosting();
     } else if (viewId === 'chartOfAccounts') {
       Accounting.loadAccounts();
     } else if (viewId === 'costCenters') {

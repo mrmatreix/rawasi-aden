@@ -62,6 +62,7 @@ const Sidebar = {
       if (tab) { if (await App.navigateDeep(view, tab) === false) return; } else if (await App.navigate(view) === false) return;
       if (action === 'client') Accounting.openNewClientModal();
       if (action === 'supplier') Accounting.openNewSupplierModal();
+      if (action === 'periods') await Accounting.openPeriodsModal();
       this.sync(view, tab);
     } catch (error) { console.error('Navigation failed:', error); App.showToast('تعذر فتح العملية، يرجى المحاولة مجدداً', 'error'); }
   }

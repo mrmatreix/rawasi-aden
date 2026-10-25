@@ -612,7 +612,8 @@ router.get('/journal-entries', requirePermission('accounting:view'), async (req,
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    sql += ' GROUP BY je.id ORDER BY je.date DESC, je.id DESC LIMIT 100';
+    sql += ' GROUP BY je.id ORDER BY je.date DESC, je.id DESC';
+    if (req.query.all !== 'true') sql += ' LIMIT 100';
     const entries = await query(sql, params);
     if (entries.length) {
       const placeholders = entries.map(() => '?').join(',');
@@ -852,7 +853,7 @@ router.post('/journal-entries/:id/approve', requirePermission('accounting:approv
     // 2. فحص الفترة المحاسبية
     await FinancialControlService.assertPeriodOpen(entry.date);
 
-    if (entry.status === 'approved' || entry.status === 'posted') {
+    if (!['draft', 'under_review'].includes(entry.status)) {
       return res.status(400).json({ success: false, message: 'القيد معتمد مسبقاً' });
     }
 
@@ -860,11 +861,16 @@ router.post('/journal-entries/:id/approve', requirePermission('accounting:approv
     const approverId = await FinancialControlService.resolveValidUserId(rawAppId);
     const approverName = req.user?.username || req.user?.full_name || 'المدير المالي';
 
-    await run(`
-      UPDATE journal_entries 
-      SET status = 'approved', approved_by = ?, approved_by_name = ?, approved_at = CURRENT_TIMESTAMP, approval_notes = ?
-      WHERE id = ?
-    `, [approverId, approverName, notes || null, id]);
+    await transaction(async tx => {
+      const current = await lockFinancialDocument(tx, 'journal_entries', id);
+      if (!['draft', 'under_review'].includes(current.status)) throw Object.assign(new Error('تغيّرت حالة القيد؛ حدّث السجل قبل الاعتماد'), { statusCode: 409 });
+      FinancialControlService.assertMakerChecker(current, req.user, 'اعتماد');
+      await tx.run(`
+        UPDATE journal_entries
+        SET status = 'approved', approved_by = ?, approved_by_name = ?, approved_at = CURRENT_TIMESTAMP, approval_notes = ?
+        WHERE id = ?
+      `, [approverId, approverName, notes || null, id]);
+    });
 
     await logAudit(req, {
       action: 'APPROVE',
@@ -889,8 +895,8 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
     const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [id]);
     if (!entry) return res.status(404).json({ success: false, message: 'القيد اليومي غير موجود' });
 
-    if (entry.status === 'posted') {
-      return res.status(400).json({ success: false, message: 'القيد مرحل مسبقاً' });
+    if (!['draft', 'under_review', 'approved'].includes(entry.status)) {
+      return res.status(400).json({ success: false, message: 'حالة القيد لا تسمح بالترحيل أو أنه مرحل مسبقاً' });
     }
     if (entry.status === 'reversed') {
       return res.status(400).json({ success: false, message: 'لا يمكن ترحيل قيد تم عكسه مسبقاً' });
@@ -933,7 +939,7 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
 
     res.json({ success: true, message: `تم ترحيل القيد اليومي (${entry.entry_no}) بنجاح لدفتر الأستاذ`, status: 'posted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء ترحيل القيد: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ أثناء ترحيل القيد: ' + err.message });
   }
 });
 
@@ -1373,8 +1379,9 @@ router.get('/periods', requirePermission('accounting:view'), async (req, res) =>
 router.post('/periods', requirePermission('accounting:create'), async (req, res) => {
   try {
     const { period_name, fiscal_year, start_date, end_date, notes } = req.body;
-    if (!period_name || !start_date || !end_date) {
-      return res.status(400).json({ success: false, message: 'اسم الفترة وتاريخ البداية والنهاية حقول مطلوبة' });
+    const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+    if (!period_name || !validDate(start_date) || !validDate(end_date) || start_date > end_date) {
+      return res.status(400).json({ success: false, message: 'أدخل اسم الفترة وتاريخي بداية ونهاية صالحين ومرتّبين' });
     }
     const fYear = Number(fiscal_year) || new Date(start_date).getFullYear();
 

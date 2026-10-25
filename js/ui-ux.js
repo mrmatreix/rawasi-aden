@@ -269,6 +269,11 @@
           { icon: '💰', label: 'الحسابات والمالية' },
           { icon: '📖', label: 'القيود اليومية العامة' }
         ],
+        journalPosting: [
+          { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
+          { icon: '💰', label: 'الحسابات والمالية' },
+          { icon: '📖', label: 'ترحيل قيود اليومية' }
+        ],
         chartOfAccounts: [
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
           { icon: '💰', label: 'الحسابات والمالية' },

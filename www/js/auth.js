@@ -1074,6 +1074,7 @@ const Auth = {
       'revenues': 'revenues:view',
       'expenses': 'expenses:view',
       'journal': 'accounting:journal,accounting:view,reports:view',
+      'journalPosting': 'accounting:view',
       'chartOfAccounts': 'accounting:view,settings:company',
       'costCenters': 'accounting:view,projects:view',
       'currencies': 'accounting:view,settings:company',
