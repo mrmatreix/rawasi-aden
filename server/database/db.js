@@ -245,6 +245,11 @@ async function initMysql() {
     await require('../services/partyRegistryService').initializePartyRegistry({query: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0], run: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0]}, true);
     await checkAndAddCol('clients', 'account_id', 'INT NULL');
     await checkAndAddCol('accounts', 'default_cost_center_id', 'INT NULL');
+    const [centerPolicyCols] = await mysqlPool.query("SHOW COLUMNS FROM accounts LIKE 'cost_center_required'");
+    if (!centerPolicyCols.length) {
+      await mysqlPool.query('ALTER TABLE accounts ADD COLUMN cost_center_required INT NOT NULL DEFAULT 0');
+      await mysqlPool.query('UPDATE accounts SET cost_center_required = 1 WHERE default_cost_center_id IS NOT NULL');
+    }
     await checkAndAddCol('accounts', 'analytical_type', "VARCHAR(30) NOT NULL DEFAULT 'general'");
     await mysqlPool.query(`CREATE TABLE IF NOT EXISTS supporting_documents (
       id INT AUTO_INCREMENT PRIMARY KEY, entity_type VARCHAR(20) NOT NULL, entity_id INT NOT NULL,
@@ -836,6 +841,10 @@ function initSqlite() {
     require('../services/partyRegistryService').initializeSqlitePartyRegistry(sqliteDb);
     const accountCenterCols = sqliteDb.prepare('PRAGMA table_info(accounts)').all().map(c => c.name);
     if (!accountCenterCols.includes('default_cost_center_id')) sqliteDb.exec('ALTER TABLE accounts ADD COLUMN default_cost_center_id INTEGER REFERENCES cost_centers(id);');
+    if (!accountCenterCols.includes('cost_center_required')) {
+      sqliteDb.exec('ALTER TABLE accounts ADD COLUMN cost_center_required INTEGER NOT NULL DEFAULT 0;');
+      sqliteDb.exec('UPDATE accounts SET cost_center_required = 1 WHERE default_cost_center_id IS NOT NULL;');
+    }
     if (!accountCenterCols.includes('analytical_type')) sqliteDb.exec("ALTER TABLE accounts ADD COLUMN analytical_type TEXT NOT NULL DEFAULT 'general';");
     sqliteDb.exec(`CREATE TABLE IF NOT EXISTS supporting_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,

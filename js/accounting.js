@@ -4316,9 +4316,8 @@ const Accounting = {
         </td>
         <td>
           <strong style="${isRestricted ? 'text-decoration: line-through;' : ''}">${a.name || a.account_name}</strong>
-          ${a.parent_name ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">تابع لـ: ${a.parent_code} - ${a.parent_name}</div>` : ''}
           <div style="font-size:0.75rem;color:var(--text-secondary)">نوع الحساب التحليلي: ${{general:"عام",cash:"صندوق",bank:"بنك",employee_receivables:"ذمم موظفين",customers:"عملاء",suppliers:"موردين"}[a.analytical_type] || "عام"}</div>
-          ${a.default_cost_center_name ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">مركز التكلفة: ${a.default_cost_center_code || ''} - ${a.default_cost_center_name}</div>` : ''}
+          <div style="font-size: 0.75rem; color: var(--text-secondary);">استخدام مراكز التكلفة: ${Number(a.cost_center_required) === 1 ? 'إلزامي' : 'غير إلزامي'}</div>
         </td>
         <td><span class="badge" style="${typeBadges[a.type || a.account_type] || 'background: #334155; color: #fff;'}">${this.financialTypeLabel(a.type || a.account_type)}</span></td>
         <td>${levelBadge}</td>
@@ -4369,31 +4368,34 @@ const Accounting = {
     select.value = selected;
   },
 
-  async loadAccountCostCenters(edit = false, selected = null) {
-    const response = await fetch('/api/accounting/cost-centers', { cache: 'no-store' });
-    const result = await response.json();
-    if (!response.ok || !result.success) throw new Error('تعذر تحميل مراكز التكلفة');
+  async loadAccountCostCenters(edit = false, required = 0) {
     const select = document.getElementById(edit ? 'editAccCostCenter' : 'modalAccCostCenter');
-    select.replaceChildren(new Option('اختر مركز التكلفة...', ''));
-    for (const center of result.data || []) {
-      if (!center.status || center.status === 'active') select.add(new Option(`${center.code} - ${center.name}`, center.id));
-    }
-    select.value = selected ? String(selected) : '';
+    select.value = Number(required) === 1 ? '1' : '0';
     this.updateAccountCenterRequirement(edit);
   },
 
   updateAccountCenterRequirement(edit = false) {
     const prefix = edit ? 'editAcc' : 'modalAcc';
-    const parentId = document.getElementById(prefix + 'ParentSelect')?.value;
-    const parent = (this.allAccounts || []).find(account => String(account.id) === String(parentId));
-    const typeSelect = document.getElementById(prefix + 'Type');
-    if (parent && typeSelect) typeSelect.value = parent.type;
-    const type = String(parent?.type || typeSelect?.value || '').trim().toLowerCase();
-    const required = ['expense', 'revenue', 'cost', 'مصروفات', 'تكاليف', 'إيرادات', 'ايرادات'].includes(type);
     const select = document.getElementById(prefix + 'CostCenter');
-    if (select) select.required = required;
+    if (select) select.required = true;
     const label = document.getElementById(prefix + 'CostCenterLabel');
-    if (label) label.textContent = required ? 'مركز التكلفة * (إلزامي لهذا النوع)' : 'مركز التكلفة (اختياري لهذا النوع)';
+    if (label) label.textContent = 'استخدام مراكز التكلفة لهذا الحساب';
+  },
+
+  chooseAccountParent() {
+    const type = document.getElementById('modalAccType').value;
+    const candidates = (this.allAccounts || []).filter(account => this.financialTypeLabel(account.type) === this.financialTypeLabel(type) && [1, 2, 3, 5].includes(String(account.code).length) && (!account.status || account.status === 'active'));
+    candidates.sort((a, b) => String(b.code).length - String(a.code).length || String(a.code).localeCompare(String(b.code)));
+    document.getElementById('modalAccParentSelect').value = candidates[0] ? String(candidates[0].id) : '';
+  },
+
+  inferAccountParent(edit = false) {
+    const prefix = edit ? 'editAcc' : 'modalAcc';
+    const code = document.getElementById(prefix + 'Code').value.trim();
+    const length = { 2: 1, 3: 2, 5: 3, 8: 5 }[code.length];
+    const parent = length ? (this.allAccounts || []).find(account => String(account.code) === code.slice(0, length)) : null;
+    document.getElementById(prefix + 'ParentSelect').value = parent ? String(parent.id) : '';
+    if (parent) document.getElementById(prefix + 'Type').value = parent.type;
   },
 
   async openNewAccountModal() {
@@ -4409,6 +4411,7 @@ const Accounting = {
     if (p) p.value = '';
     if (s) s.value = 'active';
     this.populateParentSelects();
+    this.chooseAccountParent();
     this.suggestAccountCode();
     try { await this.loadAccountCostCenters(); }
     catch (error) { return App.showToast(error.message, 'error'); }
@@ -4461,7 +4464,7 @@ const Accounting = {
     const type = document.getElementById('modalAccType')?.value?.trim();
     const parent_id = document.getElementById('modalAccParentSelect')?.value || null;
     const status = document.getElementById('modalAccStatus')?.value || 'active';
-    const default_cost_center_id = document.getElementById('modalAccCostCenter')?.value || null;
+    const cost_center_required = Number(document.getElementById('modalAccCostCenter').value);
 
     if (!code || !name || !type) {
       App.showToast('يرجى ملء جميع الحقول المطلوبة', 'error');
@@ -4472,7 +4475,7 @@ const Accounting = {
       const res = await fetch('/api/accounting/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, type, parent_id, status, default_cost_center_id, analytical_type: document.getElementById('modalAccAnalyticalType').value })
+        body: JSON.stringify({ code, name, type, parent_id, status, cost_center_required, analytical_type: document.getElementById('modalAccAnalyticalType').value })
       });
       const data = await res.json();
       if (data.success) {
@@ -4515,7 +4518,7 @@ const Accounting = {
           .join('');
     }
 
-    try { await this.loadAccountCostCenters(true, acc.default_cost_center_id); }
+    try { await this.loadAccountCostCenters(true, acc.cost_center_required); }
     catch (error) { return App.showToast(error.message, 'error'); }
     App.openModal('editAccountModal');
   },
@@ -4528,7 +4531,7 @@ const Accounting = {
     const type = document.getElementById('editAccType')?.value?.trim();
     const parent_id = document.getElementById('editAccParentSelect')?.value || null;
     const status = document.getElementById('editAccStatus')?.value || 'active';
-    const default_cost_center_id = document.getElementById('editAccCostCenter')?.value || null;
+    const cost_center_required = Number(document.getElementById('editAccCostCenter').value);
 
     if (!id || !code || !name) {
       App.showToast('يرجى ملء جميع الحقول الإلزامية', 'error');
@@ -4539,7 +4542,7 @@ const Accounting = {
       const res = await fetch(`/api/accounting/accounts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, type, parent_id, status, default_cost_center_id, analytical_type: document.getElementById('editAccAnalyticalType').value })
+        body: JSON.stringify({ code, name, type, parent_id, status, cost_center_required, analytical_type: document.getElementById('editAccAnalyticalType').value })
       });
       const data = await res.json();
       if (data.success) {

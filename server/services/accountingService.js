@@ -93,6 +93,12 @@ const AccountingService = {
     return id;
   },
 
+  async resolveAccountOperationCenter(account, value, db = { get }) {
+    const center = await this.resolveOptionalCostCenter(value, db);
+    if (Number(account.cost_center_required) === 1 && !center) throw Object.assign(new Error('مركز التكلفة إلزامي للحساب ' + account.code + ' - ' + account.name), { statusCode: 400 });
+    return center;
+  },
+
   async assertVoucherAccount(voucherType, accountId) {
     const account = await this.assertLeafAccount(accountId);
     if (voucherType === 'سند صرف') {
@@ -257,7 +263,7 @@ const AccountingService = {
       // التحقق الصارم من الحساب: يجب أن يكون فرعياً أخيراً ونشطاً
       const account = await this.assertLeafAccount(accountId);
 
-      const costCenterId = await this.resolveOptionalCostCenter(line.cost_center_id);
+      const costCenterId = await this.resolveAccountOperationCenter(account, line.cost_center_id);
 
       totalDebit += debit;
       totalCredit += credit;
@@ -467,7 +473,8 @@ const AccountingService = {
 
       const jeId = jeRes.lastInsertRowid || jeRes.insertId;
 
-      const finalCcId = await this.resolveOptionalCostCenter(costCenterId, tx);
+      const finalCcId = await this.resolveAccountOperationCenter(selectedLeafAccount, costCenterId, tx);
+      await this.resolveAccountOperationCenter(opposingAccount, finalCcId, tx);
 
       let validProjectId = null;
       if (projectId) {

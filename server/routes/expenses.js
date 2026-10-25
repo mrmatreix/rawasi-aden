@@ -233,7 +233,8 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
         if (bExists) validBankAccId = bExists.id;
       }
     }
-    const finalCcId = await AccountingService.resolveOptionalCostCenter(cost_center_id);
+    const finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
+    if (settlementAccount) await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
 
     const accId = leafAccount.id;
     const rawCreatorId = req.user?.id || null;
@@ -615,7 +616,7 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
     const method = req.body.payment_method ?? exp.payment_method;
     const accountId = Number(req.body.account_id ?? exp.account_id);
     const settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id);
-    const costCenterId = await AccountingService.resolveOptionalCostCenter(
+    const costCenterId = await AccountingService.resolveAccountOperationCenter(await AccountingService.assertLeafAccount(accountId),
       req.body.cost_center_id !== undefined ? req.body.cost_center_id : exp.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {

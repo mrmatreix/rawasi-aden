@@ -35,12 +35,36 @@ test('financial saves resist concurrent/retried requests; only drafts can be del
     const center = await db.get('SELECT id FROM cost_centers LIMIT 1');
     const supporting_documents = [{ name: 'test.pdf', content_base64: Buffer.from('%PDF-1.7\nfixture\n%%EOF').toString('base64') }];
     const common = { date: '2099-01-15', amount: 100, currency: 'ر.ي', payment_method: 'نقدي', settlement_account_id: cash, cost_center_id: center.id, status: 'draft', supporting_documents };
+    // Account setup accepts a usage policy rather than a chosen default center,
+    // and infers the hidden parent from the sequential account code.
+    const setup = await request('accounting/accounts', { code: '31101002', name: 'إعداد إلزامي', type: 'asset', cost_center_required: 1 });
+    assert.equal(setup.status, 200, JSON.stringify(setup));
+    const configured = await db.get('SELECT * FROM accounts WHERE id = ?', [setup.body.id]);
+    assert.equal(configured.cost_center_required, 1);
+    assert.equal(configured.default_cost_center_id, null);
+    assert.equal(configured.parent_id, (await db.get("SELECT id FROM accounts WHERE code = '31101'")).id);
+    const editedSetup = await request('accounting/accounts/' + configured.id, { code: configured.code, name: configured.name, type: configured.type, cost_center_required: 0 }, 'PUT');
+    assert.equal(editedSetup.status, 200, JSON.stringify(editedSetup));
+    assert.equal((await db.get('SELECT cost_center_required FROM accounts WHERE id = ?', [configured.id])).cost_center_required, 0);
     const cases = [
       { route: 'expenses', table: 'expenses', kind: 'expense', payload: { ...common, expense_type: 'مصروف عام', account_id: expense } },
       { route: 'payments', table: 'payments', kind: 'payment', payload: { ...common, type: 'قبض', client_id: client.id, account_id: revenue } },
       { route: 'accounting/journal-entries', table: 'journal_entries', kind: 'journal', payload: { date: common.date, description: 'اختبار منع التكرار', status: 'draft', supporting_documents, lines: [{ account_id: cash, debit: 100, credit: 0 }, { account_id: expense, debit: 0, credit: 100, cost_center_id: center.id }] } }
     ];
     for (const item of cases) {
+      const policyAccount = item.kind === 'payment' ? revenue : expense;
+      await db.run('UPDATE accounts SET cost_center_required = 1 WHERE id = ?', [policyAccount]);
+      const noCenter = structuredClone(item.payload);
+      delete noCenter.cost_center_id;
+      if (noCenter.lines) for (const line of noCenter.lines) delete line.cost_center_id;
+      const required = await request(item.route, noCenter);
+      assert.equal(required.status, 400, JSON.stringify(required));
+      assert.match(required.body.message, /مركز التكلفة إلزامي/);
+      await db.run('UPDATE accounts SET cost_center_required = 0 WHERE id = ?', [policyAccount]);
+      const optional = await request(item.route, noCenter);
+      assert.equal(optional.status, 200, JSON.stringify(optional));
+      assert.equal((await request(item.route + '/' + optional.body.id, {}, 'DELETE')).status, 200);
+      await db.run('UPDATE accounts SET cost_center_required = 1 WHERE id = ?', [policyAccount]);
       const key = 'test-' + item.table;
       const before = (await db.get(`SELECT COUNT(*) AS n FROM ${item.table}`)).n;
       const started = performance.now();

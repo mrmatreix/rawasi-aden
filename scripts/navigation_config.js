@@ -1,8 +1,8 @@
 const item=(label,view,tab='',perm='',action='')=>({label,view,tab,perm,action});
 const groups=[
 {id:'groupAccounting',label:'الحسابات والعمليات المالية',description:'السندات والقيود والأدلة',icon:'money',sections:[
- ['العمليات اليومية',[item('سندات الصرف','expenses','','expenses:view'),item('سندات القبض','revenues','','revenues:view'),item('قيود اليومية','journal','','accounting:view,accounting:journal'),item('حركة الصناديق','cash','cash','cash:view'),item('حركة البنوك','cash','bank','cash:view'),item('العهد والنثريات','custody','','custody:view')]],
- ['الأدلة المالية',[item('دليل الحسابات','chartOfAccounts','','accounting:view'),item('مراكز التكلفة','costCenters','','accounting:view'),item('العملات وأسعار الصرف','currencies','','accounting:view'),item('تخطيط التدفقات النقدية','cashFlow','','accounting:view')]]]},
+ ['تهيئة الحسابات',[item('دليل الحسابات','chartOfAccounts','','accounting:view'),item('مراكز التكلفة','costCenters','','accounting:view'),item('العملات وأسعار الصرف','currencies','','accounting:view'),item('تخطيط التدفقات النقدية','cashFlow','','accounting:view')]],
+ ['العمليات اليومية',[item('سندات الصرف','expenses','','expenses:view'),item('سندات القبض','revenues','','revenues:view'),item('قيود اليومية','journal','','accounting:view,accounting:journal'),item('حركة الصناديق','cash','cash','cash:view'),item('حركة البنوك','cash','bank','cash:view'),item('العهد والنثريات','custody','','custody:view')]]]},
 {id:'groupProjects',label:'إدارة المشاريع',description:'التنفيذ والمتابعة والمستندات',icon:'projects',sections:[
  ['سجل المشاريع',[item('كافة المشاريع','projects','all'),item('المشاريع تحت الدراسة','projects','under_study'),item('المشاريع الجارية','projects','active'),item('المشاريع المكتملة','projects','completed')]],
  ['التخطيط والتكلفة',[item('مركز مستندات المشروع','projectHub'),item('المخططات','projectHub','drawings'),item('جدول الكميات','projectHub','boq'),item('الميزانية والتكلفة المستهدفة','projectHub','budgets'),item('أوامر التغيير','projectHub','change-orders'),item('مشتريات المشروع والفواتير','projectHub','purchases'),item('العمالة والمصروفات','projectHub','labor')]],

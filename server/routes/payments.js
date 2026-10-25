@@ -489,7 +489,8 @@ router.post('/', (req, res, next) => {
     const directClientName = req.body.client_name ? String(req.body.client_name).trim() : null;
     const directSupplierName = req.body.supplier_name ? String(req.body.supplier_name).trim() : null;
     const accId = leafAccount.id;
-    const finalCcId = await AccountingService.resolveOptionalCostCenter(cost_center_id);
+    const finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
+    if (settlementAccount) await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
 
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
@@ -859,7 +860,7 @@ router.put('/:id', requirePermission('revenues:edit,expenses:edit'), async (req,
     const method = req.body.payment_method ?? pay.payment_method;
     const accountId = Number(req.body.account_id ?? pay.account_id);
     const settlementId = Number(req.body.settlement_account_id ?? pay.settlement_account_id);
-    const costCenterId = await AccountingService.resolveOptionalCostCenter(
+    const costCenterId = await AccountingService.resolveAccountOperationCenter(await AccountingService.assertLeafAccount(accountId),
       req.body.cost_center_id !== undefined ? req.body.cost_center_id : pay.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {
