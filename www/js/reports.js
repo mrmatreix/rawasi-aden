@@ -12,13 +12,18 @@
  */
 
 const Reports = {
+  formatNumber(value) {
+    const normalized = String(value ?? 0).replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 1632)).replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 1776)).replace(/٬/g, '').replace(/٫/g, '.');
+    const number = Number(normalized);
+    return Number.isFinite(number) ? number.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0';
+  },
   financialTypeLabel(value) { return (typeof FinancialLabels !== 'undefined' ? FinancialLabels : require('./financial-labels')).type(value); },
   accountDetailsHtml(data) {
     if (!data?.account_details?.length) return '';
     const escape = text => String(text || '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
-    return '<h4>تفاصيل الحسابات المتأثرة بالعمليات ضمن خيارات التقرير</h4><table class="custom-table official-report-table"><thead><tr><th>رقم الحساب</th><th>اسم الحساب</th><th>المستوى</th><th>مدين</th><th>دائن</th><th>الصافي</th></tr></thead><tbody>' + data.account_details.map(row => '<tr><td>' + escape(row.code) + '</td><td>' + escape(row.name) + '</td><td>' + (row.account_kind === 'main' ? 'رئيسي (تجميعي)' : 'فرعي') + '</td><td>' + App.formatNumber(row.period_debit) + '</td><td>' + App.formatNumber(row.period_credit) + '</td><td>' + App.formatNumber(row.closing_balance) + '</td></tr>').join('') + '</tbody></table>';
+    return '<h4>تفاصيل الحسابات المتأثرة بالعمليات ضمن خيارات التقرير</h4><table class="custom-table official-report-table"><thead><tr><th>رقم الحساب</th><th>اسم الحساب</th><th>المستوى</th><th>مدين</th><th>دائن</th><th>الصافي</th></tr></thead><tbody>' + data.account_details.map(row => '<tr><td>' + escape(row.code) + '</td><td>' + escape(row.name) + '</td><td>' + (row.account_kind === 'main' ? 'رئيسي (تجميعي)' : 'فرعي') + '</td><td>' + Reports.formatNumber(row.period_debit) + '</td><td>' + Reports.formatNumber(row.period_credit) + '</td><td>' + Reports.formatNumber(row.closing_balance) + '</td></tr>').join('') + '</tbody></table>';
   },
-  budgetReportHtml(data, format = value => App.formatNumber(value)) {
+  budgetReportHtml(data, format = value => Reports.formatNumber(value)) {
     const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const rows = data.projects || [], totals = data.totals || {};
     const cards = [['التقديري لكامل المشروع',totals.planned_cost],['الفعلي المتراكم حتى تاريخ التقرير',totals.actual_cost],['المتبقي من الموازنة',totals.remaining_budget],['التجاوز = الفعلي − التقديري',totals.variance_amount]].map(([name,value])=>'<div style="padding:12px;border:1px solid var(--border-color);border-radius:8px"><small>'+name+'</small><h3>'+format(value||0)+'</h3></div>').join('');
@@ -39,6 +44,7 @@ const Reports = {
       if(select?.value) params.set('project_id',select.value);
       if(date?.value) params.set('as_of_date',date.value);
       const json = await (await this.fetchFinancialReport('/api/reports/project-budget?'+params)).json();
+      if (!json.success) return;
       this.lastReportData['project-budget']=json;
       const target = document.getElementById('projectBudgetReportContent');
       if(target) target.innerHTML=this.budgetReportHtml(json.data)+(json.warnings?.length?'<p>'+json.warnings.map(value=>String(value).replace(/</g,'&lt;')).join('<br>')+'</p>':'');
@@ -47,6 +53,9 @@ const Reports = {
   reportCurrency() { return this.loadedReportCurrency || 'ر.ي'; },
   async fetchFinancialReport(url) {
     const parsed = new URL(url, window.location.origin);
+    this.reportRequests ||= new Map();
+    const request = {};
+    this.reportRequests.set(parsed.pathname, request);
     for (const [key,id] of [['display_level','financialDisplayLevel'],['cost_center_id','financialCostCenter'],['posting_status','financialPostingStatus'],['currency','financialCurrency']]) {
       const value = document.getElementById(id)?.value || '';
       if (value) parsed.searchParams.set(key, value); else parsed.searchParams.delete(key);
@@ -54,6 +63,8 @@ const Reports = {
     parsed.searchParams.set('hide_zero', document.getElementById('financialHideZero')?.checked ? 'true' : 'false');
     const response = await fetch(parsed.pathname + parsed.search, { cache: 'no-store' });
     const data = await response.json();
+    // A slower response for previous filters must never replace the latest report.
+    if (this.reportRequests.get(parsed.pathname) !== request) return { ok: true, status: response.status, json: async () => ({ success: false, stale: true }) };
     if (!response.ok || !data.success) { App.showToast(data.message || 'تعذر تحميل التقرير', 'error'); throw new Error(data.message || 'تعذر تحميل التقرير'); }
     const detail = document.getElementById('financialAccountDetails');
     if (detail) { detail.innerHTML = this.accountDetailsHtml(data.data); detail.style.display = data.data?.account_details?.length ? 'block' : 'none'; }
@@ -123,7 +134,7 @@ const Reports = {
       const el = document.getElementById(id);
       if (el) {
         el.classList.remove('skeleton', 'skeleton-text');
-        el.textContent = App.formatNumber(val ?? 0);
+        el.textContent = Reports.formatNumber(val ?? 0);
       }
     };
 
@@ -202,7 +213,7 @@ const Reports = {
         <tr>
           <td>${op.date || '-'}</td>
           <td style="font-weight: 700; color: ${isIncome ? 'var(--accent-green)' : 'var(--accent-red)'}">
-            ${App.formatNumber(op.amount || 0)} ${op.currency || 'ر.ي'}
+            ${Reports.formatNumber(op.amount || 0)} ${op.currency || 'ر.ي'}
           </td>
           <td>${op.project_name || 'عام'}</td>
           <td style="color: var(--text-secondary);">${op.description || '-'}</td>
@@ -235,9 +246,9 @@ const Reports = {
         const exEl = document.getElementById('plTotalExpenses');
         const netEl = document.getElementById('plNetProfit');
 
-        if (inEl) inEl.textContent = App.formatNumber(d.total_income || 0);
-        if (exEl) exEl.textContent = App.formatNumber(d.total_expenses || 0);
-        if (netEl) netEl.textContent = App.formatNumber(d.net_profit || 0);
+        if (inEl) inEl.textContent = Reports.formatNumber(d.total_income || 0);
+        if (exEl) exEl.textContent = Reports.formatNumber(d.total_expenses || 0);
+        if (netEl) netEl.textContent = Reports.formatNumber(d.net_profit || 0);
 
         App.showToast('تم تحديث أرقام الأرباح والخسائر بنجاح', 'success');
         App.navigate('reports');
@@ -269,6 +280,7 @@ const Reports = {
     this.activeReportTab = tabId;
     if (typeof Sidebar !== 'undefined' && App.activeView === 'reports') Sidebar.sync('reports', tabId);
     await this.initFinancialReportFilters();
+    if (this.activeReportTab !== tabId) return;
     document.querySelectorAll('.report-tab-btn').forEach(btn => btn.classList.remove('active'));
     const clickedBtn = document.getElementById(`tabBtn_${tabId}`);
     if (clickedBtn) clickedBtn.classList.add('active');
@@ -354,10 +366,10 @@ await this.loadIncomeStatement();
         const expEl = document.getElementById('fullPlExpense');
         const profEl = document.getElementById('fullPlProfit');
 
-        if (incEl) incEl.textContent = App.formatNumber(d.total_income || 0) + ' ' + this.reportCurrency();
-        if (expEl) expEl.textContent = App.formatNumber(d.total_expenses || 0) + ' ' + this.reportCurrency();
+        if (incEl) incEl.textContent = Reports.formatNumber(d.total_income || 0) + ' ' + this.reportCurrency();
+        if (expEl) expEl.textContent = Reports.formatNumber(d.total_expenses || 0) + ' ' + this.reportCurrency();
         if (profEl) {
-          profEl.textContent = App.formatNumber(d.net_profit || 0) + ' ' + this.reportCurrency();
+          profEl.textContent = Reports.formatNumber(d.net_profit || 0) + ' ' + this.reportCurrency();
           profEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
         }
 
@@ -370,7 +382,7 @@ await this.loadIncomeStatement();
             tbody.innerHTML = breakdown.map(item => `
               <tr>
                 <td><strong>${item.name || item.expense_type || 'بند مصروف'}</strong></td>
-                <td style="color: var(--accent-red); font-weight: bold;">${App.formatNumber(item.amount || item.total || 0)} ${this.reportCurrency()}</td>
+                <td style="color: var(--accent-red); font-weight: bold;">${Reports.formatNumber(item.amount || item.total || 0)} ${this.reportCurrency()}</td>
                 <td>${item.percentage !== undefined ? item.percentage + '%' : Math.round(((item.amount || item.total || 0) / (d.total_expenses || 1)) * 100) + '%'}</td>
               </tr>
             `).join('');
@@ -410,16 +422,16 @@ await this.loadIncomeStatement();
         const balDebitEl = document.getElementById('tbBalanceDebit');
         const statusEl = document.getElementById('tbBalanceStatus');
 
-        if (debitEl) debitEl.textContent = App.formatNumber(totals.period_debit || totals.total_debit || 0) + ' ' + this.reportCurrency();
-        if (creditEl) creditEl.textContent = App.formatNumber(totals.period_credit || totals.total_credit || 0) + ' ' + this.reportCurrency();
-        if (balDebitEl) balDebitEl.textContent = App.formatNumber(totals.closing_debit || totals.balance_debit || 0) + ' ' + this.reportCurrency();
+        if (debitEl) debitEl.textContent = Reports.formatNumber(totals.period_debit || totals.total_debit || 0) + ' ' + this.reportCurrency();
+        if (creditEl) creditEl.textContent = Reports.formatNumber(totals.period_credit || totals.total_credit || 0) + ' ' + this.reportCurrency();
+        if (balDebitEl) balDebitEl.textContent = Reports.formatNumber(totals.closing_debit || totals.balance_debit || 0) + ' ' + this.reportCurrency();
 
         if (statusEl) {
           if (is_balanced) {
             statusEl.textContent = 'متزن 100% ✓';
             statusEl.style.color = 'var(--accent-green)';
           } else {
-            statusEl.textContent = `فارق: ${App.formatNumber(diff || 0)} ${this.reportCurrency()} ⚠️`;
+            statusEl.textContent = `فارق: ${Reports.formatNumber(diff || 0)} ${this.reportCurrency()} ⚠️`;
             statusEl.style.color = 'var(--accent-red)';
           }
         }
@@ -432,14 +444,14 @@ await this.loadIncomeStatement();
             tbody.innerHTML = accounts.map(a => `
               <tr>
                 <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${a.code}</td>
-                <td><strong>${a.name}</strong></td>
+                <td><strong>${a.name}</strong><small style="display:block">${a.account_kind === 'main' ? 'رئيسي (تجميعي)' : 'فرعي'}</small></td>
                 <td><span class="badge badge-info">${this.financialTypeLabel(a.type)}</span></td>
-                <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_debit > 0 ? App.formatNumber(a.opening_debit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_credit > 0 ? App.formatNumber(a.opening_credit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${a.period_debit > 0 ? App.formatNumber(a.period_debit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8;">${a.period_credit > 0 ? App.formatNumber(a.period_credit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">${a.closing_debit > 0 ? App.formatNumber(a.closing_debit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: #38bdf8;">${a.closing_credit > 0 ? App.formatNumber(a.closing_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_debit > 0 ? Reports.formatNumber(a.opening_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_credit > 0 ? Reports.formatNumber(a.opening_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${a.period_debit > 0 ? Reports.formatNumber(a.period_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8;">${a.period_credit > 0 ? Reports.formatNumber(a.period_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">${a.closing_debit > 0 ? Reports.formatNumber(a.closing_debit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: #38bdf8;">${a.closing_credit > 0 ? Reports.formatNumber(a.closing_credit) : '-'}</td>
               </tr>
             `).join('');
           }
@@ -450,12 +462,12 @@ await this.loadIncomeStatement();
           tfoot.innerHTML = `
             <tr>
               <td colspan="3" style="text-align: center; font-size: 1rem;">الإجمالي الكلي لميزان المراجعة</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(totals.opening_debit || 0)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(totals.opening_credit || 0)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.period_debit || totals.total_debit || 0)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.period_credit || totals.total_credit || 0)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(totals.closing_debit || totals.balance_debit || 0)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${App.formatNumber(totals.closing_credit || totals.balance_credit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(totals.opening_debit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(totals.opening_credit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${Reports.formatNumber(totals.period_debit || totals.total_debit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${Reports.formatNumber(totals.period_credit || totals.total_credit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${Reports.formatNumber(totals.closing_debit || totals.balance_debit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${Reports.formatNumber(totals.closing_credit || totals.balance_credit || 0)}</td>
             </tr>
           `;
         }
@@ -495,12 +507,12 @@ await this.loadIncomeStatement();
         const expEl = document.getElementById('isTotalExpenses');
         const netEl = document.getElementById('isNetIncome');
 
-        if (revEl) revEl.textContent = App.formatNumber(d.total_revenues || 0) + ' ' + this.reportCurrency();
-        if (dirEl) dirEl.textContent = App.formatNumber(d.total_direct_costs || 0) + ' ' + this.reportCurrency();
-        if (grossEl) grossEl.textContent = App.formatNumber(d.gross_profit || 0) + ' ' + this.reportCurrency();
-        if (expEl) expEl.textContent = App.formatNumber(d.total_operating_expenses || 0) + ' ' + this.reportCurrency();
+        if (revEl) revEl.textContent = Reports.formatNumber(d.total_revenues || 0) + ' ' + this.reportCurrency();
+        if (dirEl) dirEl.textContent = Reports.formatNumber(d.total_direct_costs || 0) + ' ' + this.reportCurrency();
+        if (grossEl) grossEl.textContent = Reports.formatNumber(d.gross_profit || 0) + ' ' + this.reportCurrency();
+        if (expEl) expEl.textContent = Reports.formatNumber(d.total_operating_expenses || 0) + ' ' + this.reportCurrency();
         if (netEl) {
-          netEl.textContent = App.formatNumber(d.net_profit || 0) + ' ' + this.reportCurrency();
+          netEl.textContent = Reports.formatNumber(d.net_profit || 0) + ' ' + this.reportCurrency();
           netEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
         }
 
@@ -513,12 +525,12 @@ await this.loadIncomeStatement();
             revTbody.innerHTML = revs.map(r => `
               <tr>
                 <td><strong>${r.code ? r.code + ' - ' : ''}${r.name}</strong></td>
-                <td style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(r.amount || 0)} ${this.reportCurrency()}</td>
+                <td style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(r.amount || 0)} ${this.reportCurrency()}</td>
               </tr>
             `).join('') + `
               <tr style="background: rgba(16,185,129,0.08); font-weight: bold;">
                 <td>إجمالي الإيرادات المعترف بها</td>
-                <td style="color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_revenues || 0)} ${this.reportCurrency()}</td>
+                <td style="color: var(--accent-green); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${Reports.formatNumber(d.total_revenues || 0)} ${this.reportCurrency()}</td>
               </tr>
             `;
           }
@@ -533,12 +545,12 @@ await this.loadIncomeStatement();
             expTbody.innerHTML = allCosts.map(e => `
               <tr>
                 <td><strong>${e.code ? e.code + ' - ' : ''}${e.name}</strong></td>
-                <td style="font-weight: bold; color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(e.amount || 0)} ${this.reportCurrency()}</td>
+                <td style="font-weight: bold; color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(e.amount || 0)} ${this.reportCurrency()}</td>
               </tr>
             `).join('') + `
               <tr style="background: rgba(239,68,68,0.08); font-weight: bold;">
                 <td>إجمالي التكاليف والمصروفات</td>
-                <td style="color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${App.formatNumber(d.total_expenses || 0)} ${this.reportCurrency()}</td>
+                <td style="color: var(--accent-red); text-align: left; direction: ltr; font-family: monospace; font-size: 1.05rem;">${Reports.formatNumber(d.total_expenses || 0)} ${this.reportCurrency()}</td>
               </tr>
             `;
           }
@@ -567,12 +579,13 @@ await this.loadIncomeStatement();
     try {
       const response = await this.fetchFinancialReport(`/api/reports/account-movement?${params.toString()}`);
       const json = await response.json();
+      if (json.stale) return;
       if (!response.ok || !json.success) throw new Error(json.message || 'تعذر تحميل حركة الحساب');
       this.lastReportData['account-movement'] = json;
       const totals = json.data.totals || {};
       const setAmount = (id, value) => {
         const element = document.getElementById(id);
-        if (element) element.textContent = `${App.formatNumber(value || 0)} ${this.reportCurrency()}`;
+        if (element) element.textContent = `${Reports.formatNumber(value || 0)} ${this.reportCurrency()}`;
       };
       setAmount('amOpeningBalance', totals.opening_balance);
       setAmount('amTotalDebit', totals.total_debit);
@@ -589,9 +602,9 @@ await this.loadIncomeStatement();
             <td>${row.reference || '-'}</td>
             <td>${row.description || row.notes || '-'}</td>
             <td>${row.cost_center_name ? `${row.cost_center_code || ''} - ${row.cost_center_name}` : 'عام'}</td>
-            <td style="color:var(--accent-green); font-weight:bold;">${row.debit > 0 ? App.formatNumber(row.debit) : '-'}</td>
-            <td style="color:var(--accent-red); font-weight:bold;">${row.credit > 0 ? App.formatNumber(row.credit) : '-'}</td>
-            <td style="font-weight:bold;">${App.formatNumber(row.running_balance || 0)}</td>
+            <td style="color:var(--accent-green); font-weight:bold;">${row.debit > 0 ? Reports.formatNumber(row.debit) : '-'}</td>
+            <td style="color:var(--accent-red); font-weight:bold;">${row.credit > 0 ? Reports.formatNumber(row.credit) : '-'}</td>
+            <td style="font-weight:bold;">${Reports.formatNumber(row.running_balance || 0)}</td>
           </tr>
         `).join('') : '<tr><td colspan="8" style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد حركات للحساب ضمن الخيارات المحددة</td></tr>';
       }
@@ -625,7 +638,7 @@ await this.loadIncomeStatement();
             badge.style.background = 'rgba(34,197,94,0.15)';
           } else {
             const diff = json.reconciliation?.difference || Math.abs(totals.assets - totals.liabilities_plus_equity);
-            badge.textContent = `⚠️ فارق ميزانية: ${App.formatNumber(diff)} ${this.reportCurrency()}`;
+            badge.textContent = `⚠️ فارق ميزانية: ${Reports.formatNumber(diff)} ${this.reportCurrency()}`;
             badge.style.color = '#f87171';
             badge.style.background = 'rgba(239,68,68,0.15)';
           }
@@ -639,7 +652,7 @@ await this.loadIncomeStatement();
             assetsTbody.innerHTML = assets.map(a => `
               <tr>
                 <td>${a.code ? a.code + ' - ' : ''}${a.name}</td>
-                <td style="font-weight: bold; text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(a.balance || 0)} ${this.reportCurrency()}</td>
+                <td style="font-weight: bold; text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(a.balance || 0)} ${this.reportCurrency()}</td>
               </tr>
             `).join('');
           }
@@ -654,7 +667,7 @@ await this.loadIncomeStatement();
             liabTbody.innerHTML = combinedLiab.map(l => `
               <tr>
                 <td>${l.code ? l.code + ' - ' : ''}${l.name}</td>
-                <td style="font-weight: bold; text-align: left; direction: ltr; font-family: monospace;">${App.formatNumber(l.balance || 0)} ${this.reportCurrency()}</td>
+                <td style="font-weight: bold; text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(l.balance || 0)} ${this.reportCurrency()}</td>
               </tr>
             `).join('');
           }
@@ -662,8 +675,8 @@ await this.loadIncomeStatement();
 
         const totAssetsEl = document.getElementById('bsTotalAssets');
         const totLiabEl = document.getElementById('bsTotalLiabEquity');
-        if (totAssetsEl) totAssetsEl.textContent = App.formatNumber(totals.assets || 0) + ' ' + this.reportCurrency();
-        if (totLiabEl) totLiabEl.textContent = App.formatNumber(totals.liabilities_plus_equity || 0) + ' ' + this.reportCurrency();
+        if (totAssetsEl) totAssetsEl.textContent = Reports.formatNumber(totals.assets || 0) + ' ' + this.reportCurrency();
+        if (totLiabEl) totLiabEl.textContent = Reports.formatNumber(totals.liabilities_plus_equity || 0) + ' ' + this.reportCurrency();
       }
     } catch (e) {
       console.error('❌ Error loading balance sheet:', e);
@@ -699,10 +712,10 @@ await this.loadIncomeStatement();
         const changeEl = document.getElementById('cfNetChange');
         const closeEl = document.getElementById('cfClosingCash');
 
-        if (openEl) openEl.textContent = App.formatNumber(d.opening_balance || 0) + ' ' + this.reportCurrency();
-        if (netOpEl) netOpEl.textContent = App.formatNumber(op.net || 0) + ' ' + this.reportCurrency();
-        if (changeEl) changeEl.textContent = App.formatNumber(d.net_cash_change || 0) + ' ' + this.reportCurrency();
-        if (closeEl) closeEl.textContent = App.formatNumber(d.closing_balance || 0) + ' ' + this.reportCurrency();
+        if (openEl) openEl.textContent = Reports.formatNumber(d.opening_balance || 0) + ' ' + this.reportCurrency();
+        if (netOpEl) netOpEl.textContent = Reports.formatNumber(op.net || 0) + ' ' + this.reportCurrency();
+        if (changeEl) changeEl.textContent = Reports.formatNumber(d.net_cash_change || 0) + ' ' + this.reportCurrency();
+        if (closeEl) closeEl.textContent = Reports.formatNumber(d.closing_balance || 0) + ' ' + this.reportCurrency();
 
         const tbody = document.getElementById('cashFlowTableBody');
         if (tbody) {
@@ -717,9 +730,9 @@ await this.loadIncomeStatement();
               html += `
                 <tr>
                   <td>${it.item}</td>
-                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${App.formatNumber(it.amount)}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${Reports.formatNumber(it.amount)}</td>
                   <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">-</td>
-                  <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">+${App.formatNumber(it.amount)} ${this.reportCurrency()}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">+${Reports.formatNumber(it.amount)} ${this.reportCurrency()}</td>
                 </tr>
               `;
             });
@@ -728,8 +741,8 @@ await this.loadIncomeStatement();
                 <tr>
                   <td>${it.item}</td>
                   <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">-</td>
-                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">${App.formatNumber(it.amount)}</td>
-                  <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-red);">-${App.formatNumber(it.amount)} ${this.reportCurrency()}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-red);">${Reports.formatNumber(it.amount)}</td>
+                  <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-red);">-${Reports.formatNumber(it.amount)} ${this.reportCurrency()}</td>
                 </tr>
               `;
             });
@@ -738,7 +751,7 @@ await this.loadIncomeStatement();
             <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
               <td>صافي النقد من الأنشطة التشغيلية</td>
               <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${op.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(op.net || 0)} ${this.reportCurrency()}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${op.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${Reports.formatNumber(op.net || 0)} ${this.reportCurrency()}</td>
             </tr>
           `;
 
@@ -748,17 +761,17 @@ await this.loadIncomeStatement();
             html += `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">لا توجد حركات استثمارية</td></tr>`;
           } else {
             (inv.inflows || []).forEach(it => {
-              html += `<tr><td>${it.item}</td><td style="text-align:left;direction:ltr;color:var(--accent-green);">${App.formatNumber(it.amount)}</td><td>-</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-green);">+${App.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
+              html += `<tr><td>${it.item}</td><td style="text-align:left;direction:ltr;color:var(--accent-green);">${Reports.formatNumber(it.amount)}</td><td>-</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-green);">+${Reports.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
             });
             (inv.outflows || []).forEach(it => {
-              html += `<tr><td>${it.item}</td><td>-</td><td style="text-align:left;direction:ltr;color:var(--accent-red);">${App.formatNumber(it.amount)}</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-red);">-${App.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
+              html += `<tr><td>${it.item}</td><td>-</td><td style="text-align:left;direction:ltr;color:var(--accent-red);">${Reports.formatNumber(it.amount)}</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-red);">-${Reports.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
             });
           }
           html += `
             <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
               <td>صافي النقد من الأنشطة الاستثمارية</td>
               <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${inv.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(inv.net || 0)} ${this.reportCurrency()}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${inv.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${Reports.formatNumber(inv.net || 0)} ${this.reportCurrency()}</td>
             </tr>
           `;
 
@@ -768,17 +781,17 @@ await this.loadIncomeStatement();
             html += `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">لا توجد حركات تمويلية</td></tr>`;
           } else {
             (fin.inflows || []).forEach(it => {
-              html += `<tr><td>${it.item}</td><td style="text-align:left;direction:ltr;color:var(--accent-green);">${App.formatNumber(it.amount)}</td><td>-</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-green);">+${App.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
+              html += `<tr><td>${it.item}</td><td style="text-align:left;direction:ltr;color:var(--accent-green);">${Reports.formatNumber(it.amount)}</td><td>-</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-green);">+${Reports.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
             });
             (fin.outflows || []).forEach(it => {
-              html += `<tr><td>${it.item}</td><td>-</td><td style="text-align:left;direction:ltr;color:var(--accent-red);">${App.formatNumber(it.amount)}</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-red);">-${App.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
+              html += `<tr><td>${it.item}</td><td>-</td><td style="text-align:left;direction:ltr;color:var(--accent-red);">${Reports.formatNumber(it.amount)}</td><td style="text-align:left;direction:ltr;font-weight:bold;color:var(--accent-red);">-${Reports.formatNumber(it.amount)} ${this.reportCurrency()}</td></tr>`;
             });
           }
           html += `
             <tr style="background: rgba(255,255,255,0.03); font-weight: bold;">
               <td>صافي النقد من الأنشطة التمويلية</td>
               <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${fin.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${App.formatNumber(fin.net || 0)} ${this.reportCurrency()}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: ${fin.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}; font-size: 1.05rem;">${Reports.formatNumber(fin.net || 0)} ${this.reportCurrency()}</td>
             </tr>
           `;
 
@@ -787,12 +800,12 @@ await this.loadIncomeStatement();
             <tr style="background: rgba(212,175,55,0.15); font-weight: bold; font-size: 1.05rem;">
               <td>صافي التغير في النقدية خلال الفترة</td>
               <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--gold-light);">${App.formatNumber(d.net_cash_change || 0)} ${this.reportCurrency()}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--gold-light);">${Reports.formatNumber(d.net_cash_change || 0)} ${this.reportCurrency()}</td>
             </tr>
             <tr style="background: rgba(255,255,255,0.06); font-weight: bold;">
               <td>رصيد النقدية والبنوك في نهاية المدة</td>
               <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.1rem;">${App.formatNumber(d.closing_balance || 0)} ${this.reportCurrency()}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.1rem;">${Reports.formatNumber(d.closing_balance || 0)} ${this.reportCurrency()}</td>
             </tr>
           `;
 
@@ -846,11 +859,11 @@ await this.loadIncomeStatement();
                 <tr>
                   <td><strong>${p.name}</strong> <small style="color:var(--text-secondary)">(${p.code})</small></td>
                   <td>${p.client_name || '-'}</td>
-                  <td style="color: var(--gold-light); font-weight: bold;">${App.formatNumber(p.contract_value || 0)}</td>
-                  <td style="color: var(--accent-red);">${App.formatNumber(p.actual_cost || 0)}</td>
-                  <td style="color: #38bdf8; font-weight: 600;">${App.formatNumber(p.recognized_revenue || 0)}</td>
+                  <td style="color: var(--gold-light); font-weight: bold;">${Reports.formatNumber(p.contract_value || 0)}</td>
+                  <td style="color: var(--accent-red);">${Reports.formatNumber(p.actual_cost || 0)}</td>
+                  <td style="color: #38bdf8; font-weight: 600;">${Reports.formatNumber(p.recognized_revenue || 0)}</td>
                   <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">
-                    ${App.formatNumber(p.calculated_actual_profit || 0)}
+                    ${Reports.formatNumber(p.calculated_actual_profit || 0)}
                   </td>
                   <td><span class="badge ${isProfit ? 'badge-income' : 'badge-expense'}">${p.profit_margin_percentage || 0}%</span></td>
                   <td>
@@ -905,10 +918,10 @@ await this.loadIncomeStatement();
         const totNetEl = document.getElementById('ccProfitTotalNet');
         const totMarginEl = document.getElementById('ccProfitTotalMargin');
 
-        if (totRevEl) totRevEl.textContent = App.formatNumber(d.totals?.total_revenue || 0) + ' ' + this.reportCurrency();
-        if (totExpEl) totExpEl.textContent = App.formatNumber(d.totals?.total_expense || 0) + ' ' + this.reportCurrency();
+        if (totRevEl) totRevEl.textContent = Reports.formatNumber(d.totals?.total_revenue || 0) + ' ' + this.reportCurrency();
+        if (totExpEl) totExpEl.textContent = Reports.formatNumber(d.totals?.total_expense || 0) + ' ' + this.reportCurrency();
         if (totNetEl) {
-          totNetEl.textContent = App.formatNumber(d.totals?.net_profit || 0) + ' ' + this.reportCurrency();
+          totNetEl.textContent = Reports.formatNumber(d.totals?.net_profit || 0) + ' ' + this.reportCurrency();
           totNetEl.style.color = (d.totals?.net_profit || 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
         }
         if (totMarginEl) totMarginEl.textContent = (d.totals?.overall_margin || 0) + '%';
@@ -930,9 +943,9 @@ await this.loadIncomeStatement();
                   <td><strong style="color: #fff;">${cc.name}</strong></td>
                   <td><span class="badge badge-info">${this.financialTypeLabel(cc.type || 'مركز تكلفة')}</span></td>
                   <td>${cc.project_name || '-'}</td>
-                  <td style="color: var(--gold-light); font-weight: bold;">${App.formatNumber(cc.total_revenue || 0)} ${this.reportCurrency()}</td>
-                  <td style="color: #38bdf8; font-weight: bold;">${App.formatNumber(cc.total_expense || 0)} ${this.reportCurrency()}</td>
-                  <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${App.formatNumber(cc.net_profit || 0)} ${this.reportCurrency()}</td>
+                  <td style="color: var(--gold-light); font-weight: bold;">${Reports.formatNumber(cc.total_revenue || 0)} ${this.reportCurrency()}</td>
+                  <td style="color: #38bdf8; font-weight: bold;">${Reports.formatNumber(cc.total_expense || 0)} ${this.reportCurrency()}</td>
+                  <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${Reports.formatNumber(cc.net_profit || 0)} ${this.reportCurrency()}</td>
                   <td>${statusBadge}</td>
                 </tr>
               `;
@@ -998,9 +1011,9 @@ await this.loadIncomeStatement();
                   <span style="font-size: 0.8rem; color: var(--text-secondary);">الهاتف: ${client.phone || '-'} | العنوان: ${client.address || '-'}</span>
                 </div>
                 <div style="display: flex; gap: 14px; background: rgba(0,0,0,0.3); padding: 8px 16px; border-radius: 8px;">
-                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المطالبات:</span> <strong style="color:var(--accent-red)">${App.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></div>
-                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المحصل:</span> <strong style="color:var(--accent-green)">${App.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></div>
-                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">الرصيد المستحق:</span> <strong style="color:var(--gold-light);font-size:1.1rem">${App.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></div>
+                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المطالبات:</span> <strong style="color:var(--accent-red)">${Reports.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></div>
+                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المحصل:</span> <strong style="color:var(--accent-green)">${Reports.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></div>
+                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">الرصيد المستحق:</span> <strong style="color:var(--gold-light);font-size:1.1rem">${Reports.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></div>
                 </div>
               </div>
             </div>
@@ -1021,9 +1034,9 @@ await this.loadIncomeStatement();
                   <td><strong>${s.type}</strong></td>
                   <td><span style="font-family: monospace; color: #fff;">${s.ref || '-'}</span></td>
                   <td>${s.project_name || '-'}</td>
-                  <td style="color: var(--accent-red); font-weight: bold;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
-                  <td style="color: var(--accent-green); font-weight: bold;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
-                  <td style="font-weight: 800; color: ${runBalColor};">${App.formatNumber(runBal)}</td>
+                  <td style="color: var(--accent-red); font-weight: bold;">${s.debit ? Reports.formatNumber(s.debit) : '-'}</td>
+                  <td style="color: var(--accent-green); font-weight: bold;">${s.credit ? Reports.formatNumber(s.credit) : '-'}</td>
+                  <td style="font-weight: 800; color: ${runBalColor};">${Reports.formatNumber(runBal)}</td>
                   <td style="font-size: 0.8rem; color: var(--text-secondary); max-width: 250px;">${s.notes || '-'}</td>
                 </tr>
               `;
@@ -1104,15 +1117,15 @@ await this.loadIncomeStatement();
                 <div style="display: grid; grid-template-columns: repeat(3, auto); gap: 14px;">
                   <div style="background: rgba(59,130,246,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
                     <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي الاستحقاق (له):</div>
-                    <strong style="color: #3b82f6;">${App.formatNumber(summary.total_invoiced || 0)} ${sCurr}</strong>
+                    <strong style="color: #3b82f6;">${Reports.formatNumber(summary.total_invoiced || 0)} ${sCurr}</strong>
                   </div>
                   <div style="background: rgba(16,185,129,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
                     <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي المسدد (عليه):</div>
-                    <strong style="color: #10b981;">${App.formatNumber(summary.total_paid || 0)} ${sCurr}</strong>
+                    <strong style="color: #10b981;">${Reports.formatNumber(summary.total_paid || 0)} ${sCurr}</strong>
                   </div>
                   <div style="background: rgba(245,158,11,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
                     <div style="font-size: 0.72rem; color: var(--text-secondary);">صافي الرصيد المستحق:</div>
-                    <strong style="color: #f59e0b; font-size: 1.05rem;">${App.formatNumber(summary.outstanding_balance || 0)} ${sCurr}</strong>
+                    <strong style="color: #f59e0b; font-size: 1.05rem;">${Reports.formatNumber(summary.outstanding_balance || 0)} ${sCurr}</strong>
                   </div>
                 </div>
               </div>
@@ -1132,9 +1145,9 @@ await this.loadIncomeStatement();
                   <td style="white-space: nowrap; font-family: monospace;">${s.date || '-'}</td>
                   <td><span class="badge" style="background: rgba(59,130,246,0.12); color: #3b82f6; font-size: 0.78rem;">${s.type}</span></td>
                   <td style="font-weight: 600; font-family: monospace;">${s.ref || '-'}</td>
-                  <td style="color: var(--accent-amber); font-weight: 700; text-align: right;">${s.credit ? App.formatNumber(s.credit) : '-'}</td>
-                  <td style="color: var(--accent-green); font-weight: 700; text-align: right;">${s.debit ? App.formatNumber(s.debit) : '-'}</td>
-                  <td style="font-weight: 800; text-align: right; color: ${runBalColor};">${App.formatNumber(s.running_balance ?? 0)}</td>
+                  <td style="color: var(--accent-amber); font-weight: 700; text-align: right;">${s.credit ? Reports.formatNumber(s.credit) : '-'}</td>
+                  <td style="color: var(--accent-green); font-weight: 700; text-align: right;">${s.debit ? Reports.formatNumber(s.debit) : '-'}</td>
+                  <td style="font-weight: 800; text-align: right; color: ${runBalColor};">${Reports.formatNumber(s.running_balance ?? 0)}</td>
                   <td style="font-size: 0.85rem; color: var(--text-secondary);">${s.notes || '-'}</td>
                 </tr>
               `;
@@ -1144,9 +1157,9 @@ await this.loadIncomeStatement();
               tfoot.innerHTML = `
                 <tr style="background: var(--bg-secondary); font-weight: bold; border-top: 2px solid var(--border-color);">
                   <td colspan="3" style="text-align: center;">الإجمالي العام</td>
-                  <td style="color: var(--accent-amber); text-align: right;">${App.formatNumber(summary.total_invoiced || 0)}</td>
-                  <td style="color: var(--accent-green); text-align: right;">${App.formatNumber(summary.total_paid || 0)}</td>
-                  <td style="color: #f59e0b; text-align: right; font-size: 1.05rem;">${App.formatNumber(summary.outstanding_balance || 0)}</td>
+                  <td style="color: var(--accent-amber); text-align: right;">${Reports.formatNumber(summary.total_invoiced || 0)}</td>
+                  <td style="color: var(--accent-green); text-align: right;">${Reports.formatNumber(summary.total_paid || 0)}</td>
+                  <td style="color: #f59e0b; text-align: right; font-size: 1.05rem;">${Reports.formatNumber(summary.outstanding_balance || 0)}</td>
                   <td>${summary.outstanding_balance === 0 ? 'مسوى بالكامل ✓' : 'متبقي مستحق'}</td>
                 </tr>
               `;
@@ -1199,28 +1212,28 @@ await this.loadIncomeStatement();
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
           <div style="border: 1px solid #86efac; border-radius: 6px; padding: 10px; text-align: center; background: #f0fdf4;">
             <div style="font-size: 0.8rem; color: #15803d;">إجمالي الإيرادات المعترف بها</div>
-            <div style="font-weight: 900; font-size: 1.2rem; color: #15803d;">${App.formatNumber(d.total_income || d.total_revenues || 0)} ${this.reportCurrency()}</div>
+            <div style="font-weight: 900; font-size: 1.2rem; color: #15803d;">${Reports.formatNumber(d.total_income || d.total_revenues || 0)} ${this.reportCurrency()}</div>
           </div>
           <div style="border: 1px solid #fca5a5; border-radius: 6px; padding: 10px; text-align: center; background: #fef2f2;">
             <div style="font-size: 0.8rem; color: #b91c1c;">إجمالي التكاليف والمصروفات</div>
-            <div style="font-weight: 900; font-size: 1.2rem; color: #b91c1c;">${App.formatNumber(d.total_expenses || 0)} ${this.reportCurrency()}</div>
+            <div style="font-weight: 900; font-size: 1.2rem; color: #b91c1c;">${Reports.formatNumber(d.total_expenses || 0)} ${this.reportCurrency()}</div>
           </div>
           <div style="border: 1.5px solid #d4af37; border-radius: 6px; padding: 10px; text-align: center; background: #fdfaf2;">
             <div style="font-size: 0.8rem; color: #b8911c;">صافي الدخل التشغيلي</div>
-            <div style="font-weight: 900; font-size: 1.25rem; color: #047857;">${App.formatNumber(d.net_profit || 0)} ${this.reportCurrency()}</div>
+            <div style="font-weight: 900; font-size: 1.25rem; color: #047857;">${Reports.formatNumber(d.net_profit || 0)} ${this.reportCurrency()}</div>
           </div>
         </div>
         <div style="font-weight: 800; color: #0f2744; font-size: 0.95rem; margin-bottom: 8px;">توزيع بنود الإيرادات والتكاليف:</div>
         <table class="official-report-table">
           <thead><tr><th>البيان المحاسبي</th><th>المبلغ المحقق</th></tr></thead>
           <tbody>
-            <tr><td>إجمالي الإيرادات المعترف بها (4)</td><td style="color:#15803d;font-weight:bold">${App.formatNumber(d.total_income || d.total_revenues || 0)} ${this.reportCurrency()}</td></tr>
-            ${(d.revenues || []).map(row => `<tr><td>${row.code || ""} - ${row.name}</td><td>${App.formatNumber(row.amount || 0)} ${this.reportCurrency()}</td></tr>`).join("")}
-            ${(d.expenses || []).map(row => `<tr><td>${row.code || ""} - ${row.name}</td><td style="color:#b91c1c">${App.formatNumber(row.amount || 0)} ${this.reportCurrency()}</td></tr>`).join("")}
-            <tr><td>تكلفة الإيراد المباشرة</td><td style="color:#b91c1c">${App.formatNumber(d.total_direct_costs || 0)} ${this.reportCurrency()}</td></tr>
-            <tr style="background:#f8fafc;font-weight:bold"><td>مجمل الربح</td><td style="color:#047857">${App.formatNumber(d.gross_profit || 0)} ${this.reportCurrency()}</td></tr>
-            <tr><td>المصروفات التشغيلية والإدارية</td><td style="color:#b91c1c">${App.formatNumber(d.total_operating_expenses || 0)} ${this.reportCurrency()}</td></tr>
-            <tr style="background:#f0fdf4;font-weight:900;font-size:1.1rem"><td>صافي الربح / الدخل النهائي</td><td style="color:#047857">${App.formatNumber(d.net_profit || 0)} ${this.reportCurrency()}</td></tr>
+            <tr><td>إجمالي الإيرادات المعترف بها (4)</td><td style="color:#15803d;font-weight:bold">${Reports.formatNumber(d.total_income || d.total_revenues || 0)} ${this.reportCurrency()}</td></tr>
+            ${(d.revenues || []).map(row => `<tr><td>${row.code || ""} - ${row.name}</td><td>${Reports.formatNumber(row.amount || 0)} ${this.reportCurrency()}</td></tr>`).join("")}
+            ${(d.expenses || []).map(row => `<tr><td>${row.code || ""} - ${row.name}</td><td style="color:#b91c1c">${Reports.formatNumber(row.amount || 0)} ${this.reportCurrency()}</td></tr>`).join("")}
+            <tr><td>تكلفة الإيراد المباشرة</td><td style="color:#b91c1c">${Reports.formatNumber(d.total_direct_costs || 0)} ${this.reportCurrency()}</td></tr>
+            <tr style="background:#f8fafc;font-weight:bold"><td>مجمل الربح</td><td style="color:#047857">${Reports.formatNumber(d.gross_profit || 0)} ${this.reportCurrency()}</td></tr>
+            <tr><td>المصروفات التشغيلية والإدارية</td><td style="color:#b91c1c">${Reports.formatNumber(d.total_operating_expenses || 0)} ${this.reportCurrency()}</td></tr>
+            <tr style="background:#f0fdf4;font-weight:900;font-size:1.1rem"><td>صافي الربح / الدخل النهائي</td><td style="color:#047857">${Reports.formatNumber(d.net_profit || 0)} ${this.reportCurrency()}</td></tr>
           </tbody>
         </table>
       `;
@@ -1234,14 +1247,14 @@ await this.loadIncomeStatement();
       const rows = (d.movements || []).map(row => `
         <tr><td>${row.date || '-'}</td><td>${row.entry_no || '-'}</td><td>${row.reference || '-'}</td>
         <td>${row.description || row.notes || '-'}</td><td>${row.cost_center_name || 'عام'}</td>
-        <td>${row.debit ? App.formatNumber(row.debit) : '-'}</td><td>${row.credit ? App.formatNumber(row.credit) : '-'}</td>
-        <td>${App.formatNumber(row.running_balance || 0)}</td></tr>
+        <td>${row.debit ? Reports.formatNumber(row.debit) : '-'}</td><td>${row.credit ? Reports.formatNumber(row.credit) : '-'}</td>
+        <td>${Reports.formatNumber(row.running_balance || 0)}</td></tr>
       `).join('');
       reportBodyHtml = `
         <div style="margin-bottom:12px;font-weight:bold;">${d.account ? `${d.account.code} - ${d.account.name}` : ''}</div>
         <table class="official-report-table"><thead><tr><th>التاريخ</th><th>القيد</th><th>المرجع</th><th>البيان</th><th>مركز التكلفة</th><th>مدين</th><th>دائن</th><th>الرصيد</th></tr></thead>
-        <tbody><tr style="font-weight:bold"><td colspan="7">الرصيد الافتتاحي</td><td>${App.formatNumber(totals.opening_balance || 0)}</td></tr>${rows}
-        <tr style="font-weight:bold"><td colspan="5">الإجمالي</td><td>${App.formatNumber(totals.total_debit || 0)}</td><td>${App.formatNumber(totals.total_credit || 0)}</td><td>${App.formatNumber(totals.closing_balance || 0)}</td></tr></tbody></table>`;
+        <tbody><tr style="font-weight:bold"><td colspan="7">الرصيد الافتتاحي</td><td>${Reports.formatNumber(totals.opening_balance || 0)}</td></tr>${rows}
+        <tr style="font-weight:bold"><td colspan="5">الإجمالي</td><td>${Reports.formatNumber(totals.total_debit || 0)}</td><td>${Reports.formatNumber(totals.total_credit || 0)}</td><td>${Reports.formatNumber(totals.closing_balance || 0)}</td></tr></tbody></table>`;
     } else if (tab === 'trial-balance') {
       reportTitle = cfg.trial_balance_title || 'ميزان المراجعة بالأرصدة والمجاميع';
       const d = reportData.data || {};
@@ -1250,10 +1263,10 @@ await this.loadIncomeStatement();
           <td style="font-family: monospace;">${a.code}</td>
           <td>${a.name}</td>
           <td>${this.financialTypeLabel(a.type)}</td>
-          <td style="text-align: left; font-family: monospace;">${a.period_debit ? App.formatNumber(a.period_debit) : '-'}</td>
-          <td style="text-align: left; font-family: monospace;">${a.period_credit ? App.formatNumber(a.period_credit) : '-'}</td>
-          <td style="text-align: left; font-family: monospace; font-weight: bold;">${a.closing_debit ? App.formatNumber(a.closing_debit) : '-'}</td>
-          <td style="text-align: left; font-family: monospace; font-weight: bold;">${a.closing_credit ? App.formatNumber(a.closing_credit) : '-'}</td>
+          <td style="text-align: left; font-family: monospace;">${a.period_debit ? Reports.formatNumber(a.period_debit) : '-'}</td>
+          <td style="text-align: left; font-family: monospace;">${a.period_credit ? Reports.formatNumber(a.period_credit) : '-'}</td>
+          <td style="text-align: left; font-family: monospace; font-weight: bold;">${a.closing_debit ? Reports.formatNumber(a.closing_debit) : '-'}</td>
+          <td style="text-align: left; font-family: monospace; font-weight: bold;">${a.closing_credit ? Reports.formatNumber(a.closing_credit) : '-'}</td>
         </tr>
       `).join('');
       reportBodyHtml = `
@@ -1417,17 +1430,17 @@ await this.loadIncomeStatement();
             <tr>
               <td><strong>${p.project_name}</strong><br><small style="color: var(--text-secondary);">${p.project_code || ''}</small></td>
               <td>${p.client_name || '-'}</td>
-              <td style="color: var(--gold-light); font-weight: 600;">${App.formatNumber(contractVal)}</td>
-              <td style="color: var(--accent-red);">${App.formatNumber(actualCost)}</td>
+              <td style="color: var(--gold-light); font-weight: 600;">${Reports.formatNumber(contractVal)}</td>
+              <td style="color: var(--accent-red);">${Reports.formatNumber(actualCost)}</td>
               <td><strong>${pocPct}%</strong></td>
-              <td style="color: #38bdf8; font-weight: 600;">${App.formatNumber(recRev)}</td>
-              <td style="color: var(--accent-green);">${App.formatNumber(billed)}</td>
-              <td>${App.formatNumber(wip)}</td>
-              <td style="color: #4ade80;">${App.formatNumber(cash)}</td>
-              <td style="color: #facc15;">${App.formatNumber(adv)}</td>
-              <td style="color: #94a3b8;">${App.formatNumber(ret)}</td>
-              <td style="color: ${profit >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${App.formatNumber(profit)}</td>
-              <td style="color: ${netCash >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${App.formatNumber(netCash)}</td>
+              <td style="color: #38bdf8; font-weight: 600;">${Reports.formatNumber(recRev)}</td>
+              <td style="color: var(--accent-green);">${Reports.formatNumber(billed)}</td>
+              <td>${Reports.formatNumber(wip)}</td>
+              <td style="color: #4ade80;">${Reports.formatNumber(cash)}</td>
+              <td style="color: #facc15;">${Reports.formatNumber(adv)}</td>
+              <td style="color: #94a3b8;">${Reports.formatNumber(ret)}</td>
+              <td style="color: ${profit >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${Reports.formatNumber(profit)}</td>
+              <td style="color: ${netCash >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${Reports.formatNumber(netCash)}</td>
               <td style="text-align: center;">
                 <button type="button" class="btn btn-secondary btn-sm" onclick="Reports.openRevenueRecognitionModal(${p.project_id})" title="إثبات إيراد دوري" style="padding: 3px 8px; font-size: 0.75rem; white-space: nowrap;">
                   إثبات POC
@@ -1487,7 +1500,7 @@ await this.loadIncomeStatement();
         previewCard.style.display = 'block';
         const setTxt = (id, val) => {
           const el = document.getElementById(id);
-          if (el) el.textContent = typeof val === 'number' ? App.formatNumber(val) : (val || '0');
+          if (el) el.textContent = typeof val === 'number' ? Reports.formatNumber(val) : (val || '0');
         };
         setTxt('prevContractVal', d.revised_contract_value || d.base_contract_value || 0);
         setTxt('prevActualCost', d.cumulative_actual_cost || 0);
