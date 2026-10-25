@@ -63,6 +63,11 @@ const Sidebar = {
       if (action === 'client') Accounting.openNewClientModal();
       if (action === 'supplier') Accounting.openNewSupplierModal();
       if (action === 'periods') await Accounting.openPeriodsModal();
+      if (action === 'quotation') ProjectHub.openNewQuotationModal(true);
+      if (action === 'invoice') {
+        await App.loadClientsTable();
+        await App.openNewClientBillModal(null, null, null, 'فاتورة');
+      }
       this.sync(view, tab);
     } catch (error) { console.error('Navigation failed:', error); App.showToast('تعذر فتح العملية، يرجى المحاولة مجدداً', 'error'); }
   }

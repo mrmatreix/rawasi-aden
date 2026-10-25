@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261025-tvby',
+  assetVersion: '1.0.0.20261025-gw8t',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,19 +11,19 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-tvby',
-    projects: 'js/projects.js?v=1.0.0.20261025-tvby',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261025-tvby',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-tvby',
-    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-tvby',
-    accounting: 'js/accounting.js?v=1.0.0.20261025-tvby',
-    hr: 'js/hr.js?v=1.0.0.20261025-tvby',
-    reports: 'js/reports.js?v=1.0.0.20261025-tvby',
-    inventory: 'js/inventory.js?v=1.0.0.20261025-tvby',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-tvby',
-    settings: 'js/settings.js?v=1.0.0.20261025-tvby',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261025-tvby',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-tvby'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-gw8t',
+    projects: 'js/projects.js?v=1.0.0.20261025-gw8t',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-gw8t',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-gw8t',
+    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-gw8t',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-gw8t',
+    hr: 'js/hr.js?v=1.0.0.20261025-gw8t',
+    reports: 'js/reports.js?v=1.0.0.20261025-gw8t',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-gw8t',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-gw8t',
+    settings: 'js/settings.js?v=1.0.0.20261025-gw8t',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-gw8t',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-gw8t'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -2636,7 +2636,14 @@ const App = {
   // نافذة إصدار مستخلص جديد مرتبط بالسلسلة
   // ============================================================================
 
-  async openNewClientBillModal(clientId, contractId, projectId) {
+  async openNewClientBillModal(clientId, contractId, projectId, billType = 'مستخلص أعمال جاري') {
+    document.getElementById('newClientBillForm').reset();
+    document.getElementById('newClientBillForm').dataset.billType = billType;
+    document.getElementById('newClientBillTitle').textContent = billType === 'فاتورة' ? 'إنشاء فاتورة للعميل' : 'إصدار مستخلص أعمال ومطالبة للعميل';
+    document.querySelector('#newClientBillForm button[type="submit"]').textContent = billType === 'فاتورة' ? 'حفظ الفاتورة كمسودة' : 'إصدار المستخلص وتحديث رصيد العميل';
+    this.billModalContracts = []; this.billModalProjects = []; this.currentBillProjectMetrics = null;
+    document.getElementById('modalBillProjectSelect').replaceChildren(new Option('اختر المشروع...', ''));
+    document.getElementById('modalBillContractSelect').replaceChildren(new Option('بدون عقد محدد...', ''));
     this.openModal('newClientBillModal');
 
     // رقم تلقائي
@@ -2831,6 +2838,7 @@ const App = {
 
   async submitNewClientBill(e) {
     e.preventDefault();
+    const isInvoice = document.getElementById('newClientBillForm').dataset.billType === 'فاتورة';
     const autoNo = document.getElementById('newBillAutoNo')?.innerText || `BILL-${Date.now().toString().slice(-4)}`;
     const clientId = document.getElementById('modalBillClientSelect')?.value;
     const projectId = document.getElementById('modalBillProjectSelect')?.value;
@@ -2857,7 +2865,7 @@ const App = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bill_no: autoNo,
-          bill_type: 'مستخلص أعمال جاري',
+          bill_type: document.getElementById('newClientBillForm').dataset.billType || 'مستخلص أعمال جاري',
           client_id: Number(clientId),
           project_id: Number(projectId),
           contract_id: contractId ? Number(contractId) : null,
@@ -2868,7 +2876,7 @@ const App = {
           net_amount: net,
           amount: gross,
           date,
-          status: 'معتمد',
+          status: isInvoice ? 'draft' : 'معتمد',
           notes,
           progress_percentage: autoProgress ? progressPct : undefined
         })
@@ -2876,7 +2884,7 @@ const App = {
 
       const json = await res.json();
       if (json.success) {
-        this.showToast(`تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل ونسبة الإنجاز آلياً 📑`, 'success');
+        this.showToast(isInvoice ? `تم حفظ الفاتورة كمسودة (${json.bill_no || autoNo})` : `تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل ونسبة الإنجاز آلياً 📑`, 'success');
         this.closeModal('newClientBillModal');
         this.loadClientsTable();
 

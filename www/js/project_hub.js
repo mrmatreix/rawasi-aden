@@ -1428,8 +1428,12 @@ const ProjectHub = {
     }).join('');
   },
 
-  openNewQuotationModal() {
+  openNewQuotationModal(selectProject = false) {
     document.getElementById('quoModalForm').reset();
+    const project = document.getElementById('quoModalProject');
+    const options = [...(document.getElementById('hubProjectSelect')?.options || [])].filter(option => Number(option.value) > 0);
+    project.replaceChildren(new Option('اختر المشروع...', ''), ...options.map(option => new Option(option.textContent, option.value)));
+    project.value = selectProject ? '' : String(this.currentProjectId || '');
     document.getElementById('quoModalNo').value = `QUO-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`;
     document.getElementById('quoModalDate').value = new Date().toISOString().split('T')[0];
     App.openModal('newQuotationModal');
@@ -1437,6 +1441,8 @@ const ProjectHub = {
 
   async submitQuotationForm(e) {
     if (e) e.preventDefault();
+    const projectId = Number(document.getElementById('quoModalProject')?.value);
+    if (!projectId) return App.showToast('يرجى اختيار المشروع لعرض السعر', 'warning');
     const payload = {
       quotation_no: document.getElementById('quoModalNo').value,
       title: document.getElementById('quoModalTitle').value,
@@ -1451,7 +1457,7 @@ const ProjectHub = {
       notes: document.getElementById('quoModalNotes').value
     };
 
-    const res = await fetch(`/api/project-hub/${this.currentProjectId}/quotations`, {
+    const res = await fetch(`/api/project-hub/${projectId}/quotations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1461,6 +1467,8 @@ const ProjectHub = {
     if (json.success) {
       App.showToast('تم إنشاء عرض السعر بنجاح', 'success');
       App.closeModal('newQuotationModal');
+      this.currentProjectId = projectId;
+      document.getElementById('hubProjectSelect').value = String(projectId);
       await this.loadProjectData();
     } else {
       App.showToast(json.message || 'فشل في حفظ عرض السعر', 'error');

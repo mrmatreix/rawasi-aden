@@ -764,9 +764,9 @@ router.post('/:projectId/quotations', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
-      quotation_no, client_id, title, date, valid_until,
-      items_json, subtotal = 0, discount = 0, tax_vat = 0, total_amount = 0,
-      currency = 'ر.ي', payment_terms, delivery_period, status = 'مسودة', notes
+      quotation_no, client_id, title, date, valid_until = null,
+      items_json = null, subtotal = 0, discount = 0, tax_vat = 0, total_amount = 0,
+      currency = 'ر.ي', payment_terms = '', delivery_period = '', status = 'مسودة', notes = ''
     } = req.body;
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');
