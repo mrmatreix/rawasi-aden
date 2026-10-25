@@ -333,16 +333,28 @@ const ContractAlertsUI = {
 };
 
 const CashFlowUI = {
+  async exportProjection(format) {
+    if(!Auth.hasPermission('reports:export,accounting:export'))return App.showToast('لا تملك صلاحية الطباعة والتصدير','error');
+    if(!this.data)return App.showToast('اعرض التوقعات أولًا','warning');
+    const title=Settings.getOperationTitle('cash_projection','توقعات التدفق النقدي والسيولة');
+    const html=Settings.renderReportHeader(title,[{label:'الفترة',val:this.data.from_month+' — '+this.data.to_month}])+document.getElementById('cashFlowMonthsTableBody').closest('table').outerHTML+Settings.renderReportFooter();
+    if(format==='excel'){await App.loadModule('excelExport');ExcelExporter.download(html,title,'التوقعات',false);}else{document.getElementById('printArea').innerHTML='<div class="multi-page-report-document" dir="rtl">'+html+'</div>';window.print();}
+  },
   data: null,
   scenarios: null,
   activeScenario: 'realistic',
 
   async init() {
+    const now = new Date();
+    const month = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const from = document.getElementById('cfMonthFrom'), to = document.getElementById('cfMonthTo');
+    if (from && !from.value) from.value = month(now);
+    if (to && !to.value) to.value = month(new Date(now.getFullYear(), now.getMonth() + 5, 1));
     await this.loadProjections();
-    await this.loadScenarios();
   },
 
   async loadProjections() {
+    const request = this._request = (this._request || 0) + 1;
     const from = document.getElementById('cfMonthFrom')?.value || '';
     const to = document.getElementById('cfMonthTo')?.value || '';
     let url = '/api/cash-flow/projection?';
@@ -350,37 +362,50 @@ const CashFlowUI = {
     if (to) url += `to=${to}&`;
 
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: 'no-store' });
       const json = await res.json();
+      if (request !== this._request) return;
+      if (!res.ok || !json.success) throw new Error(json.message || 'تعذر تحميل توقعات التدفق النقدي');
       if (json.success) {
         this.data = json;
         this.renderKPIs();
         this.renderMonthsTable();
+        const notice = document.getElementById('cfProjectionNotice');
+        if (notice) notice.textContent = json.total_collections || json.total_payments ? 'العملة: ريال يمني. التوقعات خطة تقديرية؛ أعد الاحتساب لتحديثها من مستندات النظام.' : 'لا توجد تدفقات متوقعة محفوظة لهذه الفترة. اضغط «إعادة احتساب تلقائي من البيانات الحية» لتوليدها من المستندات المتاحة.';
+        await this.loadScenarios(from, to, request);
       }
     } catch (e) {
       console.error('Error loading cash flow projections:', e);
+      if (request !== this._request) return;
+      this.data = null; this.scenarios = null;
+      document.getElementById('cashFlowMonthsTableBody').innerHTML = '<tr><td colspan="6">تعذر تحميل التوقعات. تحقق من الفترة ثم أعد المحاولة.</td></tr>';
+      document.getElementById('cfScenariosWrap').textContent = '';
+      for (const id of ['cfKpiInitialCash','cfKpiTotalIn','cfKpiTotalOut','cfKpiNetCash']) document.getElementById(id).textContent = '—';
+      App.showToast(e.message || 'تعذر تحميل توقعات التدفق النقدي', 'error');
     }
   },
 
-  async loadScenarios() {
+  async loadScenarios(from = '', to = '', request = this._request) {
     try {
-      const res = await fetch('/api/cash-flow/scenarios');
+      const res = await fetch('/api/cash-flow/scenarios?' + new URLSearchParams({from,to}), { cache: 'no-store' });
       const json = await res.json();
+      if (request !== this._request) return;
+      if (!res.ok || !json.success) throw new Error(json.message || 'تعذر تحميل السيناريوهات');
       if (json.success) {
         this.scenarios = json.scenarios;
         this.renderScenarioCards();
       }
-    } catch (e) {}
+    } catch (e) { if (request === this._request) document.getElementById('cfScenariosWrap').textContent = 'تعذر تحميل سيناريوهات الفترة المحددة؛ أعد تحديث الفلترة.'; }
   },
 
   renderKPIs() {
     if (!this.data) return;
-    document.getElementById('cfKpiInitialCash').textContent = `${App.formatNumber(this.data.initial_cash || 0)} $`;
-    document.getElementById('cfKpiTotalIn').textContent = `${App.formatNumber(this.data.total_collections || 0)} $`;
-    document.getElementById('cfKpiTotalOut').textContent = `${App.formatNumber(this.data.total_payments || 0)} $`;
+    document.getElementById('cfKpiInitialCash').textContent = `${App.formatNumber(this.data.initial_cash || 0)} ر.ي`;
+    document.getElementById('cfKpiTotalIn').textContent = `${App.formatNumber(this.data.total_collections || 0)} ر.ي`;
+    document.getElementById('cfKpiTotalOut').textContent = `${App.formatNumber(this.data.total_payments || 0)} ر.ي`;
     const netEl = document.getElementById('cfKpiNetCash');
     const netVal = this.data.total_net_cash_flow || 0;
-    netEl.textContent = `${App.formatNumber(netVal)} $`;
+    netEl.textContent = `${App.formatNumber(netVal)} ر.ي`;
     netEl.style.color = netVal >= 0 ? '#4ade80' : '#f87171';
   },
 
@@ -391,13 +416,13 @@ const CashFlowUI = {
     tbody.innerHTML = this.data.months.map(m => `
       <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
         <td><strong>${m.period}</strong></td>
-        <td style="color: #4ade80; font-weight: bold;">+${App.formatNumber(m.expected_collections)} $</td>
-        <td style="color: #f87171; font-weight: bold;">-${App.formatNumber(m.expected_payments)} $</td>
+        <td style="color: #4ade80; font-weight: bold;">+${App.formatNumber(m.expected_collections)} ر.ي</td>
+        <td style="color: #f87171; font-weight: bold;">-${App.formatNumber(m.expected_payments)} ر.ي</td>
         <td style="font-weight: bold; color: ${m.net_cash_flow >= 0 ? '#4ade80' : '#f87171'};">
-          ${m.net_cash_flow >= 0 ? '+' : ''}${App.formatNumber(m.net_cash_flow)} $
+          ${m.net_cash_flow >= 0 ? '+' : ''}${App.formatNumber(m.net_cash_flow)} ر.ي
         </td>
         <td style="font-weight: 800; color: var(--gold-light);">
-          ${App.formatNumber(m.cumulative_balance)} $
+          ${App.formatNumber(m.cumulative_balance)} ر.ي
         </td>
         <td style="font-size: 0.8rem; color: #94a3b8;">
           مستخلصات: ${App.formatNumber(m.breakdown.by_type.ipc_collections)} |
@@ -419,7 +444,7 @@ const CashFlowUI = {
           <h4 style="color: #4ade80; margin: 0 0 6px 0;">⚡ ${this.scenarios.optimistic.name}</h4>
           <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px;">${this.scenarios.optimistic.description}</p>
           <div style="font-size: 1.25rem; font-weight: 900; color: #4ade80;">
-            ${App.formatNumber(this.scenarios.optimistic.final_balance)} $
+            ${App.formatNumber(this.scenarios.optimistic.final_balance)} ر.ي
           </div>
         </div>
 
@@ -427,7 +452,7 @@ const CashFlowUI = {
           <h4 style="color: var(--gold-light); margin: 0 0 6px 0;">⚖️ ${this.scenarios.realistic.name}</h4>
           <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px;">${this.scenarios.realistic.description}</p>
           <div style="font-size: 1.25rem; font-weight: 900; color: var(--gold-light);">
-            ${App.formatNumber(this.scenarios.realistic.final_balance)} $
+            ${App.formatNumber(this.scenarios.realistic.final_balance)} ر.ي
           </div>
         </div>
 
@@ -435,7 +460,7 @@ const CashFlowUI = {
           <h4 style="color: #f87171; margin: 0 0 6px 0;">🛡️ ${this.scenarios.pessimistic.name}</h4>
           <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px;">${this.scenarios.pessimistic.description}</p>
           <div style="font-size: 1.25rem; font-weight: 900; color: #f87171;">
-            ${App.formatNumber(this.scenarios.pessimistic.final_balance)} $
+            ${App.formatNumber(this.scenarios.pessimistic.final_balance)} ر.ي
           </div>
         </div>
       </div>
@@ -443,6 +468,10 @@ const CashFlowUI = {
   },
 
   async regenerate() {
+    if (this._regenerating) return;
+    this._regenerating = true;
+    const button = document.getElementById('cfRegenerateButton');
+    if (button) button.disabled = true;
     try {
       const from = document.getElementById('cfMonthFrom')?.value || '';
       const to = document.getElementById('cfMonthTo')?.value || '';
@@ -452,14 +481,14 @@ const CashFlowUI = {
         body: JSON.stringify({ from, to })
       });
       const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || 'فشل إعادة الاحتساب');
       if (json.success) {
         App.showToast('تمت إعادة احتساب توقعات التدفق النقدي بنجاح', 'success');
         await this.loadProjections();
-        await this.loadScenarios();
       }
     } catch (e) {
-      App.showToast('فشل إعادة الاحتساب', 'error');
-    }
+      App.showToast(e.message || 'فشل إعادة الاحتساب', 'error');
+    } finally { this._regenerating = false; if (button) button.disabled = false; }
   }
 };
 

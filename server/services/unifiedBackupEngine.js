@@ -1020,6 +1020,11 @@ class UnifiedBackupEngine {
     const schedTime = await get("SELECT value FROM settings WHERE key = 'auto_backup_time'").catch(() => null);
 
     const isRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+    const cloudBackup = require('./cloudBackupCryptoService');
+    const cloudConfig = await cloudBackup.getCloudConfig().catch(() => ({ enabled: false, provider: 'not_configured' }));
+    const encryptionConfigured = String(process.env.BACKUP_ENCRYPTION_KEY || '').length >= 12;
+    const testedAndEncrypted = Boolean(lastBackup && lastBackup.encrypted && lastBackup.test_status === 'test_passed');
+    const offsiteConfigured = Boolean(cloudConfig.enabled && cloudConfig.provider === 'offsite_webhook' && cloudConfig.endpointUrl);
 
     return {
       storage: {
@@ -1057,6 +1062,17 @@ class UnifiedBackupEngine {
         enabled: schedEnabled?.value !== 'false',
         interval: schedInterval?.value || 'daily',
         time: schedTime?.value || '02:00'
+      },
+      readiness: {
+        encryptionConfigured,
+        offsiteConfigured,
+        testedAndEncrypted,
+        recoveryReady: Boolean(testedAndEncrypted && offsiteConfigured && encryptionConfigured),
+        risks: [
+          ...(encryptionConfigured ? [] : ['مفتاح تشفير النسخ BACKUP_ENCRYPTION_KEY غير مضبوط في أسرار Railway']),
+          ...(offsiteConfigured ? [] : ['لا توجد وجهة نسخ مستقلة خارج Railway مفعّلة']),
+          ...(testedAndEncrypted ? [] : ['لا توجد نسخة مشفرة اجتازت اختبار الاستعادة المعزول'])
+        ]
       }
     };
   }

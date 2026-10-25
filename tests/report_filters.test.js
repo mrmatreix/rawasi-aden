@@ -3,6 +3,36 @@ const assert = require('node:assert/strict');
 const { parseFilters, shapeAccountRows, transformReport } = require('../server/services/reportFilterService');
 const Reports = require('../js/reports');
 
+test('report amounts use Western digits for opening balances and budget numbers', () => {
+ assert.equal(Reports.formatNumber('١٢٬٣٤٥٫٦٧'), '12,345.67');
+ assert.equal(Reports.formatNumber('۱۲۳۴۵٫۶۷'), '12,345.67');
+ assert.equal(Reports.formatNumber(-1200.5), '-1,200.5');
+ assert.equal(Reports.formatNumber(null), '0');
+});
+
+test('slower old report filters cannot overwrite the latest posting and account level selection', async () => {
+ const fields = { financialPostingStatus: {value:'posted'}, financialDisplayLevel:{value:'subsidiary'}, financialCurrency:{value:'YER'}, financialFilterSummary:{textContent:''} };
+ const pending = [];
+ global.document = { getElementById:id => fields[id] || null };
+ global.window = {location:{origin:'https://example.test'}};
+ global.App = {showToast:()=>{}};
+ global.fetch = url => new Promise(resolve=>pending.push({url,resolve}));
+ try {
+  const old = Reports.fetchFinancialReport('/api/reports/trial-balance');
+  fields.financialPostingStatus.value='unposted'; fields.financialDisplayLevel.value='main';
+  const current = Reports.fetchFinancialReport('/api/reports/trial-balance');
+  assert.ok(pending[1].url.includes('posting_status=unposted'));
+  assert.ok(pending[1].url.includes('display_level=main'));
+  pending[1].resolve({ok:true,status:200,json:async()=>({success:true,data:{accounts:[]},meta:{posting_status:'unposted',display_level:'main',currency:'ر.ي'}})});
+  assert.equal((await (await current).json()).success,true);
+  const summary=fields.financialFilterSummary.textContent;
+  pending[0].resolve({ok:true,status:200,json:async()=>({success:true,data:{accounts:[]},meta:{posting_status:'posted',display_level:'subsidiary'}})});
+  assert.equal((await (await old).json()).stale,true);
+  assert.equal(fields.financialFilterSummary.textContent,summary);
+  assert.ok(summary.includes('قبل الترحيل فقط')); assert.ok(summary.includes('حسابات رئيسية'));
+ } finally { delete global.document; delete global.window; delete global.App; delete global.fetch; Reports.reportRequests = new Map(); }
+});
+
 test('hierarchy aggregation nets parent balances and keeps source totals and identifiers unchanged',()=>{
  const chart=[{id:1,code:'3',name:'مصروفات',parent_id:null,level:1},{id:2,code:'31',name:'النشاط',parent_id:1,level:2},{id:3,code:'31101001',name:'أ',parent_id:2,level:5},{id:4,code:'31101002',name:'ب',parent_id:2,level:5}];
  const rows=[{id:3,code:'31101001',name:'أ',opening_balance:80,opening_debit:80,opening_credit:0,period_debit:100,period_credit:0,closing_balance:180,closing_debit:180,closing_credit:0},{id:4,code:'31101002',name:'ب',opening_balance:-50,opening_debit:0,opening_credit:50,period_debit:0,period_credit:60,closing_balance:-110,closing_debit:0,closing_credit:110}];

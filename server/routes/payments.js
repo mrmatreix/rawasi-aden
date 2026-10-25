@@ -1,3 +1,4 @@
+const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
 const router = express.Router();
@@ -322,7 +323,7 @@ router.post('/', (req, res, next) => {
   const isReceipt = (req.body?.type === 'قبض');
   const reqPerm = isReceipt ? 'revenues:create' : 'expenses:create';
   return requirePermission(reqPerm)(req, res, next);
-}, async (req, res) => {
+}, financialSave, async (req, res) => {
   try {
     const {
       type = 'قبض', // 'قبض' أو 'صرف'
@@ -488,7 +489,8 @@ router.post('/', (req, res, next) => {
     const directClientName = req.body.client_name ? String(req.body.client_name).trim() : null;
     const directSupplierName = req.body.supplier_name ? String(req.body.supplier_name).trim() : null;
     const accId = leafAccount.id;
-    const finalCcId = await AccountingService.resolveOptionalCostCenter(cost_center_id);
+    let finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
+    if (settlementAccount) finalCcId = await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
 
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
@@ -760,6 +762,8 @@ router.post('/:id/post', (req, res, next) => {
       : pay.payment_method === 'تحويل بنكي' ? (await AccountingService.resolveBankAccount(pay.bank_account_id, pay.bank_name)).coaAccount : await AccountingService.resolveCashAccount();
 
     await transaction(async (tx) => {
+      const current = await lockFinancialDocument(tx, 'payments', pay.id);
+      if (current.status !== pay.status) throw Object.assign(new Error('تغيّرت حالة المستند؛ حدّث السجل قبل الترحيل'), { statusCode: 409 });
       // 1. تطبيق المستخلص أو تحديث المورد كما في الترحيل المباشر.
       if (pay.type === 'قبض') {
         if (pay.bill_id) await require('../services/clientChainService').applyPaymentToBill(pay.bill_id, parsedAmount, tx);
@@ -856,7 +860,7 @@ router.put('/:id', requirePermission('revenues:edit,expenses:edit'), async (req,
     const method = req.body.payment_method ?? pay.payment_method;
     const accountId = Number(req.body.account_id ?? pay.account_id);
     const settlementId = Number(req.body.settlement_account_id ?? pay.settlement_account_id);
-    const costCenterId = await AccountingService.resolveOptionalCostCenter(
+    const costCenterId = await AccountingService.resolveAccountOperationCenter(await AccountingService.assertLeafAccount(accountId),
       req.body.cost_center_id !== undefined ? req.body.cost_center_id : pay.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {
@@ -942,7 +946,11 @@ router.delete('/:id', (req, res, next) => {
 
     await FinancialControlService.assertPeriodOpen(pay.date);
 
-    await run('DELETE FROM payments WHERE id = ?', [req.params.id]);
+    await transaction(async tx => {
+      FinancialControlService.assertDeletable(await lockFinancialDocument(tx, 'payments', req.params.id));
+      await tx.run("DELETE FROM supporting_documents WHERE entity_type = 'payment' AND entity_id = ?", [req.params.id]);
+      await tx.run('DELETE FROM payments WHERE id = ?', [req.params.id]);
+    });
 
     await logAudit(req, {
       action: 'DELETE_DRAFT',

@@ -6,6 +6,14 @@
 (function () {
   'use strict';
 
+  // Prevent the browser's numeric spinner from changing financial values on scroll.
+  document.addEventListener('wheel', event => {
+    const input = event.target;
+    if (input.matches?.('input[type="number"]') && input.closest('#modalReceiptForm, #quickReceiptForm, #modalExpenseForm, #quickExpenseForm, #modalJournalForm, #voucherReviewModal') && document.activeElement === input) {
+      event.preventDefault();
+    }
+  }, { capture: true, passive: false });
+
   const ActionDispatcher = {
     handlers: {},
 

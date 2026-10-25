@@ -45,10 +45,10 @@ const Sidebar = {
     const empty = document.getElementById('sidebarEmpty'); if (empty) empty.hidden = !query || matches > 0;
     const clear = document.getElementById('sidebarSearchClear'); if (clear) clear.hidden = !query;
   },
-  sync(view, tab) {
+  sync(view, tab, preferredLink) {
     const links = [...document.querySelectorAll('#sidebarNavList a[data-view]')];
     const moduleTab = tab || ({ reports: typeof Reports !== 'undefined' ? Reports.activeReportTab : '', projectHub: typeof ProjectHub !== 'undefined' ? ProjectHub.activeTab : '', settings: typeof Settings !== 'undefined' ? Settings.activeTab : '', inventory: typeof Inventory !== 'undefined' ? Inventory.activeTab : '' })[view] || '';
-    const matched = links.find(link => link.dataset.view === view && link.dataset.tab === moduleTab && !link.dataset.navAction) || links.find(link => link.dataset.view === view && !link.dataset.navAction);
+    const matched = links.includes(preferredLink) ? preferredLink : links.find(link => link.dataset.view === view && link.dataset.tab === moduleTab && !link.dataset.navAction) || links.find(link => link.dataset.view === view && !link.dataset.navAction);
     for (const link of links) { const active = link === matched; link.classList.toggle('active', active); if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }
     document.querySelectorAll('#sidebarNavList .nav-group').forEach(group => group.classList.toggle('has-active', Boolean(matched && group.contains(matched))));
     if (matched?.closest('.nav-group')) this.setOpen(matched.closest('.nav-group'), true);
@@ -62,7 +62,14 @@ const Sidebar = {
       if (tab) { if (await App.navigateDeep(view, tab) === false) return; } else if (await App.navigate(view) === false) return;
       if (action === 'client') Accounting.openNewClientModal();
       if (action === 'supplier') Accounting.openNewSupplierModal();
-      this.sync(view, tab);
+      if (action === 'periods') await Accounting.openPeriodsModal();
+      if (action === 'project') Projects.openNewModal();
+      if (action === 'quotation') ProjectHub.openNewQuotationModal(true);
+      if (action === 'invoice') {
+        await App.loadClientsTable();
+        await App.openNewClientBillModal(null, null, null, 'فاتورة');
+      }
+      this.sync(view, tab, link);
     } catch (error) { console.error('Navigation failed:', error); App.showToast('تعذر فتح العملية، يرجى المحاولة مجدداً', 'error'); }
   }
 };

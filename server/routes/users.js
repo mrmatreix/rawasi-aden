@@ -77,7 +77,11 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
 
       return { 
         ...u, 
-        two_factor_pin: u.two_factor_pin || (u.role === 'admin' || u.username === 'admin' ? '123456' : ''),
+        // Never return a secret PIN in a user-management response.  The UI only
+        // needs to know whether one exists; exposing or substituting a default
+        // PIN caused edits to overwrite a valid configuration in production.
+        two_factor_pin: '',
+        two_factor_configured: Boolean(u.two_factor_pin),
         two_factor_enabled: u.two_factor_enabled !== undefined && u.two_factor_enabled !== null ? u.two_factor_enabled : 1,
         branch_id: u.branch_id || 1,
         branch: u.branch || 'المركز الرئيسي',
@@ -102,6 +106,7 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
 // إضافة مستخدم جديد مع الصلاحيات
 router.post('/', requirePermission('settings:users'), async (req, res) => {
   try {
+    if (typeof req.body.password !== 'string' || req.body.password.length < 8 || req.body.password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور يجب أن تكون 8 خانات على الأقل ومطابقة للتأكيد'});
     const { 
       username, password, full_name, role_id, role, email, phone, status = 'active', 
       permissions, security_settings, two_factor_pin, two_factor_enabled,
@@ -144,8 +149,11 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       ? JSON.stringify(allowed_departments) 
       : (allowed_departments || '*');
 
-    const cleanPin = two_factor_pin !== undefined ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || '123456') : '123456';
+    const cleanPin = two_factor_pin !== undefined ? String(two_factor_pin).replace(/\D/g, '') : '';
     const tfaEnabled = two_factor_enabled !== undefined ? (two_factor_enabled ? 1 : 0) : 1;
+    if (tfaEnabled && !/^\d{6}$/.test(cleanPin)) {
+      return res.status(400).json({ success: false, message: 'يتطلب التحقق بخطوتين رمز PIN خاصاً من 6 أرقام.' });
+    }
 
     const result = await run(`
       INSERT INTO users (
@@ -155,7 +163,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, 
+      cleanUsername, password_hash, full_name.trim(), roleIdVal || null, roleName, email || '', phone || '', status,
       permsString, secString, cleanPin, tfaEnabled,
       branch_id || 1, branch || 'المركز الرئيسي', department_id || 1, department || 'الإدارة العامة',
       allowedProjectsStr, allowedBranchesStr, allowedDepartmentsStr
@@ -196,6 +204,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
 // تعديل بيانات وصلاحيات مستخدم
 router.put('/:id', requirePermission('settings:users'), async (req, res) => {
   try {
+    if ((req.body.password || req.body.password_confirm) && (typeof req.body.password !== 'string' || req.body.password.length < 8 || req.body.password !== req.body.password_confirm)) return res.status(400).json({success:false,message:'كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل ومطابقة للتأكيد'});
     const userId = parseInt(req.params.id);
     const { 
       username, password, full_name, role_id, role, email, phone, status, 
@@ -218,6 +227,7 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
 
     let roleName = role || user.role;
     let roleIdVal = role_id !== undefined ? role_id : user.role_id;
+    if(role && !role_id)roleIdVal=(await get('SELECT id FROM roles WHERE name=?',[role]))?.id || null;
     if (role_id) {
       const roleObj = await get('SELECT name FROM roles WHERE id = ?', [role_id]);
       if (roleObj) roleName = roleObj.name;
@@ -244,12 +254,19 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
     const deptIdVal = department_id !== undefined ? department_id : (user.department_id || 1);
     const deptVal = department !== undefined ? department : (user.department || 'الإدارة العامة');
 
-    const cleanPin = two_factor_pin !== undefined 
-      ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || user.two_factor_pin || '123456')
-      : (user.two_factor_pin || '123456');
+    // A blank PIN on edit means "keep the existing PIN".  It must never be
+    // silently converted to a public default.
+    const submittedPin = two_factor_pin === undefined ? '' : String(two_factor_pin).replace(/\D/g, '');
+    if (submittedPin && !/^\d{6}$/.test(submittedPin)) {
+      return res.status(400).json({ success: false, message: 'رمز PIN يجب أن يتكون من 6 أرقام.' });
+    }
+    const cleanPin = submittedPin || user.two_factor_pin || '';
     const tfaEnabled = two_factor_enabled !== undefined 
       ? (two_factor_enabled ? 1 : 0) 
       : (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null ? user.two_factor_enabled : 1);
+    if (tfaEnabled && !/^\d{6}$/.test(cleanPin)) {
+      return res.status(400).json({ success: false, message: 'لا يمكن تفعيل التحقق بخطوتين قبل تعيين رمز PIN خاص من 6 أرقام.' });
+    }
 
     if (password && password.trim().length > 0) {
       const salt = bcrypt.genSaltSync(10);

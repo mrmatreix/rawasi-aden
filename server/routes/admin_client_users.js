@@ -6,11 +6,23 @@
 
 const express = require('express');
 const router = express.Router();
-router.use(require('../middleware/security').requirePermission('settings:users'));
+router.use((req,res,next)=>{
+  const path=req.path,read=req.method==='GET';let action=read?'view':req.method==='DELETE'?'delete':req.method==='POST'&&path==='/'?'create':'edit';
+  if(path.startsWith('/services-catalog'))action=read?'view':'services';
+  else if(path.startsWith('/messages'))action='messages';
+  else if(path.startsWith('/service-requests'))action=read?'requests_view':path.endsWith('/convert-to-project')?'requests_convert':'requests_edit';
+  else if(path.endsWith('/reset-password'))action='reset_password';
+  else if(path.endsWith('/revoke-sessions'))action='sessions';
+  else if(/\/(invite-preview|send-invite)$/.test(path))action='invite';
+  else if(path.endsWith('/projects')&&!read)action='permissions';
+  require('../middleware/security').requirePermission('settings:users,client_app:'+action)(req,res,next);
+});
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../database/db');
 const { logAudit } = require('../services/auditService');
+const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
+const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
 
 /**
  * GET /api/admin/client-users
@@ -77,6 +89,128 @@ router.get('/stats', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب إحصائيات الإدارة' });
+  }
+});
+
+// =========================================================================
+// كتالوج الخدمات المعروضة للزوار والعملاء في بوابة العملاء
+// =========================================================================
+router.get('/services-catalog', async (req, res) => {
+  try {
+    const services = await db.query(`
+      SELECT id, code, title, category, description, icon, is_active, display_order, created_at
+      FROM engineering_services
+      ORDER BY CASE category
+        WHEN 'design' THEN 10 WHEN 'execution' THEN 20 WHEN 'finishing' THEN 30
+        WHEN 'systems' THEN 40 WHEN 'infrastructure' THEN 50 WHEN 'consulting' THEN 60
+        WHEN 'supply' THEN 70 ELSE 90 END, display_order ASC, id ASC
+    `);
+    res.json({ success: true, services: services || [] });
+  } catch (err) {
+    console.error('Fetch services catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر تحميل كتالوج الخدمات' });
+  }
+});
+
+router.post('/services-catalog', async (req, res) => {
+  try {
+    const { code, title, category, description, icon, display_order, is_active } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    if (!cleanTitle || cleanTitle.length > 200) return res.status(400).json({ success: false, message: 'اسم الخدمة مطلوب وبحد أقصى 200 حرف' });
+    const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 50) || null;
+    const duplicate = cleanCode ? await db.get('SELECT id FROM engineering_services WHERE code = ?', [cleanCode]) : null;
+    if (duplicate) return res.status(409).json({ success: false, message: 'رمز الخدمة مستخدم مسبقاً' });
+    const result = await db.run(`
+      INSERT INTO engineering_services (code, title, category, description, icon, is_active, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, parseDisplayOrder(display_order)]);
+    const serviceId = result.lastID || result.lastInsertRowid || result.insertId || result.id;
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_CREATE', entity_type: 'engineering_services', entity_id: serviceId, details: `إضافة خدمة للبوابة: ${cleanTitle}` });
+    res.status(201).json({ success: true, id: serviceId, message: 'تمت إضافة الخدمة وستظهر للزوار عند تفعيلها' });
+  } catch (err) {
+    console.error('Create service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر إضافة الخدمة' });
+  }
+});
+
+// كتالوج جاهز قابل للإدراج مرة واحدة؛ لا يستبدل الخدمات أو التعديلات الموجودة.
+const RECOMMENDED_VISITOR_SERVICES = [
+  ['ARCH-DESIGN', 'التصميم المعماري والإنشائي', 'design', 'إعداد المخططات المعمارية والإنشائية المتكاملة وفق احتياج المشروع والمتطلبات الفنية.', 'fa-solid fa-compass-drafting', 10],
+  ['ENG-SUPERVISION', 'الإشراف الهندسي وإدارة المشاريع', 'design', 'متابعة التنفيذ وضبط الجودة والبرنامج الزمني والتنسيق بين أطراف المشروع.', 'fa-solid fa-helmet-safety', 20],
+  ['GENERAL-CONTRACT', 'المقاولات العامة وتسليم المفتاح', 'execution', 'تنفيذ المشروع كاملاً من التجهيز وحتى التسليم وفق المواصفات والاتفاق المعتمد.', 'fa-solid fa-building', 30],
+  ['BUILD-CONSTRUCT', 'تنفيذ المباني السكنية والتجارية', 'execution', 'تنفيذ الفلل والمباني والمنشآت التجارية بأعمال إنشائية منظمة ومتابعة مستمرة.', 'fa-solid fa-city', 40],
+  ['RENOVATION', 'الترميم والتأهيل والصيانة', 'finishing', 'معالجة وتجديد المباني القائمة وتحسين كفاءتها ومظهرها.', 'fa-solid fa-screwdriver-wrench', 50],
+  ['FINISHING', 'التشطيبات الداخلية والخارجية', 'finishing', 'أعمال التشطيبات المتكاملة للأسقف والجدران والأرضيات والواجهات.', 'fa-solid fa-paint-roller', 60],
+  ['INTERIOR-DESIGN', 'التصميم والديكور الداخلي', 'finishing', 'تصميم المساحات الداخلية واختيار الخامات والألوان وتنفيذ الديكور.', 'fa-solid fa-couch', 70],
+  ['WATER-SEWER', 'شبكات المياه والصرف الصحي', 'infrastructure', 'تصميم وتنفيذ شبكات المياه والصرف والتوصيلات الداخلية والخارجية.', 'fa-solid fa-faucet-drip', 80],
+  ['ELECTRICAL', 'الأعمال الكهربائية', 'systems', 'تنفيذ التمديدات واللوحات والإنارة وأنظمة الحماية الكهربائية.', 'fa-solid fa-bolt', 90],
+  ['SOLAR-ENERGY', 'أنظمة الطاقة الشمسية', 'systems', 'تصميم وتركيب حلول الطاقة الشمسية المناسبة للمباني والمنشآت.', 'fa-solid fa-solar-panel', 100],
+  ['HVAC-FIRE', 'التكييف والتهوية وأنظمة الحريق', 'systems', 'حلول التكييف والتهوية والإنذار والإطفاء بما يلائم المشروع.', 'fa-solid fa-temperature-arrow-down', 110],
+  ['PERMITS', 'المخططات والتراخيص الهندسية', 'consulting', 'إعداد المخططات والملفات المطلوبة للإجراءات والتراخيص الهندسية.', 'fa-solid fa-file-signature', 120],
+  ['QUANTITY-SURVEY', 'حصر الكميات وإعداد المقايسات', 'consulting', 'إعداد جداول الكميات والمواصفات والتكلفة التقديرية للمشروع.', 'fa-solid fa-ruler-combined', 130],
+  ['FEASIBILITY', 'دراسات الجدوى والتسعير الفني', 'consulting', 'تحليل الاحتياجات والتكلفة والبدائل وإعداد عرض فني أولي.', 'fa-solid fa-chart-line', 140],
+  ['SURVEY', 'الرفع المساحي وتخطيط المواقع', 'infrastructure', 'رفع الموقع وتحديد المناسيب والحدود وتجهيز بيانات التخطيط والتنفيذ.', 'fa-solid fa-map-location-dot', 150],
+  ['SUPPLY-INSTALL', 'توريد وتركيب المواد والمعدات', 'supply', 'توريد وتركيب المواد والمعدات ذات الصلة بالمشروع حسب المواصفات المعتمدة.', 'fa-solid fa-truck-fast', 160]
+];
+
+router.post('/services-catalog/add-recommended', async (req, res) => {
+  try {
+    let added = 0;
+    let normalized = 0;
+    const legacyCategories = new Set(['التصميم والإشراف', 'المقاولات', 'ترميم وصيانة', 'تشطيبات', 'بنية تحتية', 'أنظمة', 'استشارات', 'توريد', 'survey']);
+    for (const [code, title, category, description, icon, displayOrder] of RECOMMENDED_VISITOR_SERVICES) {
+      const exists = await db.get('SELECT id, category FROM engineering_services WHERE code = ?', [code]);
+      if (exists) {
+        if (legacyCategories.has(exists.category)) {
+          await db.run('UPDATE engineering_services SET category = ? WHERE id = ?', [category, exists.id]);
+          normalized += 1;
+        }
+        continue;
+      }
+      await db.run(`INSERT INTO engineering_services (code, title, category, description, icon, is_active, display_order) VALUES (?, ?, ?, ?, ?, 1, ?)`, [code, title, category, description, icon, displayOrder]);
+      added += 1;
+    }
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_RECOMMENDED_SEED', entity_type: 'engineering_services', entity_id: null, details: `إضافة ${added} خدمة مقترحة وتوحيد ${normalized} نوع خدمة في كتالوج الزوار` });
+    res.json({ success: true, added, normalized, total: RECOMMENDED_VISITOR_SERVICES.length, message: added ? `تمت إضافة ${added} خدمة مقترحة وتنسيق ${normalized} خدمة` : normalized ? `تم تنسيق أنواع ${normalized} خدمة موجودة` : 'جميع الخدمات المقترحة موجودة ومنسقة مسبقاً' });
+  } catch (err) {
+    console.error('Add recommended services error:', err);
+    res.status(500).json({ success: false, message: 'تعذر إضافة الخدمات المقترحة' });
+  }
+});
+
+router.put('/services-catalog/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT id, title FROM engineering_services WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'الخدمة غير موجودة' });
+    const { code, title, category, description, icon, display_order, is_active } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    if (!cleanTitle || cleanTitle.length > 200) return res.status(400).json({ success: false, message: 'اسم الخدمة مطلوب وبحد أقصى 200 حرف' });
+    const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 50) || null;
+    const duplicate = cleanCode ? await db.get('SELECT id FROM engineering_services WHERE code = ? AND id != ?', [cleanCode, id]) : null;
+    if (duplicate) return res.status(409).json({ success: false, message: 'رمز الخدمة مستخدم مسبقاً' });
+    await db.run(`UPDATE engineering_services SET code = ?, title = ?, category = ?, description = ?, icon = ?, is_active = ?, display_order = ? WHERE id = ?`, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, parseDisplayOrder(display_order), id]);
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_UPDATE', entity_type: 'engineering_services', entity_id: id, details: `تعديل خدمة البوابة: ${existing.title} → ${cleanTitle}` });
+    res.json({ success: true, message: 'تم حفظ تعديل الخدمة' });
+  } catch (err) {
+    console.error('Update service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر تعديل الخدمة' });
+  }
+});
+
+router.delete('/services-catalog/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT id, title FROM engineering_services WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'الخدمة غير موجودة' });
+    const used = await db.get('SELECT COUNT(*) AS count FROM service_request_items WHERE service_id = ?', [id]);
+    if (Number(used?.count || 0) > 0) return res.status(409).json({ success: false, message: 'لا يمكن حذف خدمة مرتبطة بطلبات سابقة؛ أخفها بدلاً من ذلك' });
+    await db.run('DELETE FROM engineering_services WHERE id = ?', [id]);
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_DELETE', entity_type: 'engineering_services', entity_id: id, details: `حذف خدمة غير مستخدمة من البوابة: ${existing.title}` });
+    res.json({ success: true, message: 'تم حذف الخدمة' });
+  } catch (err) {
+    console.error('Delete service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر حذف الخدمة' });
   }
 });
 
@@ -320,6 +454,7 @@ router.get('/:id/details', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    if (typeof req.body.password !== 'string' || req.body.password.length < 6 || req.body.password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور وتأكيدها غير متطابقين'});
     const { client_id, email, password, full_name, phone, role, status, two_factor_enabled, project_ids } = req.body;
 
     if (!client_id || !email || !password || !full_name) {
@@ -461,6 +596,7 @@ router.put('/:id', async (req, res) => {
     }
 
     const updates = [];
+    if(role&&role!==user.role&&!require('../middleware/security').hasUserPermission(req.user,'settings:users,client_app:permissions'))return res.status(403).json({success:false,message:'تغيير دور حساب العميل يتطلب صلاحية تعيين الصلاحيات'});
     const params = [];
 
     if (full_name) { updates.push('full_name = ?'); params.push(String(full_name).trim()); }
@@ -489,7 +625,7 @@ router.put('/:id', async (req, res) => {
       entity_type: 'client_users',
       entity_id: userId,
       old_values: user,
-      new_values: req.body,
+      new_values: {full_name,phone,role,status,two_factor_enabled},
       details: `تحديث بيانات حساب العميل (${user.full_name}) - الحالة الجديدة: ${status || user.status}`
     });
 
@@ -505,11 +641,13 @@ router.put('/:id', async (req, res) => {
  */
 router.post('/:id/reset-password', async (req, res) => {
   try {
+    if (req.body.new_password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور وتأكيدها غير متطابقين'});
     const userId = parseInt(req.params.id, 10);
     const { new_password } = req.body;
 
-    if (!new_password || String(new_password).length < 6) {
-      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل' });
+    const password = String(new_password || '');
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تتكون من 6 خانات على الأقل' });
     }
 
     const user = await db.get(`SELECT id, full_name, email FROM client_users WHERE id = ?`, [userId]);
@@ -518,9 +656,9 @@ router.post('/:id/reset-password', async (req, res) => {
     }
 
     const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(String(new_password), salt);
+    const hash = bcrypt.hashSync(password, salt);
 
-    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
+    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, otp_code = NULL, otp_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_PASSWORD_RESET',
@@ -529,15 +667,44 @@ router.post('/:id/reset-password', async (req, res) => {
       details: `تمت إعادة تعيين كلمة المرور لحساب العميل: ${user.full_name} (${user.email})`
     });
 
-    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور بنجاح وإبطال الجلسات السابقة' });
+    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور وإلغاء ربط الجهاز ورمز التحقق السابقين' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إعادة تعيين كلمة المرور' });
   }
 });
 
+const makeTempPassword = () => `Rawasi#${crypto.randomBytes(5).toString('base64url')}`;
+const makeOtpCode = () => crypto.randomInt(100000, 1000000).toString();
+const buildInviteText = ({ fullName, email, tempPassword, otpCode, portalUrl, message }) => {
+  const greeting = String(message || `مرحباً ${fullName}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.`).trim();
+  return `${greeting}\n\nالبريد: ${email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${portalUrl}`;
+};
+
+// معاينة قابلة للتحرير: لا تحفظ كلمة مرور ولا رمزاً قبل تأكيد الإرسال.
+router.get('/:id/invite-preview', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const user = await db.get(`SELECT id, full_name, email, phone, status FROM client_users WHERE id = ?`, [userId]);
+    if (!user) return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
+    if (user.status !== 'active') return res.status(400).json({ success: false, message: 'لا يمكن إرسال دعوة لحساب غير نشط' });
+    const portalUrl = `${req.protocol}://${req.get('host')}/client-app/`;
+    res.json({
+      success: true,
+      preview: {
+        user_id: user.id, full_name: user.full_name, email: user.email, phone: user.phone,
+        temp_password: makeTempPassword(), otp_code: makeOtpCode(), expiry_days: 7,
+        message: `مرحباً ${user.full_name}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.`,
+        portal_url: portalUrl
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر تجهيز معاينة دعوة التفعيل' });
+  }
+});
+
 /**
  * POST /api/admin/client-users/:id/send-invite
- * توليد ودعوة العميل لتفعيل حسابه ودخوله لأول مرة (Invitation / Temp Access)
+ * يثبت بيانات الدخول فقط بعد مراجعة المدير وتأكيده للإرسال.
  */
 router.post('/:id/send-invite', async (req, res) => {
   try {
@@ -547,23 +714,38 @@ router.post('/:id/send-invite', async (req, res) => {
       return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
     }
 
-    // إنشاء كلمة مرور مؤقتة وتثبيتها
-    const tempPassword = 'Rawasi#' + crypto.randomBytes(3).toString('hex').toUpperCase();
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    if (user.status !== 'active') return res.status(400).json({ success: false, message: 'لا يمكن إرسال دعوة لحساب غير نشط' });
+    const requested = req.body || {};
+    const tempPassword = String(requested.temp_password || makeTempPassword()).trim();
+    const otpCode = String(requested.otp_code || makeOtpCode()).trim();
+    const expiryDays = Math.max(1, Math.min(30, Number(requested.expiry_days) || 7));
+    const portalUrl = `${req.protocol}://${req.get('host')}/client-app/`;
+    if (tempPassword.length < 10 || tempPassword.length > 128) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور المؤقتة يجب أن تكون بين 10 و128 حرفاً' });
+    }
+    if (!/^\d{6}$/.test(otpCode)) {
+      return res.status(400).json({ success: false, message: 'رمز OTP يجب أن يتكون من 6 أرقام إنجليزية' });
+    }
+    const message = String(requested.message || '').trim().slice(0, 600);
+    const defaultShareText = buildInviteText({ fullName: user.full_name, email: user.email, tempPassword, otpCode, portalUrl, message });
+    const whatsappShareText = String(requested.whatsapp_share_text || defaultShareText).trim().slice(0, 2500);
+    if (!whatsappShareText) {
+      return res.status(400).json({ success: false, message: 'نص رسالة واتساب لا يمكن أن يكون فارغاً' });
+    }
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(tempPassword, salt);
 
     await db.run(`
       UPDATE client_users 
-      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', '+7 days'), updated_at = CURRENT_TIMESTAMP 
+      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', ?), updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [hash, otpCode, userId]);
+    `, [hash, otpCode, `+${expiryDays} days`, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_INVITE_SENT',
       entity_type: 'client_users',
       entity_id: userId,
-      details: `تم إصداره وتجهيز دعوة تفعيل جديدة لحساب العميل: ${user.full_name}`
+      details: `تم اعتماد وتجهيز دعوة تفعيل جديدة لحساب العميل: ${user.full_name} (صلاحية رمز التفعيل: ${expiryDays} أيام)`
     });
 
     res.json({
@@ -576,8 +758,9 @@ router.post('/:id/send-invite', async (req, res) => {
         phone: user.phone,
         temp_password: tempPassword,
         otp_code: otpCode,
-        portal_url: `${req.protocol}://${req.get('host')}/client-app/`,
-        whatsapp_share_text: `مرحباً ${user.full_name}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.\n\nالبريد: ${user.email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${req.protocol}://${req.get('host')}/client-app/`
+        portal_url: portalUrl,
+        expiry_days: expiryDays,
+        whatsapp_share_text: whatsappShareText
       }
     });
   } catch (err) {

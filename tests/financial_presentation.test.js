@@ -4,6 +4,15 @@ const labels = require('../js/financial-labels');
 const Excel = require('../js/excel-export');
 const { transformReport } = require('../server/services/reportFilterService');
 
+test('Excel custom titles are escaped and independent exports exclude cached financial report context',async()=>{
+ let blob;const original=URL.createObjectURL;URL.createObjectURL=value=>{blob=value;return 'blob:test';};
+ global.Settings={getOperationTitle:()=>'<عنوان مخصص>'};global.Reports={activeReportTab:'trial-balance',lastReportData:{'trial-balance':{meta:{}}},describeReportFilters:()=> 'STALE_FILTER',accountDetailsHtml:()=> 'STALE_DETAILS'};
+ global.document={createElement:()=>({setAttribute(){},click(){}}),body:{appendChild(){},removeChild(){}}};
+ try{Excel.download('<table><tr><td class="hdr-title">قديم</td></tr></table>','تقرير');let html=await blob.text();assert.ok(html.includes('&lt;عنوان مخصص&gt;'));assert.ok(!html.includes('<عنوان مخصص>'));
+ Excel.download('<table><tr><td>مستند مشروع</td></tr></table>','مشروع','بيانات',false);html=await blob.text();assert.ok(!html.includes('STALE_FILTER'));assert.ok(!html.includes('STALE_DETAILS'));
+ }finally{URL.createObjectURL=original;delete global.Settings;delete global.Reports;delete global.document;}
+});
+
 test('financial classifications have consistent Arabic labels while internal codes remain unchanged',()=>{
  for(const [code,label] of [['asset','الأصول'],['liability','الالتزامات'],['equity','حقوق الملكية'],['expense','المصروفات'],['revenue','الإيرادات'],['cost','التكاليف']]) assert.equal(labels.type(code),label);
  assert.equal(labels.type('مصروفات'),'المصروفات'); assert.equal(labels.type('cash'),'صندوق');

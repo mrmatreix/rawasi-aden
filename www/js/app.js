@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261019-tfzi',
+  assetVersion: '1.0.0.20261025-djqd',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,20 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261019-tfzi',
-    projects: 'js/projects.js?v=1.0.0.20261019-tfzi',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261019-tfzi',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261019-tfzi',
-    accounting: 'js/accounting.js?v=1.0.0.20261019-tfzi',
-    hr: 'js/hr.js?v=1.0.0.20261019-tfzi',
-    reports: 'js/reports.js?v=1.0.0.20261019-tfzi',
-    inventory: 'js/inventory.js?v=1.0.0.20261019-tfzi',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261019-tfzi',
-    settings: 'js/settings.js?v=1.0.0.20261019-tfzi',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261019-tfzi',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261019-tfzi'
+    projectSetup: 'js/project-setup.js?v=1.0.0.20261025-djqd',
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-djqd',
+    projects: 'js/projects.js?v=1.0.0.20261025-djqd',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-djqd',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-djqd',
+    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-djqd',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-djqd',
+    hr: 'js/hr.js?v=1.0.0.20261025-djqd',
+    reports: 'js/reports.js?v=1.0.0.20261025-djqd',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-djqd',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-djqd',
+    settings: 'js/settings.js?v=1.0.0.20261025-djqd',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-djqd',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-djqd'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -71,12 +73,15 @@ const App = {
     const viewMap = {
       dashboard: ['reports', 'projects'],
       projects: ['projects'],
-      projectHub: ['projects', 'projectHub', 'tafqeet', 'accounting'],
-      revenues: ['tafqeet', 'accounting'],
-      expenses: ['tafqeet', 'accounting'],
+      projectWorkItems: ['projectSetup'],
+      projectProgressReport: ['projectSetup'],
+      projectHub: ['projects', 'projectHub', 'projectSetup', 'tafqeet', 'accounting'],
+      revenues: ['tafqeet', 'accounting', 'journalPosting'],
+      expenses: ['tafqeet', 'accounting', 'journalPosting'],
       custody: ['tafqeet', 'accounting'],
       journal: ['tafqeet', 'accounting', 'excelExport'],
-      chartOfAccounts: ['accounting'],
+      chartOfAccounts: ['accounting', 'journalPosting'],
+      journalPosting: ['tafqeet', 'accounting', 'journalPosting'],
       costCenters: ['accounting'],
       currencies: ['accounting'],
       clients: ['tafqeet', 'accounting', 'reports'],
@@ -92,9 +97,11 @@ const App = {
     };
 
     const modules = viewMap[viewId] || [];
+    if(modules.length&&viewId!=='settings'&&!modules.includes('settings'))modules.unshift('settings');
     for (const mod of modules) {
       await this.loadModule(mod);
     }
+    if(modules.length&&typeof Settings!=='undefined'&&!Settings._printSettingsLoaded)await Settings.loadPrintSettings();
   },
 
   // التحميل الكسول المسبق في أوقات خمول المتصفح (Idle Preload)
@@ -297,34 +304,43 @@ const App = {
   // 🌙☀️ تبديل الوضع الليلي / النهاري
   // ============================================
   initTheme() {
-    // استرجاع الوضع المحفوظ من localStorage
+    // استرجاع الوضع المحفوظ: ليلي أو نهاري أو تلقائي حسب تفضيل الجهاز.
     const savedTheme = localStorage.getItem('rawasi_theme') || 'dark';
     this.applyTheme(savedTheme);
+    if (!this._themeMediaQuery && window.matchMedia) {
+      this._themeMediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+      this._themeMediaQuery.addEventListener('change', () => {
+        if ((localStorage.getItem('rawasi_theme') || 'dark') === 'system') this.applyTheme('system');
+      });
+    }
   },
 
   toggleTheme() {
-    const isLight = document.body.classList.contains('light-mode');
-    const newTheme = isLight ? 'dark' : 'light';
+    const currentTheme = localStorage.getItem('rawasi_theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : (currentTheme === 'light' ? 'system' : 'dark');
     localStorage.setItem('rawasi_theme', newTheme);
     this.applyTheme(newTheme);
 
-    // تلميح مرئي للمستخدم
-    const label = newTheme === 'light' ? 'نهاري' : 'ليلي';
+    const label = newTheme === 'light' ? 'نهاري' : (newTheme === 'system' ? 'تلقائي حسب الجهاز' : 'ليلي');
     this.showToast(`تم التبديل إلى الوضع ${label} ✨`, 'info');
   },
 
   applyTheme(theme) {
-    const isLight = theme === 'light';
+    const isSystem = theme === 'system';
+    const isLight = theme === 'light' || (isSystem && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
     document.body.classList.toggle('light-mode', isLight);
     document.documentElement.classList.toggle('light-mode', isLight);
+    document.body.classList.toggle('system-theme', isSystem);
+    document.documentElement.classList.toggle('system-theme', isSystem);
+    document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
 
-    // تحديث نص وأيقونة زر التبديل
     const label = document.getElementById('themeToggleLabel');
-    if (label) label.textContent = isLight ? 'نهاري' : 'ليلي';
+    if (label) label.textContent = isSystem ? 'تلقائي' : (isLight ? 'نهاري' : 'ليلي');
+    const button = document.getElementById('btnThemeToggle');
+    if (button) button.setAttribute('title', `المظهر الحالي: ${isSystem ? 'تلقائي حسب الجهاز' : (isLight ? 'نهاري' : 'ليلي')} — انقر للتبديل`);
 
-    // تحديث meta theme-color للمتصفح
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', isLight ? '#16304f' : '#0f172a');
+    if (meta) meta.setAttribute('content', isLight ? '#f5f7fa' : '#08111f');
   },
 
   // التحكم بالقوائم الشجرية المنسدلة (Accordion Groups)
@@ -426,7 +442,7 @@ const App = {
     } else if (viewId === 'projectHub' && typeof ProjectHub !== 'undefined' && !ProjectHub._initialized && ProjectHub.init) {
       await ProjectHub.init();
       ProjectHub._initialized = true;
-    } else if (['revenues', 'expenses', 'custody', 'journal', 'chartOfAccounts', 'costCenters', 'currencies', 'cash'].includes(viewId)) {
+    } else if (['revenues', 'expenses', 'custody', 'journal', 'chartOfAccounts', 'costCenters', 'currencies', 'cash', 'journalPosting'].includes(viewId)) {
       if (typeof Accounting !== 'undefined' && !Accounting._initialized && Accounting.init) {
         await Accounting.init();
         Accounting._initialized = true;
@@ -478,7 +494,7 @@ const App = {
     if (typeof Sidebar !== 'undefined') Sidebar.sync(viewId);
 
     // تحديث أزرار شريط التنقل السفلي للهواتف
-    const accountingViews = ['journal', 'revenues', 'expenses', 'custody', 'chartOfAccounts', 'costCenters', 'currencies', 'cash'];
+    const accountingViews = ['journal', 'revenues', 'expenses', 'custody', 'chartOfAccounts', 'costCenters', 'currencies', 'cash', 'journalPosting'];
     const projectViews = ['projects', 'projectHub'];
 
     document.querySelectorAll('.bottom-nav-item').forEach(btn => {
@@ -530,6 +546,10 @@ const App = {
       HR.load();
     } else if (viewId === 'projects') {
       Projects.loadProjects();
+    } else if (viewId === 'projectWorkItems') {
+      await ProjectSetup.load();
+    } else if (viewId === 'projectProgressReport') {
+      await ProjectSetup.loadProgress();
     } else if (viewId === 'projectHub') {
       if (typeof ProjectHub !== 'undefined') {
         ProjectHub.populateProjectSelect().then(() => ProjectHub.loadProjectData());
@@ -545,6 +565,8 @@ const App = {
       this.loadCustodyTable();
     } else if (viewId === 'journal') {
       Accounting.loadJournalEntries();
+    } else if (viewId === 'journalPosting') {
+      await Accounting.initJournalPosting();
     } else if (viewId === 'chartOfAccounts') {
       Accounting.loadAccounts();
     } else if (viewId === 'costCenters') {
@@ -559,8 +581,7 @@ const App = {
       Accounting.loadCashMovement();
       await this.loadCashTable();
     } else if (viewId === 'settings') {
-      Settings.loadCompanySettings();
-      Settings.loadUsers();
+      Settings.switchTab(Settings.activeTab || 'users');
     } else if (viewId === 'contractLifecycle') {
       if (window.ContractAlertsUI && window.ContractAlertsUI.loadDashboard) {
         window.ContractAlertsUI.loadDashboard();
@@ -615,7 +636,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${p.notes || '-'}</td>
                   <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('payment', ${p.id})">📎 المؤيدات</button> ${p.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('receipt', ${p.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('receipt', ${p.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('payment', ${p.id})">📎 المؤيدات</button> ${p.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('receipt', ${p.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('receipt', ${p.id})">ترحيل</button>${Accounting.draftDeleteButton('receipt', p.id)}` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
                       receipt_no: '${p.receipt_no}',
                       date: '${p.date}',
                       client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
@@ -714,7 +735,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${e.notes || '-'}</td>
                   <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('expense', ${e.id})">📎 المؤيدات</button> ${e.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('expense', ${e.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('expense', ${e.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('expense', ${e.id})">📎 المؤيدات</button> ${e.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('expense', ${e.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('expense', ${e.id})">ترحيل</button>${Accounting.draftDeleteButton('expense', e.id)}` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
                       receipt_no: '${e.receipt_no}',
                       date: '${e.date}',
                       expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',
@@ -1202,9 +1223,6 @@ const App = {
               <button class="btn btn-primary btn-sm" onclick="Accounting.openEditSupplierModal(${v.id}); App.closeModal('dynamicAppModal');">
                 <i class="fa fa-edit"></i> تعديل بيانات المورد
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="Reports.showSupplierStatement(${v.id}); App.closeModal('dynamicAppModal');">
-                <i class="fa fa-file-text-o"></i> كشف الحساب
-              </button>
             </div>
           </div>
 
@@ -1541,7 +1559,7 @@ const App = {
       if (tbody && json.success) {
         const list = json.data || [];
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد عمليات مسجلة (${type})</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">لا توجد عمليات غير مرحلة (${type})</td></tr>`;
           const pag = document.getElementById('cashPagination');
           if (pag) pag.innerHTML = '';
         } else {
@@ -2626,7 +2644,14 @@ const App = {
   // نافذة إصدار مستخلص جديد مرتبط بالسلسلة
   // ============================================================================
 
-  async openNewClientBillModal(clientId, contractId, projectId) {
+  async openNewClientBillModal(clientId, contractId, projectId, billType = 'مستخلص أعمال جاري') {
+    document.getElementById('newClientBillForm').reset();
+    document.getElementById('newClientBillForm').dataset.billType = billType;
+    document.getElementById('newClientBillTitle').textContent = billType === 'فاتورة' ? 'إنشاء فاتورة للعميل' : 'إصدار مستخلص أعمال ومطالبة للعميل';
+    document.querySelector('#newClientBillForm button[type="submit"]').textContent = billType === 'فاتورة' ? 'حفظ الفاتورة كمسودة' : 'إصدار المستخلص وتحديث رصيد العميل';
+    this.billModalContracts = []; this.billModalProjects = []; this.currentBillProjectMetrics = null;
+    document.getElementById('modalBillProjectSelect').replaceChildren(new Option('اختر المشروع...', ''));
+    document.getElementById('modalBillContractSelect').replaceChildren(new Option('بدون عقد محدد...', ''));
     this.openModal('newClientBillModal');
 
     // رقم تلقائي
@@ -2821,6 +2846,7 @@ const App = {
 
   async submitNewClientBill(e) {
     e.preventDefault();
+    const isInvoice = document.getElementById('newClientBillForm').dataset.billType === 'فاتورة';
     const autoNo = document.getElementById('newBillAutoNo')?.innerText || `BILL-${Date.now().toString().slice(-4)}`;
     const clientId = document.getElementById('modalBillClientSelect')?.value;
     const projectId = document.getElementById('modalBillProjectSelect')?.value;
@@ -2847,7 +2873,7 @@ const App = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bill_no: autoNo,
-          bill_type: 'مستخلص أعمال جاري',
+          bill_type: document.getElementById('newClientBillForm').dataset.billType || 'مستخلص أعمال جاري',
           client_id: Number(clientId),
           project_id: Number(projectId),
           contract_id: contractId ? Number(contractId) : null,
@@ -2858,7 +2884,7 @@ const App = {
           net_amount: net,
           amount: gross,
           date,
-          status: 'معتمد',
+          status: isInvoice ? 'draft' : 'معتمد',
           notes,
           progress_percentage: autoProgress ? progressPct : undefined
         })
@@ -2866,7 +2892,7 @@ const App = {
 
       const json = await res.json();
       if (json.success) {
-        this.showToast(`تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل ونسبة الإنجاز آلياً 📑`, 'success');
+        this.showToast(isInvoice ? `تم حفظ الفاتورة كمسودة (${json.bill_no || autoNo})` : `تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل ونسبة الإنجاز آلياً 📑`, 'success');
         this.closeModal('newClientBillModal');
         this.loadClientsTable();
 

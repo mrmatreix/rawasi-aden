@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS work_item_catalog (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ parent_id INTEGER,
+ code VARCHAR(80) NOT NULL UNIQUE,
+ name VARCHAR(250) NOT NULL,
+ cost_group VARCHAR(30) NOT NULL,
+ unit VARCHAR(40) DEFAULT '',
+ reference_rate DECIMAL(15,2) DEFAULT 0,
+ notes TEXT,
+ status VARCHAR(20) DEFAULT 'active'
+);

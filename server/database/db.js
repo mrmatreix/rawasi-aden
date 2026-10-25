@@ -49,7 +49,9 @@ function initSqliteInstance() {
   if (!sqliteDb) {
     sqliteDb = new DatabaseSync(sqlitePath);
     sqliteDb.exec('PRAGMA foreign_keys = ON;');
-    sqliteDb.exec('PRAGMA journal_mode = WAL;');
+    // Railway volumes use durable mounted storage; DELETE avoids WAL lock stalls
+    // there while local development retains WAL's concurrency benefits.
+    sqliteDb.exec(runtime.isDev ? 'PRAGMA journal_mode = WAL;' : 'PRAGMA journal_mode = DELETE;');
     sqliteDb.exec('PRAGMA busy_timeout = 10000;');
   }
   return sqliteDb;
@@ -243,6 +245,11 @@ async function initMysql() {
     await require('../services/partyRegistryService').initializePartyRegistry({query: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0], run: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0]}, true);
     await checkAndAddCol('clients', 'account_id', 'INT NULL');
     await checkAndAddCol('accounts', 'default_cost_center_id', 'INT NULL');
+    const [centerPolicyCols] = await mysqlPool.query("SHOW COLUMNS FROM accounts LIKE 'cost_center_required'");
+    if (!centerPolicyCols.length) {
+      await mysqlPool.query('ALTER TABLE accounts ADD COLUMN cost_center_required INT NOT NULL DEFAULT 0');
+      await mysqlPool.query('UPDATE accounts SET cost_center_required = 1 WHERE default_cost_center_id IS NOT NULL');
+    }
     await checkAndAddCol('accounts', 'analytical_type', "VARCHAR(30) NOT NULL DEFAULT 'general'");
     await mysqlPool.query(`CREATE TABLE IF NOT EXISTS supporting_documents (
       id INT AUTO_INCREMENT PRIMARY KEY, entity_type VARCHAR(20) NOT NULL, entity_id INT NOT NULL,
@@ -834,6 +841,10 @@ function initSqlite() {
     require('../services/partyRegistryService').initializeSqlitePartyRegistry(sqliteDb);
     const accountCenterCols = sqliteDb.prepare('PRAGMA table_info(accounts)').all().map(c => c.name);
     if (!accountCenterCols.includes('default_cost_center_id')) sqliteDb.exec('ALTER TABLE accounts ADD COLUMN default_cost_center_id INTEGER REFERENCES cost_centers(id);');
+    if (!accountCenterCols.includes('cost_center_required')) {
+      sqliteDb.exec('ALTER TABLE accounts ADD COLUMN cost_center_required INTEGER NOT NULL DEFAULT 0;');
+      sqliteDb.exec('UPDATE accounts SET cost_center_required = 1 WHERE default_cost_center_id IS NOT NULL;');
+    }
     if (!accountCenterCols.includes('analytical_type')) sqliteDb.exec("ALTER TABLE accounts ADD COLUMN analytical_type TEXT NOT NULL DEFAULT 'general';");
     sqliteDb.exec(`CREATE TABLE IF NOT EXISTS supporting_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
@@ -2674,6 +2685,22 @@ async function initializeDatabase() {
     try {
       if (appConfig.dbEngine === 'mysql') await initMysql();
       else initSqlite();
+      // Cash-flow screens must work on both new and existing databases.
+      const cashFlowSchema = fs.readFileSync(path.join(__dirname, 'migration_cash_flow.sql'), 'utf8');
+      if (activeEngine === 'sqlite') sqliteDb.exec(cashFlowSchema);
+      else {
+        const tables = cashFlowSchema.replace(/--[^\n]*/g, '').split(';').filter(sql => /^\s*CREATE TABLE/i.test(sql));
+        for (const sql of tables) await mysqlPool.query(sql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'INTEGER PRIMARY KEY AUTO_INCREMENT'));
+      }
+      const projectSetupSchema = fs.readFileSync(path.join(__dirname, 'migration_project_setup.sql'), 'utf8');
+      if (activeEngine === 'sqlite') {
+        sqliteDb.exec(projectSetupSchema);
+        if (!sqliteDb.prepare('PRAGMA table_info(project_boq)').all().some(column => column.name === 'work_item_id')) sqliteDb.exec('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
+      } else {
+        await mysqlPool.query(projectSetupSchema.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'INTEGER PRIMARY KEY AUTO_INCREMENT'));
+        const [columns] = await mysqlPool.query("SHOW COLUMNS FROM project_boq LIKE 'work_item_id'");
+        if (!columns.length) await mysqlPool.query('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
+      }
       databaseState = 'ready'; databaseError = null;
     } catch (error) {
       databaseState = 'failed'; databaseError = error;

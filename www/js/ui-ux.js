@@ -244,6 +244,18 @@
           { icon: '🏗️', label: 'المشاريع', nav: 'projects' },
           { icon: '📁', label: 'مركز وثائق ومستندات المشروع' }
         ],
+        projectWorkItems: [
+          { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
+          { icon: '🏗️', label: 'إدارة المشاريع', nav: 'projects' },
+          { label: 'تهيئة المشاريع' },
+          { label: 'شجرة بنود الأعمال ومرجعية المقايسات' }
+        ],
+        projectProgressReport: [
+          { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
+          { icon: '🏗️', label: 'إدارة المشاريع', nav: 'projects' },
+          { label: 'تقارير المشاريع' },
+          { label: 'المشروعات تحت التنفيذ' }
+        ],
         projectCloseout: [
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
           { icon: '🏗️', label: 'المشاريع', nav: 'projects' },
@@ -268,6 +280,12 @@
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
           { icon: '💰', label: 'الحسابات والمالية' },
           { icon: '📖', label: 'القيود اليومية العامة' }
+        ],
+        journalPosting: [
+          { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
+          { icon: '💰', label: 'إدارة الحسابات' },
+          { icon: '📚', label: 'سجل الأستاذ' },
+          { icon: '📖', label: 'اعتماد وترحيل قيود اليومية' }
         ],
         chartOfAccounts: [
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },

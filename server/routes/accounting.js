@@ -1,3 +1,4 @@
+const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const analyticalTypes = new Set(['general','cash','bank','employee_receivables','customers','suppliers']);
 function analyticalType(value = 'general') { if (!analyticalTypes.has(value)) { const e = new Error('نوع الحساب التحليلي غير صالح'); e.statusCode = 400; throw e; } return value; }
@@ -111,16 +112,22 @@ router.post('/accounts', requirePermission('accounting:create,settings:company')
       parent_id = parent.id;
     }
 
+    if (!parent_id && cleanCode.length > 1) {
+      const parentLength = { 2: 1, 3: 2, 5: 3, 8: 5 }[cleanCode.length];
+      const parent = parentLength ? await get('SELECT id FROM accounts WHERE code = ?', [cleanCode.slice(0, parentLength)]) : null;
+      if (!parent) return res.status(400).json({ success: false, message: 'لا يوجد حساب تجميعي يطابق تسلسل رقم الحساب' });
+      parent_id = parent.id;
+    }
     let level;
     let accountSetup;
     const analytical = analyticalType(req.body.analytical_type);
     const result = await transaction(async tx => {
       const sequence = await assertAccountNumber(tx, cleanCode, parent_id);
       level = sequence.level;
-      accountSetup = await resolveAccountCostCenter(tx, parent_id, type, default_cost_center_id);
-      return tx.run(`INSERT INTO accounts (code, name, type, parent_id, balance, status, level, is_posting, default_cost_center_id, analytical_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [cleanCode, name.trim(), accountSetup.type, parent_id, Number(balance || 0), status || 'active', level, level === 5 ? 1 : 0, accountSetup.cost_center_id, analytical]);
+      accountSetup = await resolveAccountCostCenter(tx, parent_id, type, default_cost_center_id, req.body.cost_center_required);
+      return tx.run(`INSERT INTO accounts (code, name, type, parent_id, balance, status, level, is_posting, default_cost_center_id, analytical_type, cost_center_required)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [cleanCode, name.trim(), accountSetup.type, parent_id, Number(balance || 0), status || 'active', level, level === 5 ? 1 : 0, accountSetup.cost_center_id, analytical, accountSetup.cost_center_required]);
     });
 
     const newId = result.lastInsertRowid || result.insertId;
@@ -129,14 +136,14 @@ router.post('/accounts', requirePermission('accounting:create,settings:company')
       action: 'INSERT',
       entity_type: 'account',
       entity_id: cleanCode,
-      details: { id: newId, code: cleanCode, name: name.trim(), type: accountSetup.type, status, level, default_cost_center_id: accountSetup.cost_center_id }
+      details: { id: newId, code: cleanCode, name: name.trim(), type: accountSetup.type, status, level, default_cost_center_id: accountSetup.cost_center_id, cost_center_required: accountSetup.cost_center_required }
     });
 
     res.json({ 
       success: true, 
       message: `تمت إضافة الحساب [${cleanCode} - ${name.trim()}] بنجاح`, 
       id: newId,
-      data: { id: newId, code: cleanCode, name: name.trim(), type: accountSetup.type, status, level, default_cost_center_id: accountSetup.cost_center_id }
+      data: { id: newId, code: cleanCode, name: name.trim(), type: accountSetup.type, status, level, default_cost_center_id: accountSetup.cost_center_id, cost_center_required: accountSetup.cost_center_required }
     });
   } catch (err) {
     res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في إضافة الحساب: ' + err.message, suggested_code: err.suggested_code });
@@ -173,22 +180,22 @@ router.put('/accounts/:id', requirePermission('accounting:edit,settings:company'
     }
     const accStatus = status || current.status || 'active';
     const accountSetup = await resolveAccountCostCenter({ get }, pId, type,
-      req.body.default_cost_center_id !== undefined ? req.body.default_cost_center_id : current.default_cost_center_id);
+      req.body.default_cost_center_id !== undefined ? req.body.default_cost_center_id : current.default_cost_center_id, req.body.cost_center_required);
     const analytical = analyticalType(req.body.analytical_type ?? current.analytical_type ?? 'general');
     const accBalance = balance !== undefined ? Number(balance) : current.balance;
     const level = cleanCode.length >= 8 ? 5 : (cleanCode.length >= 4 ? 4 : (cleanCode.length === 3 ? 3 : (cleanCode.length === 2 ? 2 : 1)));
 
     await run(`
       UPDATE accounts 
-      SET code = ?, name = ?, type = ?, parent_id = ?, balance = ?, status = ?, level = ?, default_cost_center_id = ?, analytical_type = ?
+      SET code = ?, name = ?, type = ?, parent_id = ?, balance = ?, status = ?, level = ?, default_cost_center_id = ?, analytical_type = ?, cost_center_required = ?
       WHERE id = ?
-    `, [cleanCode, name.trim(), accountSetup.type, pId, accBalance, accStatus, level, accountSetup.cost_center_id, analytical, id]);
+    `, [cleanCode, name.trim(), accountSetup.type, pId, accBalance, accStatus, level, accountSetup.cost_center_id, analytical, req.body.cost_center_required === undefined ? current.cost_center_required : accountSetup.cost_center_required, id]);
 
     await logAudit(req, {
       action: 'UPDATE',
       entity_type: 'account',
       entity_id: String(id),
-      details: { id, code: cleanCode, name: name.trim(), type: accountSetup.type, status: accStatus, default_cost_center_id: accountSetup.cost_center_id }
+      details: { id, code: cleanCode, name: name.trim(), type: accountSetup.type, status: accStatus, default_cost_center_id: accountSetup.cost_center_id, cost_center_required: accountSetup.cost_center_required }
     });
 
     res.json({ success: true, message: `تم تحديث بيانات الحساب [${cleanCode} - ${name.trim()}] بنجاح` });
@@ -605,7 +612,8 @@ router.get('/journal-entries', requirePermission('accounting:view'), async (req,
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    sql += ' GROUP BY je.id ORDER BY je.date DESC, je.id DESC LIMIT 100';
+    sql += ' GROUP BY je.id ORDER BY je.date DESC, je.id DESC';
+    if (req.query.all !== 'true') sql += ' LIMIT 100';
     const entries = await query(sql, params);
     if (entries.length) {
       const placeholders = entries.map(() => '?').join(',');
@@ -755,7 +763,7 @@ router.get('/check-period', requirePermission('accounting:view,expenses:create,r
 });
 
 // إنشاء قيد يدوي متزن بطرفين أو أطراف متعددة مع الفحص الصارم للاتزان وإغلاق الفترات ومراكز التكلفة
-router.post('/journal-entries', requirePermission('accounting:create'), async (req, res) => {
+router.post('/journal-entries', requirePermission('accounting:create'), financialSave, async (req, res) => {
   try {
     const { 
       date = new Date().toISOString().split('T')[0], 
@@ -845,7 +853,7 @@ router.post('/journal-entries/:id/approve', requirePermission('accounting:approv
     // 2. فحص الفترة المحاسبية
     await FinancialControlService.assertPeriodOpen(entry.date);
 
-    if (entry.status === 'approved' || entry.status === 'posted') {
+    if (!['draft', 'under_review'].includes(entry.status)) {
       return res.status(400).json({ success: false, message: 'القيد معتمد مسبقاً' });
     }
 
@@ -853,11 +861,16 @@ router.post('/journal-entries/:id/approve', requirePermission('accounting:approv
     const approverId = await FinancialControlService.resolveValidUserId(rawAppId);
     const approverName = req.user?.username || req.user?.full_name || 'المدير المالي';
 
-    await run(`
-      UPDATE journal_entries 
-      SET status = 'approved', approved_by = ?, approved_by_name = ?, approved_at = CURRENT_TIMESTAMP, approval_notes = ?
-      WHERE id = ?
-    `, [approverId, approverName, notes || null, id]);
+    await transaction(async tx => {
+      const current = await lockFinancialDocument(tx, 'journal_entries', id);
+      if (!['draft', 'under_review'].includes(current.status)) throw Object.assign(new Error('تغيّرت حالة القيد؛ حدّث السجل قبل الاعتماد'), { statusCode: 409 });
+      FinancialControlService.assertMakerChecker(current, req.user, 'اعتماد');
+      await tx.run(`
+        UPDATE journal_entries
+        SET status = 'approved', approved_by = ?, approved_by_name = ?, approved_at = CURRENT_TIMESTAMP, approval_notes = ?
+        WHERE id = ?
+      `, [approverId, approverName, notes || null, id]);
+    });
 
     await logAudit(req, {
       action: 'APPROVE',
@@ -882,8 +895,8 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
     const entry = await get('SELECT * FROM journal_entries WHERE id = ?', [id]);
     if (!entry) return res.status(404).json({ success: false, message: 'القيد اليومي غير موجود' });
 
-    if (entry.status === 'posted') {
-      return res.status(400).json({ success: false, message: 'القيد مرحل مسبقاً' });
+    if (!['draft', 'under_review', 'approved'].includes(entry.status)) {
+      return res.status(400).json({ success: false, message: 'حالة القيد لا تسمح بالترحيل أو أنه مرحل مسبقاً' });
     }
     if (entry.status === 'reversed') {
       return res.status(400).json({ success: false, message: 'لا يمكن ترحيل قيد تم عكسه مسبقاً' });
@@ -892,6 +905,9 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
     await FinancialControlService.assertPeriodOpen(entry.date);
 
     // التحقق الصارم من التوازن قبل الترحيل
+    const entryLines = await query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [id]);
+    const validated = await AccountingService.validateJournalEntryLines(entryLines);
+    const activeLines = entryLines.filter(line => Math.round(Number(line.debit) * 100) || Math.round(Number(line.credit) * 100));
     const diff = Math.abs(Number(entry.total_debit) - Number(entry.total_credit));
     if (diff > 0.001 || Number(entry.total_debit) <= 0) {
       return res.status(400).json({ success: false, message: `⛔ لا يمكن ترحيل قيد غير متزن! الفرق: ${diff}` });
@@ -902,6 +918,9 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
     const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
 
     await transaction(async (tx) => {
+      const current = await lockFinancialDocument(tx, 'journal_entries', entry.id);
+      for (const [index, line] of validated.sanitizedLines.entries()) await tx.run('UPDATE journal_entry_lines SET cost_center_id = ? WHERE id = ? AND entry_id = ?', [line.cost_center_id, activeLines[index].id, entry.id]);
+      if (current.status !== entry.status) throw Object.assign(new Error('تغيّرت حالة المستند؛ حدّث السجل قبل الترحيل'), { statusCode: 409 });
       await tx.run(`
         UPDATE journal_entries
         SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
@@ -920,7 +939,7 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
 
     res.json({ success: true, message: `تم ترحيل القيد اليومي (${entry.entry_no}) بنجاح لدفتر الأستاذ`, status: 'posted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء ترحيل القيد: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ أثناء ترحيل القيد: ' + err.message });
   }
 });
 
@@ -965,6 +984,8 @@ router.delete('/journal-entries/:id', requirePermission('accounting:approve'), a
     await FinancialControlService.assertPeriodOpen(entry.date);
 
     await transaction(async (tx) => {
+      FinancialControlService.assertDeletable(await lockFinancialDocument(tx, 'journal_entries', req.params.id));
+      await tx.run("DELETE FROM supporting_documents WHERE entity_type = 'journal' AND entity_id = ?", [req.params.id]);
       await tx.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [req.params.id]);
       await tx.run('DELETE FROM journal_entries WHERE id = ?', [req.params.id]);
     });
@@ -1330,7 +1351,11 @@ router.get('/cash-movements', async (req, res) => {
   try {
     const { getCashAccountActivity } = require('../services/cashAccountActivity');
     const ledger = require('../services/reportingLedger');
-    res.json(await getCashAccountActivity(ledger, req.query));
+    const result = await getCashAccountActivity(ledger, { ...req.query, all: 'true' });
+    // Keep permanent balances in the summary; the operational list contains only unposted rows.
+    result.data = result.data.filter(row => !row.is_posted);
+    if (req.query.all !== 'true') result.data = result.data.slice(0, 100);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب حركة الصندوق', error: err.message });
   }
@@ -1354,8 +1379,9 @@ router.get('/periods', requirePermission('accounting:view'), async (req, res) =>
 router.post('/periods', requirePermission('accounting:create'), async (req, res) => {
   try {
     const { period_name, fiscal_year, start_date, end_date, notes } = req.body;
-    if (!period_name || !start_date || !end_date) {
-      return res.status(400).json({ success: false, message: 'اسم الفترة وتاريخ البداية والنهاية حقول مطلوبة' });
+    const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+    if (!period_name || !validDate(start_date) || !validDate(end_date) || start_date > end_date) {
+      return res.status(400).json({ success: false, message: 'أدخل اسم الفترة وتاريخي بداية ونهاية صالحين ومرتّبين' });
     }
     const fYear = Number(fiscal_year) || new Date(start_date).getFullYear();
 
