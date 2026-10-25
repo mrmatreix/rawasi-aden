@@ -1,3 +1,4 @@
+const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const analyticalTypes = new Set(['general','cash','bank','employee_receivables','customers','suppliers']);
 function analyticalType(value = 'general') { if (!analyticalTypes.has(value)) { const e = new Error('نوع الحساب التحليلي غير صالح'); e.statusCode = 400; throw e; } return value; }
@@ -755,7 +756,7 @@ router.get('/check-period', requirePermission('accounting:view,expenses:create,r
 });
 
 // إنشاء قيد يدوي متزن بطرفين أو أطراف متعددة مع الفحص الصارم للاتزان وإغلاق الفترات ومراكز التكلفة
-router.post('/journal-entries', requirePermission('accounting:create'), async (req, res) => {
+router.post('/journal-entries', requirePermission('accounting:create'), financialSave, async (req, res) => {
   try {
     const { 
       date = new Date().toISOString().split('T')[0], 
@@ -902,6 +903,8 @@ router.post('/journal-entries/:id/post', requirePermission('accounting:post'), a
     const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
 
     await transaction(async (tx) => {
+      const current = await lockFinancialDocument(tx, 'journal_entries', entry.id);
+      if (current.status !== entry.status) throw Object.assign(new Error('تغيّرت حالة المستند؛ حدّث السجل قبل الترحيل'), { statusCode: 409 });
       await tx.run(`
         UPDATE journal_entries
         SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP
@@ -965,6 +968,8 @@ router.delete('/journal-entries/:id', requirePermission('accounting:approve'), a
     await FinancialControlService.assertPeriodOpen(entry.date);
 
     await transaction(async (tx) => {
+      FinancialControlService.assertDeletable(await lockFinancialDocument(tx, 'journal_entries', req.params.id));
+      await tx.run("DELETE FROM supporting_documents WHERE entity_type = 'journal' AND entity_id = ?", [req.params.id]);
       await tx.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [req.params.id]);
       await tx.run('DELETE FROM journal_entries WHERE id = ?', [req.params.id]);
     });

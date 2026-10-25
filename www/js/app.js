@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261024-8otl',
+  assetVersion: '1.0.0.20261025-8lez',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,18 +11,18 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261024-8otl',
-    projects: 'js/projects.js?v=1.0.0.20261024-8otl',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261024-8otl',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261024-8otl',
-    accounting: 'js/accounting.js?v=1.0.0.20261024-8otl',
-    hr: 'js/hr.js?v=1.0.0.20261024-8otl',
-    reports: 'js/reports.js?v=1.0.0.20261024-8otl',
-    inventory: 'js/inventory.js?v=1.0.0.20261024-8otl',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261024-8otl',
-    settings: 'js/settings.js?v=1.0.0.20261024-8otl',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261024-8otl',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261024-8otl'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-8lez',
+    projects: 'js/projects.js?v=1.0.0.20261025-8lez',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-8lez',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-8lez',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-8lez',
+    hr: 'js/hr.js?v=1.0.0.20261025-8lez',
+    reports: 'js/reports.js?v=1.0.0.20261025-8lez',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-8lez',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-8lez',
+    settings: 'js/settings.js?v=1.0.0.20261025-8lez',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-8lez',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-8lez'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -624,7 +624,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${p.notes || '-'}</td>
                   <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('payment', ${p.id})">📎 المؤيدات</button> ${p.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('receipt', ${p.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('receipt', ${p.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('payment', ${p.id})">📎 المؤيدات</button> ${p.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('receipt', ${p.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('receipt', ${p.id})">ترحيل</button>${Accounting.draftDeleteButton('receipt', p.id)}` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printReceipt({
                       receipt_no: '${p.receipt_no}',
                       date: '${p.date}',
                       client_name: '${(p.client_name || 'العميل').replace(/'/g, "\\'")}',
@@ -723,7 +723,7 @@ const App = {
                   <td>${paymentStr}</td>
                   <td>${e.notes || '-'}</td>
                   <td style="text-align: center;">
-                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('expense', ${e.id})">📎 المؤيدات</button> ${e.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('expense', ${e.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('expense', ${e.id})">ترحيل</button>` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
+                    <button class="btn btn-secondary btn-sm" onclick="Accounting.viewSupportingDocuments('expense', ${e.id})">📎 المؤيدات</button> ${e.status === 'draft' ? `<button class="btn btn-secondary btn-sm" onclick="Accounting.openVoucherReview('expense', ${e.id})">معاينة وتعديل</button> <button class="btn btn-primary btn-sm" onclick="Accounting.postDraft('expense', ${e.id})">ترحيل</button>${Accounting.draftDeleteButton('expense', e.id)}` : ''}<button class="btn btn-secondary btn-sm" onclick="Accounting.printExpenseReceipt({
                       receipt_no: '${e.receipt_no}',
                       date: '${e.date}',
                       expense_type: '${(e.expense_type || '').replace(/'/g, "\\'")}',

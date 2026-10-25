@@ -1260,7 +1260,7 @@ const Accounting = {
     const local_amount = currency === 'ر.ي' ? Number(amount) : (parseFloat(document.getElementById('modalRcLocalAmount')?.value) || (Number(amount) * exchange_rate));
     const settlement_account_id = document.getElementById('modalRcFinancialAccountSelect')?.value || null;
     const notes = document.getElementById('modalRcNotes').value;
-    const idempotency_key = 'rc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const idempotency_key = this.financialSaveKey('modalReceiptForm');
 
     if (!client_id && !client_name) {
       App.showToast('يرجى اختيار أو كتابة اسم العميل', 'error');
@@ -1320,6 +1320,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('modalReceiptForm');
         App.showToast(data.message || 'تم حفظ السند', 'success');
         App.closeModal('newReceiptModal');
         const form = document.getElementById('modalReceiptForm');
@@ -1337,8 +1338,7 @@ const Accounting = {
             App.openClientChainModal(client_id);
           }
         }
-        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
-        this.loadCashMovement();
+
         
         // إمكانية الطباعة الفورية
         if (confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
@@ -1409,7 +1409,7 @@ const Accounting = {
     try {
       const res = await fetch('/api/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': this.financialSaveKey('quickReceiptForm') },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('rcSupportingFiles'),
           type: 'قبض',
@@ -1430,6 +1430,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('quickReceiptForm');
         App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no})`, 'success');
         this.resetReceiptForm();
         this.fetchNextNumbers();
@@ -1516,7 +1517,7 @@ const Accounting = {
     try {
       const res = await fetch('/api/expenses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': this.financialSaveKey('quickExpenseForm') },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('expSupportingFiles'),
           expense_type,
@@ -1538,6 +1539,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('quickExpenseForm');
         App.showToast(`تم حفظ سند الصرف بنجاح (${data.receipt_no})`, 'success');
         this.resetExpenseForm();
         this.fetchNextNumbers();
@@ -1805,14 +1807,14 @@ const Accounting = {
       return;
     }
 
-    const idempotency_key = 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const idempotency_key = this.financialSaveKey('modalExpenseForm');
 
     try {
       const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': idempotency_key
+          'Idempotency-Key': idempotency_key
         },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('modalExpSupportingFiles'),
@@ -1839,6 +1841,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('modalExpenseForm');
         App.showToast(`تم حفظ سند الصرف بنجاح (${data.receipt_no})`, 'success');
         App.closeModal('newExpenseModal');
         const form = document.getElementById('modalExpenseForm');
@@ -3441,7 +3444,7 @@ const Accounting = {
         <td style="text-align: center;">
           <div style="display: flex; gap: 6px; justify-content: center;">
             <button class="btn btn-sm btn-secondary" onclick="Accounting.viewJournalDetails(${je.id})" title="عرض تفاصيل وسطور القيد">👁️ تفاصيل</button>
-            ${je.status === 'draft' ? `<button class="btn btn-sm btn-secondary" onclick="Accounting.editJournalDraft(${je.id})">تعديل</button><button class="btn btn-sm btn-primary" onclick="Accounting.postDraft('journal', ${je.id})">ترحيل</button>` : ''}
+            ${je.status === 'draft' ? `<button class="btn btn-sm btn-secondary" onclick="Accounting.editJournalDraft(${je.id})">تعديل</button><button class="btn btn-sm btn-primary" onclick="Accounting.postDraft('journal', ${je.id})">ترحيل</button>${this.draftDeleteButton('journal', je.id)}` : ''}
             <button class="btn btn-sm btn-secondary" onclick="Accounting.viewSupportingDocuments('journal', ${je.id})">📎 المؤيدات</button><button class="btn btn-sm btn-primary" onclick="Accounting.printJournalEntryById(${je.id})" title="طباعة أو حفظ PDF">🖨️ PDF</button>
           </div>
         </td>
@@ -3728,17 +3731,7 @@ const Accounting = {
       return;
     }
 
-    // 1. فحص فوري لحالة الفترة المحاسبية
-    try {
-      const pCheck = await (await fetch(`/api/accounting/check-period?date=${date}`)).json();
-      if (pCheck && pCheck.isOpen === false) {
-        App.showToast(pCheck.message || 'الفترة المحاسبية لهذا التاريخ مغلقة رسمياً', 'error');
-        return;
-      }
-    } catch (err) {
-      console.warn('Period check warning:', err);
-    }
-
+    // The save endpoint validates the period; avoid a separate network round trip.
     const rows = document.querySelectorAll('#journalLinesTableBody tr');
     if (rows.length < 2) {
       App.showToast('يجب تسجيل سطرين على الأقل (طرف مدين وطرف دائن)', 'error');
@@ -3814,7 +3807,7 @@ const Accounting = {
       const editingId = this.editingJournalId;
       const res = await fetch('/api/accounting/journal-entries' + (editingId ? `/${editingId}` : ''), {
         method: editingId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': this.financialSaveKey('modalJournalForm') },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('modalJeSupportingFiles'),
           date,
@@ -3828,9 +3821,10 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('modalJournalForm');
         App.showToast(data.message || 'تم حفظ القيد بنجاح', 'success');
         App.closeModal('newJournalModal');
-        await this.loadJournalEntries();
+        this.loadJournalEntries();
         if (data.id || editingId) this.viewJournalDetails(data.id || editingId);
       } else {
         App.showToast(data.message || 'فشل حفظ القيد اليومي', 'error');
@@ -3866,6 +3860,66 @@ const Accounting = {
       tbody.lastElementChild.querySelector('.je-line-desc').value = line.notes || '';
     }
     this.calcJournalBalance();
+  },
+
+  financialSaveKey(formId) {
+    return this._financialSaves?.[formId]?.key;
+  },
+
+  completeFinancialSave(formId) {
+    if (this._financialSaves) delete this._financialSaves[formId];
+    try { sessionStorage.removeItem('financial-save:' + formId); } catch {}
+  },
+
+  async withFinancialSave(formId, operation) {
+    this._financialBusy ||= {};
+    if (this._financialBusy[formId]) return;
+    const form = document.getElementById(formId);
+    if (!form) return;
+    this._financialBusy[formId] = true;
+    const buttons = Array.from(form.querySelectorAll('[type="submit"]'));
+    const previous = buttons.map(button => [button, button.disabled, button.innerHTML]);
+    try {
+      const signature = JSON.stringify([this.editingJournalId || null, Array.from(form.querySelectorAll('input, select, textarea')).map(input =>
+        [input.id, input.value, input.checked, Array.from(input.files || []).map(file => [file.name, file.size, file.lastModified])])]);
+      let state = this._financialSaves?.[formId];
+      try { state = JSON.parse(sessionStorage.getItem('financial-save:' + formId)) || state; } catch {}
+      if (!state || state.signature !== signature) state = { signature, key: 'save_' + (globalThis.crypto?.randomUUID?.() || Date.now() + '_' + Math.random().toString(36).slice(2)) };
+      this._financialSaves ||= {};
+      this._financialSaves[formId] = state;
+      try { sessionStorage.setItem('financial-save:' + formId, JSON.stringify(state)); } catch {}
+      for (const button of buttons) { button.disabled = true; button.textContent = 'جاري الحفظ...'; }
+      return await operation();
+    } finally {
+      this._financialBusy[formId] = false;
+      for (const [button, disabled, html] of previous) { button.disabled = disabled; button.innerHTML = html; }
+    }
+  },
+
+  draftDeleteButton(kind, id) {
+    const permission = { journal: 'accounting:approve', expense: 'expenses:cancel', receipt: 'revenues:cancel' }[kind];
+    if (!permission || typeof Auth === 'undefined' || !Auth.hasPermission(permission)) return '';
+    return `<button type="button" class="btn btn-danger btn-sm" onclick="Accounting.deleteDraft('${kind}', ${Number(id)})">حذف المسودة</button>`;
+  },
+
+  async deleteDraft(kind, id) {
+    const route = { journal: 'accounting/journal-entries', expense: 'expenses', receipt: 'payments' }[kind];
+    if (!route || !confirm('هل تريد حذف هذه المسودة قبل الترحيل؟')) return;
+    this._deletingDrafts ||= new Set();
+    const key = kind + ':' + id;
+    if (this._deletingDrafts.has(key)) return;
+    this._deletingDrafts.add(key);
+    try {
+      const response = await fetch(`/api/${route}/${Number(id)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'تعذر حذف المسودة');
+      App.showToast(result.message, 'success');
+      App.closeModal('voucherReviewModal');
+      if (kind === 'journal') await this.loadJournalEntries();
+      else if (kind === 'expense') await App.loadExpensesTable();
+      else await App.loadRevenuesTable();
+    } catch (error) { App.showToast(error.message, 'error'); }
+    finally { this._deletingDrafts.delete(key); }
   },
 
   async postDraft(kind, id) {
@@ -5624,6 +5678,16 @@ const Accounting = {
     }
   }
 };
+
+
+// Guard before any validation/file read/network await, including Enter and double clicks.
+for (const [method, form] of [["submitReceiptVoucherModal","modalReceiptForm"],["submitReceiptVoucher","quickReceiptForm"],["submitExpenseVoucher","quickExpenseForm"],["submitExpenseVoucherModal","modalExpenseForm"],["submitJournalEntryModal","modalJournalForm"]]) {
+  const save = Accounting[method];
+  Accounting[method] = function(event) {
+    event?.preventDefault();
+    return this.withFinancialSave(form, () => save.call(this, event));
+  };
+}
 
 if (typeof window !== 'undefined') {
   window.Accounting = Accounting;
