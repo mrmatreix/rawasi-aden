@@ -271,8 +271,9 @@
         ],
         journalPosting: [
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
-          { icon: '💰', label: 'الحسابات والمالية' },
-          { icon: '📖', label: 'ترحيل قيود اليومية' }
+          { icon: '💰', label: 'إدارة الحسابات' },
+          { icon: '📚', label: 'سجل الأستاذ' },
+          { icon: '📖', label: 'اعتماد وترحيل قيود اليومية' }
         ],
         chartOfAccounts: [
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },

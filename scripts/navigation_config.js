@@ -1,8 +1,9 @@
 const item=(label,view,tab='',perm='',action='')=>({label,view,tab,perm,action});
 const groups=[
-{id:'groupAccounting',label:'الحسابات والعمليات المالية',description:'السندات والقيود والأدلة',icon:'money',sections:[
+{id:'groupAccounting',label:'إدارة الحسابات',description:'السندات والقيود والأدلة',icon:'money',sections:[
  ['تهيئة الحسابات',[item('دليل الحسابات','chartOfAccounts','','accounting:view'),item('مراكز التكلفة','costCenters','','accounting:view'),item('العملات وأسعار الصرف','currencies','','accounting:view'),item('تخطيط التدفقات النقدية','cashFlow','','accounting:view'),item('بنود الميزانية الخاصة للمشاريع','projectHub','budgets','projects:view'),item('تهيئة الفترة المحاسبية (فتح وإغلاق)','chartOfAccounts','','accounting:view','periods')]],
- ['العمليات اليومية',[item('سندات الصرف','expenses','','expenses:view'),item('سندات القبض','revenues','','revenues:view'),item('قيود اليومية','journal','','accounting:view,accounting:journal'),item('حركة الصناديق','cash','cash','cash:view'),item('حركة البنوك','cash','bank','cash:view'),item('العهد والنثريات','custody','','custody:view')]],['ترحيل قيود اليومية',[item('اعتماد قيود اليومية','journalPosting','','accounting:view')]]]},
+ ['سجل الأستاذ',[item('اعتماد وترحيل قيود اليومية','journalPosting','','accounting:view')]],
+ ['العمليات اليومية',[item('سندات الصرف','expenses','','expenses:view'),item('سندات القبض','revenues','','revenues:view'),item('قيود اليومية','journal','','accounting:view,accounting:journal'),item('حركة الصناديق','cash','cash','cash:view'),item('حركة البنوك','cash','bank','cash:view'),item('العهد والنثريات','custody','','custody:view')]]]},
 {id:'groupProjects',label:'إدارة المشاريع',description:'التنفيذ والمتابعة والمستندات',icon:'projects',sections:[
  ['سجل المشاريع',[item('كافة المشاريع','projects','all'),item('المشاريع تحت الدراسة','projects','under_study'),item('المشاريع الجارية','projects','active'),item('المشاريع المكتملة','projects','completed')]],
  ['التخطيط والتكلفة',[item('مركز مستندات المشروع','projectHub'),item('المخططات','projectHub','drawings'),item('جدول الكميات','projectHub','boq'),item('أوامر التغيير','projectHub','change-orders'),item('مشتريات المشروع والفواتير','projectHub','purchases'),item('العمالة والمصروفات','projectHub','labor')]],
