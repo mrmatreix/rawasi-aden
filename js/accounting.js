@@ -4288,7 +4288,7 @@ const Accounting = {
     if (!tbody) return;
 
     if (!accounts || accounts.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد حسابات مسجلة في الدليل</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد حسابات مسجلة في الدليل</td></tr>`;
       return;
     }
 
@@ -4326,7 +4326,6 @@ const Accounting = {
         </td>
         <td><span class="badge" style="${typeBadges[a.type || a.account_type] || 'background: #334155; color: #fff;'}">${this.financialTypeLabel(a.type || a.account_type)}</span></td>
         <td>${levelBadge}</td>
-        <td style="font-weight: bold; font-family: monospace; direction: ltr; text-align: left;">${App.formatNumber(a.current_balance || a.balance || 0)} ر.ي</td>
         <td style="text-align: center;">
           ${isRestricted 
             ? '<span class="badge" style="background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4);">🔒 موقوف / مقيد</span>' 
