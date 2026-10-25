@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261025-er36',
+  assetVersion: '1.0.0.20261025-tvby',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,19 +11,19 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-er36',
-    projects: 'js/projects.js?v=1.0.0.20261025-er36',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261025-er36',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-er36',
-    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-er36',
-    accounting: 'js/accounting.js?v=1.0.0.20261025-er36',
-    hr: 'js/hr.js?v=1.0.0.20261025-er36',
-    reports: 'js/reports.js?v=1.0.0.20261025-er36',
-    inventory: 'js/inventory.js?v=1.0.0.20261025-er36',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-er36',
-    settings: 'js/settings.js?v=1.0.0.20261025-er36',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261025-er36',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-er36'
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-tvby',
+    projects: 'js/projects.js?v=1.0.0.20261025-tvby',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-tvby',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-tvby',
+    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-tvby',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-tvby',
+    hr: 'js/hr.js?v=1.0.0.20261025-tvby',
+    reports: 'js/reports.js?v=1.0.0.20261025-tvby',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-tvby',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-tvby',
+    settings: 'js/settings.js?v=1.0.0.20261025-tvby',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-tvby',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-tvby'
   },
   _loadedModules: {},
   _loadingPromises: {},

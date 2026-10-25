@@ -4,6 +4,8 @@ const env={...process.env,NODE_ENV:'development',DB_ENGINE:'sqlite',RAWASI_DB_PA
 const files=['project_budget_presentation','financial_presentation','report_filters','voucher_ui','financial_save_ui','account_cost_center','account_numbering','reporting_pending_ledger','pending_cash_movements','supporting_documents','sidebar_navigation'].map(n=>'tests/'+n+'.test.js');
 files.push(...['financial_report_filters','journal_reference_posting','party_registry','financial_save_delete','journal_posting_periods'].map(n=>'tests/integration/'+n+'.test.js'));
 files.push('tests/journal_posting_ui.test.js');
+files.push('tests/integration/cash_flow_projection.test.js');
+files.push('tests/cash_flow_ui.test.js');
 if(fs.existsSync(path.join(root,'tests/security/hardening.test.js')))files.push('tests/security/hardening.test.js');
 try{
  let result=spawnSync(process.execPath,['tests/create_fixture.js'],{cwd:root,env,stdio:'inherit',windowsHide:true});

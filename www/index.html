@@ -13,9 +13,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="manifest.json?v=1.0.0.20261025-er36">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261025-er36">
-  <link rel="stylesheet" href="css/sidebar.css?v=1.0.0.20261025-er36">
+  <link rel="manifest" href="manifest.json?v=1.0.0.20261025-tvby">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261025-tvby">
+  <link rel="stylesheet" href="css/sidebar.css?v=1.0.0.20261025-tvby">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
 </head>
@@ -2411,37 +2411,38 @@
               <input type="month" id="cfMonthTo" class="form-control" style="width: 140px; padding: 4px 8px;">
             </div>
             <button class="btn btn-secondary btn-sm" onclick="CashFlowUI.loadProjections()">تحديث الفلترة</button>
-            <button class="btn btn-primary btn-sm" onclick="CashFlowUI.regenerate()">⚡ إعادة احتساب تلقائي من البيانات الحية</button>
+            <button id="cfRegenerateButton" class="btn btn-primary btn-sm" onclick="CashFlowUI.regenerate()">⚡ إعادة احتساب تلقائي من البيانات الحية</button>
           </div>
         </div>
 
+        <p id="cfProjectionNotice" role="status">تُعرض التوقعات بالريال اليمني. أعد الاحتساب لتحديثها من المستندات الحالية.</p>
         <!-- بطاقات المؤشرات المالية العامة للتدفق -->
         <div class="kpi-grid" style="margin-bottom: 20px;">
           <div class="kpi-card">
             <div class="kpi-content">
               <span class="kpi-label">الرصيد النقدي الافتتاحي (حركة الصندوق)</span>
-              <span class="kpi-value" id="cfKpiInitialCash" style="color: var(--accent-blue);">0 $</span>
+              <span class="kpi-value" id="cfKpiInitialCash" style="color: var(--accent-blue);">0 ر.ي</span>
             </div>
             <div class="kpi-icon-wrap">🏦</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-content">
               <span class="kpi-label">إجمالي المقبوضات المتوقعة (Inflows)</span>
-              <span class="kpi-value" id="cfKpiTotalIn" style="color: #4ade80;">0 $</span>
+              <span class="kpi-value" id="cfKpiTotalIn" style="color: #4ade80;">0 ر.ي</span>
             </div>
             <div class="kpi-icon-wrap" style="color: #22c55e;">📈</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-content">
               <span class="kpi-label">إجمالي المدفوعات والالتزامات (Outflows)</span>
-              <span class="kpi-value" id="cfKpiTotalOut" style="color: #f87171;">0 $</span>
+              <span class="kpi-value" id="cfKpiTotalOut" style="color: #f87171;">0 ر.ي</span>
             </div>
             <div class="kpi-icon-wrap" style="color: #ef4444;">📉</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-content">
               <span class="kpi-label">صافي التدفق النقدي للفترة (Net Cash)</span>
-              <span class="kpi-value" id="cfKpiNetCash" style="color: var(--gold-light);">0 $</span>
+              <span class="kpi-value" id="cfKpiNetCash" style="color: var(--gold-light);">0 ر.ي</span>
             </div>
             <div class="kpi-icon-wrap" style="color: var(--gold-primary);">⚖️</div>
           </div>
@@ -10009,30 +10010,30 @@
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
   <script src="js/xlsx.full.min.js"></script>
-  <script src="js/ui-ux.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/tafqeet.js?v=1.0.0.20261025-er36"></script>
+  <script src="js/ui-ux.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/tafqeet.js?v=1.0.0.20261025-tvby"></script>
   <script src="js/financial-labels.js"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/auth.js?v=1.0.0.20261025-er36"></script>
+  <script src="js/excel-export.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/auth.js?v=1.0.0.20261025-tvby"></script>
   <script src="js/events.js"></script>
-  <script src="js/reports.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/projects.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/project_control_ui.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/accounting.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/journal-posting.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/inventory.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/hr.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/settings.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/contracts_cashflow.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/sidebar.js?v=1.0.0.20261025-er36"></script>
-  <script src="js/app.js?v=1.0.0.20261025-er36"></script>
+  <script src="js/reports.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/projects.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/project_control_ui.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/project_hub.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/accounting.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/journal-posting.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/inventory.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/hr.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/settings.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/contracts_cashflow.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/sidebar.js?v=1.0.0.20261025-tvby"></script>
+  <script src="js/app.js?v=1.0.0.20261025-tvby"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261025-er36')
+        navigator.serviceWorker.register('./sw.js?v=1.0.0.20261025-tvby')
           .then((reg) => {
             console.log('✓ PWA Service Worker Registered:', reg.scope);
             // إجبار التحقق من التحديثات فورياً

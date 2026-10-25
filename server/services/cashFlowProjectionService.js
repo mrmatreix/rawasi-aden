@@ -19,6 +19,9 @@ class CashFlowProjectionService {
    * توليد نطاق الأشهر (YYYY-MM) بين تاريخين
    */
   static getMonthRange(fromMonth, toMonth) {
+    const valid = value => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+    if (!valid(fromMonth) || !valid(toMonth) || fromMonth > toMonth) throw Object.assign(new Error('حدد فترة صحيحة بصيغة YYYY-MM، البداية قبل النهاية'), { statusCode: 400 });
+    if ((Number(toMonth.slice(0,4)) - Number(fromMonth.slice(0,4))) * 12 + Number(toMonth.slice(5)) - Number(fromMonth.slice(5)) > 119) throw Object.assign(new Error('الفترة القصوى للتوقعات 120 شهرًا'), { statusCode: 400 });
     const months = [];
     const [fromY, fromM] = fromMonth.split('-').map(Number);
     const [toY, toM] = toMonth.split('-').map(Number);
@@ -42,49 +45,18 @@ class CashFlowProjectionService {
    * جلب الرصيد الافتتاحي للنقدية والبنوك في اللحظة الراهنة
    */
   static async getCurrentCashPosition() {
-    let totalBank = 0;
-    let totalCash = 0;
-
-    try {
-      const bankRes = await get(`
-        SELECT COALESCE(SUM(current_balance), 0) as total 
-        FROM bank_accounts 
-        WHERE is_active = 1
-      `);
-      totalBank = Number(bankRes?.total || 0);
-    } catch {
-      totalBank = 0;
+    const rows = await query(`SELECT a.code, a.analytical_type, SUM(l.debit - l.credit) AS balance
+      FROM journal_entry_lines l JOIN journal_entries j ON j.id = l.entry_id
+      JOIN accounts a ON a.id = l.account_id
+      WHERE j.status IN ('posted','closed') AND j.date <= ?
+      AND (a.analytical_type IN ('cash','bank') OR a.code LIKE '11101%' OR a.code LIKE '11102%')
+      GROUP BY a.id,a.code,a.analytical_type`, [new Date().toISOString().slice(0,10)]);
+    let totalBank = 0, totalCash = 0;
+    for (const row of rows) {
+      if (row.analytical_type === 'bank' || String(row.code).startsWith('11102')) totalBank += Number(row.balance) || 0;
+      else totalCash += Number(row.balance) || 0;
     }
-
-    try {
-      const cashRes = await get(`
-        SELECT COALESCE(SUM(balance), 0) as total 
-        FROM accounts 
-        WHERE code IN ('111', '1111', '1112', '1110', '1120')
-      `);
-      totalCash = Number(cashRes?.total || 0);
-    } catch {
-      totalCash = 0;
-    }
-
-    // إذا لم تتوفر أرصدة حسابات، الاستعلام من حركة الصندوق
-    if (totalCash === 0) {
-      try {
-        const lastMov = await get(`
-          SELECT current_balance 
-          FROM cash_movements 
-          ORDER BY id DESC LIMIT 1
-        `);
-        totalCash = Number(lastMov?.current_balance || 0);
-      } catch {}
-    }
-
-    const totalAvailable = totalBank + totalCash;
-    return {
-      total_bank: totalBank,
-      total_cash: totalCash,
-      total_available: totalAvailable > 0 ? totalAvailable : 65000.00 // قيمة تأسيسية افتراضية في حال البداية
-    };
+    return { total_bank: totalBank, total_cash: totalCash, total_available: Math.round((totalBank + totalCash) * 100) / 100 };
   }
 
   /**
@@ -109,9 +81,16 @@ class CashFlowProjectionService {
     const cashPos = await this.getCurrentCashPosition();
 
     return await transaction(async (tx) => {
+      const currencies = await tx.query('SELECT code,symbol,rate_to_base FROM currencies');
+      const rates = new Map(currencies.flatMap(row => [[row.code, Number(row.rate_to_base)], [row.symbol, Number(row.rate_to_base)]]));
+      const toBase = (amount, currency) => {
+        const rate = !currency || ['YER','ر.ي','ريال يمني'].includes(currency) ? 1 : rates.get(currency);
+        if (!(rate > 0)) throw Object.assign(new Error('سعر عملة المستند غير متاح: ' + currency), { statusCode: 400 });
+        return Math.round(Number(amount || 0) * rate * 100) / 100;
+      };
       // تنظيف التوقعات المخططة السابقة في هذا النطاق لإعادة الحساب على بيانات حية
       await tx.run(`
-        DELETE FROM cash_flow_projections 
+        DELETE FROM cash_flow_projections
         WHERE projection_month >= ? AND projection_month <= ? AND status = 'planned'
       `, [fromM, toM]);
 
@@ -122,7 +101,7 @@ class CashFlowProjectionService {
       // 1.1 مستخلصات معتمدة غير محصلة (Bills pending payment)
       const pendingBills = await tx.query(`
         SELECT b.id, b.bill_no, b.project_id, b.contract_id, b.net_amount, b.paid_amount,
-               b.date, b.created_at, p.name as project_name
+               b.date, b.created_at, p.name as project_name, p.currency as project_currency
         FROM bills b
         LEFT JOIN projects p ON b.project_id = p.id
         WHERE b.status IN ('approved', 'posted', 'معتمد')
@@ -130,7 +109,8 @@ class CashFlowProjectionService {
       `);
 
       for (const bill of pendingBills) {
-        const remaining = Number(bill.net_amount || 0) - Number(bill.paid_amount || 0);
+        if (bill.date?.slice(0,7) > toM) continue;
+        const remaining = toBase(Number(bill.net_amount || 0) - Number(bill.paid_amount || 0), bill.project_currency);
         if (remaining > 0) {
           let targetMonth = fromM;
           if (bill.date) {
@@ -156,15 +136,15 @@ class CashFlowProjectionService {
 
       // 1.2 مستخلصات مجدولة للمشاريع النشطة بناءً على POC المتبقي والعقد
       const activeProjects = await tx.query(`
-        SELECT p.id, p.name, p.contract_value, p.actual_cost, p.progress_percentage,
-               c.id as contract_id, c.contract_no, c.end_date, c.ipc_cycle_days,
-               COALESCE(c.supervision_monthly_fee, 0) as supervision_fee,
+        SELECT p.id, p.name, p.contract_value, p.actual_cost, p.progress_percentage, p.currency,
+               c.id as contract_id, c.contract_no, c.end_date,
+               0 as supervision_fee,
                COALESCE(c.retention_pct, 10) as retention_pct,
                COALESCE(c.advance_payment_pct, 10) as advance_pct,
-               c.retention_due_date
+               c.end_date as retention_due_date
         FROM projects p
         LEFT JOIN project_contracts c ON p.id = c.project_id
-        WHERE p.status IN ('active', 'in_progress', 'قيد التنفيذ', 'جارية')
+        WHERE p.status IN ('active', 'in_progress', 'قيد التنفيذ', 'جارية', 'جاري')
       `);
 
       for (const prj of activeProjects) {
@@ -173,8 +153,8 @@ class CashFlowProjectionService {
 
         // حساب ما تم فوترته حتى تاريخه
         const billedRes = await tx.get(`
-          SELECT COALESCE(SUM(net_amount), 0) as billed 
-          FROM bills 
+          SELECT COALESCE(SUM(net_amount), 0) as billed
+          FROM bills
           WHERE project_id = ? AND status != 'cancelled'
         `, [prj.id]);
         const billedTotal = Number(billedRes?.billed || 0);
@@ -183,7 +163,7 @@ class CashFlowProjectionService {
         if (remainingToBill > 0) {
           // توزيع المتبقي على الأشهر القادمة (بحد أقصى 6 أشهر أو حتى نهاية العقد)
           const activeMonths = months.slice(0, 6);
-          const monthlyPortion = Math.round((remainingToBill / activeMonths.length) * 100) / 100;
+          const monthlyPortion = Math.round((toBase(remainingToBill, prj.currency) / activeMonths.length) * 100) / 100;
 
           for (const m of activeMonths) {
             await tx.run(`
@@ -224,7 +204,7 @@ class CashFlowProjectionService {
           FROM bills
           WHERE project_id = ? AND status != 'cancelled'
         `, [prj.id]);
-        const retentionAmount = Number(totalRetentionRes?.retention_sum || (contractVal * (prj.retention_pct / 100)));
+        const retentionAmount = toBase(totalRetentionRes?.retention_sum || 0, prj.currency);
 
         if (retentionAmount > 0) {
           let retMonth = toM;
@@ -261,6 +241,7 @@ class CashFlowProjectionService {
       `);
 
       for (const pur of unpaidPurchases) {
+        if (pur.date?.slice(0,7) > toM) continue;
         const remaining = Number(pur.total_amount || 0) - Number(pur.paid_amount || 0);
         if (remaining > 0) {
           let targetMonth = fromM;
@@ -286,27 +267,16 @@ class CashFlowProjectionService {
       // 2.2 الرواتب والأجور الشهرية المجدولة (Monthly Payroll)
       let monthlySalary = 0;
       try {
-        const empRes = await tx.get(`
-          SELECT COALESCE(SUM(basic_salary), 0) as total_salary 
-          FROM employees 
+        const employees = await tx.query(`
+          SELECT currency, COALESCE(SUM(basic_salary), 0) as total_salary
+          FROM employees
           WHERE status = 'active'
+          GROUP BY currency
         `);
-        monthlySalary = Number(empRes?.total_salary || 0);
-      } catch {}
+        monthlySalary = employees.reduce((sum, row) => sum + toBase(row.total_salary, row.currency), 0);
+      } catch (error) { throw error; }
 
-      if (monthlySalary <= 0) {
-        try {
-          const payRes = await tx.get(`
-            SELECT COALESCE(AVG(net_salary), 0) * 15 as avg_total 
-            FROM payroll 
-            ORDER BY id DESC LIMIT 30
-          `);
-          monthlySalary = Number(payRes?.avg_total || 0);
-        } catch {}
-      }
-      if (monthlySalary <= 0) monthlySalary = 4500.00; // قيمة تقديرية واقعية
-
-      for (const m of months) {
+      for (const m of monthlySalary > 0 ? months : []) {
         await tx.run(`
           INSERT INTO cash_flow_projections (
             projection_month, expected_outflow_type,
@@ -322,13 +292,15 @@ class CashFlowProjectionService {
       // 2.3 مستحقات مقاولي الباطن والعمالة المباشرة غير المسددة
       try {
         const pendingLabor = await tx.query(`
-          SELECT ple.id, ple.project_id, ple.worker_name_or_team, ple.total_amount, ple.date
+          SELECT ple.id, ple.project_id, ple.worker_name_or_team, ple.total_amount, ple.paid_amount, ple.date, p.currency
           FROM project_labor_expenses ple
+          LEFT JOIN projects p ON p.id = ple.project_id
           WHERE ple.payment_status IN ('مستحق', 'pending', 'unpaid')
         `);
 
         for (const lab of pendingLabor) {
-          const amt = Number(lab.total_amount || 0);
+          if (lab.date?.slice(0,7) > toM) continue;
+          const amt = toBase(Number(lab.total_amount || 0) - Number(lab.paid_amount || 0), lab.currency);
           if (amt > 0) {
             let targetMonth = fromM;
             if (lab.date) {
@@ -349,13 +321,13 @@ class CashFlowProjectionService {
             ]);
           }
         }
-      } catch {}
+      } catch (error) { throw error; }
 
       // 2.4 التزامات ضريبية مستحقة
       try {
         const pendingTaxes = await tx.query(`
-          SELECT id, project_id, tax_amount, date 
-          FROM tax_withholdings 
+          SELECT id, project_id, tax_amount, date
+          FROM tax_withholdings
           WHERE status = 'pending'
         `);
         for (const tax of pendingTaxes) {
@@ -374,21 +346,7 @@ class CashFlowProjectionService {
             ]);
           }
         }
-      } catch {}
-
-      // 2.5 رسوم خطابات الضمان والتمويلات
-      for (const m of months.slice(0, 6)) {
-        await tx.run(`
-          INSERT INTO cash_flow_projections (
-            projection_month, expected_outflow_type,
-            expected_outflow_amount, expected_outflow_date, confidence_level,
-            source_document, status, notes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          m, 'ضمان', 350.00, `${m}-10`, 'medium',
-          'contract', 'planned', `مصاريف وعمولات بنكية دورية لتجديد الضمانات البنكية`
-        ]);
-      }
+      } catch (error) { throw error; }
 
       return {
         success: true,
@@ -406,11 +364,12 @@ class CashFlowProjectionService {
    * @param {number} openingBalance - الرصيد الافتتاحي للشهر
    */
   static async getMonthProjection(month, openingBalance = 0) {
+    this.getMonthRange(month, month);
     const records = await query(`
       SELECT cfp.*, p.name as project_name, p.code as project_code
       FROM cash_flow_projections cfp
       LEFT JOIN projects p ON cfp.project_id = p.id
-      WHERE cfp.projection_month = ? AND cfp.status != 'cancelled'
+      WHERE cfp.projection_month = ? AND cfp.status IN ('planned','confirmed')
       ORDER BY COALESCE(cfp.expected_inflow_date, cfp.expected_outflow_date) ASC
     `, [month]);
 
@@ -517,6 +476,8 @@ class CashFlowProjectionService {
 
     return {
       success: true,
+      currency: 'YER',
+      currency_symbol: 'ر.ي',
       from_month: fromMonth,
       to_month: toMonth,
       initial_cash: cashPos.total_available,
@@ -537,7 +498,7 @@ class CashFlowProjectionService {
     if (!project) throw new Error('المشروع غير موجود');
 
     const records = await query(`
-      SELECT * FROM cash_flow_projections 
+      SELECT * FROM cash_flow_projections
       WHERE project_id = ? AND status != 'cancelled'
       ORDER BY projection_month ASC, COALESCE(expected_inflow_date, expected_outflow_date) ASC
     `, [prjId]);

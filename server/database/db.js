@@ -2685,6 +2685,13 @@ async function initializeDatabase() {
     try {
       if (appConfig.dbEngine === 'mysql') await initMysql();
       else initSqlite();
+      // Cash-flow screens must work on both new and existing databases.
+      const cashFlowSchema = fs.readFileSync(path.join(__dirname, 'migration_cash_flow.sql'), 'utf8');
+      if (activeEngine === 'sqlite') sqliteDb.exec(cashFlowSchema);
+      else {
+        const tables = cashFlowSchema.replace(/--[^\n]*/g, '').split(';').filter(sql => /^\s*CREATE TABLE/i.test(sql));
+        for (const sql of tables) await mysqlPool.query(sql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'INTEGER PRIMARY KEY AUTO_INCREMENT'));
+      }
       databaseState = 'ready'; databaseError = null;
     } catch (error) {
       databaseState = 'failed'; databaseError = error;
