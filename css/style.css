@@ -5938,3 +5938,24 @@ button.tab-btn.active::after,
   color: #ffffff !important;
   box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4) !important;
 }
+
+/* Clear, responsive print designer */
+#pane_settings_print .print-settings-layout{grid-template-columns:minmax(320px,420px) minmax(0,1fr);gap:24px}
+#pane_settings_print .print-settings-layout>.panel-card{padding:18px}
+.designer-controls{display:grid;gap:10px;margin-bottom:18px}
+.designer-presets,.designer-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.designer-presets button,.designer-toolbar button,.designer-toolbar select{border:1px solid #cbd5e1;border-radius:7px;padding:7px 10px;cursor:pointer;background:#fff;color:#1e293b}
+.designer-group{border:1px solid var(--border-light);border-radius:10px;margin:10px 0;padding:12px}
+.designer-group summary{cursor:pointer;font-weight:700;padding:6px 0;color:var(--gold-light)}
+.designer-group .print-settings-section-card{border:0;padding:12px 0;margin:0;background:transparent}
+.designer-group [style*="grid-template-columns"]{grid-template-columns:1fr!important}
+.designer-actions{position:sticky;bottom:0;z-index:4;display:flex;flex-wrap:wrap;gap:8px;background:var(--bg-card,#182438);padding:14px 0;border-top:1px solid var(--border-gold)}
+#designerDirty{display:block;flex-basis:100%;font-size:.8rem;color:var(--gold-light)}
+#pane_settings_print .print-preview-sticky{padding:14px;background:#e8edf3;min-width:0;overflow:hidden;top:18px}
+.designer-toolbar{margin-bottom:14px;color:#1e293b;font-size:.8rem}
+#designerSourceLabel{flex-basis:100%;padding:8px;background:#fff7df;border-radius:6px}
+#printLivePreviewBox{background:#dce3eb;overflow:auto;max-height:80vh;padding:12px;border-radius:8px}
+#printLivePreviewBox .designer-paper{box-sizing:border-box!important;margin:0 auto!important;background:#fff!important;color:#172334;box-shadow:0 4px 16px #14213b25;border-radius:0!important;max-width:none!important}
+#pane_settings_print [hidden]{display:none!important}
+@media(max-width:1100px){#pane_settings_print .print-settings-layout{grid-template-columns:1fr}#pane_settings_print .print-preview-sticky{position:static}.designer-actions{position:static}}
+.designer-paper{box-sizing:border-box;background:white;color:#172334;direction:rtl;margin-bottom:16px}

@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261025-jrdo',
+  assetVersion: '1.0.0.20261025-djqd',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,20 +11,20 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    projectSetup: 'js/project-setup.js?v=1.0.0.20261025-jrdo',
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-jrdo',
-    projects: 'js/projects.js?v=1.0.0.20261025-jrdo',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261025-jrdo',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-jrdo',
-    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-jrdo',
-    accounting: 'js/accounting.js?v=1.0.0.20261025-jrdo',
-    hr: 'js/hr.js?v=1.0.0.20261025-jrdo',
-    reports: 'js/reports.js?v=1.0.0.20261025-jrdo',
-    inventory: 'js/inventory.js?v=1.0.0.20261025-jrdo',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-jrdo',
-    settings: 'js/settings.js?v=1.0.0.20261025-jrdo',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261025-jrdo',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-jrdo'
+    projectSetup: 'js/project-setup.js?v=1.0.0.20261025-djqd',
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-djqd',
+    projects: 'js/projects.js?v=1.0.0.20261025-djqd',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-djqd',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-djqd',
+    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-djqd',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-djqd',
+    hr: 'js/hr.js?v=1.0.0.20261025-djqd',
+    reports: 'js/reports.js?v=1.0.0.20261025-djqd',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-djqd',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-djqd',
+    settings: 'js/settings.js?v=1.0.0.20261025-djqd',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-djqd',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-djqd'
   },
   _loadedModules: {},
   _loadingPromises: {},

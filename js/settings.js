@@ -511,7 +511,7 @@ const Settings = {
   serializePrintForm() {
     const config = {};
     document.querySelectorAll('#printSettingsForm input, #printSettingsForm select, #printSettingsForm textarea').forEach(el => {
-      if (!el.id || el.id.startsWith('printProfile') || el.type === 'submit' || el.type === 'button') return;
+      if (!el.id || el.id.startsWith('printProfile') || el.id.startsWith('designer') || el.type === 'submit' || el.type === 'button') return;
       config[el.id] = el.type === 'checkbox' ? Boolean(el.checked) : el.value;
     });
     return config;
@@ -742,6 +742,7 @@ const Settings = {
         this._printConfig.operation_titles=JSON.parse(cfg.print_operation_titles);
         localStorage.setItem('rawasi_print_config', JSON.stringify(this._printConfig));
         this.updatePrintPreview();
+        this.designerMarkSaved?.();
         App.showToast('تم حفظ وتطبيق كافة إعدادات أوراق الطباعة والتقارير بنجاح 🖨️✨', 'success');
       } else {
         App.showToast(data.message || 'خطأ في حفظ الإعدادات', 'error');
