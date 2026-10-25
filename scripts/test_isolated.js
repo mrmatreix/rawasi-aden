@@ -7,6 +7,7 @@ files.push('tests/journal_posting_ui.test.js');
 files.push('tests/integration/cash_flow_projection.test.js');
 files.push('tests/cash_flow_ui.test.js');
 files.push('tests/integration/sales_creation.test.js');
+files.push('tests/integration/project_setup.test.js');
 if(fs.existsSync(path.join(root,'tests/security/hardening.test.js')))files.push('tests/security/hardening.test.js');
 try{
  let result=spawnSync(process.execPath,['tests/create_fixture.js'],{cwd:root,env,stdio:'inherit',windowsHide:true});

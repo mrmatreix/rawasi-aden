@@ -2,7 +2,7 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 test('navigation covers every existing project, report, HR, inventory and settings tab once',()=>{
  const all=groups.flatMap(g=>g.sections.flatMap(s=>s[1]));assert.equal(groups.length,8);
  for(const [view,regex] of [['inventory',/Inventory.switchTab\('([^']+)'/g],['projectHub',/id="hubTabBtn_([^"]+)"/g],['reports',/id="tabBtn_((?:trial-balance|income-statement|account-movement|balance-sheet|cash-flow|project-budget|projects-profitability|cost-centers-profitability|client-statement|supplier-statement))"/g],['settings',/id="tabBtn_settings_([^"]+)"/g],['hr',/HR.showPane\('([^']+)'/g]]){
-  const actual=[...new Set([...html.matchAll(regex)].map(m=>m[1]))].sort();const routes=all.filter(i=>i.view===view&&i.tab).map(i=>i.tab).sort();assert.deepEqual(routes,actual,view);
+  const actual=[...new Set([...html.matchAll(regex)].map(m=>m[1]))].sort();const routes=[...new Set(all.filter(i=>i.view===view&&i.tab).map(i=>i.tab))].sort();assert.deepEqual(routes,actual,view);
  }
  const routes=all.map(i=>[i.view,i.tab,i.action].join(':'));assert.equal(new Set(routes).size,routes.length);
  const icons = new Set([...html.matchAll(/<symbol id="([^"]+)"/g)].map(m=>m[1]));

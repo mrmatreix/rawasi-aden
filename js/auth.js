@@ -1067,6 +1067,8 @@ const Auth = {
       'dashboard': 'dashboard:view',
       'projects': 'projects:view',
       'projectHub': 'projects:view',
+      'projectWorkItems': 'projects:view',
+      'projectProgressReport': 'projects:view,reports:view',
       'projectCloseout': 'projects:view,reports:view',
       'inventory': 'inventory:view',
       'hr': 'hr:view',

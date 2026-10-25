@@ -1315,28 +1315,32 @@ const ProjectHub = {
     }
   },
 
-  openNewBoqModal() {
+  async openNewBoqModal() {
     document.getElementById('boqModalForm').reset();
     document.getElementById('boqModalId').value = '';
     const nextNo = `${(this.data?.boq?.length || 0) + 1}.01`;
     document.getElementById('boqModalNo').value = nextNo;
+    await ProjectSetup.boqReferences();
     App.openModal('boqItemModal');
   },
 
-  editBoqItem(id) {
+  async editBoqItem(id) {
     const b = (this.data.boq || []).find(item => item.id == id);
     if (!b) return;
 
     document.getElementById('boqModalId').value = b.id;
     document.getElementById('boqModalNo').value = b.item_no;
     document.getElementById('boqModalDesc').value = b.description;
-    document.getElementById('boqModalCategory').value = b.category;
+    const categorySelect = document.getElementById('boqModalCategory');
+    if (b.category && ![...categorySelect.options].some(option => option.value === b.category)) categorySelect.add(new Option(b.category, b.category));
+    categorySelect.value = b.category;
     document.getElementById('boqModalUnit').value = b.unit;
     document.getElementById('boqModalContractQty').value = b.contract_qty;
     document.getElementById('boqModalExecutedQty').value = b.executed_qty;
     document.getElementById('boqModalRate').value = b.unit_rate;
     document.getElementById('boqModalStatus').value = b.status || 'جاري التنفيذ';
     document.getElementById('boqModalNotes').value = b.notes || '';
+    await ProjectSetup.boqReferences(b.work_item_id);
 
     App.openModal('boqItemModal');
   },
@@ -1350,6 +1354,7 @@ const ProjectHub = {
     const payload = {
       projectId: pid,
       item_no: document.getElementById('boqModalNo').value,
+      work_item_id: document.getElementById('boqWorkItem')?.value || null,
       description: document.getElementById('boqModalDesc').value,
       category: document.getElementById('boqModalCategory').value,
       unit: document.getElementById('boqModalUnit').value,

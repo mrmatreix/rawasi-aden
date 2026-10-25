@@ -244,6 +244,18 @@
           { icon: '🏗️', label: 'المشاريع', nav: 'projects' },
           { icon: '📁', label: 'مركز وثائق ومستندات المشروع' }
         ],
+        projectWorkItems: [
+          { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
+          { icon: '🏗️', label: 'إدارة المشاريع', nav: 'projects' },
+          { label: 'تهيئة المشاريع' },
+          { label: 'شجرة بنود الأعمال ومرجعية المقايسات' }
+        ],
+        projectProgressReport: [
+          { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
+          { icon: '🏗️', label: 'إدارة المشاريع', nav: 'projects' },
+          { label: 'تقارير المشاريع' },
+          { label: 'المشروعات تحت التنفيذ' }
+        ],
         projectCloseout: [
           { icon: '🏠', label: 'الرئيسية', nav: 'dashboard' },
           { icon: '🏗️', label: 'المشاريع', nav: 'projects' },

@@ -3,7 +3,7 @@
  */
 
 const App = {
-  assetVersion: '1.0.0.20261025-s7cb',
+  assetVersion: '1.0.0.20261025-lzs3',
   activeView: 'dashboard',
   dbStatus: null,
 
@@ -11,19 +11,20 @@ const App = {
   // ⚡ سجل مسارات الوحدات للتحميل الكسول عند الطلب (Code Splitting)
   // ============================================================
   _moduleRegistry: {
-    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-s7cb',
-    projects: 'js/projects.js?v=1.0.0.20261025-s7cb',
-    projectHub: 'js/project_hub.js?v=1.0.0.20261025-s7cb',
-    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-s7cb',
-    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-s7cb',
-    accounting: 'js/accounting.js?v=1.0.0.20261025-s7cb',
-    hr: 'js/hr.js?v=1.0.0.20261025-s7cb',
-    reports: 'js/reports.js?v=1.0.0.20261025-s7cb',
-    inventory: 'js/inventory.js?v=1.0.0.20261025-s7cb',
-    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-s7cb',
-    settings: 'js/settings.js?v=1.0.0.20261025-s7cb',
-    excelExport: 'js/excel-export.js?v=1.0.0.20261025-s7cb',
-    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-s7cb'
+    projectSetup: 'js/project-setup.js?v=1.0.0.20261025-lzs3',
+    tafqeet: 'js/tafqeet.js?v=1.0.0.20261025-lzs3',
+    projects: 'js/projects.js?v=1.0.0.20261025-lzs3',
+    projectHub: 'js/project_hub.js?v=1.0.0.20261025-lzs3',
+    projectControl: 'js/project_control_ui.js?v=1.0.0.20261025-lzs3',
+    journalPosting: 'js/journal-posting.js?v=1.0.0.20261025-lzs3',
+    accounting: 'js/accounting.js?v=1.0.0.20261025-lzs3',
+    hr: 'js/hr.js?v=1.0.0.20261025-lzs3',
+    reports: 'js/reports.js?v=1.0.0.20261025-lzs3',
+    inventory: 'js/inventory.js?v=1.0.0.20261025-lzs3',
+    projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-lzs3',
+    settings: 'js/settings.js?v=1.0.0.20261025-lzs3',
+    excelExport: 'js/excel-export.js?v=1.0.0.20261025-lzs3',
+    contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-lzs3'
   },
   _loadedModules: {},
   _loadingPromises: {},
@@ -72,7 +73,9 @@ const App = {
     const viewMap = {
       dashboard: ['reports', 'projects'],
       projects: ['projects'],
-      projectHub: ['projects', 'projectHub', 'tafqeet', 'accounting'],
+      projectWorkItems: ['projectSetup'],
+      projectProgressReport: ['projectSetup'],
+      projectHub: ['projects', 'projectHub', 'projectSetup', 'tafqeet', 'accounting'],
       revenues: ['tafqeet', 'accounting', 'journalPosting'],
       expenses: ['tafqeet', 'accounting', 'journalPosting'],
       custody: ['tafqeet', 'accounting'],
@@ -541,6 +544,10 @@ const App = {
       HR.load();
     } else if (viewId === 'projects') {
       Projects.loadProjects();
+    } else if (viewId === 'projectWorkItems') {
+      await ProjectSetup.load();
+    } else if (viewId === 'projectProgressReport') {
+      await ProjectSetup.loadProgress();
     } else if (viewId === 'projectHub') {
       if (typeof ProjectHub !== 'undefined') {
         ProjectHub.populateProjectSelect().then(() => ProjectHub.loadProjectData());

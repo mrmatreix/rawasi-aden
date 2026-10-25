@@ -2692,6 +2692,15 @@ async function initializeDatabase() {
         const tables = cashFlowSchema.replace(/--[^\n]*/g, '').split(';').filter(sql => /^\s*CREATE TABLE/i.test(sql));
         for (const sql of tables) await mysqlPool.query(sql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'INTEGER PRIMARY KEY AUTO_INCREMENT'));
       }
+      const projectSetupSchema = fs.readFileSync(path.join(__dirname, 'migration_project_setup.sql'), 'utf8');
+      if (activeEngine === 'sqlite') {
+        sqliteDb.exec(projectSetupSchema);
+        if (!sqliteDb.prepare('PRAGMA table_info(project_boq)').all().some(column => column.name === 'work_item_id')) sqliteDb.exec('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
+      } else {
+        await mysqlPool.query(projectSetupSchema.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'INTEGER PRIMARY KEY AUTO_INCREMENT'));
+        const [columns] = await mysqlPool.query("SHOW COLUMNS FROM project_boq LIKE 'work_item_id'");
+        if (!columns.length) await mysqlPool.query('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
+      }
       databaseState = 'ready'; databaseError = null;
     } catch (error) {
       databaseState = 'failed'; databaseError = error;
