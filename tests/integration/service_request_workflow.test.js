@@ -65,7 +65,7 @@ test('manager approval and client response apply to the correct quote and accoun
   const staffToken=jwt.sign({id:staffId},require('../../server/middleware/security').JWT_SECRET);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
   await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[staffId,guest]);
-  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
   await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[admin,guest]);
 
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,200);
@@ -74,6 +74,13 @@ test('manager approval and client response apply to the correct quote and accoun
 
   assert.equal(Number((await db.get('SELECT assigned_to FROM service_requests WHERE id=?',[guest])).assigned_to),admin);
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:code,message:'تفاصيل إضافية'})).status,200);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,400);
+  await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:requests_view','client_app:requests_edit']),staffId]);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,200);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',internal)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
+  await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[admin,guest]);
+
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:'0000000000000000000000000000',message:'غير مصرح'})).status,404);
   const guestAdmin='/api/admin/client-users/service-requests/'+guest;
   assert.equal((await api(guestAdmin,internal,'PUT',{status:'pricing',assigned_to:admin,admin_notes:'تمت مراجعة الكميات'})).status,200);

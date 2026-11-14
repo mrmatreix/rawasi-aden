@@ -303,44 +303,16 @@
 
       <!-- زر وقائمة الإشعارات المنسدلة (تتضمن حالة وشعارات الاتصال بالمشروع بعد تسجيل الدخول) -->
       <div class="notifications-wrapper" id="notificationsWrapper">
-        <button class="icon-btn" id="btnHeaderNotifications" title="إشعارات النظام وحالة الاتصال" onclick="App.toggleNotificationsDropdown(event)">
+        <button class="icon-btn" id="btnHeaderNotifications" title="ردود الزوار والموافقات" onclick="App.toggleNotificationsDropdown(event)">
           <svg class="icon" width="20" height="20"><use href="#icon-bell"></use></svg>
           <span class="notification-dot" id="headerNotificationDot"></span>
         </button>
 
-        <!-- لوحة وقائمة الإشعارات المنسدلة التفاعلية -->
         <div class="notifications-dropdown" id="notificationsDropdown">
           <div class="notif-dropdown-header">
-            <div class="notif-header-title">
-              <svg class="icon" width="18" height="18"><use href="#icon-bell"></use></svg>
-              <span>إشعارات النظام والاتصال</span>
-            </div>
-            <button type="button" class="notif-header-recheck" onclick="App.recheckConnectionModal()" title="إعادة فحص الاتصال">
-              <svg class="icon" width="14" height="14"><use href="#icon-refresh"></use></svg>
-              <span>فحص الاتصال</span>
-            </button>
+            <div class="notif-header-title"><svg class="icon" width="18" height="18"><use href="#icon-bell"></use></svg><span>ردود الزوار والموافقات</span></div>
           </div>
-
-          <!-- بطاقة حالة الاتصال السحابي / المحلي داخل قائمة الإشعارات -->
-          <div class="notif-conn-card status-offline" id="notifConnCard" onclick="App.showConnectionModal(); App.closeNotificationsDropdown();">
-            <div class="notif-conn-icon" id="notifConnIcon">🔴</div>
-            <div class="notif-conn-info">
-              <div class="notif-conn-status" id="notifConnStatusTitle">قاعدة البيانات المحلية (أوفلاين)</div>
-              <div class="notif-conn-desc" id="notifConnStatusDesc">يتم حفظ ومزامنة كافة العمليات محلياً على قاعدة بيانات SQLite بأمان تام</div>
-            </div>
-            <span class="notif-conn-badge offline" id="notifConnBadge">🔴 أوفلاين</span>
-          </div>
-
-          <!-- قائمة عناصر الإشعارات والتنبيهات المباشرة -->
-          <div class="notif-list" id="notifList">
-            <!-- سيتم توليد إشعارات الدخول والنسخ الاحتياطي والنشاطات هنا -->
-          </div>
-
-          <div class="notif-dropdown-footer">
-            <button type="button" class="notif-footer-btn" onclick="App.showConnectionModal(); App.closeNotificationsDropdown();">
-              <span>⚙️ إدارة تفاصيل الاتصال والنسخ الاحتياطي</span>
-            </button>
-          </div>
+          <div class="notif-list" id="notifList"></div>
         </div>
       </div>
 
@@ -10054,7 +10026,7 @@
   <script src="js/print-designer.js"></script>
   <script src="js/contracts_cashflow.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/sidebar.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/app.js?v=separate-client-app-20261114"></script>
+  <script src="js/app.js?v=guest-replies-20261114"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>

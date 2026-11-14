@@ -1054,12 +1054,14 @@ router.get('/service-requests', async (req, res) => {
 router.get('/service-requests/alerts', async (req,res) => {
   try {
     const admin=req.user.role==='admin';
+    const unanswered=`EXISTS (SELECT 1 FROM service_request_events guest WHERE guest.request_id=sr.id AND guest.event_type='message_from_client' AND guest.id > COALESCE((SELECT MAX(reply.id) FROM service_request_events reply WHERE reply.request_id=sr.id AND reply.event_type IN ('message_pending_approval','message_approved','message_rejected','message_to_client')),0))`;
+    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered})` : `(sr.assigned_to=? AND (sr.status IN ('client_changes','manager_changes') OR ${unanswered}))`;
     const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
       (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
-      FROM service_requests sr WHERE sr.source='guest' AND ${admin ? "(sr.status IN ('new','pending_manager') OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval'))" : "sr.assigned_to=? AND sr.status IN ('new','client_changes','manager_changes')"}
+      FROM service_requests sr WHERE sr.source='guest' AND ${work}
       ORDER BY sr.updated_at DESC, sr.id DESC LIMIT 100`,admin?[]:[req.user.id]);
-    res.json({success:true,alerts:(rows||[]).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,status:r.status,pending_messages:Number(r.pending_messages||0),updated_at:r.updated_at}))});
-  } catch(err){console.error('guest request alerts',err);res.status(500).json({success:false,message:'تعذر تحميل تنبيهات طلبات الزوار'});}
+    res.json({success:true,alerts:(rows||[]).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,status:r.status,pending_messages:admin?Number(r.pending_messages||0):0,updated_at:r.updated_at}))});
+  } catch(err){console.error('guest request alerts',err);res.status(500).json({success:false,message:'تعذر تحميل تنبيهات ردود الزوار'});}
 });
 
 router.get('/service-requests/:id', async (req, res) => {
@@ -1112,6 +1114,26 @@ router.get('/service-requests/:id', async (req, res) => {
  * PUT /api/admin/client-users/service-requests/:id
  * تحديث حالة طلب الخدمة، تعيين موظف، حفظ عرض السعر وملاحظات الإدارة
  */
+router.put('/service-requests/:id/assignee', async (req,res) => {
+  const id=Number(req.params.id), assigneeId=Number(req.body.assigned_to);
+  if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(assigneeId)||assigneeId<=0)return res.status(400).json({success:false,message:'حدد الموظف أو المهندس المسؤول'});
+  try {
+    const assignee=await db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[assigneeId]);
+    let permissions=[];try{permissions=JSON.parse(assignee?.permissions||assignee?.role_permissions||'[]');}catch{}
+    const allowed=assignee&&require('../middleware/security').hasUserPermission({...assignee,permissions},'client_app:requests_view')&&require('../middleware/security').hasUserPermission({...assignee,permissions},'client_app:requests_edit');
+    if(!allowed)return res.status(400).json({success:false,message:'يجب اختيار مستخدم نشط يملك صلاحية عرض طلبات الخدمات وتحديثها'});
+    const saved=await db.transaction(async tx=>{
+      const request=await tx.get('SELECT id FROM service_requests WHERE id=?',[id]);if(!request)return false;
+      await tx.run('UPDATE service_requests SET assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',[assigneeId,id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'request_assigned',`تم إسناد الطلب للمستخدم ${assigneeId}`]);
+      return true;
+    });
+    if(!saved)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await logAudit(req,{action:'SERVICE_REQUEST_ASSIGNED',entity_type:'service_requests',entity_id:id,details:`إسناد الطلب للمستخدم ${assigneeId}`});
+    res.json({success:true});
+  } catch(err){console.error('assign service request',err);res.status(500).json({success:false,message:'تعذر تعيين المسؤول'});}
+});
+
 router.put('/service-requests/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

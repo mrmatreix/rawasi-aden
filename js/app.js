@@ -1872,20 +1872,22 @@ const App = {
     const requestedUser=String(Auth.currentUser.id||'');
     try {
       const response=await fetch('/api/admin/client-users/service-requests/alerts',{cache:'no-store'});
-      if (!response.ok) { this.guestRequestAlerts=[]; this.guestAlertsAvailable=false; this.updateGuestRequestAlertBadge(); return; }
+      if (!response.ok) { this.guestRequestAlerts=[]; this.guestAlertsAvailable=false; this.guestAlertsError=response.status===403?'لا تملك صلاحية عرض ردود الزوار':'تعذر تحميل ردود الزوار'; this.updateGuestRequestAlertBadge(); if(document.getElementById('notificationsDropdown')?.classList.contains('active'))this.renderNotificationsList(); return; }
       const data=await response.json();
       if (!Auth.currentUser || String(Auth.currentUser.id||'')!==requestedUser) return;
       this.guestAlertsAvailable=!!data.success;
+      this.guestAlertsError=data.success?'':'تعذر تحميل ردود الزوار';
       this.guestRequestAlerts=data.success && Array.isArray(data.alerts)?data.alerts:[];
       this.updateGuestRequestAlertBadge();
       if(document.getElementById('notificationsDropdown')?.classList.contains('active'))this.renderNotificationsList();
-    } catch { this.guestRequestAlerts=[]; this.guestAlertsAvailable=false; this.updateGuestRequestAlertBadge(); }
+    } catch { this.guestRequestAlerts=[]; this.guestAlertsAvailable=false; this.guestAlertsError='تعذر تحميل ردود الزوار'; this.updateGuestRequestAlertBadge(); if(document.getElementById('notificationsDropdown')?.classList.contains('active'))this.renderNotificationsList(); }
   },
   updateGuestRequestAlertBadge() {
     const button=document.getElementById('guestRequestAlertsButton'), count=document.getElementById('guestRequestAlertsCount');
     const size=(this.guestRequestAlerts||[]).length;
     if(button)button.style.display=this.guestAlertsAvailable?'inline-flex':'none';
     if(count)count.textContent=String(size);
+    const dot=document.getElementById('headerNotificationDot');if(dot)dot.style.display=size?'':'none';
   },
   openGuestRequestAlert(id) {
     const requestId=Number(id);
@@ -1899,49 +1901,12 @@ const App = {
     const listEl = document.getElementById('notifList');
     if (!listEl) return;
 
-    const s = this.dbStatus || {};
-    const isOnline = !!s.isOnline;
-    const user = (typeof Auth !== 'undefined' && Auth.currentUser) ? Auth.currentUser.full_name : 'المستخدم';
-
-    const items = [
-      {
-        icon: isOnline ? '🟢' : '🔴',
-        iconClass: isOnline ? 'success' : 'warning',
-        title: isOnline ? 'تم التحقق من الاتصال السحابي' : 'يعمل النظام على قاعدة البيانات المحلية',
-        desc: isOnline ? `تم فحص السيرفر السحابي بنجاح (${s.latencyMs || 0}ms)` : 'الاتصال السحابي غير مفعل - البيانات تحفظ محلياً',
-        time: 'عند تسجيل الدخول'
-      },
-      {
-        icon: '💾',
-        iconClass: 'info',
-        title: 'نظام النسخ الاحتياطي التلقائي نشط',
-        desc: 'يتم أخذ نسخة احتياطية فورية تلقائياً عند تسجيل الخروج لضمان عدم ضياع أي تعديل',
-        time: 'تلقائي دائم'
-      },
-      {
-        icon: '🛡️',
-        iconClass: 'success',
-        title: 'حماية وتكامل البيانات 100%',
-        desc: 'كافة القيود والسندات والمشاريع تخزن فورياً بأعلى معايير الأمان المالي',
-        time: 'النظام مؤمن'
-      }
-    ];
-
     const safeText=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const requestItems=(this.guestRequestAlerts||[]).map(a=>{
-      const label=Number(a.pending_messages)>0?'رد بانتظار موافقة المدير':a.status==='pending_manager'?'عرض بانتظار موافقة المدير':a.status==='client_changes'?'العميل طلب تعديل العرض':a.status==='manager_changes'?'المدير أعاد العرض للتعديل':'طلب زائر جديد';
-      return `<button type="button" class="notif-item" style="width:100%;text-align:right;cursor:pointer;background:transparent;border:0;color:inherit" onclick="App.openGuestRequestAlert(${Number(a.id)})"><div class="notif-item-icon info">📋</div><div class="notif-item-content"><div class="notif-item-title">${safeText(label)}</div><div>${safeText(a.request_no)} — ${safeText(a.client_name)}</div><div class="notif-item-time">اضغط لعرض الطلب كاملًا</div></div></button>`;
+      const label=Number(a.pending_messages)>0?'رد بانتظار موافقة المدير':a.status==='pending_manager'?'عرض بانتظار موافقة المدير':a.status==='client_changes'?'الزائر طلب تعديل العرض':a.status==='manager_changes'?'المدير أعاد العرض للتعديل':'رد جديد من الزائر';
+      return `<button type="button" class="notif-item" style="width:100%;text-align:right;cursor:pointer;background:transparent;border:0;color:inherit" onclick="App.openGuestRequestAlert(${Number(a.id)})"><div class="notif-item-icon info">📋</div><div class="notif-item-content"><div class="notif-item-title">${safeText(label)}</div><div>${safeText(a.request_no)} — ${safeText(a.client_name)}</div><div class="notif-item-time">اضغط لعرض التفاصيل والرد</div></div></button>`;
     }).join('');
-    listEl.innerHTML = requestItems + items.map(item => `
-      <div class="notif-item">
-        <div class="notif-item-icon ${item.iconClass}">${item.icon}</div>
-        <div class="notif-item-content">
-          <div class="notif-item-title">${item.title}</div>
-          <div style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 2px;">${item.desc}</div>
-          <div class="notif-item-time">${item.time}</div>
-        </div>
-      </div>
-    `).join('');
+    listEl.innerHTML=requestItems || `<div class="notif-item" style="padding:16px">${safeText(this.guestAlertsError||'لا توجد ردود أو موافقات معلّقة')}</div>`;
   },
 
   // إظهار نافذة تفاصيل الاتصال والنسخ الاحتياطي

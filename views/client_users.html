@@ -955,6 +955,7 @@
               <select id="srvReqAssigneeSelect" class="w-full custom-input rounded-xl px-3 py-2 text-xs focus:outline-none bg-slate-900">
                 <option value="">غير معين (بدون تعيين)</option>
               </select>
+              <button type="button" onclick="saveRequestAssignee()" class="mt-2 px-3 py-2 bg-slate-800 text-amber-300 rounded-lg text-xs font-bold">حفظ تعيين الموظف أو المهندس</button>
             </div>
 
             <div>
@@ -2441,6 +2442,13 @@
         const data = await response.json(); if (!data.success) throw new Error(data.message);
         showToast('تم تسجيل قرار المدير', 'success'); await openServiceRequestModal(currentServiceRequestId); loadServiceRequests();
       } catch(err) { showToast(err.message || 'تعذر تسجيل القرار','error'); }
+    }
+
+    async function saveRequestAssignee() {
+      try {const assigned_to=Number(document.getElementById('srvReqAssigneeSelect').value);if(!assigned_to)throw new Error('اختر الموظف أو المهندس المسؤول');
+        const response=await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/assignee`,{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({assigned_to})});
+        const data=await response.json();if(!data.success)throw new Error(data.message);showToast('تم تعيين المسؤول عن الطلب','success');await openServiceRequestModal(currentServiceRequestId);loadServiceRequests();
+      }catch(err){showToast(err.message||'تعذر تعيين المسؤول','error');}
     }
 
     async function submitServiceRequestUpdate(e) {
