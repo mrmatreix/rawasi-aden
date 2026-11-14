@@ -1201,81 +1201,15 @@ router.post('/service-requests/:id/manager-decision', async (req, res) => {
 
 router.post('/service-requests/:id/convert-to-project', async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    const request = await db.get(`SELECT * FROM service_requests WHERE id = ?`, [id]);
-    if (!request) {
-      return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
-    }
-    if (request.status !== 'client_accepted') return res.status(409).json({success:false,message:'يلزم موافقة العميل على العرض قبل تحويل الطلب إلى مشروع'});
-
-    // 1. فحص وجود العميل أو إنشائه في دليل العملاء
-    let clientId = null;
-    if (request.client_user_id) {
-      const cu = await db.get(`SELECT client_id FROM client_users WHERE id = ?`, [request.client_user_id]);
-      clientId = cu?.client_id;
-    }
-    if (!clientId) {
-      const existingClient = await db.get(`SELECT id FROM clients WHERE phone = ? OR name = ?`, [request.phone, request.client_name]);
-      if (existingClient) {
-        clientId = existingClient.id;
-      } else {
-        const ledgerAccount = await db.get(`SELECT id FROM accounts WHERE code = '12301001'`);
-        if (!ledgerAccount) {
-          return res.status(409).json({ success: false, message: 'تعذر إنشاء العميل: الحساب 12301001 غير موجود في دليل الحسابات' });
-        }
-        const clientInsert = await db.run(`
-          INSERT INTO clients (account_id, name, phone, email, notes, created_at)
-          VALUES (?, ?, ?, ?, 'تم الإنشاء تلقائياً من طلب خدمة مكتب الهندسة والمقاولات ' || ?, CURRENT_TIMESTAMP)
-        `, [ledgerAccount.id, request.client_name, request.phone, request.email, request.request_no]);
-        clientId = clientInsert.lastID || clientInsert.insertId;
-      }
-    }
-
-    // 2. إنشاء المشروع
-    const projName = request.project_name || `مشروع ${request.client_name} - ${request.project_type || 'أعمال هندسية'}`;
-    const projCode = `PRJ-${Date.now().toString().slice(-4)}`;
-    const contractVal = request.quoted_amount || request.estimated_budget || 0;
-
-    const projNotes = request.description || ('مشروع محول من طلب الخدمة: ' + request.request_no);
-    const projInsert = await db.run(`
-      INSERT INTO projects (
-        code, name, client_id, status, contract_value, location, description, notes, created_at
-      ) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [
-      projCode,
-      projName,
-      clientId,
-      contractVal,
-      request.location || 'عدن',
-      projNotes,
-      projNotes
-    ]);
-
-    const newProjectId = projInsert.lastID || projInsert.insertId;
-
-    // 3. تحديث حالة طلب الخدمة إلى محول
-    await db.run(`
-      UPDATE service_requests
-      SET status = 'converted', admin_notes = COALESCE(admin_notes, '') || ' [تم التحويل لمشروع كود: ' || ? || ']', updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [projCode, id]);
-
-    await logAudit(req, {
-      action: 'SERVICE_REQUEST_CONVERTED',
-      entity_type: 'service_requests',
-      entity_id: id,
-      details: `تم تحويل طلب الخدمة (${request.request_no}) إلى مشروع (${projName}) بكود (${projCode})`
-    });
-
-    res.json({
-      success: true,
-      message: `تم تحويل الطلب بنجاح إلى مشروع جديد بكود: ${projCode}`,
-      project_id: newProjectId,
-      project_code: projCode
-    });
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({success:false,message:'رقم الطلب غير صالح'});
+    const result = await require('../services/serviceRequestConversionService').convertServiceRequest(db, id, req.user.id);
+    await logAudit(req, {action:'SERVICE_REQUEST_CONVERTED',entity_type:'service_requests',entity_id:id,details:`تم تحويل طلب الخدمة (${result.requestNo}) إلى مشروع (${result.projectName}) بكود (${result.projectCode})`});
+    res.json({success:true,message:`تم تحويل الطلب بنجاح إلى مشروع جديد بكود: ${result.projectCode}`,project_id:result.projectId,project_code:result.projectCode,cost_center_id:result.costCenterId});
   } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({success:false,message:err.message});
     console.error('Convert to project error:', err);
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحويل الطلب إلى مشروع' });
+    res.status(500).json({success:false,message:'حدث خطأ أثناء تحويل الطلب إلى مشروع'});
   }
 });
 

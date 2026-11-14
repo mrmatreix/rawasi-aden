@@ -28,6 +28,21 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal((await api(adminPath+'/manager-decision',internal,'POST',{decision:'approve',quote_id:second})).status,200);
   assert.equal((await api(portal+'/my-service-requests/'+request+'/response',clientToken(owner),'POST',{decision:'accept',quote_id:pending})).status,409);
   assert.equal((await api(portal+'/my-service-requests/'+request+'/response',clientToken(owner),'POST',{decision:'accept',quote_id:second})).status,200);
+  // One accepted quote produces exactly one project and one project cost center, even under concurrent requests.
+  const conversions=await Promise.all([api(adminPath+'/convert-to-project',internal,'POST',{}),api(adminPath+'/convert-to-project',internal,'POST',{})]);
+  assert.deepEqual(conversions.map(x=>x.status).sort(),[200,409]);
+  const converted=conversions.find(x=>x.status===200).data;
+  const project=await db.get('SELECT * FROM projects WHERE id=?',[converted.project_id]);
+  assert.equal(Number(project.contract_value),150);
+  assert.equal((await db.get('SELECT COUNT(*) AS n FROM cost_centers WHERE project_id=?',[converted.project_id])).n,1);
+  assert.equal((await db.get('SELECT status FROM service_requests WHERE id=?',[request])).status,'converted');
+  const failed=(await db.run("INSERT INTO service_requests(request_no,client_user_id,client_name,phone,status,assigned_to) VALUES ('SR-ROLLBACK',?,'Test','123','client_accepted',?)",[owner,admin])).lastInsertRowid;
+  await db.run("INSERT INTO service_request_quotes(request_id,version,details,duration,amount,currency,state,created_by) VALUES (?,1,'test','week',42,'YER','accepted',?)",[failed,admin]);
+  await db.run("INSERT INTO cost_centers(code,name) VALUES (?,?)",['CC-SR-'+failed,'collision']);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+failed+'/convert-to-project',internal,'POST',{})).status,500);
+  assert.equal((await db.get('SELECT status FROM service_requests WHERE id=?',[failed])).status,'client_accepted');
+  assert.equal((await db.get('SELECT COUNT(*) AS n FROM projects WHERE code=?',['PRJ-SR-'+failed])).n,0);
+
   assert.equal((await api('/api/admin/client-users/service-request-supervisor',internal,'PUT',{supervisor_id:admin})).status,200);
   const service=(await db.run("INSERT INTO engineering_services(code,title,is_active) VALUES ('S-TEST','Synthetic service',1)")).lastInsertRowid;
   const submitted=await api(portal+'/services/requests',null,'POST',{client_name:'Guest test',phone:'777000000',service_ids:[service]});
