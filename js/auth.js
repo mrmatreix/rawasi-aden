@@ -217,9 +217,8 @@ const Auth = {
           }
         });
         const data = await res.json();
-        if (!data.success && data.session_terminated) {
-          this.stopHeartbeat();
-          this.logout(true, data.message || 'تم تسجيل الدخول بهذا الحساب من جهاز أو نافذة أخرى. تم إنهاء هذه الجلسة منعاً للتكرار.');
+        if (res.status === 401 || (!data.success && data.session_terminated)) {
+          this.handleExpiredSession(data.message);
         }
       } catch (e) {
         // خطأ شبكة مؤقت
@@ -232,6 +231,31 @@ const Auth = {
     if (this._heartbeatInterval) {
       clearInterval(this._heartbeatInterval);
       this._heartbeatInterval = null;
+    }
+  },
+
+  // Keep unsaved forms in the current page; never retry a write automatically.
+  handleExpiredSession(message) {
+    const expiredToken = this.token;
+    const username = this.currentUser?.username;
+    this.stopHeartbeat();
+    this.stopActivityTracker();
+    this.token = null;
+    this.sessionId = null;
+    this.currentUser = null;
+    sessionStorage.removeItem('rawasi_token');
+    sessionStorage.removeItem('rawasi_user');
+    sessionStorage.removeItem('rawasi_session_active');
+    if (expiredToken && localStorage.getItem('rawasi_token') === expiredToken) {
+      localStorage.removeItem('rawasi_token');
+      localStorage.removeItem('rawasi_user');
+    }
+    if (username) localStorage.setItem('rawasi_last_username', username);
+    this.showLogin();
+    const errorBox = document.getElementById('loginErrorMsg');
+    if (errorBox) {
+      errorBox.textContent = 'انتهت جلسة الدخول أو أُغلقت. سجل الدخول مجددًا في هذه الصفحة، ثم أعد الحفظ؛ تبقى البيانات غير المحفوظة في النموذج المفتوح.';
+      errorBox.style.display = 'block';
     }
   },
 
@@ -248,11 +272,10 @@ const Auth = {
         localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         this.updateUserUI();
         this.applyPermissions();
-      } else {
+      } else if (res.status === 401 || res.status === 403 || data.session_terminated) {
         // انتهت صلاحية الجلسة أو تم تسجيل الدخول من مكان آخر
         console.warn('جلسة الدخول منتهية أو غير صالحة:', data.message);
-        this.stopHeartbeat();
-        this.logout(false, data.message || 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول');
+        this.handleExpiredSession(data.message);
       }
     } catch (err) {
       console.warn('تعذر التحقق من الخادم حالياً، مواصلة العمل بالجلسة المخزنة محلياً:', err);

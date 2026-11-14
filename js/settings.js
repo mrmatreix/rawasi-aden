@@ -3260,6 +3260,8 @@ const Settings = {
         App.showToast(data.message || 'تم حفظ المستخدم وتعيين الصلاحيات بنجاح!', 'success');
         App.closeModal('newUserModal');
         await this.loadUsers();
+      } else if (res.status === 401) {
+        Auth.handleExpiredSession?.(data.message);
       } else {
         App.showToast(data.message || 'حدث خطأ أثناء حفظ المستخدم', 'error');
       }

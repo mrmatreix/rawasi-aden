@@ -2141,7 +2141,7 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 9999;
+  z-index: 200000;
   background: radial-gradient(circle at 50% 30%, #173258 0%, #0a1728 60%, #050b14 100%);
   display: flex;
   align-items: center;
