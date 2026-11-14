@@ -59,6 +59,15 @@ test('manager approval and client response apply to the correct quote and accoun
   const staffMessage=await api('/api/admin/client-users/service-requests/'+guest+'/message',internal,'POST',{message:'رسالة خاصة قبل الاعتماد'});assert.equal(staffMessage.status,200);
   let visible=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(visible.data.request.messages.some(m=>m.message==='رسالة خاصة قبل الاعتماد'),false);
   const pendingMessage=await db.get("SELECT id FROM service_request_events WHERE request_id=? AND event_type='message_pending_approval'",[guest]);
+  const alertsAdmin=await api('/api/admin/client-users/service-requests/alerts',internal);
+  assert.equal(alertsAdmin.status,200);assert.equal(alertsAdmin.data.alerts.find(a=>Number(a.id)===Number(guest)).pending_messages,1);
+  const staffId=(await db.run("INSERT INTO users(username,password_hash,full_name,role,permissions,status) VALUES ('alert-worker','unused','Worker','custom',?,'active')",[JSON.stringify(['client_app:requests_view'])])).lastInsertRowid;
+  const staffToken=jwt.sign({id:staffId},require('../../server/middleware/security').JWT_SECRET);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
+  await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[staffId,guest]);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
+  await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[admin,guest]);
+
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,200);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,409);
   visible=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(visible.data.request.messages.some(m=>m.message==='رسالة خاصة قبل الاعتماد'),true);

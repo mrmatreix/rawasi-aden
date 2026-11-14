@@ -1051,6 +1051,17 @@ router.get('/service-requests', async (req, res) => {
  * GET /api/admin/client-users/service-requests/:id
  * تفاصيل طلب خدمة محدد مع الخدمات المختارة والمرفقات
  */
+router.get('/service-requests/alerts', async (req,res) => {
+  try {
+    const admin=req.user.role==='admin';
+    const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
+      (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
+      FROM service_requests sr WHERE sr.source='guest' AND ${admin ? "(sr.status IN ('new','pending_manager') OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval'))" : "sr.assigned_to=? AND sr.status IN ('new','client_changes','manager_changes')"}
+      ORDER BY sr.updated_at DESC, sr.id DESC LIMIT 100`,admin?[]:[req.user.id]);
+    res.json({success:true,alerts:(rows||[]).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,status:r.status,pending_messages:Number(r.pending_messages||0),updated_at:r.updated_at}))});
+  } catch(err){console.error('guest request alerts',err);res.status(500).json({success:false,message:'تعذر تحميل تنبيهات طلبات الزوار'});}
+});
+
 router.get('/service-requests/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

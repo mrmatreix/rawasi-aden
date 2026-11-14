@@ -145,6 +145,7 @@ const App = {
     this.setupNetworkWatchers();
     this.setupHardwareBackButton();
     this.initAutoBackupHeader();
+    this.initGuestRequestAlerts();
 
     // تهيئة مسار التنقل الدلالي ووحدة تجربة المستخدم والتحميل الكسول
     if (window.UI && UI.Breadcrumbs) UI.Breadcrumbs.update(this.activeView);
@@ -1783,6 +1784,7 @@ const App = {
       dropdown.classList.remove('active');
     } else {
       this.renderNotificationsList();
+      this.refreshGuestRequestAlerts();
       dropdown.classList.add('active');
     }
   },
@@ -1856,6 +1858,38 @@ const App = {
     this.renderNotificationsList();
   },
 
+  initGuestRequestAlerts() {
+    if (this._guestAlertTimer) return;
+    this._guestAlertTimer=setInterval(()=>this.refreshGuestRequestAlerts(),30000);
+    this.refreshGuestRequestAlerts();
+  },
+  async refreshGuestRequestAlerts() {
+    if (typeof Auth === 'undefined' || !Auth.currentUser || !Auth.token) { this.guestRequestAlerts=[]; this.guestAlertsAvailable=false; this.updateGuestRequestAlertBadge(); return; }
+    const requestedUser=String(Auth.currentUser.id||'');
+    try {
+      const response=await fetch('/api/admin/client-users/service-requests/alerts',{cache:'no-store'});
+      if (!response.ok) { this.guestRequestAlerts=[]; this.guestAlertsAvailable=false; this.updateGuestRequestAlertBadge(); return; }
+      const data=await response.json();
+      if (!Auth.currentUser || String(Auth.currentUser.id||'')!==requestedUser) return;
+      this.guestAlertsAvailable=!!data.success;
+      this.guestRequestAlerts=data.success && Array.isArray(data.alerts)?data.alerts:[];
+      this.updateGuestRequestAlertBadge();
+      if(document.getElementById('notificationsDropdown')?.classList.contains('active'))this.renderNotificationsList();
+    } catch { this.guestRequestAlerts=[]; this.guestAlertsAvailable=false; this.updateGuestRequestAlertBadge(); }
+  },
+  updateGuestRequestAlertBadge() {
+    const button=document.getElementById('guestRequestAlertsButton'), count=document.getElementById('guestRequestAlertsCount');
+    const size=(this.guestRequestAlerts||[]).length;
+    if(button)button.style.display=this.guestAlertsAvailable?'inline-flex':'none';
+    if(count)count.textContent=String(size);
+  },
+  openGuestRequestAlert(id) {
+    const requestId=Number(id);
+    if(!Number.isSafeInteger(requestId)||requestId<=0)return;
+    window.open('/views/client_users.html?request_id='+requestId,'_blank');
+    this.closeNotificationsDropdown();
+  },
+
   // بناء عناصر قائمة الإشعارات ديناميكياً
   renderNotificationsList() {
     const listEl = document.getElementById('notifList');
@@ -1889,7 +1923,12 @@ const App = {
       }
     ];
 
-    listEl.innerHTML = items.map(item => `
+    const safeText=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const requestItems=(this.guestRequestAlerts||[]).map(a=>{
+      const label=Number(a.pending_messages)>0?'رد بانتظار موافقة المدير':a.status==='pending_manager'?'عرض بانتظار موافقة المدير':a.status==='client_changes'?'العميل طلب تعديل العرض':a.status==='manager_changes'?'المدير أعاد العرض للتعديل':'طلب زائر جديد';
+      return `<button type="button" class="notif-item" style="width:100%;text-align:right;cursor:pointer;background:transparent;border:0;color:inherit" onclick="App.openGuestRequestAlert(${Number(a.id)})"><div class="notif-item-icon info">📋</div><div class="notif-item-content"><div class="notif-item-title">${safeText(label)}</div><div>${safeText(a.request_no)} — ${safeText(a.client_name)}</div><div class="notif-item-time">اضغط لعرض الطلب كاملًا</div></div></button>`;
+    }).join('');
+    listEl.innerHTML = requestItems + items.map(item => `
       <div class="notif-item">
         <div class="notif-item-icon ${item.iconClass}">${item.icon}</div>
         <div class="notif-item-content">

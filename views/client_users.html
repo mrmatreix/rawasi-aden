@@ -2531,7 +2531,9 @@
     document.addEventListener('DOMContentLoaded', () => {
       loadClientUsers();
       loadClientMessages();
-      loadServiceRequests();
+      const requestId=Number(new URLSearchParams(window.location.search).get('request_id'));
+      if(Number.isSafeInteger(requestId)&&requestId>0){switchMainTab('requests');openServiceRequestModal(requestId);}
+      else loadServiceRequests();
     });
   </script>
 </body>

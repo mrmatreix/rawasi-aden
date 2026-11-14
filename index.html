@@ -242,8 +242,10 @@
         <span class="theme-toggle-label" id="themeToggleLabel">ليلي</span>
       </button>
 
+      <button type="button" id="guestRequestAlertsButton" onclick="App.toggleNotificationsDropdown(event)" title="طلبات الزوار والموافقات" aria-label="طلبات الزوار والموافقات" style="display:none;align-items:center;gap:6px;border:1px solid var(--border-color);border-radius:20px;padding:7px 12px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer"><span>طلبات الزوار</span><strong id="guestRequestAlertsCount">0</strong></button>
+
       <!-- زر ومؤشر حالة النسخ الاحتياطي التلقائي المجدول في الهيدر -->
-      <div class="header-backup-status-wrap" id="headerBackupStatusWrap">
+      <div class="header-backup-status-wrap" id="headerBackupStatusWrap" style="display:none !important;">
         <button type="button" class="header-backup-status-btn" id="btnHeaderBackupStatus" onclick="App.toggleBackupStatusDropdown(event)" title="حالة النسخ الاحتياطي التلقائي المجدول ومسار التخزين">
           <div class="backup-status-icon-wrap">
             <span class="backup-status-icon" id="headerBackupIcon">🛡️</span>
@@ -10055,7 +10057,7 @@
   <script src="js/print-designer.js"></script>
   <script src="js/contracts_cashflow.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/sidebar.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/app.js?v=1.0.0.20261025-djqd"></script>
+  <script src="js/app.js?v=guest-alerts-20261114"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
