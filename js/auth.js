@@ -1110,7 +1110,8 @@ const Auth = {
       'cash': 'cash:view',
       'contractLifecycle': 'projects:view',
       'cashFlow': 'accounting:view,reports:view',
-      'settings': 'settings:users,settings:company,settings:backup,client_app:view'
+      'settings': 'settings:users,settings:company,settings:backup',
+      'clientApp': 'client_app:view'
     };
 
     const perm = viewPermMap[viewId];
@@ -1232,8 +1233,7 @@ const Auth = {
     if (typeof Sidebar !== 'undefined') Sidebar.refresh();
 
     // إخفاء أو إظهار ألسنة الإعدادات حسب الصلاحيات
-    const clientTab = document.getElementById('tabBtn_settings_client_app');
-    if(clientTab)clientTab.style.display=this.hasPermission('settings:users,client_app:view')?'':'none';
+    for (const [id,permission] of [['settingsHeaderAddUser','settings:users'],['settingsHeaderBackup','settings:backup'],['settingsHeaderRestore','settings:backup'],['clientAppAddUser','client_app:create']]) { const el=document.getElementById(id);if(el)el.style.display=this.hasPermission(permission)?'':'none'; }
     const usersTab = document.getElementById('tabBtn_settings_users');
     if (usersTab) usersTab.style.display = this.hasPermission('settings:users') ? '' : 'none';
 

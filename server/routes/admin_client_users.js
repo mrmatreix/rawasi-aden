@@ -15,7 +15,7 @@ router.use((req,res,next)=>{
   else if(path.endsWith('/revoke-sessions'))action='sessions';
   else if(/\/(invite-preview|send-invite)$/.test(path))action='invite';
   else if(path.endsWith('/projects')&&!read)action='permissions';
-  require('../middleware/security').requirePermission('settings:users,client_app:'+action)(req,res,next);
+  require('../middleware/security').requirePermission('client_app:'+action)(req,res,next);
 });
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -627,7 +627,7 @@ router.put('/:id', async (req, res) => {
     }
 
     const updates = [];
-    if(role&&role!==user.role&&!require('../middleware/security').hasUserPermission(req.user,'settings:users,client_app:permissions'))return res.status(403).json({success:false,message:'تغيير دور حساب العميل يتطلب صلاحية تعيين الصلاحيات'});
+    if(role&&role!==user.role&&!require('../middleware/security').hasUserPermission(req.user,'client_app:permissions'))return res.status(403).json({success:false,message:'تغيير دور حساب العميل يتطلب صلاحية تعيين الصلاحيات'});
     const params = [];
 
     if (full_name) { updates.push('full_name = ?'); params.push(String(full_name).trim()); }

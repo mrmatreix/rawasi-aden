@@ -17,6 +17,10 @@ test('user confirmation and granular Client App permissions are enforced, and pr
  assert.equal((await api('/api/admin/client-users')).status,200);assert.equal((await api('/api/admin/client-users','POST',account)).status,403);assert.equal((await api('/api/admin/client-users/'+clientUser+'/reset-password','POST',{new_password:'Reset123!',password_confirm:'Reset123!'})).status,403);assert.equal((await api('/api/users')).status,403);assert.equal((await api('/api/admin/client-users/service-requests')).status,403);
  await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:view','client_app:edit']),limited]);assert.equal((await api('/api/admin/client-users/'+clientUser,'PUT',{phone:'777000111'})).status,200);assert.equal((await api('/api/admin/client-users/'+clientUser,'PUT',{role:'owner'})).status,403);
  await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:view','client_app:reset_password']),limited]);assert.equal((await api('/api/admin/client-users/'+clientUser+'/reset-password','POST',{new_password:'Reset456!',password_confirm:'Reset456!'})).status,200);
+ await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['settings:users']),limited]);
+ assert.equal((await api('/api/users')).status,200);
+ assert.equal((await api('/api/admin/client-users')).status,403);
+ assert.equal((await api('/api/admin/client-users/'+clientUser+'/reset-password','POST',{new_password:'Reset456!',password_confirm:'Reset456!'})).status,403);
  token=adminToken;const titles={project_budget:'موازنة مخصصة',weekly_report:'تقرير أسبوعي مخصص'};assert.equal((await api('/api/settings','POST',{print_operation_titles:JSON.stringify(titles)})).status,200);assert.deepEqual(JSON.parse((await db.get("SELECT value FROM settings WHERE key='print_operation_titles'")).value),titles);
  }finally{if(server)await new Promise(resolve=>server.close(resolve));if(db)await db.closeDatabase();try{source.close();}catch{}assert.ok(path.resolve(temp).startsWith(scratch+path.sep));fs.rmSync(temp,{recursive:true,force:true});}
 });

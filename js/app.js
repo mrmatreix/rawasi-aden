@@ -22,7 +22,7 @@ const App = {
     reports: 'js/reports.js?v=1.0.0.20261025-djqd',
     inventory: 'js/inventory.js?v=1.0.0.20261025-djqd',
     projectCloseout: 'js/project_closeout.js?v=1.0.0.20261025-djqd',
-    settings: 'js/settings.js?v=1.0.0.20261025-djqd',
+    settings: 'js/settings.js?v=client-separation-20261114',
     excelExport: 'js/excel-export.js?v=1.0.0.20261025-djqd',
     contractsCashflow: 'js/contracts_cashflow.js?v=1.0.0.20261025-djqd'
   },
@@ -93,7 +93,8 @@ const App = {
       hr: ['hr'],
       contractLifecycle: ['projects', 'contractsCashflow'],
       cashFlow: ['accounting', 'contractsCashflow'],
-      settings: ['settings']
+      settings: ['settings'],
+      clientApp: ['settings']
     };
 
     const modules = viewMap[viewId] || [];
@@ -355,6 +356,7 @@ const App = {
 
   // التنقل الشجري العميق إلى إدارة وتبويب محدد
   async navigateDeep(viewId, subTab, clickedEl = null) {
+    if (viewId === 'settings' && subTab === 'client_app') return this.navigate('clientApp', clickedEl);
     // فتح مجموعة القائمة الحاضنة للتبويب
     if (clickedEl) {
       const parentGroup = clickedEl.closest('.nav-group');
@@ -581,6 +583,8 @@ const App = {
     } else if (viewId === 'cash') {
       Accounting.loadCashMovement();
       await this.loadCashTable();
+    } else if (viewId === 'clientApp') {
+      await Settings.loadClientUsersForSettings();
     } else if (viewId === 'settings') {
       Settings.switchTab(Settings.activeTab || 'users');
     } else if (viewId === 'contractLifecycle') {
