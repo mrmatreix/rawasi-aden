@@ -839,7 +839,7 @@
         </div>
 
         <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-          <button onclick="window.print()" class="btn btn-outline" style="border-radius: 12px;">
+          <button onclick="printRequestSummary()" class="btn btn-outline" style="border-radius: 12px;">
             <i class="fa-solid fa-print"></i> طباعة ملخص الطلب
           </button>
           <button onclick="resetAndNewRequest()" class="btn btn-primary" style="border-radius: 12px; font-weight: 800;">
@@ -1242,6 +1242,11 @@
       }
     }
 
+    function printRequestSummary() {
+      if (window.RawasiAndroid && typeof window.RawasiAndroid.printOrder === 'function') { window.RawasiAndroid.printOrder(); return; }
+      window.print();
+    }
+
     function showSuccessView(data) {
       document.getElementById('stepServices').classList.remove('active');
       document.getElementById('stepForm').classList.remove('active');
@@ -1267,9 +1272,15 @@
     }
 
     // Track Order Modal
-    function openTrackModal() {
+    async function openTrackModal() {
       document.getElementById('trackModal').style.display = 'flex';
       document.getElementById('trackResultContainer').style.display = 'none';
+      try {
+        const res=await fetch('/api/client-portal/services/requests/guest-session',{credentials:'same-origin',cache:'no-store'});
+        if(!res.ok)return;
+        const saved=await res.json();
+        if(saved.success){document.getElementById('trackRequestNoInput').value=saved.request_no;document.getElementById('trackVerifyCodeInput').value=saved.verification_code;await executeTrackRequest();}
+      } catch {}
     }
 
     function closeTrackModal() {

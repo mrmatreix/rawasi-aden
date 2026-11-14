@@ -580,6 +580,12 @@ router.post('/services/requests', async (req, res) => {
       console.warn('Could not insert audit log for service request:', auditErr);
     }
 
+    if (source === 'guest') {
+      const configured=await db.get("SELECT value FROM settings WHERE `key`='guest_request_access_days'");
+      const days=Number(configured?.value); const lifetime=Number.isInteger(days)&&days>=1&&days<=365?days:30;
+      const token=jwt.sign({type:'guest_request',request_no:requestNo,verification_code:verificationCode},CLIENT_JWT_SECRET,{algorithm:'HS256',expiresIn:lifetime*86400});
+      res.cookie('rawasi_guest_request',token,{httpOnly:true,secure:!['localhost','127.0.0.1','::1'].includes(req.hostname),sameSite:'lax',path:'/api/client-portal/services/requests',maxAge:lifetime*86400000});
+    }
     res.json({
       success: true,
       message: 'مرحباً بكم في رواسي عدن، استلمنا طلبكم وسيتم تحويله للمشرف لمراجعته والتواصل معكم.',
@@ -606,6 +612,19 @@ router.post('/services/requests', async (req, res) => {
  * GET /api/client-portal/services/requests/track
  * متابعة حالة الطلب للزائر باستخدام رقم الطلب ورمز التحقق
  */
+router.get('/services/requests/guest-session', async (req,res) => {
+  res.set('Cache-Control','no-store');
+  try {
+    const part=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('rawasi_guest_request='));
+    const token=part ? decodeURIComponent(part.slice('rawasi_guest_request='.length)) : '';
+    const data=jwt.verify(token,CLIENT_JWT_SECRET,{algorithms:['HS256']});
+    if(data.type!=='guest_request'||!data.request_no||!/^[a-f0-9]{28}$/.test(data.verification_code||'')) throw new Error('invalid');
+    const found=await db.get("SELECT id FROM service_requests WHERE request_no=? AND verification_code=? AND source='guest'",[data.request_no,data.verification_code]);
+    if(!found) throw new Error('invalid');
+    res.json({success:true,request_no:data.request_no,verification_code:data.verification_code,expires_at:new Date(data.exp*1000).toISOString()});
+  } catch {res.status(401).json({success:false,message:'انتهت جلسة متابعة الزائر أو لم تبدأ'});}
+});
+
 router.get('/services/requests/track', async (req, res) => {
   try {
     const { request_no, verification_code } = req.query;

@@ -10,7 +10,7 @@ test('manager approval and client response apply to the correct quote and accoun
   const request=(await db.run("INSERT INTO service_requests(request_no,client_user_id,client_name,phone,status,assigned_to,verification_code,admin_notes,quoted_amount) VALUES ('SR-TEST-1',?,'Test','123','pricing',?,'123456','private',50)",[owner,admin])).lastInsertRowid;
   const internal=jwt.sign({id:admin},require('../../server/middleware/security').JWT_SECRET), clientSecret=require('../../server/middleware/client_auth').CLIENT_JWT_SECRET;
   const clientToken=id=>jwt.sign({id,client_id:client,type:'client'},clientSecret), base='http://127.0.0.1:'+server.address().port;
-  async function api(url,token,method='GET',body){const res=await fetch(base+url,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:res.status,data:await res.json()};}
+  async function api(url,token,method='GET',body){const res=await fetch(base+url,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:res.status,data:await res.json(),cookie:res.headers.get('set-cookie')};}
   const adminPath='/api/admin/client-users/service-requests/'+request, portal='/api/client-portal';
   let track=await api(portal+'/services/requests/track?request_no=SR-TEST-1&verification_code=123456');assert.equal(track.data.request.quoted_amount,null);assert.equal(track.data.request.admin_notes,undefined);
   assert.equal((await api(adminPath,internal,'PUT',{status:'quoted'})).status,409);
@@ -44,10 +44,25 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal((await db.get('SELECT COUNT(*) AS n FROM projects WHERE code=?',['PRJ-SR-'+failed])).n,0);
 
   assert.equal((await api('/api/admin/client-users/service-request-supervisor',internal,'PUT',{supervisor_id:admin})).status,200);
+  assert.equal((await api('/api/admin/client-users/guest-access-settings',internal,'PUT',{days:7})).status,200);
+  assert.equal((await api('/api/admin/client-users/guest-access-settings',internal,'PUT',{days:0})).status,400);
   const service=(await db.run("INSERT INTO engineering_services(code,title,is_active) VALUES ('S-TEST','Synthetic service',1)")).lastInsertRowid;
   const submitted=await api(portal+'/services/requests',null,'POST',{client_name:'Guest test',phone:'777000000',service_ids:[service]});
   assert.equal(submitted.status,200,JSON.stringify(submitted.data));assert.match(submitted.data.data.verification_code,/^[a-f0-9]{28}$/);
   const guest=submitted.data.data.request_id, code=submitted.data.data.verification_code, number=submitted.data.data.request_no;
+  assert.match(submitted.cookie,/HttpOnly/i); assert.match(submitted.cookie,/Max-Age=604800/i);
+  const guestSession=await fetch(base+portal+'/services/requests/guest-session',{headers:{Cookie:submitted.cookie.split(';')[0]}});
+  assert.equal(guestSession.status,200); assert.equal((await guestSession.json()).request_no,number);
+  assert.equal((await fetch(base+portal+'/services/requests/guest-session',{headers:{Cookie:'rawasi_guest_request=invalid'}})).status,401);
+  const expired=jwt.sign({type:'guest_request',request_no:number,verification_code:code},clientSecret,{expiresIn:-1});
+  assert.equal((await fetch(base+portal+'/services/requests/guest-session',{headers:{Cookie:'rawasi_guest_request='+expired}})).status,401);
+  const staffMessage=await api('/api/admin/client-users/service-requests/'+guest+'/message',internal,'POST',{message:'رسالة خاصة قبل الاعتماد'});assert.equal(staffMessage.status,200);
+  let visible=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(visible.data.request.messages.some(m=>m.message==='رسالة خاصة قبل الاعتماد'),false);
+  const pendingMessage=await db.get("SELECT id FROM service_request_events WHERE request_id=? AND event_type='message_pending_approval'",[guest]);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,200);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,409);
+  visible=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(visible.data.request.messages.some(m=>m.message==='رسالة خاصة قبل الاعتماد'),true);
+
   assert.equal(Number((await db.get('SELECT assigned_to FROM service_requests WHERE id=?',[guest])).assigned_to),admin);
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:code,message:'تفاصيل إضافية'})).status,200);
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:'0000000000000000000000000000',message:'غير مصرح'})).status,404);

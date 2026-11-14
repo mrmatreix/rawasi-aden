@@ -24,6 +24,16 @@ const { logAudit } = require('../services/auditService');
 const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
 const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
 
+router.get('/guest-access-settings', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  try {const row=await db.get("SELECT value FROM settings WHERE `key`='guest_request_access_days'");const days=Number(row?.value);res.json({success:true,days:Number.isInteger(days)&&days>=1&&days<=365?days:30});} catch {res.status(500).json({success:false,message:'تعذر قراءة الإعداد'});}
+});
+router.put('/guest-access-settings', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  const days=Number(req.body.days);if(!Number.isInteger(days)||days<1||days>365)return res.status(400).json({success:false,message:'اختر مدة من يوم إلى 365 يوماً'});
+  try {const row=await db.get("SELECT `key` FROM settings WHERE `key`='guest_request_access_days'");if(row)await db.run("UPDATE settings SET `value`=? WHERE `key`='guest_request_access_days'",[String(days)]);else await db.run("INSERT INTO settings (`key`,`value`) VALUES ('guest_request_access_days',?)",[String(days)]);await logAudit(req,{action:'GUEST_ACCESS_DAYS_SET',entity_type:'settings',details:`مدة متابعة الزائر ${days} يوم`});res.json({success:true,days});}catch{res.status(500).json({success:false,message:'تعذر حفظ الإعداد'});}
+});
+
 router.get('/service-request-supervisor', async (req,res) => {
   if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
   try {const row=await db.get("SELECT value FROM settings WHERE `key`='service_request_supervisor_id'");res.json({success:true,supervisor_id:Number(row?.value)||null});}
@@ -1148,12 +1158,26 @@ router.post('/service-requests/:id/message', async (req,res) => {
   const id=Number(req.params.id), message=String(req.body.message||'').trim();
   if(!message || message.length>4000) return res.status(400).json({success:false,message:'أدخل رسالة لا تزيد عن 4000 حرف'});
   try {
-    const request=await db.get('SELECT id,client_user_id,request_no FROM service_requests WHERE id=?',[id]);
+    const request=await db.get('SELECT id,client_user_id,request_no,source FROM service_requests WHERE id=?',[id]);
     if(!request) return res.status(404).json({success:false,message:'الطلب غير موجود'});
-    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'message_to_client',message]);
-    if(request.client_user_id) await require('../services/pushNotificationService').sendToClientUser(request.client_user_id,{title:'رسالة جديدة بشأن طلبك',body:`لديك رسالة جديدة بشأن الطلب ${request.request_no}`,referenceType:'service_request',referenceId:id});
-    res.json({success:true});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,request.source==='guest'?'message_pending_approval':'message_to_client',message]);
+    if(request.source!=='guest' && request.client_user_id) await require('../services/pushNotificationService').sendToClientUser(request.client_user_id,{title:'رسالة جديدة بشأن طلبك',body:`لديك رسالة جديدة بشأن الطلب ${request.request_no}`,referenceType:'service_request',referenceId:id});
+    res.json({success:true,pending_approval:request.source==='guest'});
   } catch(err) {res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/service-requests/:id/message-decision', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'اعتماد الرد متاح للمدير العام فقط'});
+  const id=Number(req.params.id),eventId=Number(req.body.event_id),decision=req.body.decision;
+  if(!Number.isSafeInteger(id)||!Number.isSafeInteger(eventId)||!['approve','reject'].includes(decision))return res.status(400).json({success:false,message:'بيانات القرار غير صحيحة'});
+  try {const result=await db.transaction(async tx=>{
+    const event=await tx.get("SELECT id,message FROM service_request_events WHERE id=? AND request_id=? AND event_type='message_pending_approval'",[eventId,id]);
+    if(!event)return false;
+    const changed=await tx.run("UPDATE service_request_events SET event_type=? WHERE id=? AND request_id=? AND event_type='message_pending_approval'",[decision==='approve'?'message_approved':'message_rejected',eventId,id]);
+    if(!changed.changes)return false;
+    await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'manager',req.user.id,decision==='approve'?'message_to_client':'message_declined',decision==='approve'?event.message:'تم رفض الرد من المدير']);
+    return true;
+  }); if(!result)return res.status(409).json({success:false,message:'الرد لم يعد بانتظار الاعتماد'});res.json({success:true});}catch(err){console.error('message approval',err);res.status(500).json({success:false,message:'تعذر تسجيل القرار'});}
 });
 
 router.post('/service-requests/:id/quote', async (req, res) => {
