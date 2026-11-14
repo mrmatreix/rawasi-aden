@@ -24,6 +24,27 @@ const { logAudit } = require('../services/auditService');
 const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
 const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
 
+router.get('/service-request-supervisor', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  try {const row=await db.get("SELECT value FROM settings WHERE `key`='service_request_supervisor_id'");res.json({success:true,supervisor_id:Number(row?.value)||null});}
+  catch(err){res.status(500).json({success:false,message:'تعذر قراءة إعداد المشرف'});}
+});
+router.put('/service-request-supervisor', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  try {
+    const id=Number(req.body.supervisor_id);
+    const user=await db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[id]);
+    if(!user) return res.status(400).json({success:false,message:'اختر مستخدماً نشطاً'});
+    let permissions=[];try{permissions=JSON.parse(user.permissions||user.role_permissions||'[]');}catch{}
+    if(!require('../middleware/security').hasUserPermission({...user,permissions},'client_app:requests_review'))return res.status(400).json({success:false,message:'المستخدم يحتاج صلاحية اعتماد مراجعة طلبات الخدمات'});
+    const existing=await db.get("SELECT `key` FROM settings WHERE `key`='service_request_supervisor_id'");
+    if(existing) await db.run("UPDATE settings SET `value`=? WHERE `key`='service_request_supervisor_id'",[String(id)]);
+    else await db.run("INSERT INTO settings (`key`,`value`) VALUES ('service_request_supervisor_id',?)",[String(id)]);
+    await logAudit(req,{action:'SERVICE_REQUEST_SUPERVISOR_SET',entity_type:'users',entity_id:id,details:'تعيين مشرف استقبال طلبات الخدمات'});
+    res.json({success:true});
+  } catch(err){console.error('supervisor setting',err);res.status(500).json({success:false,message:'تعذر حفظ إعداد المشرف'});}
+});
+
 /**
  * GET /api/admin/client-users
  * استعراض قائمة حسابات العملاء مع تفاصيل العميل والمشاريع المسموحة
@@ -1027,7 +1048,7 @@ router.get('/service-requests/:id', async (req, res) => {
       SELECT 
         sr.*,
         u.username AS assigned_username,
-        u.name AS assigned_name
+        COALESCE(u.full_name, u.username) AS assigned_name
       FROM service_requests sr
       LEFT JOIN users u ON sr.assigned_to = u.id
       WHERE sr.id = ?
@@ -1043,6 +1064,8 @@ router.get('/service-requests/:id', async (req, res) => {
       LEFT JOIN engineering_services es ON sri.service_id = es.id
       WHERE sri.request_id = ?
     `, [id]);
+    const quotes = await db.query('SELECT * FROM service_request_quotes WHERE request_id = ? ORDER BY version DESC', [id]);
+    const events = await db.query('SELECT * FROM service_request_events WHERE request_id = ? ORDER BY id DESC', [id]);
 
     let attachments = [];
     try {
@@ -1056,7 +1079,7 @@ router.get('/service-requests/:id', async (req, res) => {
       request: {
         ...request,
         attachments,
-        items: items || []
+        items: items || [], quotes, events
       }
     });
   } catch (err) {
@@ -1079,15 +1102,26 @@ router.put('/service-requests/:id', async (req, res) => {
     }
 
     const newStatus = status || request.status;
+    if (!['new', 'under_review', 'pricing', 'rejected'].includes(newStatus) || !['new', 'under_review', 'pricing', 'rejected', 'client_changes', 'manager_changes'].includes(request.status)) {
+      return res.status(409).json({success:false,message:'استخدم إجراءات اعتماد العرض لتغيير هذه الحالة'});
+    }
     const newAssignedTo = assigned_to !== undefined ? (assigned_to ? parseInt(assigned_to, 10) : null) : request.assigned_to;
+    if (newAssignedTo && !(await db.get("SELECT id FROM users WHERE id=? AND (status='active' OR status IS NULL)",[newAssignedTo]))) return res.status(400).json({success:false,message:'الموظف المحدد غير نشط أو غير موجود'});
     const newAdminNotes = admin_notes !== undefined ? admin_notes : request.admin_notes;
+    if (newStatus === 'pricing' && request.status !== 'pricing') {
+      if (!require('../middleware/security').hasUserPermission(req.user,'client_app:requests_review')) return res.status(403).json({success:false,message:'اعتماد مراجعة المتطلبات والكميات يتطلب صلاحية مشرف الخدمة'});
+      if (!newAssignedTo || !String(newAdminNotes || '').trim()) return res.status(400).json({success:false,message:'عيّن المسؤول وسجّل نتيجة مراجعة المتطلبات والكميات'});
+    }
     const newQuote = quoted_amount !== undefined ? (quoted_amount ? parseFloat(quoted_amount) : null) : request.quoted_amount;
+    if (newQuote !== null && (!Number.isFinite(newQuote) || newQuote < 0)) return res.status(400).json({success:false,message:'المبلغ غير صالح'});
 
-    await db.run(`
+    const saved = await db.run(`
       UPDATE service_requests
       SET status = ?, assigned_to = ?, admin_notes = ?, quoted_amount = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [newStatus, newAssignedTo, newAdminNotes, newQuote, id]);
+      WHERE id = ? AND status = ?
+    `, [newStatus, newAssignedTo, newAdminNotes, newQuote, id, request.status]);
+    if (!saved.changes) return res.status(409).json({success:false,message:'تغيرت حالة الطلب، أعد فتحه'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'request_updated',`الحالة: ${newStatus}؛ المسؤول: ${newAssignedTo || 'غير معين'}؛ ملاحظات المراجعة: ${newAdminNotes || 'لا يوجد'}`]);
 
     await logAudit(req, {
       action: 'SERVICE_REQUEST_UPDATED',
@@ -1110,6 +1144,61 @@ router.put('/service-requests/:id', async (req, res) => {
  * POST /api/admin/client-users/service-requests/:id/convert-to-project
  * تحويل طلب الخدمة إلى مشروع رسمي في النظام
  */
+router.post('/service-requests/:id/message', async (req,res) => {
+  const id=Number(req.params.id), message=String(req.body.message||'').trim();
+  if(!message || message.length>4000) return res.status(400).json({success:false,message:'أدخل رسالة لا تزيد عن 4000 حرف'});
+  try {
+    const request=await db.get('SELECT id,client_user_id,request_no FROM service_requests WHERE id=?',[id]);
+    if(!request) return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'message_to_client',message]);
+    if(request.client_user_id) await require('../services/pushNotificationService').sendToClientUser(request.client_user_id,{title:'رسالة جديدة بشأن طلبك',body:`لديك رسالة جديدة بشأن الطلب ${request.request_no}`,referenceType:'service_request',referenceId:id});
+    res.json({success:true});
+  } catch(err) {res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/service-requests/:id/quote', async (req, res) => {
+  try {
+    const id = Number(req.params.id), amount = Number(req.body.amount);
+    const details = String(req.body.details || '').trim(), duration = String(req.body.duration || '').trim();
+    if (!details || !duration || req.body.amount === '' || !Number.isFinite(amount) || amount < 0 || details.length > 12000 || duration.length > 200)
+      return res.status(400).json({success:false,message:'أدخل تفاصيل العرض والمدة ومبلغًا صالحًا'});
+    const result = await db.transaction(async tx => {
+      const request = await tx.get('SELECT * FROM service_requests WHERE id = ?', [id]);
+      if (!request) return {status:404,message:'الطلب غير موجود'};
+      if (!['pricing','client_changes','manager_changes'].includes(request.status) || !request.assigned_to)
+        return {status:409,message:'عيّن المسؤول وأكمل مراجعة الطلب قبل إعداد العرض'};
+      const version = Number((await tx.get('SELECT MAX(version) AS version FROM service_request_quotes WHERE request_id = ?', [id])).version || 0) + 1;
+      await tx.run('INSERT INTO service_request_quotes (request_id,version,details,duration,amount,currency,state,created_by) VALUES (?,?,?,?,?,?,?,?)', [id,version,details,duration,amount,request.currency || 'YER','pending_manager',req.user.id]);
+      await tx.run("UPDATE service_requests SET status='pending_manager', updated_at=CURRENT_TIMESTAMP WHERE id=?",[id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'quote_submitted',`عرض رقم ${version} بانتظار موافقة المدير العام`]);
+      return {status:200,version};
+    });
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch (err) { console.error('submit request quote',err); res.status(500).json({success:false,message:'تعذر حفظ العرض'}); }
+});
+
+router.post('/service-requests/:id/manager-decision', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({success:false,message:'اعتماد العرض متاح للمدير العام فقط'});
+  const decision = req.body.decision, note = String(req.body.note || '').trim();
+  if (!['approve','return'].includes(decision) || (decision === 'return' && !note) || note.length > 4000) return res.status(400).json({success:false,message:'حدد القرار وأدخل سبب الإعادة إن وجد'});
+  try {
+    const result = await db.transaction(async tx => {
+      const id = Number(req.params.id), quote = await tx.get("SELECT * FROM service_request_quotes WHERE request_id=? AND state='pending_manager' ORDER BY version DESC LIMIT 1",[id]);
+      if (!quote || Number(req.body.quote_id) !== quote.id) return {status:409,message:'العرض تغير أو لم يعد بانتظار الموافقة'};
+      const updated = await tx.run("UPDATE service_requests SET status=?, quoted_amount=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending_manager'",[decision === 'approve' ? 'quoted' : 'manager_changes',decision === 'approve' ? quote.amount : null,id]);
+      if (!updated.changes) return {status:409,message:'حالة الطلب تغيرت'};
+      await tx.run('UPDATE service_request_quotes SET state=?, approved_by=?, approved_at=CURRENT_TIMESTAMP WHERE id=? AND state=?',[decision === 'approve' ? 'sent' : 'returned',req.user.id,quote.id,'pending_manager']);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'manager',req.user.id,decision === 'approve' ? 'quote_approved' : 'quote_returned',note]);
+      return {status:200};
+    });
+    if(result.status===200 && decision==='approve') {
+      const request=await db.get('SELECT client_user_id,request_no FROM service_requests WHERE id=?',[Number(req.params.id)]);
+      if(request?.client_user_id) await require('../services/pushNotificationService').sendToClientUser(request.client_user_id,{title:'عرض سعر جاهز للمراجعة',body:`عرض السعر الخاص بالطلب ${request.request_no} جاهز لمراجعتك`,referenceType:'service_request',referenceId:Number(req.params.id)});
+    }
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch(err) { console.error('manager quote decision',err); res.status(500).json({success:false,message:'تعذر تسجيل القرار'}); }
+});
+
 router.post('/service-requests/:id/convert-to-project', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -1117,6 +1206,7 @@ router.post('/service-requests/:id/convert-to-project', async (req, res) => {
     if (!request) {
       return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
     }
+    if (request.status !== 'client_accepted') return res.status(409).json({success:false,message:'يلزم موافقة العميل على العرض قبل تحويل الطلب إلى مشروع'});
 
     // 1. فحص وجود العميل أو إنشائه في دليل العملاء
     let clientId = null;

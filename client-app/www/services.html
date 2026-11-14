@@ -898,7 +898,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">رمز التحقق (Verification Code)</label>
-        <input type="text" id="trackVerifyCodeInput" placeholder="رمز التحقق المكون من 6 أرقام" class="form-input-srv" dir="ltr" style="text-align: right;">
+        <input type="text" id="trackVerifyCodeInput" placeholder="رمز المتابعة الذي حصلت عليه عند تقديم الطلب" class="form-input-srv" dir="ltr" style="text-align: right;">
       </div>
 
       <button onclick="executeTrackRequest()" class="btn btn-primary" style="width: 100%; height: 46px; border-radius: 12px; font-weight: 800; margin-top: 10px;">
@@ -1336,6 +1336,10 @@
           'new': { text: 'طلب جديد (قيد المراجعة الأولية)', color: '#60a5fa' },
           'under_review': { text: 'قيد المراجعة الفنية ودراسة المخططات', color: '#f59e0b' },
           'pricing': { text: 'جاري إعداد عرض السعر وجداول الكميات', color: '#fbbf24' },
+          'pending_manager': { text: 'بانتظار موافقة الإدارة', color: '#fbbf24' },
+          'manager_changes': { text: 'قيد تعديل العرض', color: '#fbbf24' },
+          'client_changes': { text: 'أعيد بملاحظاتك', color: '#fbbf24' },
+          'client_accepted': { text: 'تمت الموافقة على العرض', color: '#34d399' },
           'quoted': { text: 'تم إعداد عرض السعر والتواصل معكم', color: '#34d399' },
           'converted': { text: 'تم اعتماده وتحويله لمشروع رسمي', color: '#10b981' },
           'rejected': { text: 'ملغي أو معتذر عنه', color: '#f87171' }
@@ -1348,7 +1352,8 @@
             <div style="margin-bottom: 4px;">العميل: <b>${escapeHtml(r.client_name)}</b></div>
             <div style="margin-bottom: 4px;">الحالة: <b style="color: ${st.color};">${st.text}</b></div>
             ${r.quoted_amount ? `<div style="margin-bottom: 4px;">مبلغ عرض السعر: <b style="color: #34d399;">${r.quoted_amount} ${r.currency || 'YER'}</b></div>` : ''}
-            ${r.admin_notes ? `<div style="margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 8px;">ملاحظات الإدارة: ${escapeHtml(r.admin_notes)}</div>` : ''}
+            ${r.quote ? `<div style="white-space:pre-wrap;margin-top:10px">تفاصيل العرض: ${escapeHtml(r.quote.details)}<br>مدة التنفيذ: ${escapeHtml(r.quote.duration)}</div>${r.status === 'quoted' && r.source === 'guest' ? `<textarea id="guestQuoteNote" class="form-input-srv" placeholder="ملاحظاتك عند طلب التعديل"></textarea><button class="btn btn-primary" onclick="guestQuoteResponse(${Number(r.quote.id)},'accept')">الموافقة على العرض</button> <button class="btn btn-secondary" onclick="guestQuoteResponse(${Number(r.quote.id)},'changes')">إعادة العرض بملاحظات</button>` : ''}` : ''}
+            ${r.messages && r.source === 'guest' ? `<div><h4>مراسلات الطلب</h4>${r.messages.map(m=>`<p>${escapeHtml(m.actor_type==='guest'?'أنت':'رواسي عدن')}: ${escapeHtml(m.message)}</p>`).join('')}<textarea id="guestMessage" class="form-input-srv" placeholder="رسالة إلى مشرف الخدمة"></textarea><button class="btn btn-secondary" onclick="guestSendMessage()">إرسال الرسالة</button></div>` : ''}
             <div style="margin-top: 8px; color: var(--text-muted); font-size: 0.75rem;">تاريخ التقديم: ${new Date(r.created_at).toLocaleString('ar-YE')}</div>
           </div>
         `;
@@ -1359,6 +1364,20 @@
           </div>
         `;
       }
+    }
+
+    async function guestSendMessage() {
+      try{const response=await fetch('/api/client-portal/services/requests/guest-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),message:document.getElementById('guestMessage').value})});const data=await response.json();if(!data.success)throw new Error(data.message);await executeTrackRequest();}catch(err){alert(err.message||'تعذر إرسال الرسالة');}
+    }
+
+    async function guestQuoteResponse(quoteId,decision) {
+      const note=document.getElementById('guestQuoteNote').value.trim();
+      if(decision==='changes'&&!note){alert('يرجى كتابة الملاحظات');return;}
+      if(decision==='accept'&&!confirm('تأكيد الموافقة على عرض السعر؟'))return;
+      try {
+        const response=await fetch('/api/client-portal/services/requests/guest-response',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),decision,quote_id:quoteId,note})});
+        const data=await response.json();if(!data.success)throw new Error(data.message);await executeTrackRequest();
+      } catch(err){alert(err.message||'تعذر إرسال الرد');}
     }
 
     function escapeHtml(str) {

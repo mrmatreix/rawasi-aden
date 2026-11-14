@@ -2345,6 +2345,34 @@ function initSqlite() {
         CREATE INDEX IF NOT EXISTS idx_sr_status ON service_requests(status);
         CREATE INDEX IF NOT EXISTS idx_sr_source ON service_requests(source);
         CREATE INDEX IF NOT EXISTS idx_sri_request ON service_request_items(request_id);
+        CREATE TABLE IF NOT EXISTS service_request_quotes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          request_id INTEGER NOT NULL,
+          version INTEGER NOT NULL,
+          details TEXT NOT NULL,
+          duration TEXT NOT NULL,
+          amount DECIMAL(15,2) NOT NULL,
+          currency VARCHAR(10) NOT NULL,
+          state VARCHAR(30) NOT NULL,
+          created_by INTEGER NOT NULL,
+          approved_by INTEGER,
+          approved_at DATETIME,
+          client_response TEXT,
+          client_responded_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(request_id, version),
+          FOREIGN KEY (request_id) REFERENCES service_requests(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS service_request_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          request_id INTEGER NOT NULL,
+          actor_type VARCHAR(30) NOT NULL,
+          actor_id INTEGER,
+          event_type VARCHAR(50) NOT NULL,
+          message TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (request_id) REFERENCES service_requests(id) ON DELETE CASCADE
+        );
       `);
 
       // إضافة أعمدة اعتماد المستخلصات في جدول bills إذا لم تكن موجودة
@@ -2685,6 +2713,21 @@ async function initializeDatabase() {
     try {
       if (appConfig.dbEngine === 'mysql') await initMysql();
       else initSqlite();
+      if (activeEngine === 'mysql') {
+        await mysqlPool.query(`CREATE TABLE IF NOT EXISTS service_request_quotes (
+          id INTEGER PRIMARY KEY AUTO_INCREMENT, request_id INTEGER NOT NULL,
+          version INTEGER NOT NULL, details TEXT NOT NULL, duration VARCHAR(200) NOT NULL,
+          amount DECIMAL(15,2) NOT NULL, currency VARCHAR(10) NOT NULL, state VARCHAR(30) NOT NULL,
+          created_by INTEGER NOT NULL, approved_by INTEGER, approved_at DATETIME,
+          client_response TEXT, client_responded_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY request_version (request_id, version)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+        await mysqlPool.query(`CREATE TABLE IF NOT EXISTS service_request_events (
+          id INTEGER PRIMARY KEY AUTO_INCREMENT, request_id INTEGER NOT NULL,
+          actor_type VARCHAR(30) NOT NULL, actor_id INTEGER, event_type VARCHAR(50) NOT NULL,
+          message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, INDEX(request_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+      }
       // Cash-flow screens must work on both new and existing databases.
       const cashFlowSchema = fs.readFileSync(path.join(__dirname, 'migration_cash_flow.sql'), 'utf8');
       if (activeEngine === 'sqlite') sqliteDb.exec(cashFlowSchema);

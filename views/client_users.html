@@ -398,6 +398,12 @@
 
     <!-- View 3: Service Requests Section (طلبات خدمات العملاء والزوار) -->
     <div id="viewRequestsSection" class="hidden">
+      <div class="glass-card rounded-2xl p-4 mb-4 text-sm text-slate-200">
+        <label for="defaultRequestSupervisor">مشرف استقبال الطلبات الجديدة</label>
+        <select id="defaultRequestSupervisor" class="custom-input rounded-xl px-3 py-2 bg-slate-900"><option value="">لم يُحدد مشرف</option></select>
+        <button type="button" onclick="saveRequestSupervisor()" class="px-3 py-2 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold">حفظ المشرف</button>
+        <p class="text-xs text-slate-400 mt-2">يعيّنه المدير العام؛ يجب أن يملك صلاحية اعتماد مراجعة طلبات الخدمات.</p>
+      </div>
       <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-slate-700/80 mb-10">
         
         <!-- Search & Filters Toolbar -->
@@ -414,7 +420,11 @@
               <option value="new">طلبات جديدة</option>
               <option value="under_review">قيد المراجعة الفنية</option>
               <option value="pricing">جاري التسعير</option>
+              <option value="pending_manager">بانتظار موافقة المدير</option>
+              <option value="manager_changes">أعيد من المدير للتعديل</option>
               <option value="quoted">تم إرسال عرض السعر</option>
+              <option value="client_changes">أعيد بملاحظات العميل</option>
+              <option value="client_accepted">موافق عليه من العميل</option>
               <option value="converted">تم التحويل لمشروع</option>
               <option value="rejected">معتذر عنها / ملغية</option>
             </select>
@@ -909,6 +919,21 @@
         </div>
 
         <!-- Administrative Action Form -->
+        <div class="p-3 bg-slate-900 rounded-xl border border-slate-700 space-y-2">
+          <h3 class="text-amber-300 font-bold">دراسة الطلب وعرض السعر</h3>
+          <p class="text-xs text-slate-300">عيّن المسؤول وسجّل مراجعة المتطلبات والكميات في ملاحظات الإدارة، ثم احفظ الحالة «جاري التسعير» قبل إرسال العرض.</p>
+          <div id="srvQuoteHistory" class="text-xs text-slate-200"></div>
+          <textarea id="srvMessage" rows="2" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="رسالة للعميل بشأن الطلب"></textarea>
+          <button type="button" onclick="sendRequestMessage()" class="px-3 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold">إرسال الرسالة للعميل</button>
+          <textarea id="srvQuoteDetails" rows="4" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="تفاصيل البنود والكميات والأسعار والشروط"></textarea>
+          <input id="srvQuoteDuration" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="مدة التنفيذ المقترحة">
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="submitRequestQuote()" class="px-3 py-2 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold">إرسال العرض لموافقة المدير العام</button>
+            <button type="button" onclick="managerRequestDecision('approve')" class="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold">موافقة المدير وإرسال العرض</button>
+            <button type="button" onclick="managerRequestDecision('return')" class="px-3 py-2 bg-rose-700 text-white rounded-lg text-xs font-bold">إعادة العرض للتعديل</button>
+          </div>
+          <textarea id="srvManagerNote" rows="2" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="ملاحظات المدير عند الإعادة"></textarea>
+        </div>
         <form id="srvReqActionForm" onsubmit="submitServiceRequestUpdate(event)" class="space-y-4 pt-3 border-t border-slate-700/80">
           <input type="hidden" id="srvReqId">
 
@@ -919,8 +944,6 @@
                 <option value="new">طلب جديد</option>
                 <option value="under_review">قيد المراجعة الفنية</option>
                 <option value="pricing">جاري التسعير وإعداد العرض</option>
-                <option value="quoted">تم إرسال عرض السعر للعميل</option>
-                <option value="converted">تم اعتماده وتحويله لمشروع</option>
                 <option value="rejected">معتذر عنه / ملغي</option>
               </select>
             </div>
@@ -2129,6 +2152,7 @@
           renderServiceRequests(allServiceRequests);
           updateServiceRequestStats(data.stats);
           populateEngineersSelect(systemEngineers);
+          populateRequestSupervisor(systemEngineers);
         } else {
           if (tbody) {
             tbody.innerHTML = `
@@ -2181,6 +2205,15 @@
       `).join('');
     }
 
+    async function populateRequestSupervisor(engineers) {
+      const select=document.getElementById('defaultRequestSupervisor');
+      select.innerHTML='<option value="">لم يُحدد مشرف</option>'+(engineers||[]).map(e=>`<option value="${Number(e.id)}">${escapeHtml(e.name||e.username)}</option>`).join('');
+      try{const res=await fetch('/api/admin/client-users/service-request-supervisor',{headers:getAuthHeaders()});const data=await res.json();if(data.success)select.value=data.supervisor_id||'';}catch{}
+    }
+    async function saveRequestSupervisor() {
+      try{const res=await fetch('/api/admin/client-users/service-request-supervisor',{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({supervisor_id:document.getElementById('defaultRequestSupervisor').value})});const data=await res.json();if(!data.success)throw new Error(data.message);showToast('تم حفظ مشرف استقبال الطلبات','success');}catch(err){showToast(err.message||'تعذر حفظ المشرف','error');}
+    }
+
     function renderServiceRequests(requests) {
       const tbody = document.getElementById('requestsTableBody');
       if (!tbody) return;
@@ -2199,6 +2232,10 @@
         'new': '<span class="portal-badge badge-owner"><i class="fa-solid fa-sparkles"></i> طلب جديد</span>',
         'under_review': '<span class="portal-badge badge-manager"><i class="fa-solid fa-magnifying-glass"></i> قيد المراجعة</span>',
         'pricing': '<span class="portal-badge badge-owner"><i class="fa-solid fa-coins"></i> جاري التسعير</span>',
+        'pending_manager': '<span class="portal-badge badge-manager">بانتظار موافقة المدير</span>',
+        'manager_changes': '<span class="portal-badge badge-manager">أعيد من المدير للتعديل</span>',
+        'client_changes': '<span class="portal-badge badge-manager">أعيد بملاحظات العميل</span>',
+        'client_accepted': '<span class="portal-badge badge-active">موافق عليه من العميل</span>',
         'quoted': '<span class="portal-badge badge-active"><i class="fa-solid fa-file-invoice-dollar"></i> تم عرض السعر</span>',
         'converted': '<span class="portal-badge badge-active"><i class="fa-solid fa-city"></i> محول لمشروع</span>',
         'rejected': '<span class="portal-badge badge-inactive"><i class="fa-solid fa-xmark"></i> ملغي / معتذر</span>'
@@ -2291,6 +2328,12 @@
         }
 
         const r = data.request;
+        window.currentServiceQuote = (r.quotes || [])[0] || null;
+        document.getElementById('srvQuoteDetails').value = window.currentServiceQuote?.details || '';
+        document.getElementById('srvQuoteDuration').value = window.currentServiceQuote?.duration || '';
+        document.getElementById('srvManagerNote').value = '';
+        document.getElementById('srvQuoteHistory').textContent = (r.events || []).map(e => `${e.created_at}: ${e.event_type} ${e.message || ''}`).join('\n') || 'لم تُسجل إجراءات بعد';
+        document.getElementById('srvQuoteHistory').style.whiteSpace = 'pre-wrap';
 
         // Header info
         document.getElementById('srvReqNoBadge').innerText = r.request_no;
@@ -2353,6 +2396,10 @@
           convertBtn.disabled = true;
           convertBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>تم تحويله إلى مشروع بالفعل</span>';
           convertBtn.className = 'px-4 py-2 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold cursor-not-allowed';
+        } else if (r.status !== 'client_accepted') {
+          convertBtn.disabled = true;
+          convertBtn.textContent = 'التحويل متاح بعد موافقة العميل';
+          convertBtn.className = 'px-4 py-2 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold cursor-not-allowed';
         } else {
           convertBtn.disabled = false;
           convertBtn.innerHTML = '<i class="fa-solid fa-city"></i> <span>تحويل إلى مشروع رسمي في النظام</span>';
@@ -2369,6 +2416,24 @@
     function closeServiceRequestModal() {
       document.getElementById('serviceRequestModal').classList.add('hidden');
       currentServiceRequestId = null;
+    }
+
+    async function submitRequestQuote() {
+      try {
+        const response = await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/quote`, {method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({details:document.getElementById('srvQuoteDetails').value,duration:document.getElementById('srvQuoteDuration').value,amount:document.getElementById('srvReqQuoteAmountInput').value})});
+        const data = await response.json(); if (!data.success) throw new Error(data.message);
+        showToast('أُرسل العرض إلى المدير العام', 'success'); await openServiceRequestModal(currentServiceRequestId); loadServiceRequests();
+      } catch(err) { showToast(err.message || 'تعذر إرسال العرض','error'); }
+    }
+    async function sendRequestMessage() {
+      try {const response=await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/message`,{method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:document.getElementById('srvMessage').value})});const data=await response.json();if(!data.success)throw new Error(data.message);document.getElementById('srvMessage').value='';showToast('تم إرسال الرسالة','success');await openServiceRequestModal(currentServiceRequestId);} catch(err){showToast(err.message||'تعذر إرسال الرسالة','error');}
+    }
+    async function managerRequestDecision(decision) {
+      try {
+        const response = await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/manager-decision`, {method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({decision,quote_id:window.currentServiceQuote?.id,note:document.getElementById('srvManagerNote').value})});
+        const data = await response.json(); if (!data.success) throw new Error(data.message);
+        showToast('تم تسجيل قرار المدير', 'success'); await openServiceRequestModal(currentServiceRequestId); loadServiceRequests();
+      } catch(err) { showToast(err.message || 'تعذر تسجيل القرار','error'); }
     }
 
     async function submitServiceRequestUpdate(e) {
