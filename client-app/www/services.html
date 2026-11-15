@@ -1302,13 +1302,8 @@
 
       try {
         const url = `/api/client-portal/services/requests/track?request_no=${encodeURIComponent(requestNo)}&verification_code=${encodeURIComponent(verifyCode)}`;
-        let data;
-        if (window.ClientAPI) {
-          data = await window.ClientAPI.get(`/services/requests/track?request_no=${encodeURIComponent(requestNo)}&verification_code=${encodeURIComponent(verifyCode)}`);
-        } else {
-          const res = await fetch(url);
-          data = await res.json();
-        }
+        const res = await fetch(url, {cache:'no-store', credentials:'same-origin'});
+        const data = await res.json();
 
         if (!data || !data.success || !data.request) {
           throw new Error(data?.message || 'الطلب غير موجود');

@@ -1241,7 +1241,8 @@ router.post('/service-requests/:id/manager-decision', async (req, res) => {
   try {
     const result = await db.transaction(async tx => {
       const id = Number(req.params.id), quote = await tx.get("SELECT * FROM service_request_quotes WHERE request_id=? AND state='pending_manager' ORDER BY version DESC LIMIT 1",[id]);
-      if (!quote || Number(req.body.quote_id) !== quote.id) return {status:409,message:'العرض تغير أو لم يعد بانتظار الموافقة'};
+      if (!quote) return {status:409,message:'لا يوجد عرض سعر بانتظار موافقة المدير. أرسل العرض للموافقة أولاً.'};
+      if (Number(req.body.quote_id) !== Number(quote.id)) return {status:409,message:'تغير عرض السعر؛ أعد فتح الطلب لمراجعة العرض الحالي.'};
       const updated = await tx.run("UPDATE service_requests SET status=?, quoted_amount=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending_manager'",[decision === 'approve' ? 'quoted' : 'manager_changes',decision === 'approve' ? quote.amount : null,id]);
       if (!updated.changes) return {status:409,message:'حالة الطلب تغيرت'};
       await tx.run('UPDATE service_request_quotes SET state=?, approved_by=?, approved_at=CURRENT_TIMESTAMP WHERE id=? AND state=?',[decision === 'approve' ? 'sent' : 'returned',req.user.id,quote.id,'pending_manager']);

@@ -626,6 +626,7 @@ router.get('/services/requests/guest-session', async (req,res) => {
 });
 
 router.get('/services/requests/track', async (req, res) => {
+  res.set('Cache-Control','no-store');
   try {
     const { request_no, verification_code } = req.query;
     if (!request_no || !verification_code) {

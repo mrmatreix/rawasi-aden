@@ -83,10 +83,19 @@ test('manager approval and client response apply to the correct quote and accoun
 
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:'0000000000000000000000000000',message:'غير مصرح'})).status,404);
   const guestAdmin='/api/admin/client-users/service-requests/'+guest;
+  const missingQuote=await api(guestAdmin+'/manager-decision',internal,'POST',{decision:'approve'});
+  assert.equal(missingQuote.status,409);assert.match(missingQuote.data.message,/لا يوجد عرض سعر/);
+
   assert.equal((await api(guestAdmin,internal,'PUT',{status:'pricing',assigned_to:admin,admin_notes:'تمت مراجعة الكميات'})).status,200);
   assert.equal((await api(guestAdmin+'/quote',internal,'POST',{details:'أعمال بناء',duration:'أسبوع',amount:42})).status,200);
   const guestQuote=(await db.get('SELECT id FROM service_request_quotes WHERE request_id=?',[guest])).id;
+  let guestTrack=await fetch(base+portal+'/services/requests/track?request_no='+number+'&verification_code='+code);
+  assert.equal(guestTrack.headers.get('cache-control'),'no-store');assert.equal((await guestTrack.json()).request.quote,null);
+
   assert.equal((await api(guestAdmin+'/manager-decision',internal,'POST',{decision:'approve',quote_id:guestQuote})).status,200);
+  guestTrack=await fetch(base+portal+'/services/requests/track?request_no='+number+'&verification_code='+code);
+  const guestAfterApproval=await guestTrack.json();assert.equal(guestAfterApproval.request.quote.id,guestQuote);assert.equal(Number(guestAfterApproval.request.quote.amount),42);assert.equal(guestAfterApproval.request.status,'quoted');
+
   assert.equal((await api(portal+'/services/requests/guest-response',null,'POST',{request_no:number,verification_code:'123456',decision:'accept',quote_id:guestQuote})).status,400);
   assert.equal((await api(portal+'/services/requests/guest-response',null,'POST',{request_no:number,verification_code:code,decision:'accept',quote_id:guestQuote})).status,200);
  }finally{if(server)await new Promise(resolve=>server.close(resolve));if(db)await db.closeDatabase();try{source.close();}catch{}assert.ok(path.resolve(temp).startsWith(scratch+path.sep));fs.rmSync(temp,{recursive:true,force:true});}

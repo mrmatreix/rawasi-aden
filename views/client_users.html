@@ -922,17 +922,18 @@
         <!-- Administrative Action Form -->
         <div class="p-3 bg-slate-900 rounded-xl border border-slate-700 space-y-2">
           <h3 class="text-amber-300 font-bold">دراسة الطلب وعرض السعر</h3>
+          <p id="srvQuoteWorkflowHint" role="status" class="text-xs text-amber-300"></p>
           <p class="text-xs text-slate-300">عيّن المسؤول وسجّل مراجعة المتطلبات والكميات في ملاحظات الإدارة، ثم احفظ الحالة «جاري التسعير» قبل إرسال العرض.</p>
           <div id="srvQuoteHistory" class="text-xs text-slate-200"></div>
           <div id="pendingRequestMessages" class="space-y-2"></div>
           <textarea id="srvMessage" rows="2" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="رسالة للعميل بشأن الطلب"></textarea>
-          <button type="button" onclick="sendRequestMessage()" class="px-3 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold">إرسال الرسالة للعميل</button>
+          <button type="button" onclick="sendRequestMessage()" class="px-3 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold">إرسال الرد لموافقة المدير</button>
           <textarea id="srvQuoteDetails" rows="4" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="تفاصيل البنود والكميات والأسعار والشروط"></textarea>
           <input id="srvQuoteDuration" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="مدة التنفيذ المقترحة">
           <div class="flex flex-wrap gap-2">
             <button type="button" onclick="submitRequestQuote()" class="px-3 py-2 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold">إرسال العرض لموافقة المدير العام</button>
-            <button type="button" onclick="managerRequestDecision('approve')" class="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold">موافقة المدير وإرسال العرض</button>
-            <button type="button" onclick="managerRequestDecision('return')" class="px-3 py-2 bg-rose-700 text-white rounded-lg text-xs font-bold">إعادة العرض للتعديل</button>
+            <button id="btnApproveRequestQuote" type="button" disabled onclick="managerRequestDecision('approve')" class="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold">موافقة المدير وإرسال العرض</button>
+            <button id="btnReturnRequestQuote" type="button" disabled onclick="managerRequestDecision('return')" class="px-3 py-2 bg-rose-700 text-white rounded-lg text-xs font-bold">إعادة العرض للتعديل</button>
           </div>
           <textarea id="srvManagerNote" rows="2" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="ملاحظات المدير عند الإعادة"></textarea>
         </div>
@@ -2335,7 +2336,13 @@
 
         const r = data.request;
         window.currentServiceQuote = (r.quotes || [])[0] || null;
-        document.getElementById('pendingRequestMessages').innerHTML=(r.events||[]).filter(e=>e.event_type==='message_pending_approval').map(e=>`<div class="p-2 bg-slate-800 rounded-lg"><p>رد بانتظار موافقة المدير: ${escapeHtml(e.message||'')}</p><button type="button" onclick="managerMessageDecision(${Number(e.id)},'approve')">اعتماد الرد وإرساله</button> <button type="button" onclick="managerMessageDecision(${Number(e.id)},'reject')">رفض الرد</button></div>`).join('');
+        const pendingQuote=window.currentServiceQuote?.state==='pending_manager' && r.status==='pending_manager';
+        document.getElementById('btnApproveRequestQuote').disabled=!pendingQuote;
+        document.getElementById('btnReturnRequestQuote').disabled=!pendingQuote;
+        const hint=document.getElementById('srvQuoteWorkflowHint');
+        hint.textContent=pendingQuote?'عرض السعر جاهز لموافقة المدير. اعتمد العرض لإرساله للزائر.':r.status==='quoted'?'تم اعتماد عرض السعر وإرساله للعميل.':"لا يوجد عرض بانتظار موافقة المدير. عيّن المسؤول، واحفظ مراجعة الطلب بحالة «جاري التسعير»، وأدخل التفاصيل والمدة والمبلغ، ثم اضغط «إرسال العرض لموافقة المدير العام». إذا أردت اعتماد رسالة نصية فاستخدم زر «اعتماد الرد وإرساله» الظاهر بجانب الرسالة.";
+        for(const button of [document.getElementById('btnApproveRequestQuote'),document.getElementById('btnReturnRequestQuote')]){button.style.opacity=pendingQuote?'1':'0.45';button.title=pendingQuote?'':'لا يوجد عرض سعر بانتظار الموافقة';}
+        document.getElementById('pendingRequestMessages').innerHTML=(r.events||[]).filter(e=>e.event_type==='message_pending_approval').map(e=>`<div class="p-2 bg-slate-800 rounded-lg"><p>رد بانتظار موافقة المدير: ${escapeHtml(e.message||'')}</p><button type="button" onclick="managerMessageDecision(${Number(e.id)},'approve')" class="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold">اعتماد الرد وإرساله</button> <button type="button" onclick="managerMessageDecision(${Number(e.id)},'reject')" class="px-3 py-2 bg-rose-700 text-white rounded-lg text-xs font-bold">رفض الرد</button></div>`).join('');
         document.getElementById('srvQuoteDetails').value = window.currentServiceQuote?.details || '';
         document.getElementById('srvQuoteDuration').value = window.currentServiceQuote?.duration || '';
         document.getElementById('srvManagerNote').value = '';
@@ -2394,7 +2401,7 @@
         document.getElementById('srvReqId').value = r.id;
         document.getElementById('srvReqStatusSelect').value = r.status || 'new';
         document.getElementById('srvReqAssigneeSelect').value = r.assigned_to || '';
-        document.getElementById('srvReqQuoteAmountInput').value = r.quoted_amount || '';
+        document.getElementById('srvReqQuoteAmountInput').value = window.currentServiceQuote?.amount ?? r.quoted_amount ?? '';
         document.getElementById('srvReqAdminNotesInput').value = r.admin_notes || '';
 
         // If converted already, adjust button
@@ -2437,6 +2444,7 @@
     }
     async function managerMessageDecision(eventId,decision) {try{const response=await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/message-decision`,{method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({event_id:eventId,decision})});const data=await response.json();if(!data.success)throw new Error(data.message);showToast('تم تسجيل قرار المدير','success');await openServiceRequestModal(currentServiceRequestId);}catch(err){showToast(err.message||'تعذر تسجيل القرار','error');}}
     async function managerRequestDecision(decision) {
+      if (!window.currentServiceQuote || window.currentServiceQuote.state !== 'pending_manager') { showToast('لا يوجد عرض سعر بانتظار موافقة المدير. أرسل العرض للموافقة أولاً.','error'); return; }
       try {
         const response = await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/manager-decision`, {method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({decision,quote_id:window.currentServiceQuote?.id,note:document.getElementById('srvManagerNote').value})});
         const data = await response.json(); if (!data.success) throw new Error(data.message);
