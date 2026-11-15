@@ -930,6 +930,8 @@
           <p class="text-xs text-slate-300">عيّن المسؤول وسجّل مراجعة المتطلبات والكميات في ملاحظات الإدارة، ثم احفظ الحالة «جاري التسعير» قبل إرسال العرض.</p>
           <div id="srvQuoteHistory" class="text-xs text-slate-200"></div>
           <div id="pendingRequestMessages" class="space-y-2"></div>
+          <label for="srvMessageRecipient" class="block text-xs font-bold text-slate-300">إرسال رسالة إلى</label>
+          <select id="srvMessageRecipient" class="w-full custom-input rounded-xl p-2 text-xs"><option value="visitor">الزائر / العميل</option></select>
           <textarea id="srvMessage" rows="2" class="w-full custom-input rounded-xl p-2 text-xs" placeholder="رسالة للعميل بشأن الطلب"></textarea>
           <button id="btnSendRequestMessage" type="button" onclick="sendRequestMessage()" class="px-3 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold">إرسال الرد لموافقة المدير</button>
           <label for="srvQuoteDetails" class="block text-xs font-bold text-slate-300">تفاصيل عرض المشرف: البنود والكميات وأسعارها والشروط</label>
@@ -2209,9 +2211,12 @@
     function populateEngineersSelect(engineers) {
       const select = document.getElementById('srvReqAssigneeSelect');
       if (!select) return;
+      const previous=select.value, previousLabel=select.selectedOptions[0]?.textContent;
       select.innerHTML = '<option value="">غير معين (بدون تعيين)</option>' + (engineers || []).map(e => `
-        <option value="${e.id}">${e.name || e.username} (${e.role || 'مهندس'})</option>
+        <option value="${Number(e.id)}">${escapeHtml(e.name || e.username)} (${escapeHtml(e.role || 'مهندس')})</option>
       `).join('');
+      if(previous&&!Array.from(select.options).some(o=>o.value===previous)){const option=document.createElement('option');option.value=previous;option.textContent=previousLabel||'المسؤول الحالي';select.append(option);}
+      if(previous)select.value=previous;
     }
 
     async function showManagerRequestSettings(engineers) {
@@ -2341,13 +2346,17 @@
       currentServiceRequestId = id;
       try {
         const headers = getAuthHeaders();
-        const [res,accessRes] = await Promise.all([
+        const [res,accessRes,contactsRes] = await Promise.all([
           fetch(`/api/admin/client-users/service-requests/${id}`, { headers }),
-          fetch('/api/admin/client-users/service-requests/workflow-access', { headers, cache:'no-store' })
+          fetch('/api/admin/client-users/service-requests/workflow-access', { headers, cache:'no-store' }),
+          fetch('/api/admin/client-users/service-requests/contacts', { headers, cache:'no-store' })
         ]);
         const data = await res.json();
         const accessData = accessRes.ok ? await accessRes.json() : null;
         const access=accessData?.success ? accessData.access : {can_edit:false,can_review:false,can_convert:false,is_manager:false};
+        const contactsData=contactsRes.ok?await contactsRes.json():null;
+        const recipientSelect=document.getElementById('srvMessageRecipient');
+        recipientSelect.innerHTML='<option value="visitor">الزائر / العميل</option>'+(contactsData?.contacts||[]).filter(u=>Number(u.id)!==Number(access.user_id)).map(u=>`<option value="${Number(u.id)}">${escapeHtml(u.name||u.username)} (${escapeHtml(u.role||'مستخدم')})</option>`).join('');
 
         if (!data.success || !data.request) {
           showToast(data.message || 'تعذر تحميل بيانات الطلب', 'error');
@@ -2358,14 +2367,14 @@
         window.currentRequestAssignment={assignedTo:Number(r.assigned_to)||null,userId:Number(access.user_id),manager:!!access.is_manager,source:r.source};
         window.currentServiceQuote = (r.quotes || [])[0] || null;
         const editable=!!access.can_edit, manager=!!access.is_manager;
-        document.getElementById('btnSendRequestMessage').textContent=r.source==='guest'?'إرسال الرد لموافقة المدير':'إرسال الرسالة للعميل';
+        document.getElementById('btnSendRequestMessage').textContent=access.is_manager?'إرسال الرسالة':'إرسال الرسالة (رد الزائر يحتاج موافقة المدير)';
         const roleSteps=[];
         if(manager)roleSteps.push('المدير العام: تعتمد الردود وعروض الأسعار أو تعيدها للتعديل');
         else if(editable)roleSteps.push(Number(r.assigned_to)===Number(access.user_id)?'أنت المسؤول المعيّن: راجع الطلب، وأرسل الرد أو العرض لموافقة المدير':'يمكنك متابعة الطلب وتعيين المسؤول وإعداد الرد أو العرض');
         else roleSteps.push('صلاحيتك الحالية: الاطلاع على تفاصيل الطلب');
         if(editable && !access.can_review)roleSteps.push('اعتماد مراجعة الكميات ونقل الطلب للتسعير يحتاج صلاحية اعتماد المراجعة');
         document.getElementById('workflowAccessHint').textContent=roleSteps.join(' — ');
-        for(const field of ['srvMessage','srvQuoteDetails','srvQuoteDuration','srvReqStatusSelect','srvReqAssigneeSelect','srvReqQuoteAmountInput','srvReqAdminNotesInput'])document.getElementById(field).disabled=!editable;
+        for(const field of ['srvMessage','srvMessageRecipient','srvQuoteDetails','srvQuoteDuration','srvReqStatusSelect','srvReqAssigneeSelect','srvReqQuoteAmountInput','srvReqAdminNotesInput'])document.getElementById(field).disabled=!editable;
         for(const button of ['btnSendRequestMessage','btnSubmitRequestQuote','btnSaveRequestAssignee','btnSaveRequestUpdate'])document.getElementById(button).style.display=editable?'':'none';
         for(const button of ['btnApproveRequestQuote','btnReturnRequestQuote','srvManagerNote'])document.getElementById(button).style.display=manager?'':'none';
         document.getElementById('srvReqStatusSelect').querySelector('option[value="pricing"]').disabled=!access.can_review;
@@ -2381,7 +2390,7 @@
         document.getElementById('srvQuoteDuration').value = window.currentServiceQuote?.duration || '';
         document.getElementById('srvManagerNote').value = '';
         const eventLabels={request_received:'استلام الطلب',request_assigned:'إحالة الطلب للمشرف',supervisor_assigned:'تعيين مشرف الاستقبال',request_updated:'تحديث الطلب',message_from_client:'رسالة الزائر',message_pending_approval:'رد بانتظار موافقة المدير',message_approved:'اعتماد الرد',message_rejected:'رفض الرد',message_declined:'ملاحظات المدير على الرد',message_to_client:'رد معتمد للزائر',quote_submitted:'عرض بانتظار موافقة المدير',quote_approved:'اعتماد عرض السعر',quote_returned:'إعادة العرض للمشرف للتعديل'};
-        document.getElementById('srvQuoteHistory').textContent = (r.events || []).map(e => `${e.created_at}: ${eventLabels[e.event_type] || 'إجراء على الطلب'} — ${e.message || ''}`).join('\n') || 'لم تُسجل إجراءات بعد';
+        document.getElementById('srvQuoteHistory').textContent = (r.events || []).map(e => {const internal=/^internal_(?:read_)?to_(\d+)$/.exec(e.event_type||'');const contact=internal&&(contactsData?.contacts||[]).find(u=>Number(u.id)===Number(internal[1]));const label=internal?`رسالة داخلية إلى ${contact?.name||contact?.username||'مستخدم'}`:(eventLabels[e.event_type]||'إجراء على الطلب');return `${e.created_at}: ${label} — ${e.message || ''}`;}).join('\n') || 'لم تُسجل إجراءات بعد';
         document.getElementById('srvQuoteHistory').style.whiteSpace = 'pre-wrap';
 
         // Header info
@@ -2435,7 +2444,9 @@
         // Action Form
         document.getElementById('srvReqId').value = r.id;
         document.getElementById('srvReqStatusSelect').value = r.status || 'new';
-        document.getElementById('srvReqAssigneeSelect').value = r.assigned_to || '';
+        const assignedSelect=document.getElementById('srvReqAssigneeSelect');
+        if(r.assigned_to && !Array.from(assignedSelect.options).some(o=>o.value===String(r.assigned_to))){const option=document.createElement('option');option.value=String(r.assigned_to);option.textContent=(r.assigned_name||r.assigned_username||'المسؤول الحالي')+' (المعين حاليًا)';assignedSelect.append(option);}
+        assignedSelect.value = r.assigned_to || '';
         document.getElementById('srvReqQuoteAmountInput').value = window.currentServiceQuote?.amount ?? r.quoted_amount ?? '';
         document.getElementById('srvReqAdminNotesInput').value = r.admin_notes || '';
 
@@ -2476,10 +2487,11 @@
     }
     async function sendRequestMessage() {
       const assignment=window.currentRequestAssignment;
-      if(assignment?.source==='guest' && !assignment.manager && (!assignment.assignedTo || assignment.assignedTo===assignment.userId)) {
+      const recipient=document.getElementById('srvMessageRecipient').value;
+      if(recipient==='visitor' && assignment?.source==='guest' && !assignment.manager && (!assignment.assignedTo || assignment.assignedTo===assignment.userId)) {
         if(confirm('يُفضّل تعيين المشرف المختص للرد. اضغط موافق لاختيار المشرف، أو إلغاء لتخطي التعيين وإرسال الرد لموافقة المدير.')) {document.getElementById('srvReqAssigneeSelect').focus();document.getElementById('srvReqAssigneeSelect').scrollIntoView({behavior:'smooth',block:'center'});return;}
       }
-      try {const response=await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/message`,{method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:document.getElementById('srvMessage').value})});const data=await response.json();if(!data.success)throw new Error(data.message);document.getElementById('srvMessage').value='';showToast(data.pending_approval?'أُرسل الرد لموافقة المدير العام':'تم إرسال الرسالة','success');await openServiceRequestModal(currentServiceRequestId);} catch(err){showToast(err.message||'تعذر إرسال الرسالة','error');}
+      try {const internal=recipient!=='visitor';const response=await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/${internal?'internal-message':'message'}`,{method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:document.getElementById('srvMessage').value,recipient_id:internal?Number(recipient):undefined,send_direct:!internal&&!!assignment?.manager})});const data=await response.json();if(!data.success)throw new Error(data.message);document.getElementById('srvMessage').value='';showToast(data.pending_approval?'أُرسل الرد لموافقة المدير العام':'تم إرسال الرسالة','success');await openServiceRequestModal(currentServiceRequestId);} catch(err){showToast(err.message||'تعذر إرسال الرسالة','error');}
     }
     async function managerMessageDecision(eventId,decision) {try{const note=decision==='reject'?document.getElementById('srvManagerNote').value.trim():'';if(decision==='reject'&&!note)throw new Error('أدخل ملاحظات المدير عند رفض الرد');const response=await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/message-decision`,{method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({event_id:eventId,decision,note})});const data=await response.json();if(!data.success)throw new Error(data.message);showToast('تم تسجيل قرار المدير','success');await openServiceRequestModal(currentServiceRequestId);}catch(err){showToast(err.message||'تعذر تسجيل القرار','error');}}
     async function managerRequestDecision(decision) {

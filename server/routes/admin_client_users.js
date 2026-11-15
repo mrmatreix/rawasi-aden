@@ -1065,12 +1065,21 @@ router.get('/service-requests/workflow-access', (req,res) => {
   res.json({success:true,access:{user_id:req.user.id,can_view:can('client_app:requests_view'),can_edit:can('client_app:requests_edit'),can_review:can('client_app:requests_review'),can_convert:can('client_app:requests_convert'),can_assign_supervisor:can('client_app:requests_assign_supervisor'),is_manager:req.user.role==='admin'}});
 });
 
+router.get('/service-requests/contacts', async (req,res) => {
+  try {
+    const users=await db.query("SELECT u.id,u.username,u.full_name AS name,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.status='active' OR u.status IS NULL");
+    const contacts=(users||[]).filter(u=>{let permissions=[];try{permissions=JSON.parse(u.permissions||u.role_permissions||'[]');}catch{}return require('../middleware/security').hasUserPermission({...u,permissions},'client_app:requests_view');}).map(({id,username,name,role})=>({id,username,name,role}));
+    res.json({success:true,contacts});
+  }catch{res.status(500).json({success:false,message:'تعذر تحميل جهات التواصل'});}
+});
+
 router.get('/service-requests/alerts', async (req,res) => {
   try {
     const admin=req.user.role==='admin';
     const unanswered=`EXISTS (SELECT 1 FROM service_request_events guest WHERE guest.request_id=sr.id AND guest.event_type='message_from_client' AND guest.id > COALESCE((SELECT MAX(reply.id) FROM service_request_events reply WHERE reply.request_id=sr.id AND reply.event_type IN ('message_pending_approval','message_approved','message_rejected','message_to_client')),0))`;
     const returnedMessage=`EXISTS (SELECT 1 FROM service_request_events d WHERE d.request_id=sr.id AND d.event_type='message_declined' AND d.id > COALESCE((SELECT MAX(n.id) FROM service_request_events n WHERE n.request_id=sr.id AND n.event_type IN ('message_pending_approval','message_to_client')),0))`;
-    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered})` : `(sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage}))`;
+    const internal=`EXISTS (SELECT 1 FROM service_request_events i WHERE i.request_id=sr.id AND i.event_type='internal_to_${Number(req.user.id)}')`;
+    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered} OR ${internal})` : `((sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage})) OR ${internal})`;
     const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
       (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
       FROM service_requests sr WHERE sr.source='guest' AND ${work}
@@ -1102,6 +1111,7 @@ router.get('/service-requests/:id', async (req, res) => {
       LEFT JOIN engineering_services es ON sri.service_id = es.id
       WHERE sri.request_id = ?
     `, [id]);
+    await db.run('UPDATE service_request_events SET event_type=? WHERE request_id=? AND event_type=?',[`internal_read_to_${Number(req.user.id)}`,id,`internal_to_${Number(req.user.id)}`]);
     const quotes = await db.query('SELECT * FROM service_request_quotes WHERE request_id = ? ORDER BY version DESC', [id]);
     const events = await db.query('SELECT * FROM service_request_events WHERE request_id = ? ORDER BY id DESC', [id]);
 
@@ -1166,7 +1176,8 @@ router.put('/service-requests/:id', async (req, res) => {
     const newAdminNotes = admin_notes !== undefined ? admin_notes : request.admin_notes;
     if (newStatus === 'pricing' && request.status !== 'pricing') {
       if (!require('../middleware/security').hasUserPermission(req.user,'client_app:requests_review')) return res.status(403).json({success:false,message:'اعتماد مراجعة المتطلبات والكميات يتطلب صلاحية مشرف الخدمة'});
-      if (!newAssignedTo || !String(newAdminNotes || '').trim()) return res.status(400).json({success:false,message:'عيّن المسؤول وسجّل نتيجة مراجعة المتطلبات والكميات'});
+      if (!newAssignedTo) return res.status(400).json({success:false,message:'عيّن المشرف المسؤول أولاً'});
+      if (!String(newAdminNotes || '').trim()) return res.status(400).json({success:false,message:'سجّل نتيجة مراجعة المتطلبات والكميات في ملاحظات الإدارة الهندسية قبل التسعير'});
     }
     const newQuote = quoted_amount !== undefined ? (quoted_amount ? parseFloat(quoted_amount) : null) : request.quoted_amount;
     if (newQuote !== null && (!Number.isFinite(newQuote) || newQuote < 0)) return res.status(400).json({success:false,message:'المبلغ غير صالح'});
@@ -1206,10 +1217,24 @@ router.post('/service-requests/:id/message', async (req,res) => {
   try {
     const request=await db.get('SELECT id,client_user_id,request_no,source FROM service_requests WHERE id=?',[id]);
     if(!request) return res.status(404).json({success:false,message:'الطلب غير موجود'});
-    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,request.source==='guest'?'message_pending_approval':'message_to_client',message]);
+    const pending=request.source==='guest' && !(req.user.role==='admin' && req.body.send_direct===true);
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,pending?'message_pending_approval':'message_to_client',message]);
     if(request.source!=='guest' && request.client_user_id) await require('../services/pushNotificationService').sendToClientUser(request.client_user_id,{title:'رسالة جديدة بشأن طلبك',body:`لديك رسالة جديدة بشأن الطلب ${request.request_no}`,referenceType:'service_request',referenceId:id});
-    res.json({success:true,pending_approval:request.source==='guest'});
+    res.json({success:true,pending_approval:pending});
   } catch(err) {res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/service-requests/:id/internal-message', async (req,res) => {
+  const id=Number(req.params.id), recipient=Number(req.body.recipient_id), message=String(req.body.message||'').trim();
+  if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(recipient)||recipient<=0||!message||message.length>4000)return res.status(400).json({success:false,message:'اختر المستلم واكتب رسالة لا تزيد عن 4000 حرف'});
+  try {
+    const user=await findRequestSupervisor(recipient);let permissions=[];try{permissions=JSON.parse(user?.permissions||user?.role_permissions||'[]');}catch{}
+    if(!user||!require('../middleware/security').hasUserPermission({...user,permissions},'client_app:requests_view'))return res.status(400).json({success:false,message:'المستلم غير نشط أو لا يملك صلاحية عرض الطلبات'});
+    const request=await db.get('SELECT id FROM service_requests WHERE id=?',[id]);if(!request)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,`internal_to_${recipient}`,message]);
+    await db.run('UPDATE service_requests SET updated_at=CURRENT_TIMESTAMP WHERE id=?',[id]);
+    res.json({success:true});
+  }catch(err){console.error('internal service message',err);res.status(500).json({success:false,message:'تعذر إرسال الرسالة الداخلية'});}
 });
 
 router.post('/service-requests/:id/message-decision', async (req,res) => {

@@ -66,6 +66,15 @@ test('manager approval and client response apply to the correct quote and accoun
   const adminAccess=await api('/api/admin/client-users/service-requests/workflow-access',internal);assert.equal(adminAccess.data.access.is_manager,true);assert.equal(adminAccess.data.access.can_review,true);
   const readAccess=await api('/api/admin/client-users/service-requests/workflow-access',staffToken);assert.equal(readAccess.data.access.can_view,true);assert.equal(readAccess.data.access.can_edit,false);assert.equal(readAccess.data.access.is_manager,false);
 
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/internal-message',internal,'POST',{recipient_id:staffId,message:'رسالة داخلية للمشرف'})).status,200);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
+  let internalTrack=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(internalTrack.data.request.messages.some(m=>m.message==='رسالة داخلية للمشرف'),false);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest,staffToken)).status,200);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message',internal,'POST',{message:'رسالة مباشرة من المدير',send_direct:true})).status,200);
+  internalTrack=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(internalTrack.data.request.messages.some(m=>m.message==='رسالة مباشرة من المدير'),true);
+  await db.run("DELETE FROM service_request_events WHERE request_id=? AND event_type=?",[guest,'internal_to_'+staffId]);
+
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
   await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[staffId,guest]);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
@@ -98,6 +107,8 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',staffToken,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,403);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,400);
   await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:requests_view','client_app:requests_edit','client_app:requests_review','client_app:requests_assign_supervisor']),staffId]);
+  const attemptedDirect=await api('/api/admin/client-users/service-requests/'+guest+'/message',staffToken,'POST',{message:'رد موظف للمراجعة',send_direct:true});assert.equal(attemptedDirect.data.pending_approval,true);
+  const trackPending=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(trackPending.data.request.messages.some(m=>m.message==='رد موظف للمراجعة'),false);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,200);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',internal)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
@@ -105,6 +116,7 @@ test('manager approval and client response apply to the correct quote and accoun
 
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:'0000000000000000000000000000',message:'غير مصرح'})).status,404);
   const guestAdmin='/api/admin/client-users/service-requests/'+guest;
+  const reviewMissing=await api(guestAdmin,internal,'PUT',{status:'pricing',assigned_to:admin,admin_notes:''});assert.equal(reviewMissing.status,400);assert.match(reviewMissing.data.message,/مراجعة المتطلبات/);
   const missingQuote=await api(guestAdmin+'/manager-decision',internal,'POST',{decision:'approve'});
   assert.equal(missingQuote.status,409);assert.match(missingQuote.data.message,/لا يوجد عرض سعر/);
 
