@@ -8,7 +8,8 @@ const express = require('express');
 const router = express.Router();
 router.use((req,res,next)=>{
   const path=req.path,read=req.method==='GET';let action=read?'view':req.method==='DELETE'?'delete':req.method==='POST'&&path==='/'?'create':'edit';
-  if(path.startsWith('/services-catalog'))action=read?'view':'services';
+  if(path==='/service-request-supervisor')action='requests_assign_supervisor';
+  else if(path.startsWith('/services-catalog'))action=read?'view':'services';
   else if(path.startsWith('/messages'))action='messages';
   else if(path.startsWith('/service-requests'))action=read?'requests_view':path.endsWith('/convert-to-project')?'requests_convert':'requests_edit';
   else if(path.endsWith('/reset-password'))action='reset_password';
@@ -35,18 +36,16 @@ router.put('/guest-access-settings', async (req,res) => {
 });
 
 router.get('/service-request-supervisor', async (req,res) => {
-  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
   try {const row=await db.get("SELECT value FROM settings WHERE `key`='service_request_supervisor_id'");res.json({success:true,supervisor_id:Number(row?.value)||null});}
   catch(err){res.status(500).json({success:false,message:'تعذر قراءة إعداد المشرف'});}
 });
 router.put('/service-request-supervisor', async (req,res) => {
-  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
   try {
     const id=Number(req.body.supervisor_id);
     const user=await db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[id]);
     if(!user) return res.status(400).json({success:false,message:'اختر مستخدماً نشطاً'});
     let permissions=[];try{permissions=JSON.parse(user.permissions||user.role_permissions||'[]');}catch{}
-    if(!require('../middleware/security').hasUserPermission({...user,permissions},'client_app:requests_review'))return res.status(400).json({success:false,message:'المستخدم يحتاج صلاحية اعتماد مراجعة طلبات الخدمات'});
+    if(!['client_app:requests_view','client_app:requests_edit','client_app:requests_review'].every(permission=>require('../middleware/security').hasUserPermission({...user,permissions},permission)))return res.status(400).json({success:false,message:'المشرف يحتاج صلاحيات عرض الطلبات وتحديثها واعتماد مراجعتها'});
     const existing=await db.get("SELECT `key` FROM settings WHERE `key`='service_request_supervisor_id'");
     if(existing) await db.run("UPDATE settings SET `value`=? WHERE `key`='service_request_supervisor_id'",[String(id)]);
     else await db.run("INSERT INTO settings (`key`,`value`) VALUES ('service_request_supervisor_id',?)",[String(id)]);
@@ -1054,7 +1053,7 @@ router.get('/service-requests', async (req, res) => {
 router.get('/service-requests/workflow-access', (req,res) => {
   const can=permission=>require('../middleware/security').hasUserPermission(req.user,permission);
   res.set('Cache-Control','no-store');
-  res.json({success:true,access:{user_id:req.user.id,can_view:can('client_app:requests_view'),can_edit:can('client_app:requests_edit'),can_review:can('client_app:requests_review'),can_convert:can('client_app:requests_convert'),is_manager:req.user.role==='admin'}});
+  res.json({success:true,access:{user_id:req.user.id,can_view:can('client_app:requests_view'),can_edit:can('client_app:requests_edit'),can_review:can('client_app:requests_review'),can_convert:can('client_app:requests_convert'),can_assign_supervisor:can('client_app:requests_assign_supervisor'),is_manager:req.user.role==='admin'}});
 });
 
 router.get('/service-requests/alerts', async (req,res) => {

@@ -80,6 +80,15 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,400);
   await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:requests_view','client_app:requests_edit']),staffId]);
   const editAccess=await api('/api/admin/client-users/service-requests/workflow-access',staffToken);assert.equal(editAccess.data.access.can_edit,true);assert.equal(editAccess.data.access.can_review,false);assert.equal(editAccess.data.access.is_manager,false);
+  const supervisorPath='/api/admin/client-users/service-request-supervisor';
+  assert.equal((await api(supervisorPath,staffToken)).status,403);
+  assert.equal((await api(supervisorPath,staffToken,'PUT',{supervisor_id:admin})).status,403);
+  await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:requests_view','client_app:requests_edit','client_app:requests_assign_supervisor']),staffId]);
+  assert.equal((await api('/api/admin/client-users/service-requests/workflow-access',staffToken)).data.access.can_assign_supervisor,true);
+  assert.equal((await api(supervisorPath,staffToken)).status,200);
+  assert.equal((await api(supervisorPath,staffToken,'PUT',{supervisor_id:staffId})).status,400);
+  assert.equal((await api(supervisorPath,staffToken,'PUT',{supervisor_id:admin})).status,200);
+  assert.equal((await api('/api/admin/client-users/guest-access-settings',staffToken,'PUT',{days:10})).status,403);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',staffToken,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,403);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,200);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);

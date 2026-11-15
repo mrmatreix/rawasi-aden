@@ -527,6 +527,9 @@
     .track-request-btn:focus-visible { outline: 3px solid #f3ce61; outline-offset: 3px; }
     .track-request-btn:active { transform: translateY(1px); }
     .track-request-btn svg { width: 17px; height: 17px; flex: 0 0 auto; }
+    #trackModal { box-sizing:border-box; overflow:hidden; padding:12px; align-items:center; }
+    #trackModal .track-modal-panel { box-sizing:border-box; width:100%; max-width:480px; max-height:100%; min-height:0; margin:auto; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scroll-padding-bottom:18px; }
+    #trackModal .track-modal-panel textarea { scroll-margin-bottom:18px; }
     .guest-message-feedback { margin: 8px 0 2px; padding: 10px 12px; border: 1px solid rgba(251,191,36,.45); border-radius: 10px; color: #ffe2a3; background: rgba(146,95,18,.18); font-size: .8rem; line-height: 1.6; }
     .guest-message-feedback[hidden] { display: none; }
     #guestMessage[aria-invalid="true"] { border-color: #f2b84a; }
@@ -883,14 +886,14 @@
   </div>
 
   <!-- Modal: Track Order -->
-  <div id="trackModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 16px;">
-    <div class="form-box" style="width: 100%; max-width: 480px; margin: auto;">
+  <div id="trackModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="trackModalTitle" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); justify-content: center;">
+    <div class="form-box track-modal-panel">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
+        <h3 id="trackModalTitle" style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
           <i class="fa-solid fa-magnifying-glass text-gold"></i>
           <span>متابعة حالة الطلب</span>
         </h3>
-        <button onclick="closeTrackModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">
+        <button type="button" aria-label="إغلاق متابعة الطلب" onclick="closeTrackModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -1300,12 +1303,32 @@
       renderServices();
     }
 
+    function keepTrackingFieldVisible() {
+      const panel=document.querySelector('#trackModal .track-modal-panel');
+      const field=document.activeElement;
+      if(!panel || !field || !panel.contains(field) || !/^(INPUT|TEXTAREA|SELECT)$/.test(field.tagName))return;
+      const box=panel.getBoundingClientRect(), target=field.getBoundingClientRect(), margin=16;
+      if(target.bottom > box.bottom-margin)panel.scrollTop+=target.bottom-box.bottom+margin;
+      else if(target.top < box.top+margin)panel.scrollTop-=box.top+margin-target.top;
+    }
+    function syncTrackingViewport() {
+      const modal=document.getElementById('trackModal');
+      if(!modal || modal.style.display!=='flex')return;
+      const viewport=window.visualViewport;
+      if(viewport){modal.style.top=viewport.offsetTop+'px';modal.style.bottom='auto';modal.style.height=viewport.height+'px';}
+      requestAnimationFrame(keepTrackingFieldVisible);
+    }
+    window.addEventListener('resize',syncTrackingViewport);
+    if(window.visualViewport){window.visualViewport.addEventListener('resize',syncTrackingViewport);window.visualViewport.addEventListener('scroll',syncTrackingViewport);}
+    document.addEventListener('focusin',event=>{if(document.getElementById('trackModal')?.contains(event.target)){setTimeout(syncTrackingViewport,150);setTimeout(syncTrackingViewport,400);}});
+
     // Refresh only while tracking is open; never erase a draft being written.
     let trackRefreshTimer = null;
     let trackRequestSequence = 0;
     async function openTrackModal() {
       const modal=document.getElementById('trackModal');
       modal.style.display = 'flex';
+      syncTrackingViewport();
       document.getElementById('trackResultContainer').style.display = 'none';
       if(trackRefreshTimer)clearInterval(trackRefreshTimer);
       trackRefreshTimer=setInterval(()=>executeTrackRequest(true),30000);
@@ -1351,6 +1374,8 @@
         }
 
         const r = data.request;
+        const panel=document.querySelector('#trackModal .track-modal-panel');
+        const oldScroll=panel?.scrollTop||0;
         const statusMap = {
           'new': { text: 'طلب جديد (قيد المراجعة الأولية)', color: '#60a5fa' },
           'under_review': { text: 'قيد المراجعة الفنية ودراسة المخططات', color: '#f59e0b' },
@@ -1376,6 +1401,7 @@
             <div style="margin-top: 8px; color: var(--text-muted); font-size: 0.75rem;">تاريخ التقديم: ${new Date(r.created_at).toLocaleString('ar-YE')}</div>
           </div>
         `;
+        if(silent && panel)panel.scrollTop=oldScroll;
         if(document.getElementById('guestMessage'))document.getElementById('guestMessage').value=draftMessage;
         if(document.getElementById('guestQuoteNote'))document.getElementById('guestQuoteNote').value=draftQuote;
       } catch (err) {

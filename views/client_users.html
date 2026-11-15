@@ -399,11 +399,13 @@
     <!-- View 3: Service Requests Section (طلبات خدمات العملاء والزوار) -->
     <div id="viewRequestsSection" class="hidden">
       <div id="managerRequestSettings" class="glass-card rounded-2xl p-4 mb-4 text-sm text-slate-200" style="display:none">
-        <label for="defaultRequestSupervisor">مشرف استقبال الطلبات الجديدة</label>
-        <select id="defaultRequestSupervisor" class="custom-input rounded-xl px-3 py-2 bg-slate-900"><option value="">لم يُحدد مشرف</option></select>
-        <button type="button" onclick="saveRequestSupervisor()" class="px-3 py-2 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold">حفظ المشرف</button>
-        <p class="text-xs text-slate-400 mt-2">يعيّنه المدير العام؛ يجب أن يملك صلاحية اعتماد مراجعة طلبات الخدمات.</p>
-        <div class="mt-3"><label for="guestAccessDays">مدة متابعة الزائر (بالأيام)</label> <input id="guestAccessDays" type="number" min="1" max="365" value="30" class="custom-input rounded-xl px-3 py-2 bg-slate-900 w-24"> <button type="button" onclick="saveGuestAccessDays()" class="px-3 py-2 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold">حفظ المدة</button><p class="text-xs text-slate-400 mt-2">تطبق المدة على جلسات المتابعة الجديدة؛ يمكن استخدام رقم الطلب ورمز التحقق بعد انتهائها.</p></div>
+        <div id="supervisorSettings" style="display:none">
+          <label for="defaultRequestSupervisor">مشرف استقبال الطلبات الجديدة</label>
+          <select id="defaultRequestSupervisor" class="custom-input rounded-xl px-3 py-2 bg-slate-900"><option value="">لم يُحدد مشرف</option></select>
+          <button type="button" onclick="saveRequestSupervisor()" class="px-3 py-2 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold">حفظ المشرف</button>
+          <p class="text-xs text-slate-400 mt-2">تحدده خدمة العملاء المخوّلة؛ يجب أن يملك المشرف صلاحيات عرض الطلبات وتحديثها واعتماد مراجعتها.</p>
+        </div>
+        <div id="guestAccessSettings" class="mt-3" style="display:none"><label for="guestAccessDays">مدة متابعة الزائر (بالأيام)</label> <input id="guestAccessDays" type="number" min="1" max="365" value="30" class="custom-input rounded-xl px-3 py-2 bg-slate-900 w-24"> <button type="button" onclick="saveGuestAccessDays()" class="px-3 py-2 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold">حفظ المدة</button><p class="text-xs text-slate-400 mt-2">تطبق المدة على جلسات المتابعة الجديدة؛ يمكن استخدام رقم الطلب ورمز التحقق بعد انتهائها.</p></div>
       </div>
       <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-slate-700/80 mb-10">
         
@@ -2212,8 +2214,14 @@
     }
 
     async function showManagerRequestSettings(engineers) {
-      const box=document.getElementById('managerRequestSettings');box.style.display='none';
-      try{const res=await fetch('/api/admin/client-users/service-requests/workflow-access',{headers:getAuthHeaders(),cache:'no-store'});const data=await res.json();if(data.success&&data.access?.is_manager){box.style.display='';await populateRequestSupervisor(engineers);await loadGuestAccessDays();}}catch{}
+      const box=document.getElementById('managerRequestSettings'), supervisor=document.getElementById('supervisorSettings'), guest=document.getElementById('guestAccessSettings');
+      box.style.display='none';supervisor.style.display='none';guest.style.display='none';
+      try{
+        const res=await fetch('/api/admin/client-users/service-requests/workflow-access',{headers:getAuthHeaders(),cache:'no-store'});const data=await res.json();
+        if(!data.success)return;
+        if(data.access?.can_assign_supervisor){box.style.display='';supervisor.style.display='';await populateRequestSupervisor(engineers);}
+        if(data.access?.is_manager){box.style.display='';guest.style.display='';await loadGuestAccessDays();}
+      }catch{}
     }
 
     async function populateRequestSupervisor(engineers) {
