@@ -63,6 +63,9 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal(alertsAdmin.status,200);assert.equal(alertsAdmin.data.alerts.find(a=>Number(a.id)===Number(guest)).pending_messages,1);
   const staffId=(await db.run("INSERT INTO users(username,password_hash,full_name,role,permissions,status) VALUES ('alert-worker','unused','Worker','custom',?,'active')",[JSON.stringify(['client_app:requests_view'])])).lastInsertRowid;
   const staffToken=jwt.sign({id:staffId},require('../../server/middleware/security').JWT_SECRET);
+  const adminAccess=await api('/api/admin/client-users/service-requests/workflow-access',internal);assert.equal(adminAccess.data.access.is_manager,true);assert.equal(adminAccess.data.access.can_review,true);
+  const readAccess=await api('/api/admin/client-users/service-requests/workflow-access',staffToken);assert.equal(readAccess.data.access.can_view,true);assert.equal(readAccess.data.access.can_edit,false);assert.equal(readAccess.data.access.is_manager,false);
+
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
   await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[staffId,guest]);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
@@ -76,6 +79,8 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:code,message:'تفاصيل إضافية'})).status,200);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,400);
   await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:requests_view','client_app:requests_edit']),staffId]);
+  const editAccess=await api('/api/admin/client-users/service-requests/workflow-access',staffToken);assert.equal(editAccess.data.access.can_edit,true);assert.equal(editAccess.data.access.can_review,false);assert.equal(editAccess.data.access.is_manager,false);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',staffToken,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,403);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,200);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',internal)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);

@@ -1051,6 +1051,12 @@ router.get('/service-requests', async (req, res) => {
  * GET /api/admin/client-users/service-requests/:id
  * تفاصيل طلب خدمة محدد مع الخدمات المختارة والمرفقات
  */
+router.get('/service-requests/workflow-access', (req,res) => {
+  const can=permission=>require('../middleware/security').hasUserPermission(req.user,permission);
+  res.set('Cache-Control','no-store');
+  res.json({success:true,access:{user_id:req.user.id,can_view:can('client_app:requests_view'),can_edit:can('client_app:requests_edit'),can_review:can('client_app:requests_review'),can_convert:can('client_app:requests_convert'),is_manager:req.user.role==='admin'}});
+});
+
 router.get('/service-requests/alerts', async (req,res) => {
   try {
     const admin=req.user.role==='admin';
