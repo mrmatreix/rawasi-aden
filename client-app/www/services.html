@@ -886,6 +886,7 @@
         <input type="text" id="trackVerifyCodeInput" placeholder="رمز المتابعة الذي حصلت عليه عند تقديم الطلب" class="form-input-srv" dir="ltr" style="text-align: right;">
       </div>
 
+      <p style="font-size:0.76rem;color:var(--text-muted);margin-top:10px">تتحدث الردود تلقائيًا أثناء فتح المتابعة. يمكنك أيضًا الضغط على فحص حالة الطلب.</p>
       <button onclick="executeTrackRequest()" class="btn btn-primary" style="width: 100%; height: 46px; border-radius: 12px; font-weight: 800; margin-top: 10px;">
         <i class="fa-solid fa-search"></i> فحص حالة الطلب
       </button>
@@ -1281,39 +1282,51 @@
       renderServices();
     }
 
-    // Track Order Modal
+    // Refresh only while tracking is open; never erase a draft being written.
+    let trackRefreshTimer = null;
+    let trackRequestSequence = 0;
     async function openTrackModal() {
-      document.getElementById('trackModal').style.display = 'flex';
+      const modal=document.getElementById('trackModal');
+      modal.style.display = 'flex';
       document.getElementById('trackResultContainer').style.display = 'none';
+      if(trackRefreshTimer)clearInterval(trackRefreshTimer);
+      trackRefreshTimer=setInterval(()=>executeTrackRequest(true),30000);
       try {
         const res=await fetch('/api/client-portal/services/requests/guest-session',{credentials:'same-origin',cache:'no-store'});
-        if(!res.ok)return;
+        if(!res.ok||modal.style.display!=='flex')return;
         const saved=await res.json();
-        if(saved.success){document.getElementById('trackRequestNoInput').value=saved.request_no;document.getElementById('trackVerifyCodeInput').value=saved.verification_code;await executeTrackRequest();}
+        if(saved.success&&modal.style.display==='flex'){document.getElementById('trackRequestNoInput').value=saved.request_no;document.getElementById('trackVerifyCodeInput').value=saved.verification_code;await executeTrackRequest();}
       } catch {}
     }
 
     function closeTrackModal() {
       document.getElementById('trackModal').style.display = 'none';
+      if(trackRefreshTimer){clearInterval(trackRefreshTimer);trackRefreshTimer=null;}
+      trackRequestSequence++;
     }
 
-    async function executeTrackRequest() {
+    async function executeTrackRequest(silent = false) {
       const requestNo = document.getElementById('trackRequestNoInput').value.trim();
       const verifyCode = document.getElementById('trackVerifyCodeInput').value.trim();
       const resContainer = document.getElementById('trackResultContainer');
 
       if (!requestNo || !verifyCode) {
-        alert('يرجى إدخال رقم الطلب ورمز التحقق.');
+        if (!silent) alert('يرجى إدخال رقم الطلب ورمز التحقق.');
         return;
       }
-
+      const draftMessage=document.getElementById('guestMessage')?.value || '';
+      const draftQuote=document.getElementById('guestQuoteNote')?.value || '';
+      if(silent && (draftMessage || draftQuote || (document.activeElement?.tagName==='TEXTAREA' && resContainer.contains(document.activeElement))))return;
+      const sequence=++trackRequestSequence;
       resContainer.style.display = 'block';
-      resContainer.innerHTML = '<div style="text-align: center; color: var(--gold);"><i class="fa-solid fa-spinner fa-spin"></i> جاري فحص حالة الطلب...</div>';
+      if(!silent)resContainer.innerHTML = '<div style="text-align: center; color: var(--gold);"><i class="fa-solid fa-spinner fa-spin"></i> جاري فحص حالة الطلب...</div>';
 
       try {
         const url = `/api/client-portal/services/requests/track?request_no=${encodeURIComponent(requestNo)}&verification_code=${encodeURIComponent(verifyCode)}`;
         const res = await fetch(url, {cache:'no-store', credentials:'same-origin'});
         const data = await res.json();
+        if(sequence!==trackRequestSequence || document.getElementById('trackModal').style.display!=='flex' || document.getElementById('trackRequestNoInput').value.trim()!==requestNo || document.getElementById('trackVerifyCodeInput').value.trim()!==verifyCode)return;
+        if(silent && ((document.getElementById('guestMessage')?.value||'') || (document.getElementById('guestQuoteNote')?.value||'') || (document.activeElement?.tagName==='TEXTAREA' && resContainer.contains(document.activeElement))))return;
 
         if (!data || !data.success || !data.request) {
           throw new Error(data?.message || 'الطلب غير موجود');
@@ -1336,26 +1349,29 @@
 
         resContainer.innerHTML = `
           <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--gold); border-radius: 14px; padding: 14px; font-size: 0.82rem; text-align: right;">
-            <div style="font-weight: 800; color: #FFFFFF; font-size: 0.95rem; margin-bottom: 6px;">طلب رقم: <span style="color: var(--gold);">${r.request_no}</span></div>
+            <div style="font-weight: 800; color: #FFFFFF; font-size: 0.95rem; margin-bottom: 6px;">طلب رقم: <span style="color: var(--gold);">${escapeHtml(r.request_no)}</span></div>
             <div style="margin-bottom: 4px;">العميل: <b>${escapeHtml(r.client_name)}</b></div>
-            <div style="margin-bottom: 4px;">الحالة: <b style="color: ${st.color};">${st.text}</b></div>
-            ${r.quoted_amount ? `<div style="margin-bottom: 4px;">مبلغ عرض السعر: <b style="color: #34d399;">${r.quoted_amount} ${r.currency || 'YER'}</b></div>` : ''}
+            <div style="margin-bottom: 4px;">الحالة: <b style="color: ${st.color};">${escapeHtml(st.text)}</b></div>
+            ${r.quoted_amount != null ? `<div style="margin-bottom: 4px;">مبلغ عرض السعر: <b style="color: #34d399;">${escapeHtml(r.quoted_amount)} ${escapeHtml(r.currency || 'YER')}</b></div>` : ''}
             ${r.quote ? `<div style="white-space:pre-wrap;margin-top:10px">تفاصيل العرض: ${escapeHtml(r.quote.details)}<br>مدة التنفيذ: ${escapeHtml(r.quote.duration)}</div>${r.status === 'quoted' && r.source === 'guest' ? `<textarea id="guestQuoteNote" class="form-input-srv" placeholder="ملاحظاتك عند طلب التعديل"></textarea><button class="btn btn-primary" onclick="guestQuoteResponse(${Number(r.quote.id)},'accept')">الموافقة على العرض</button> <button class="btn btn-secondary" onclick="guestQuoteResponse(${Number(r.quote.id)},'changes')">إعادة العرض بملاحظات</button>` : ''}` : ''}
             ${r.messages && r.source === 'guest' ? `<div><h4>مراسلات الطلب</h4>${r.messages.map(m=>`<p>${escapeHtml(m.actor_type==='guest'?'أنت':'رواسي عدن')}: ${escapeHtml(m.message)}</p>`).join('')}<textarea id="guestMessage" class="form-input-srv" placeholder="رسالة إلى مشرف الخدمة"></textarea><button class="btn btn-secondary" onclick="guestSendMessage()">إرسال الرسالة</button></div>` : ''}
             <div style="margin-top: 8px; color: var(--text-muted); font-size: 0.75rem;">تاريخ التقديم: ${new Date(r.created_at).toLocaleString('ar-YE')}</div>
           </div>
         `;
+        if(document.getElementById('guestMessage'))document.getElementById('guestMessage').value=draftMessage;
+        if(document.getElementById('guestQuoteNote'))document.getElementById('guestQuoteNote').value=draftQuote;
       } catch (err) {
+        if(silent || sequence!==trackRequestSequence)return;
         resContainer.innerHTML = `
           <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 10px; color: #fca5a5; font-size: 0.8rem; text-align: center;">
-            <i class="fa-solid fa-circle-exclamation"></i> ${err.message}
+            <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(err.message)}
           </div>
         `;
       }
     }
 
     async function guestSendMessage() {
-      try{const response=await fetch('/api/client-portal/services/requests/guest-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),message:document.getElementById('guestMessage').value})});const data=await response.json();if(!data.success)throw new Error(data.message);await executeTrackRequest();}catch(err){alert(err.message||'تعذر إرسال الرسالة');}
+      try{const response=await fetch('/api/client-portal/services/requests/guest-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),message:document.getElementById('guestMessage').value})});const data=await response.json();if(!data.success)throw new Error(data.message);const input=document.getElementById('guestMessage');if(input)input.value='';await executeTrackRequest();}catch(err){alert(err.message||'تعذر إرسال الرسالة');}
     }
 
     async function guestQuoteResponse(quoteId,decision) {
