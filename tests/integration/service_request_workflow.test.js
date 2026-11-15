@@ -68,12 +68,18 @@ test('manager approval and client response apply to the correct quote and accoun
 
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
   await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[staffId,guest]);
-  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),false);
+  assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
   await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[admin,guest]);
 
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,200);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,409);
   visible=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(visible.data.request.messages.some(m=>m.message==='رسالة خاصة قبل الاعتماد'),true);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message',internal,'POST',{message:'رد يحتاج تعديل'})).status,200);
+  const returnedMessage=await db.get("SELECT id FROM service_request_events WHERE request_id=? AND event_type='message_pending_approval' ORDER BY id DESC",[guest]);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:returnedMessage.id,decision:'reject'})).status,400);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',internal,'POST',{event_id:returnedMessage.id,decision:'reject',note:'يرجى توضيح الكمية'})).status,200);
+  assert.equal((await db.get("SELECT message FROM service_request_events WHERE request_id=? AND event_type='message_declined' ORDER BY id DESC",[guest])).message,'يرجى توضيح الكمية');
+  visible=await api(portal+'/services/requests/track?request_no='+number+'&verification_code='+code);assert.equal(visible.data.request.messages.some(m=>m.message==='رد يحتاج تعديل'),false);
 
   assert.equal(Number((await db.get('SELECT assigned_to FROM service_requests WHERE id=?',[guest])).assigned_to),admin);
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:code,message:'تفاصيل إضافية'})).status,200);
@@ -90,6 +96,8 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal((await api(supervisorPath,staffToken,'PUT',{supervisor_id:admin})).status,200);
   assert.equal((await api('/api/admin/client-users/guest-access-settings',staffToken,'PUT',{days:10})).status,403);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message-decision',staffToken,'POST',{event_id:pendingMessage.id,decision:'approve'})).status,403);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,400);
+  await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:requests_view','client_app:requests_edit','client_app:requests_review','client_app:requests_assign_supervisor']),staffId]);
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,200);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',staffToken)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);
   assert.equal((await api('/api/admin/client-users/service-requests/alerts',internal)).data.alerts.some(a=>Number(a.id)===Number(guest)),true);

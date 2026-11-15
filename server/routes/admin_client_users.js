@@ -24,6 +24,14 @@ const db = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
 const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
+function isRequestSupervisor(user) {
+  if(!user)return false;
+  let permissions=[];try{permissions=JSON.parse(user.permissions||user.role_permissions||'[]');}catch{}
+  return ['client_app:requests_view','client_app:requests_edit','client_app:requests_review'].every(permission=>require('../middleware/security').hasUserPermission({...user,permissions},permission));
+}
+async function findRequestSupervisor(id) {
+  return db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[id]);
+}
 
 router.get('/guest-access-settings', async (req,res) => {
   if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
@@ -1023,7 +1031,8 @@ router.get('/service-requests', async (req, res) => {
     `);
 
     // جلب قائمة الموظفين للإسناد
-    const engineers = await db.query(`SELECT id, username, full_name AS name, role FROM users WHERE status = 'active' OR status IS NULL`);
+    const candidates = await db.query(`SELECT u.id,u.username,u.full_name AS name,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.status = 'active' OR u.status IS NULL`);
+    const engineers=(candidates||[]).filter(isRequestSupervisor).map(({id,username,name,role})=>({id,username,name,role}));
 
     res.json({
       success: true,
@@ -1060,7 +1069,8 @@ router.get('/service-requests/alerts', async (req,res) => {
   try {
     const admin=req.user.role==='admin';
     const unanswered=`EXISTS (SELECT 1 FROM service_request_events guest WHERE guest.request_id=sr.id AND guest.event_type='message_from_client' AND guest.id > COALESCE((SELECT MAX(reply.id) FROM service_request_events reply WHERE reply.request_id=sr.id AND reply.event_type IN ('message_pending_approval','message_approved','message_rejected','message_to_client')),0))`;
-    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered})` : `(sr.assigned_to=? AND (sr.status IN ('client_changes','manager_changes') OR ${unanswered}))`;
+    const returnedMessage=`EXISTS (SELECT 1 FROM service_request_events d WHERE d.request_id=sr.id AND d.event_type='message_declined' AND d.id > COALESCE((SELECT MAX(n.id) FROM service_request_events n WHERE n.request_id=sr.id AND n.event_type IN ('message_pending_approval','message_to_client')),0))`;
+    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered})` : `(sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage}))`;
     const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
       (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
       FROM service_requests sr WHERE sr.source='guest' AND ${work}
@@ -1123,10 +1133,8 @@ router.put('/service-requests/:id/assignee', async (req,res) => {
   const id=Number(req.params.id), assigneeId=Number(req.body.assigned_to);
   if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(assigneeId)||assigneeId<=0)return res.status(400).json({success:false,message:'حدد الموظف أو المهندس المسؤول'});
   try {
-    const assignee=await db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[assigneeId]);
-    let permissions=[];try{permissions=JSON.parse(assignee?.permissions||assignee?.role_permissions||'[]');}catch{}
-    const allowed=assignee&&require('../middleware/security').hasUserPermission({...assignee,permissions},'client_app:requests_view')&&require('../middleware/security').hasUserPermission({...assignee,permissions},'client_app:requests_edit');
-    if(!allowed)return res.status(400).json({success:false,message:'يجب اختيار مستخدم نشط يملك صلاحية عرض طلبات الخدمات وتحديثها'});
+    const assignee=await findRequestSupervisor(assigneeId);
+    if(!isRequestSupervisor(assignee))return res.status(400).json({success:false,message:'اختر مشرفاً نشطاً يملك صلاحيات عرض الطلبات وتحديثها واعتماد مراجعتها'});
     const saved=await db.transaction(async tx=>{
       const request=await tx.get('SELECT id FROM service_requests WHERE id=?',[id]);if(!request)return false;
       await tx.run('UPDATE service_requests SET assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',[assigneeId,id]);
@@ -1154,7 +1162,7 @@ router.put('/service-requests/:id', async (req, res) => {
       return res.status(409).json({success:false,message:'استخدم إجراءات اعتماد العرض لتغيير هذه الحالة'});
     }
     const newAssignedTo = assigned_to !== undefined ? (assigned_to ? parseInt(assigned_to, 10) : null) : request.assigned_to;
-    if (newAssignedTo && !(await db.get("SELECT id FROM users WHERE id=? AND (status='active' OR status IS NULL)",[newAssignedTo]))) return res.status(400).json({success:false,message:'الموظف المحدد غير نشط أو غير موجود'});
+    if (newAssignedTo && Number(newAssignedTo)!==Number(request.assigned_to) && !isRequestSupervisor(await findRequestSupervisor(newAssignedTo))) return res.status(400).json({success:false,message:'اختر مشرفاً نشطاً يملك صلاحيات عرض الطلبات وتحديثها واعتماد مراجعتها'});
     const newAdminNotes = admin_notes !== undefined ? admin_notes : request.admin_notes;
     if (newStatus === 'pricing' && request.status !== 'pricing') {
       if (!require('../middleware/security').hasUserPermission(req.user,'client_app:requests_review')) return res.status(403).json({success:false,message:'اعتماد مراجعة المتطلبات والكميات يتطلب صلاحية مشرف الخدمة'});
@@ -1206,14 +1214,15 @@ router.post('/service-requests/:id/message', async (req,res) => {
 
 router.post('/service-requests/:id/message-decision', async (req,res) => {
   if(req.user.role!=='admin') return res.status(403).json({success:false,message:'اعتماد الرد متاح للمدير العام فقط'});
-  const id=Number(req.params.id),eventId=Number(req.body.event_id),decision=req.body.decision;
-  if(!Number.isSafeInteger(id)||!Number.isSafeInteger(eventId)||!['approve','reject'].includes(decision))return res.status(400).json({success:false,message:'بيانات القرار غير صحيحة'});
+  const id=Number(req.params.id),eventId=Number(req.body.event_id),decision=req.body.decision,note=String(req.body.note||'').trim();
+  if(!Number.isSafeInteger(id)||!Number.isSafeInteger(eventId)||!['approve','reject'].includes(decision)||note.length>4000||(decision==='reject'&&!note))return res.status(400).json({success:false,message:'أدخل ملاحظات المدير عند رفض الرد'});
   try {const result=await db.transaction(async tx=>{
     const event=await tx.get("SELECT id,message FROM service_request_events WHERE id=? AND request_id=? AND event_type='message_pending_approval'",[eventId,id]);
     if(!event)return false;
     const changed=await tx.run("UPDATE service_request_events SET event_type=? WHERE id=? AND request_id=? AND event_type='message_pending_approval'",[decision==='approve'?'message_approved':'message_rejected',eventId,id]);
     if(!changed.changes)return false;
-    await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'manager',req.user.id,decision==='approve'?'message_to_client':'message_declined',decision==='approve'?event.message:'تم رفض الرد من المدير']);
+    await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'manager',req.user.id,decision==='approve'?'message_to_client':'message_declined',decision==='approve'?event.message:note]);
+    if(decision==='reject')await tx.run("UPDATE service_requests SET updated_at=CURRENT_TIMESTAMP WHERE id=?",[id]);
     return true;
   }); if(!result)return res.status(409).json({success:false,message:'الرد لم يعد بانتظار الاعتماد'});res.json({success:true});}catch(err){console.error('message approval',err);res.status(500).json({success:false,message:'تعذر تسجيل القرار'});}
 });
