@@ -63,6 +63,18 @@ test('manager approval and client response apply to the correct quote and accoun
   assert.equal(alertsAdmin.status,200);assert.equal(alertsAdmin.data.alerts.find(a=>Number(a.id)===Number(guest)).pending_messages,1);
   const staffId=(await db.run("INSERT INTO users(username,password_hash,full_name,role,permissions,status) VALUES ('alert-worker','unused','Worker','custom',?,'active')",[JSON.stringify(['client_app:requests_view'])])).lastInsertRowid;
   const staffToken=jwt.sign({id:staffId},require('../../server/middleware/security').JWT_SECRET);
+  const supervisorId=(await db.run("INSERT INTO users(username,password_hash,full_name,role,permissions,status) VALUES ('app-supervisor','unused','Supervisor','service_supervisor',?,'active')",[JSON.stringify(['client_app:requests_view','client_app:requests_edit','client_app:requests_review'])])).lastInsertRowid;
+  const supervisorToken=jwt.sign({id:supervisorId},require('../../server/middleware/security').JWT_SECRET);
+  await db.run('UPDATE users SET password_hash=?,two_factor_enabled=0 WHERE id=?',[require('bcryptjs').hashSync('test-password-123',4),supervisorId]);
+  const supervisorLogin=await api('/api/auth/login',null,'POST',{username:'app-supervisor',password:'test-password-123'});assert.equal(supervisorLogin.status,200);assert.ok(supervisorLogin.data.token);
+  assert.equal((await api('/api/users',supervisorToken)).status,403);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest,supervisorToken)).status,404);
+  await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[supervisorId,guest]);
+  const scopedList=await api('/api/admin/client-users/service-requests',supervisorToken);assert.equal(scopedList.status,200);assert.ok(scopedList.data.requests.every(r=>Number(r.assigned_to)===Number(supervisorId)));assert.ok(scopedList.data.requests.some(r=>Number(r.id)===Number(guest)));
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest,supervisorToken)).status,200);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',supervisorToken,'PUT',{assigned_to:admin})).status,403);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest,supervisorToken,'PUT',{assigned_to:admin})).status,403);
+  await db.run('UPDATE service_requests SET assigned_to=? WHERE id=?',[admin,guest]);
   const adminAccess=await api('/api/admin/client-users/service-requests/workflow-access',internal);assert.equal(adminAccess.data.access.is_manager,true);assert.equal(adminAccess.data.access.can_review,true);
   const readAccess=await api('/api/admin/client-users/service-requests/workflow-access',staffToken);assert.equal(readAccess.data.access.can_view,true);assert.equal(readAccess.data.access.can_edit,false);assert.equal(readAccess.data.access.is_manager,false);
 

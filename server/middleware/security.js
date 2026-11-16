@@ -203,6 +203,11 @@ const requireAuth = async (req, res, next) => {
     else {try{const parsed=JSON.parse(permissionValue);if(Array.isArray(parsed))permissions=parsed;}catch{permissions=String(permissionValue).split(',').map(p=>p.trim()).filter(Boolean);}}
     req.user = {...decoded,...current,permissions};
     delete req.user.session_token; delete req.user.active_sessions;
+    if (current.role === 'service_supervisor') {
+      const pathname=(req.originalUrl || '').split('?')[0];
+      const allowed=/^\/api\/auth\/(?:me|logout|heartbeat|verify|session)(?:\/|$)/.test(pathname) || /^\/api\/admin\/client-users\/service-requests(?:\/|$)/.test(pathname) || /^\/uploads\/service_requests\//.test(pathname);
+      if(!allowed)return res.status(403).json({success:false,message:'هذا الحساب مخصص لمساحة المشرف في التطبيق'});
+    }
     req.user.scope = null;
     // ضمان توفر كائن النطاق الصلاحي (Scope Context)
     if (!req.user.scope) {

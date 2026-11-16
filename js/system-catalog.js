@@ -12,6 +12,7 @@
   payroll_officer:{label:'مسؤول الرواتب والأجور',permissions:['hr:view','hr:create','hr:edit','hr:export','accounting:view']},
   executive_viewer:{label:'الإدارة التنفيذية — اطلاع وتقارير',permissions:['dashboard:view','dashboard:export','projects:view','reports:view','reports:export','clients:view','suppliers:view','cash:view']},
   client_app_admin:{label:'مسؤول تطبيق العملاء وخدماتهم',permissions:['clients:view','projects:view',...Object.keys(clientActions).map(action=>'client_app:'+action)]},
+  service_supervisor:{label:'مشرف طلبات الخدمات — التطبيق فقط',permissions:['client_app:requests_view','client_app:requests_edit','client_app:requests_review']},
   users_administrator:{label:'مسؤول إدارة المستخدمين والصلاحيات',permissions:['settings:users']}
  };
  const operations=[

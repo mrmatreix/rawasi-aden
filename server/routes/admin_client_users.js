@@ -6,8 +6,13 @@
 
 const express = require('express');
 const router = express.Router();
-router.use((req,res,next)=>{
+router.use(async (req,res,next)=>{
   const path=req.path,read=req.method==='GET';let action=read?'view':req.method==='DELETE'?'delete':req.method==='POST'&&path==='/'?'create':'edit';
+  if(req.user.role==='service_supervisor') {
+    if(!path.startsWith('/service-requests') || /\/(assignee|convert-to-project|manager-decision|message-decision)$/.test(path))return res.status(403).json({success:false,message:'الإجراء غير متاح لحساب المشرف'});
+    const match=path.match(/^\/service-requests\/(\d+)(?:\/|$)/);
+    if(match){try{const request=await require('../database/db').get('SELECT assigned_to FROM service_requests WHERE id=?',[Number(match[1])]);if(!request||Number(request.assigned_to)!==Number(req.user.id))return res.status(404).json({success:false,message:'الطلب غير موجود أو غير مسند إليك'});}catch{return res.status(500).json({success:false,message:'تعذر التحقق من نطاق الطلب'});}}
+  }
   if(path==='/service-request-supervisor')action='requests_assign_supervisor';
   else if(path.startsWith('/services-catalog'))action=read?'view':'services';
   else if(path.startsWith('/messages'))action='messages';
@@ -998,6 +1003,7 @@ router.get('/service-requests', async (req, res) => {
     `;
     const params = [];
 
+    if(req.user.role==='service_supervisor'){query+=' AND sr.assigned_to = ?';params.push(req.user.id);}
     if (status && status !== 'all') {
       query += ` AND sr.status = ?`;
       params.push(status);
@@ -1027,12 +1033,12 @@ router.get('/service-requests', async (req, res) => {
         SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS converted_count,
         SUM(CASE WHEN source = 'guest' THEN 1 ELSE 0 END) AS guest_count,
         SUM(CASE WHEN source = 'registered_client' THEN 1 ELSE 0 END) AS registered_count
-      FROM service_requests
-    `);
+      FROM service_requests ${req.user.role==='service_supervisor'?'WHERE assigned_to = ?':''}
+    `,req.user.role==='service_supervisor'?[req.user.id]:[]);
 
     // جلب قائمة الموظفين للإسناد
     const candidates = await db.query(`SELECT u.id,u.username,u.full_name AS name,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.status = 'active' OR u.status IS NULL`);
-    const engineers=(candidates||[]).filter(isRequestSupervisor).map(({id,username,name,role})=>({id,username,name,role}));
+    const engineers=req.user.role==='service_supervisor'?[]:(candidates||[]).filter(isRequestSupervisor).map(({id,username,name,role})=>({id,username,name,role}));
 
     res.json({
       success: true,
@@ -1082,7 +1088,7 @@ router.get('/service-requests/alerts', async (req,res) => {
     const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered} OR ${internal})` : `((sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage})) OR ${internal})`;
     const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
       (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
-      FROM service_requests sr WHERE sr.source='guest' AND ${work}
+      FROM service_requests sr WHERE sr.source='guest' AND ${req.user.role==='service_supervisor'?`sr.assigned_to=${Number(req.user.id)} AND `:''}${work}
       ORDER BY sr.updated_at DESC, sr.id DESC LIMIT 100`,admin?[]:[req.user.id]);
     res.json({success:true,alerts:(rows||[]).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,status:r.status,pending_messages:admin?Number(r.pending_messages||0):0,updated_at:r.updated_at}))});
   } catch(err){console.error('guest request alerts',err);res.status(500).json({success:false,message:'تعذر تحميل تنبيهات ردود الزوار'});}
@@ -1166,6 +1172,7 @@ router.put('/service-requests/:id', async (req, res) => {
     if (!request) {
       return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
     }
+    if(req.user.role==='service_supervisor' && ((assigned_to!==undefined && Number(assigned_to)!==Number(request.assigned_to)) || status==='rejected')) return res.status(403).json({success:false,message:'تغيير المسؤول أو رفض الطلب غير متاح للمشرف'});
 
     const newStatus = status || request.status;
     if (!['new', 'under_review', 'pricing', 'rejected'].includes(newStatus) || !['new', 'under_review', 'pricing', 'rejected', 'client_changes', 'manager_changes'].includes(request.status)) {
