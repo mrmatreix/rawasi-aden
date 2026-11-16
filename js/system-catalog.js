@@ -1,5 +1,5 @@
 (function(root){
- const clientActions={view:'عرض حسابات تطبيق العملاء',create:'إنشاء حساب عميل',edit:'تعديل وإيقاف الحسابات',permissions:'تعيين المشاريع والصلاحيات',reset_password:'إعادة تعيين كلمة المرور',sessions:'إلغاء جلسات العملاء',invite:'معاينة وإرسال دعوات الدخول',delete:'حذف حساب عميل',services:'إدارة دليل خدمات التطبيق',messages:'إدارة رسائل العملاء والردود',requests_view:'عرض طلبات الخدمات',requests_edit:'تحديث طلبات الخدمات',requests_review:'اعتماد مراجعة طلبات الخدمات',requests_convert:'تحويل طلب خدمة إلى مشروع',requests_assign_supervisor:'تحديد مشرف استقبال الطلبات الجديدة'};
+ const clientActions={staff_login:'دخول فريق العمل في التطبيق',view:'عرض حسابات تطبيق العملاء',create:'إنشاء حساب عميل',edit:'تعديل وإيقاف الحسابات',permissions:'تعيين المشاريع والصلاحيات',reset_password:'إعادة تعيين كلمة المرور',sessions:'إلغاء جلسات العملاء',invite:'معاينة وإرسال دعوات الدخول',delete:'حذف حساب عميل',services:'إدارة دليل خدمات التطبيق',messages:'إدارة رسائل العملاء والردود',requests_view:'عرض طلبات الخدمات',requests_edit:'تحديث طلبات الخدمات',requests_review:'اعتماد مراجعة طلبات الخدمات',requests_convert:'تحويل طلب خدمة إلى مشروع',requests_assign_supervisor:'تحديد مشرف استقبال الطلبات الجديدة'};
  const roles={
   finance_manager:{label:'مدير الحسابات والمالية',permissions:['dashboard:view','accounting:view','accounting:edit','accounting:approve','accounting:post','accounting:export','expenses:view','expenses:approve','expenses:export','revenues:view','revenues:approve','revenues:export','billing:view','billing:approve','billing:export','cash:view','clients:view','suppliers:view','projects:view','reports:view','reports:export']},
   chief_accountant:{label:'رئيس الحسابات',permissions:['dashboard:view','accounting:view','accounting:create','accounting:edit','accounting:approve','accounting:post','accounting:export','expenses:view','revenues:view','billing:view','cash:view','clients:view','suppliers:view','reports:view','reports:export']},
@@ -12,7 +12,7 @@
   payroll_officer:{label:'مسؤول الرواتب والأجور',permissions:['hr:view','hr:create','hr:edit','hr:export','accounting:view']},
   executive_viewer:{label:'الإدارة التنفيذية — اطلاع وتقارير',permissions:['dashboard:view','dashboard:export','projects:view','reports:view','reports:export','clients:view','suppliers:view','cash:view']},
   client_app_admin:{label:'مسؤول تطبيق العملاء وخدماتهم',permissions:['clients:view','projects:view',...Object.keys(clientActions).map(action=>'client_app:'+action)]},
-  service_supervisor:{label:'مشرف طلبات الخدمات — التطبيق فقط',permissions:['client_app:requests_view','client_app:requests_edit','client_app:requests_review']},
+  service_supervisor:{label:'مشرف طلبات الخدمات — التطبيق فقط',permissions:['client_app:staff_login','client_app:requests_view','client_app:requests_edit','client_app:requests_review']},
   users_administrator:{label:'مسؤول إدارة المستخدمين والصلاحيات',permissions:['settings:users']}
  };
  const operations=[

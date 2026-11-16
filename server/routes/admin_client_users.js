@@ -1082,10 +1082,11 @@ router.get('/service-requests/contacts', async (req,res) => {
 router.get('/service-requests/alerts', async (req,res) => {
   try {
     const admin=req.user.role==='admin';
+    const customerSupport=req.user.role!=='service_supervisor' && require('../middleware/security').hasUserPermission(req.user,'client_app:requests_assign_supervisor');
     const unanswered=`EXISTS (SELECT 1 FROM service_request_events guest WHERE guest.request_id=sr.id AND guest.event_type='message_from_client' AND guest.id > COALESCE((SELECT MAX(reply.id) FROM service_request_events reply WHERE reply.request_id=sr.id AND reply.event_type IN ('message_pending_approval','message_approved','message_rejected','message_to_client')),0))`;
     const returnedMessage=`EXISTS (SELECT 1 FROM service_request_events d WHERE d.request_id=sr.id AND d.event_type='message_declined' AND d.id > COALESCE((SELECT MAX(n.id) FROM service_request_events n WHERE n.request_id=sr.id AND n.event_type IN ('message_pending_approval','message_to_client')),0))`;
     const internal=`EXISTS (SELECT 1 FROM service_request_events i WHERE i.request_id=sr.id AND i.event_type='internal_to_${Number(req.user.id)}')`;
-    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered} OR ${internal})` : `((sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage})) OR ${internal})`;
+    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered} OR ${internal})` : `((sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage})) OR ${internal}${customerSupport?" OR sr.status='new'":''})`;
     const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
       (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
       FROM service_requests sr WHERE sr.source='guest' AND ${req.user.role==='service_supervisor'?`sr.assigned_to=${Number(req.user.id)} AND `:''}${work}

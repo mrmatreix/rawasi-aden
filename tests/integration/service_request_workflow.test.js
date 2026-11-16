@@ -65,6 +65,10 @@ test('manager approval and client response apply to the correct quote and accoun
   const staffToken=jwt.sign({id:staffId},require('../../server/middleware/security').JWT_SECRET);
   const supervisorId=(await db.run("INSERT INTO users(username,password_hash,full_name,role,permissions,status) VALUES ('app-supervisor','unused','Supervisor','service_supervisor',?,'active')",[JSON.stringify(['client_app:requests_view','client_app:requests_edit','client_app:requests_review'])])).lastInsertRowid;
   const supervisorToken=jwt.sign({id:supervisorId},require('../../server/middleware/security').JWT_SECRET);
+  assert.equal((await api('/api/auth/staff-access',supervisorToken)).status,403);
+  await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:staff_login','client_app:requests_view','client_app:requests_edit','client_app:requests_review']),supervisorId]);
+  assert.equal((await api('/api/auth/staff-access',supervisorToken)).status,200);
+  assert.equal((await api('/api/auth/staff-access',staffToken)).status,403);
   await db.run('UPDATE users SET password_hash=?,two_factor_enabled=0 WHERE id=?',[require('bcryptjs').hashSync('test-password-123',4),supervisorId]);
   const supervisorLogin=await api('/api/auth/login',null,'POST',{username:'app-supervisor',password:'test-password-123'});assert.equal(supervisorLogin.status,200);assert.ok(supervisorLogin.data.token);
   assert.equal((await api('/api/users',supervisorToken)).status,403);

@@ -14,6 +14,7 @@ const {
 } = require('../middleware/security');
 
 router.post('/realtime-ticket',requireAuth,(req,res)=>res.json({success:true,ticket:jwt.sign({id:req.user.id,purpose:'realtime'},JWT_SECRET,{expiresIn:'60s'})}));
+router.get('/staff-access',requireAuth,require('../middleware/security').requirePermission('client_app:staff_login'),(req,res)=>res.json({success:true}));
 
 function getRoleDefaultPermissions(role) {
   switch (role) {
