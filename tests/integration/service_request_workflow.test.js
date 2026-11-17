@@ -50,6 +50,11 @@ test('manager approval and client response apply to the correct quote and accoun
   const submitted=await api(portal+'/services/requests',null,'POST',{client_name:'Guest test',phone:'777000000',service_ids:[service]});
   assert.equal(submitted.status,200,JSON.stringify(submitted.data));assert.match(submitted.data.data.verification_code,/^[a-f0-9]{28}$/);
   const guest=submitted.data.data.request_id, code=submitted.data.data.verification_code, number=submitted.data.data.request_no;
+  const uploadDir=path.join(require('../../server/config/environment').storage.uploads,'service_requests');fs.mkdirSync(uploadDir,{recursive:true});
+  const imageName='synthetic-preview.png',imagePath=path.join(uploadDir,imageName),imageBytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');fs.writeFileSync(imagePath,imageBytes);
+  await db.run('UPDATE service_requests SET attachments=? WHERE id=?',[JSON.stringify([{fileName:imageName,diskFileName:imageName,url:'/uploads/service_requests/'+imageName,size:imageBytes.length}]),guest]);
+  const imageResponse=await fetch(base+'/uploads/service_requests/'+imageName,{headers:{Authorization:'Bearer '+internal}});assert.equal(imageResponse.status,200);assert.deepEqual(Buffer.from(await imageResponse.arrayBuffer()),imageBytes);
+  assert.equal((await fetch(base+'/uploads/service_requests/'+imageName)).status,401);
   assert.match(submitted.cookie,/HttpOnly/i); assert.match(submitted.cookie,/Max-Age=604800/i);
   const guestSession=await fetch(base+portal+'/services/requests/guest-session',{headers:{Cookie:submitted.cookie.split(';')[0]}});
   assert.equal(guestSession.status,200); assert.equal((await guestSession.json()).request_no,number);
@@ -108,6 +113,15 @@ test('manager approval and client response apply to the correct quote and accoun
 
   assert.equal(Number((await db.get('SELECT assigned_to FROM service_requests WHERE id=?',[guest])).assigned_to),admin);
   assert.equal((await api(portal+'/services/requests/guest-message',null,'POST',{request_no:number,verification_code:code,message:'تفاصيل إضافية'})).status,200);
+  const inboxPath='/api/admin/client-users/service-requests/inbox';
+  let managerInbox=(await api(inboxPath,internal)).data.conversations.find(r=>Number(r.id)===Number(guest));
+  assert.equal(managerInbox.unread,true);assert.equal(managerInbox.reply_status,'unanswered');
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/read-messages',internal,'POST',{})).status,200);
+  managerInbox=(await api(inboxPath,internal)).data.conversations.find(r=>Number(r.id)===Number(guest));assert.equal(managerInbox.unread,false);
+  const anotherInbox=(await api(inboxPath,staffToken)).data.conversations.find(r=>Number(r.id)===Number(guest));assert.equal(anotherInbox.unread,true);
+  assert.equal((await api(inboxPath,supervisorToken)).data.conversations.some(r=>Number(r.id)===Number(guest)),false);
+  assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/message',internal,'POST',{message:'إجابة بعد القراءة',send_direct:true})).status,200);
+  managerInbox=(await api(inboxPath,internal)).data.conversations.find(r=>Number(r.id)===Number(guest));assert.equal(managerInbox.reply_status,'replied');
   assert.equal((await api('/api/admin/client-users/service-requests/'+guest+'/assignee',internal,'PUT',{assigned_to:staffId})).status,400);
   await db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(['client_app:requests_view','client_app:requests_edit']),staffId]);
   const editAccess=await api('/api/admin/client-users/service-requests/workflow-access',staffToken);assert.equal(editAccess.data.access.can_edit,true);assert.equal(editAccess.data.access.can_review,false);assert.equal(editAccess.data.access.is_manager,false);

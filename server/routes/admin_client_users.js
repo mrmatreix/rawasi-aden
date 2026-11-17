@@ -16,7 +16,7 @@ router.use(async (req,res,next)=>{
   if(path==='/service-request-supervisor')action='requests_assign_supervisor';
   else if(path.startsWith('/services-catalog'))action=read?'view':'services';
   else if(path.startsWith('/messages'))action='messages';
-  else if(path.startsWith('/service-requests'))action=read?'requests_view':path.endsWith('/convert-to-project')?'requests_convert':'requests_edit';
+  else if(path.startsWith('/service-requests'))action=read||path.endsWith('/read-messages')?'requests_view':path.endsWith('/convert-to-project')?'requests_convert':'requests_edit';
   else if(path.endsWith('/reset-password'))action='reset_password';
   else if(path.endsWith('/revoke-sessions'))action='sessions';
   else if(/\/(invite-preview|send-invite)$/.test(path))action='invite';
@@ -1077,6 +1077,34 @@ router.get('/service-requests/contacts', async (req,res) => {
     const contacts=(users||[]).filter(u=>{let permissions=[];try{permissions=JSON.parse(u.permissions||u.role_permissions||'[]');}catch{}return require('../middleware/security').hasUserPermission({...u,permissions},'client_app:requests_view');}).map(({id,username,name,role})=>({id,username,name,role}));
     res.json({success:true,contacts});
   }catch{res.status(500).json({success:false,message:'تعذر تحميل جهات التواصل'});}
+});
+
+router.get('/service-requests/inbox', async (req,res) => {
+  try {
+    const userId=Number(req.user.id),admin=req.user.role==='admin',scope=req.user.role==='service_supervisor'?' AND sr.assigned_to=?':'',params=req.user.role==='service_supervisor'?[userId]:[];
+    const incoming=admin?"'message_from_client','message_pending_approval'":"'message_from_client'";
+    const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.updated_at,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND (e.event_type IN (${incoming}) OR e.event_type=?)) AS last_incoming,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_from_client') AS last_guest,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_to_client') AS last_reply,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND (e.event_type IN ('message_from_client','message_to_client','message_pending_approval','message_declined') OR e.event_type IN (?,?))) AS last_message
+      FROM service_requests sr WHERE sr.source='guest' ${scope} ORDER BY sr.updated_at DESC,sr.id DESC`,[`internal_to_${userId}`,`internal_to_${userId}`,`internal_read_to_${userId}`,...params]);
+    const prefix=`staff_message_read_${userId}_`;
+    const marks=await db.query('SELECT `key`,value FROM settings WHERE `key` LIKE ?',[prefix+'%']);
+    const read=new Map((marks||[]).map(row=>[row.key,Number(row.value)||0]));
+    res.set('Cache-Control','no-store');
+    res.json({success:true,conversations:(rows||[]).filter(r=>r.last_message).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,updated_at:r.updated_at,unread:Number(r.last_incoming||0)>(read.get(prefix+r.id)||0),reply_status:r.last_guest?(Number(r.last_reply||0)>Number(r.last_guest)?'replied':'unanswered'):'none'}))});
+  }catch(err){console.error('service request inbox',err);res.status(500).json({success:false,message:'تعذر تحميل المراسلات'});}
+});
+
+router.post('/service-requests/:id/read-messages', async (req,res) => {
+  try {
+    const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({success:false,message:'رقم الطلب غير صالح'});
+    const request=await db.get('SELECT id FROM service_requests WHERE id=?',[id]);if(!request)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    const row=await db.get('SELECT MAX(id) AS id FROM service_request_events WHERE request_id=?',[id]);const key=`staff_message_read_${Number(req.user.id)}_${id}`,value=String(Number(row?.id)||0);
+    await db.transaction(async tx=>{const existing=await tx.get('SELECT `key` FROM settings WHERE `key`=?',[key]);if(existing)await tx.run('UPDATE settings SET value=? WHERE `key`=?',[value,key]);else await tx.run('INSERT INTO settings (`key`,value) VALUES (?,?)',[key,value]);});
+    res.json({success:true});
+  }catch(err){console.error('mark messages read',err);res.status(500).json({success:false,message:'تعذر تحديث حالة القراءة'});}
 });
 
 router.get('/service-requests/alerts', async (req,res) => {
