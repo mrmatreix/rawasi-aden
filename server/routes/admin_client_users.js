@@ -29,6 +29,7 @@ const db = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
 const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
+const retention = require('../services/serviceRequestRetentionService');
 function isRequestSupervisor(user) {
   if(!user)return false;
   let permissions=[];try{permissions=JSON.parse(user.permissions||user.role_permissions||'[]');}catch{}
@@ -41,6 +42,15 @@ async function findRequestSupervisor(id) {
 router.get('/guest-access-settings', async (req,res) => {
   if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
   try {const row=await db.get("SELECT value FROM settings WHERE `key`='guest_request_access_days'");const days=Number(row?.value);res.json({success:true,days:Number.isInteger(days)&&days>=1&&days<=365?days:30});} catch {res.status(500).json({success:false,message:'تعذر قراءة الإعداد'});}
+});
+router.get('/service-request-retention', async (req,res) => {
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  try{res.json({success:true,days:await retention.getDays(),scheduler_enabled:process.env.ENABLE_SERVICE_REQUEST_RETENTION!=='false'});}catch{res.status(500).json({success:false,message:'تعذر قراءة مدة الاحتفاظ'});}
+});
+router.put('/service-request-retention', async (req,res) => {
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  const days=req.body.days===null?null:Number(req.body.days);if(days!==null&&(!Number.isInteger(days)||days<1||days>3650))return res.status(400).json({success:false,message:'حدد مدة من يوم إلى 3650 يوماً أو عطل الحذف التلقائي'});
+  try{if(days===null)await db.run('DELETE FROM settings WHERE `key`=?',[retention.DAYS_KEY]);else await db.run('INSERT OR REPLACE INTO settings (`key`,value) VALUES (?,?)',[retention.DAYS_KEY,String(days)]);await logAudit(req,{action:'SERVICE_REQUEST_RETENTION_SET',entity_type:'settings',details:days?`حذف الطلبات غير المؤرشفة بعد ${days} يوم من إنشائها`:'تعطيل الحذف التلقائي'});res.json({success:true,days});}catch{res.status(500).json({success:false,message:'تعذر حفظ مدة الاحتفاظ'});}
 });
 router.put('/guest-access-settings', async (req,res) => {
   if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
@@ -1021,6 +1031,8 @@ router.get('/service-requests', async (req, res) => {
     query += ` ORDER BY sr.id DESC`;
 
     const requests = await db.query(query, params);
+    const archiveRows=await db.query('SELECT `key` FROM settings WHERE `key` LIKE ?',['service_request_archive_%']);
+    const archiveSet=new Set((archiveRows||[]).map(row=>row.key));
 
     // إحصائيات الطلبات
     const stats = await db.get(`
@@ -1042,7 +1054,7 @@ router.get('/service-requests', async (req, res) => {
 
     res.json({
       success: true,
-      requests: requests || [],
+      requests: (requests || []).map(r=>({...r,is_archived:archiveSet.has(retention.archiveKey(r.id))})),
       engineers: engineers || [],
       stats: {
         total: Number(stats?.total_count || 0),
@@ -1123,6 +1135,16 @@ router.get('/service-requests/alerts', async (req,res) => {
   } catch(err){console.error('guest request alerts',err);res.status(500).json({success:false,message:'تعذر تحميل تنبيهات ردود الزوار'});}
 });
 
+router.put('/service-requests/:id/archive',async(req,res)=>{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الأرشفة متاحة للمدير العام فقط'});
+  const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<1||typeof req.body.archived!=='boolean')return res.status(400).json({success:false,message:'حدد حالة الأرشفة'});
+  try{if(!await retention.setArchived(id,req.body.archived))return res.status(404).json({success:false,message:'الطلب غير موجود'});await logAudit(req,{action:'SERVICE_REQUEST_ARCHIVE',entity_type:'service_requests',entity_id:id,details:req.body.archived?'حفظ الطلب في الأرشيف':'إلغاء أرشفة الطلب'});res.json({success:true,archived:req.body.archived});}catch{res.status(500).json({success:false,message:'تعذر تحديث الأرشيف'});}
+});
+router.delete('/service-requests/:id',async(req,res)=>{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الحذف متاح للمدير العام فقط'});
+  const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({success:false,message:'رقم الطلب غير صالح'});
+  try{const removed=await retention.deleteRequest(id);if(!removed)return res.status(404).json({success:false,message:'الطلب غير موجود'});await logAudit(req,{action:'SERVICE_REQUEST_DELETE',entity_type:'service_requests',entity_id:id,details:`حذف الطلب ${removed.request_no} يدوياً`});res.json({success:true,cleanupPending:removed.cleanupPending,message:removed.cleanupPending?'تم حذف الطلب؛ إزالة بعض المرفقات قيد المتابعة':'تم حذف الطلب ومحتوياته'});}catch(err){console.error('request deletion',err);res.status(500).json({success:false,message:'تعذر حذف الطلب'});}
+});
 router.get('/service-requests/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

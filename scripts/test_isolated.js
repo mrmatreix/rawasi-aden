@@ -10,6 +10,7 @@ files.push('tests/integration/sales_creation.test.js');
 files.push('tests/integration/project_setup.test.js');
 files.push('tests/integration/settings_access.test.js');
 files.push('tests/integration/service_request_workflow.test.js');
+files.push('tests/integration/service_request_retention.test.js');
 files.push('tests/integration/guest_message_journey.test.js');
 if(fs.existsSync(path.join(root,'tests/security/hardening.test.js')))files.push('tests/security/hardening.test.js');
 try{

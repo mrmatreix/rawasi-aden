@@ -274,6 +274,9 @@ if (require.main === module) {
     console.log(`💼 Port:       ${PORT}`);
     console.log('===========================================================');
 
+    if (process.env.ENABLE_SERVICE_REQUEST_RETENTION !== 'false') try { require('./services/serviceRequestRetentionService').start(); }
+    catch (err) { console.error('Request retention scheduler failed:',err.message); }
+
     if (!config.schedulersEnabled) return;
 
     // بدء خدمة الجدولة التلقائية للنسخ الاحتياطي

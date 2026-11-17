@@ -450,14 +450,8 @@ router.post('/services/requests', async (req, res) => {
       }
     }
 
-    // 3. توليد رقم طلب فريد SR-YYYY-XXXX
-    const currentYear = new Date().getFullYear();
-    const countRow = await db.get(`
-      SELECT COUNT(id) as total FROM service_requests
-      WHERE request_no LIKE ?
-    `, [`SR-${currentYear}-%`]);
-    const nextSeq = (Number(countRow?.total || 0) + 1).toString().padStart(4, '0');
-    const requestNo = `SR-${currentYear}-${nextSeq}`;
+    // Reserve a durable sequence before saving files, including after request deletion.
+    const requestNo=await require('../services/serviceRequestRetentionService').reserveNumber(new Date().getFullYear());
 
     // توليد كود تحقق آمن
     const verificationCode = require('crypto').randomBytes(14).toString('hex');
