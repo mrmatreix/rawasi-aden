@@ -247,13 +247,43 @@ class BackupSchedulerService {
     try {
       const unifiedBackupEngine = require('./unifiedBackupEngine');
       const backupType = triggerSource === 'scheduled' ? `scheduled_${this.config.interval}` : 'manual';
+      const isHosted = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+      const passphrase = process.env.BACKUP_ENCRYPTION_KEY || '';
+      if (isHosted && passphrase.length < 12) {
+        throw new Error('تم إيقاف النسخ التلقائي غير المشفر: اضبط BACKUP_ENCRYPTION_KEY (12 محرفاً أو أكثر) في أسرار Railway أولاً.');
+      }
       
       const backupResult = await unifiedBackupEngine.createBackup({
         backupType,
         scope: 'full_bundle_with_files',
+        encrypt: isHosted,
+        passphrase,
         user: username || 'system',
         req
       });
+
+      // لا تصبح النسخة المجدولة جاهزة للتعافي إلا بعد استعادة معزولة ناجحة.
+      const testResult = await unifiedBackupEngine.runSandboxTestRestore(
+        backupResult.recordId || backupResult.backupUid,
+        isHosted ? passphrase : null,
+        username || 'scheduler'
+      );
+
+      // ارفع أرشيفاً مشفراً إلى وجهة مستقلة عند تفعيلها. الفشل لا يحذف
+      // النسخة المحلية، لكنه يجعل حالة النسخ متدهورة وواضحة في السجل.
+      const cloudBackup = require('./cloudBackupCryptoService');
+      const cloudConfig = await cloudBackup.getCloudConfig();
+      let offsiteSync = null;
+      if (cloudConfig.enabled && cloudConfig.autoSyncAfterBackup) {
+        const archive = await cloudBackup.createFullSystemArchive({
+          encrypt: true,
+          passphrase,
+          includeProjectsFiles: true,
+          user: username || 'scheduler',
+          req
+        });
+        offsiteSync = await cloudBackup.syncArchiveToCloud(archive.fileName, cloudConfig);
+      }
 
       const nowIso = backupResult.createdAt;
       this.config.lastRun = nowIso;
@@ -289,6 +319,8 @@ class BackupSchedulerService {
         interval: this.config.interval,
         timestamp: nowIso,
         sha256: backupResult.sha256,
+        sandboxTest: testResult,
+        offsiteSync,
         nextRun: this.calculateNextRunTime()
       };
     } catch (err) {

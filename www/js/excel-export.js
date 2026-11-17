@@ -58,8 +58,12 @@ const ExcelExporter = {
   },
 
   // تنزيل ملف Excel بتنسيق XML/HTML Spreadsheet المعتمد من Microsoft Office
-  download(htmlBody, filename, worksheetName = 'التقرير المالي') {
-    if (typeof Reports !== 'undefined') {
+  download(htmlBody, filename, worksheetName = 'التقرير المالي', includeFinancialContext = true) {
+    if(includeFinancialContext&&typeof Settings!=='undefined'&&Settings.getOperationTitle&&typeof Reports!=='undefined'){
+      const tab=Reports.activeReportTab,id=({'projects-profitability':'project_profitability','cost-centers-profitability':'center_profitability','client-statement':'client_stmt','supplier-statement':'supplier_stmt'})[tab]||String(tab||'').replace(/-/g,'_');
+      const title=Settings.getOperationTitle(id,'');if(title)htmlBody=htmlBody.replace(/(<td[^>]*class="hdr-title"[^>]*>)[\s\S]*?(<\/td>)/,(match,start,end)=>start+String(title).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))+end);
+    }
+    if (includeFinancialContext && typeof Reports !== 'undefined') {
       const report = Reports.lastReportData?.[Reports.activeReportTab];
       if (report?.meta) {
         const summary = Reports.describeReportFilters(report.meta).replace(/[&<>]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[char]));

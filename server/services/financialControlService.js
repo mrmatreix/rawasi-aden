@@ -98,7 +98,7 @@ const FinancialControlService = {
   async assertPeriodOpen(date) {
     const check = await checkPeriodOpen(date);
     if (!check.isOpen) {
-      throw new Error(check.message);
+      throw Object.assign(new Error(check.message), { statusCode: 400 });
     }
     return true;
   },

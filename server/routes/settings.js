@@ -60,6 +60,63 @@ router.post('/', requirePermission('settings:company'), async (req, res) => {
   }
 });
 
+// Saved print-template profiles. They complement the global printing settings
+// with reusable official/internal/customer layouts and an auditable history.
+async function ensurePrintTemplateTables() {
+  if (getActiveEngine() === 'mysql') {
+    await run(`CREATE TABLE IF NOT EXISTS print_template_profiles (
+      id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE,
+      config TEXT NOT NULL, created_by VARCHAR(100), created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`);
+    await run(`CREATE TABLE IF NOT EXISTS print_template_audit (
+      id INT AUTO_INCREMENT PRIMARY KEY, profile_name VARCHAR(100), action VARCHAR(30), actor VARCHAR(100), created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+  } else {
+    await run(`CREATE TABLE IF NOT EXISTS print_template_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, config TEXT NOT NULL,
+      created_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await run(`CREATE TABLE IF NOT EXISTS print_template_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, profile_name TEXT, action TEXT, actor TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+  }
+}
+
+router.get('/print-profiles', requirePermission('settings:company'), async (req, res) => {
+  try {
+    await ensurePrintTemplateTables();
+    const profiles = await query('SELECT id, name, created_by, created_at, updated_at FROM print_template_profiles ORDER BY updated_at DESC');
+    const audit = await query('SELECT profile_name, action, actor, created_at FROM print_template_audit ORDER BY id DESC LIMIT 8');
+    res.json({ success: true, data: profiles, audit });
+  } catch (err) { res.status(500).json({ success: false, message: 'تعذر جلب قوالب الطباعة: ' + err.message }); }
+});
+
+router.get('/print-profiles/:id', requirePermission('settings:company'), async (req, res) => {
+  try {
+    await ensurePrintTemplateTables();
+    const profile = await get('SELECT id, name, config FROM print_template_profiles WHERE id = ?', [Number(req.params.id)]);
+    if (!profile) return res.status(404).json({ success: false, message: 'قالب الطباعة غير موجود' });
+    await run('INSERT INTO print_template_audit (profile_name, action, actor) VALUES (?, ?, ?)', [profile.name, 'apply', req.user.username]);
+    res.json({ success: true, data: { id: profile.id, name: profile.name, config: JSON.parse(profile.config) } });
+  } catch (err) { res.status(500).json({ success: false, message: 'تعذر تطبيق قالب الطباعة: ' + err.message }); }
+});
+
+router.post('/print-profiles', requirePermission('settings:company'), async (req, res) => {
+  try {
+    await ensurePrintTemplateTables();
+    const name = String(req.body?.name || '').trim().slice(0, 100);
+    const config = req.body?.config;
+    if (!name || !config || typeof config !== 'object') return res.status(400).json({ success: false, message: 'اسم القالب وإعداداته مطلوبان' });
+    const payload = JSON.stringify(config);
+    const current = await get('SELECT id FROM print_template_profiles WHERE name = ?', [name]);
+    if (current) await run('UPDATE print_template_profiles SET config = ?, created_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [payload, req.user.username, current.id]);
+    else await run('INSERT INTO print_template_profiles (name, config, created_by) VALUES (?, ?, ?)', [name, payload, req.user.username]);
+    await run('INSERT INTO print_template_audit (profile_name, action, actor) VALUES (?, ?, ?)', [name, current ? 'update' : 'create', req.user.username]);
+    res.json({ success: true, message: `تم حفظ قالب الطباعة «${name}»` });
+  } catch (err) { res.status(500).json({ success: false, message: 'تعذر حفظ قالب الطباعة: ' + err.message }); }
+});
+
 // =========================================================================
 // منظومة إدارة النسخ الاحتياطي واستعادة البيانات الموحدة (Disaster Recovery Engine)
 // =========================================================================

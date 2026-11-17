@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>خدمات مكتب الهندسة والمقاولات - شركة رواسي عدن</title>
   
   <!-- FontAwesome Icons -->
@@ -508,6 +508,71 @@
       from { opacity: 0; transform: scale(0.92); }
       to { opacity: 1; transform: scale(1); }
     }
+
+    /* تجربة Android أولاً: لمسات أكبر، تمرير سلس، ومساحات آمنة للشاشات ذات الحافة. */
+    * { -webkit-tap-highlight-color: transparent; }
+    html { scroll-behavior: smooth; }
+    body { min-height: 100dvh; overscroll-behavior-y: contain; }
+    button, a, input, textarea, select { touch-action: manipulation; }
+    .track-request-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 44px; padding: 0 15px; white-space: nowrap;
+      border: 1px solid rgba(219, 182, 73, .68); border-radius: 14px;
+      color: #f5d77d; background: linear-gradient(145deg, #243650, #111d34);
+      box-shadow: 0 5px 16px rgba(0,0,0,.18), inset 0 1px rgba(255,255,255,.05);
+      font: inherit; font-size: .8rem; font-weight: 800; cursor: pointer;
+      transition: border-color .2s, background .2s, transform .2s;
+    }
+    .track-request-btn:hover { border-color: #f3ce61; background: #263a55; }
+    .track-request-btn:focus-visible { outline: 3px solid #f3ce61; outline-offset: 3px; }
+    .track-request-btn:active { transform: translateY(1px); }
+    .track-request-btn svg { width: 17px; height: 17px; flex: 0 0 auto; }
+    #trackModal { box-sizing:border-box; overflow:hidden; padding:12px; align-items:center; }
+    #trackModal .track-modal-panel { box-sizing:border-box; width:100%; max-width:480px; max-height:100%; min-height:0; margin:auto; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scroll-padding-bottom:18px; }
+    #trackModal .track-modal-panel textarea { scroll-margin-bottom:18px; }
+    .guest-message-feedback { margin: 8px 0 2px; padding: 10px 12px; border: 1px solid rgba(251,191,36,.45); border-radius: 10px; color: #ffe2a3; background: rgba(146,95,18,.18); font-size: .8rem; line-height: 1.6; }
+    .guest-message-feedback[hidden] { display: none; }
+    #guestMessage[aria-invalid="true"] { border-color: #f2b84a; }
+    .services-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .services-actions .btn { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; }
+    @media (max-width: 768px) {
+      .services-page-container { padding: max(12px, env(safe-area-inset-top)) 12px calc(98px + env(safe-area-inset-bottom)); }
+      .services-top-bar { align-items: flex-start; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; }
+      .brand-guest-header { gap: 8px; min-width: 0; }
+      .brand-logo-small { width: 42px; height: 42px; border-radius: 13px; padding: 5px; flex-shrink: 0; }
+      .brand-guest-header h2 { font-size: 0.96rem !important; white-space: nowrap; }
+      .mode-badge { padding: 3px 8px; font-size: 0.65rem; }
+      .services-actions { gap: 6px; }
+      .track-request-btn { min-height: 42px; padding: 0 11px; font-size: .75rem; gap: 6px; }
+      .services-actions .btn { width: 42px; min-width: 42px; padding: 0; font-size: 0; border-radius: 12px !important; }
+      .services-actions .btn i { font-size: 0.9rem; margin: 0; }
+      .services-actions .btn span { display: none; }
+      .services-hero { border-radius: 18px; padding: 19px 16px 16px; margin-bottom: 16px; }
+      .hero-heading { font-size: 1.08rem; gap: 7px; line-height: 1.45; }
+      .hero-subtext { font-size: 0.78rem; line-height: 1.7; margin-bottom: 12px; }
+      .form-input-srv { height: 52px; font-size: 16px; border-radius: 14px; }
+      .filter-pills-container { margin: 0 -12px 16px; padding: 0 12px 8px; gap: 7px; scroll-snap-type: x proximity; }
+      .filter-pill { min-height: 42px; padding: 8px 13px; font-size: 0.74rem; scroll-snap-align: start; }
+      .services-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 22px; }
+      .service-card { min-height: 188px; border-radius: 18px; padding: 16px; box-shadow: 0 7px 18px rgba(0,0,0,.22); }
+      .service-card:active { transform: scale(.985); }
+      .service-card-top { margin-bottom: 10px; }
+      .service-icon-box { width: 46px; height: 46px; border-radius: 14px; font-size: 1.2rem; }
+      .service-check-indicator { width: 30px; height: 30px; }
+      .service-title { font-size: 1rem; margin-bottom: 6px; }
+      .service-desc { font-size: .78rem; line-height: 1.65; margin-bottom: 13px; }
+      .service-card-footer { padding-top: 10px; }
+      .service-select-btn { min-height: 36px; padding: 6px 12px; font-size: .75rem; }
+      .selected-summary-bar { top: 8px; padding: 11px 12px; border-radius: 16px; margin-bottom: 16px; }
+      .selected-summary-header { flex-wrap: nowrap; }
+      .selected-count-badge { font-size: .8rem; }
+      .selected-summary-header .btn { min-height: 42px !important; padding: 0 12px !important; font-size: .78rem !important; white-space: nowrap; }
+      .form-box { padding: 18px 14px; border-radius: 18px; }
+      .form-grid-2 { grid-template-columns: 1fr; gap: 0; }
+      .btn-submit-request { min-height: 54px; font-size: .96rem; }
+    }
+    @media (min-width: 769px) and (max-width: 980px) { .services-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
   </style>
 </head>
 <body>
@@ -528,9 +593,10 @@
         </div>
       </div>
 
-      <div style="display: flex; gap: 8px;">
-        <button onclick="openTrackModal()" class="btn btn-outline btn-sm" style="border-radius: 12px; font-size: 0.78rem;">
-          <i class="fa-solid fa-magnifying-glass text-gold"></i> متابعة طلب
+      <div class="services-actions">
+        <button type="button" onclick="openTrackModal()" class="track-request-btn" aria-label="متابعة طلب الخدمة">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 4.2 4.2"></path></svg>
+          <span>متابعة الطلب</span>
         </button>
         <a href="index.html" class="btn btn-outline btn-sm" style="border-radius: 12px; font-size: 0.78rem;" title="العودة لصفحة الدخول">
           <i class="fa-solid fa-right-to-bracket"></i> <span id="loginBackText">تسجيل الدخول</span>
@@ -553,6 +619,16 @@
           اختر خدمة أو عدة خدمات من قائمة أعمالنا الهندسية والإنشائية، وأرسل طلبك مباشرة إلى الإدارة الهندسية لدراسته وتقديم عرض السعر الأمثل.
         </p>
 
+        <details style="margin:16px auto;max-width:720px;text-align:right;background:rgba(255,255,255,.05);border:1px solid rgba(212,175,55,.35);border-radius:12px;padding:12px 16px;">
+          <summary style="cursor:pointer;font-weight:700;color:#e7c360;">كيف تتابع طلبك؟</summary>
+          <ol style="padding-right:20px;line-height:1.9;margin:10px 0 0;">
+            <li>اختر الخدمة وأرسل التفاصيل، ثم احتفظ برقم الطلب ورمز المتابعة.</li>
+            <li>تراجع خدمة العملاء الطلب وقد تعيّن مهندسًا مختصًا.</li>
+            <li>يظهر الرد أو عرض السعر بعد موافقة المدير عند الضغط على «متابعة طلب».</li>
+            <li>يمكنك إرسال رسالة، والموافقة على العرض أو طلب تعديله بملاحظة.</li>
+          </ol>
+        </details>
+
         <!-- Search Input -->
         <div style="position: relative; max-width: 480px;">
           <input type="text" id="serviceSearchInput" placeholder="ابحث عن خدمة هندسية معينة..." class="form-input-srv" style="padding-right: 40px;" oninput="filterServices()">
@@ -566,16 +642,25 @@
           <i class="fa-solid fa-border-all"></i> جميع الخدمات
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('design', this)">
-          <i class="fa-solid fa-pencil-ruler"></i> التصاميم الهندسية و 3D
+          <i class="fa-solid fa-pencil-ruler"></i> التصميم والإشراف
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('execution', this)">
-          <i class="fa-solid fa-trowel-bricks"></i> المقاولات والبناء والتشطيب
+          <i class="fa-solid fa-trowel-bricks"></i> المقاولات والتنفيذ
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('finishing', this)">
+          <i class="fa-solid fa-paint-roller"></i> الترميم والتشطيبات
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('systems', this)">
+          <i class="fa-solid fa-bolt"></i> الأنظمة والطاقة
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('infrastructure', this)">
+          <i class="fa-solid fa-map-location-dot"></i> البنية التحتية والمساحة
         </button>
         <button class="filter-pill" onclick="setCategoryFilter('consulting', this)">
-          <i class="fa-solid fa-clipboard-check"></i> الإشراف والاستشارات والكميات
+          <i class="fa-solid fa-clipboard-check"></i> الاستشارات والتراخيص
         </button>
-        <button class="filter-pill" onclick="setCategoryFilter('survey', this)">
-          <i class="fa-solid fa-map-location-dot"></i> المساحة ورفع المواقع
+        <button class="filter-pill" onclick="setCategoryFilter('supply', this)">
+          <i class="fa-solid fa-truck-fast"></i> التوريد والتركيب
         </button>
       </div>
 
@@ -720,31 +805,6 @@
             <textarea id="descriptionInput" placeholder="اشرح المتطلبات الهندسية أو المساحات أو المواصفات المرغوبة..." class="form-input-srv"></textarea>
           </div>
 
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label class="form-label" for="budgetInput">
-                <i class="fa-solid fa-coins text-gold"></i>
-                <span>الميزانية التقديرية (إن رغبت في إدخالها)</span>
-              </label>
-              <div style="display: flex; gap: 8px;">
-                <input type="number" id="budgetInput" placeholder="مثال: 5000000" class="form-input-srv" style="flex: 2;">
-                <select id="currencyInput" class="form-input-srv" style="flex: 1;">
-                  <option value="YER" selected>ريال يمني</option>
-                  <option value="SAR">ريال سعودي</option>
-                  <option value="USD">دولار أمريكي</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="startDateInput">
-                <i class="fa-solid fa-calendar-days text-gold"></i>
-                <span>الموعد المتوقع للبدء</span>
-              </label>
-              <input type="date" id="startDateInput" class="form-input-srv">
-            </div>
-          </div>
-
           <div class="form-group">
             <label class="form-label" for="notesInput">
               <i class="fa-solid fa-note-sticky text-gold"></i>
@@ -810,7 +870,7 @@
         </div>
 
         <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-          <button onclick="window.print()" class="btn btn-outline" style="border-radius: 12px;">
+          <button onclick="printRequestSummary()" class="btn btn-outline" style="border-radius: 12px;">
             <i class="fa-solid fa-print"></i> طباعة ملخص الطلب
           </button>
           <button onclick="resetAndNewRequest()" class="btn btn-primary" style="border-radius: 12px; font-weight: 800;">
@@ -826,14 +886,14 @@
   </div>
 
   <!-- Modal: Track Order -->
-  <div id="trackModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 16px;">
-    <div class="form-box" style="width: 100%; max-width: 480px; margin: auto;">
+  <div id="trackModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="trackModalTitle" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); justify-content: center;">
+    <div class="form-box track-modal-panel">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
+        <h3 id="trackModalTitle" style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
           <i class="fa-solid fa-magnifying-glass text-gold"></i>
           <span>متابعة حالة الطلب</span>
         </h3>
-        <button onclick="closeTrackModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">
+        <button type="button" aria-label="إغلاق متابعة الطلب" onclick="closeTrackModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -844,9 +904,10 @@
       </div>
       <div class="form-group">
         <label class="form-label">رمز التحقق (Verification Code)</label>
-        <input type="text" id="trackVerifyCodeInput" placeholder="رمز التحقق المكون من 6 أرقام" class="form-input-srv" dir="ltr" style="text-align: right;">
+        <input type="text" id="trackVerifyCodeInput" placeholder="رمز المتابعة الذي حصلت عليه عند تقديم الطلب" class="form-input-srv" dir="ltr" style="text-align: right;">
       </div>
 
+      <p style="font-size:0.76rem;color:var(--text-muted);margin-top:10px">تتحدث الردود تلقائيًا أثناء فتح المتابعة. يمكنك أيضًا الضغط على فحص حالة الطلب.</p>
       <button onclick="executeTrackRequest()" class="btn btn-primary" style="width: 100%; height: 46px; border-radius: 12px; font-weight: 800; margin-top: 10px;">
         <i class="fa-solid fa-search"></i> فحص حالة الطلب
       </button>
@@ -913,7 +974,8 @@
         }
 
         if (res && res.success && Array.isArray(res.services)) {
-          allServices = res.services;
+          const categoryRank = { design: 10, execution: 20, finishing: 30, systems: 40, infrastructure: 50, consulting: 60, supply: 70, general: 90 };
+          allServices = [...res.services].sort((a, b) => (categoryRank[a.category] || 90) - (categoryRank[b.category] || 90) || Number(a.display_order || 0) - Number(b.display_order || 0) || Number(a.id) - Number(b.id));
           renderServices();
         } else {
           throw new Error(res?.message || 'تعذر تحميل الخدمات');
@@ -984,10 +1046,13 @@
 
     function getCategoryLabel(cat) {
       switch(cat) {
-        case 'design': return 'تصميم وإظهار 3D';
-        case 'execution': return 'تنفيذ ومقاولات';
-        case 'consulting': return 'إشراف واستشارات';
-        case 'survey': return 'مساحة ومواقع';
+        case 'design': return 'تصميم وإشراف هندسي';
+        case 'execution': return 'مقاولات وتنفيذ مبانٍ';
+        case 'finishing': return 'ترميم وتشطيبات وديكور';
+        case 'systems': return 'أنظمة وطاقة وتكييف';
+        case 'infrastructure': return 'بنية تحتية ومساحة';
+        case 'consulting': return 'استشارات وتراخيص ومقايسات';
+        case 'supply': return 'توريد وتركيب';
         default: return 'خدمات عامة';
       }
     }
@@ -1176,9 +1241,6 @@
           project_name: document.getElementById('projectNameInput').value.trim() || null,
           location: document.getElementById('locationInput').value.trim() || null,
           description: document.getElementById('descriptionInput').value.trim() || null,
-          estimated_budget: document.getElementById('budgetInput').value || null,
-          currency: document.getElementById('currencyInput').value || 'YER',
-          expected_start_date: document.getElementById('startDateInput').value || null,
           notes: document.getElementById('notesInput').value.trim() || null,
           service_ids: Array.from(selectedServiceIds),
           attachments: uploadedFiles
@@ -1212,6 +1274,11 @@
       }
     }
 
+    function printRequestSummary() {
+      if (window.RawasiAndroid && typeof window.RawasiAndroid.printOrder === 'function') { window.RawasiAndroid.printOrder(); return; }
+      window.print();
+    }
+
     function showSuccessView(data) {
       document.getElementById('stepServices').classList.remove('active');
       document.getElementById('stepForm').classList.remove('active');
@@ -1236,48 +1303,87 @@
       renderServices();
     }
 
-    // Track Order Modal
-    function openTrackModal() {
-      document.getElementById('trackModal').style.display = 'flex';
+    function keepTrackingFieldVisible() {
+      const panel=document.querySelector('#trackModal .track-modal-panel');
+      const field=document.activeElement;
+      if(!panel || !field || !panel.contains(field) || !/^(INPUT|TEXTAREA|SELECT)$/.test(field.tagName))return;
+      const box=panel.getBoundingClientRect(), target=field.getBoundingClientRect(), margin=16;
+      if(target.bottom > box.bottom-margin)panel.scrollTop+=target.bottom-box.bottom+margin;
+      else if(target.top < box.top+margin)panel.scrollTop-=box.top+margin-target.top;
+    }
+    function syncTrackingViewport() {
+      const modal=document.getElementById('trackModal');
+      if(!modal || modal.style.display!=='flex')return;
+      const viewport=window.visualViewport;
+      if(viewport){modal.style.top=viewport.offsetTop+'px';modal.style.bottom='auto';modal.style.height=viewport.height+'px';}
+      requestAnimationFrame(keepTrackingFieldVisible);
+    }
+    window.addEventListener('resize',syncTrackingViewport);
+    if(window.visualViewport){window.visualViewport.addEventListener('resize',syncTrackingViewport);window.visualViewport.addEventListener('scroll',syncTrackingViewport);}
+    document.addEventListener('focusin',event=>{if(document.getElementById('trackModal')?.contains(event.target)){setTimeout(syncTrackingViewport,150);setTimeout(syncTrackingViewport,400);}});
+
+    // Refresh only while tracking is open; never erase a draft being written.
+    let trackRefreshTimer = null;
+    let trackRequestSequence = 0;
+    async function openTrackModal() {
+      const modal=document.getElementById('trackModal');
+      modal.style.display = 'flex';
+      syncTrackingViewport();
       document.getElementById('trackResultContainer').style.display = 'none';
+      if(trackRefreshTimer)clearInterval(trackRefreshTimer);
+      trackRefreshTimer=setInterval(()=>executeTrackRequest(true),30000);
+      try {
+        const res=await fetch('/api/client-portal/services/requests/guest-session',{credentials:'same-origin',cache:'no-store'});
+        if(!res.ok||modal.style.display!=='flex')return;
+        const saved=await res.json();
+        if(saved.success&&modal.style.display==='flex'){document.getElementById('trackRequestNoInput').value=saved.request_no;document.getElementById('trackVerifyCodeInput').value=saved.verification_code;await executeTrackRequest();}
+      } catch {}
     }
 
     function closeTrackModal() {
       document.getElementById('trackModal').style.display = 'none';
+      if(trackRefreshTimer){clearInterval(trackRefreshTimer);trackRefreshTimer=null;}
+      trackRequestSequence++;
     }
 
-    async function executeTrackRequest() {
+    async function executeTrackRequest(silent = false) {
       const requestNo = document.getElementById('trackRequestNoInput').value.trim();
       const verifyCode = document.getElementById('trackVerifyCodeInput').value.trim();
       const resContainer = document.getElementById('trackResultContainer');
 
       if (!requestNo || !verifyCode) {
-        alert('يرجى إدخال رقم الطلب ورمز التحقق.');
+        if (!silent) alert('يرجى إدخال رقم الطلب ورمز التحقق.');
         return;
       }
-
+      const draftMessage=document.getElementById('guestMessage')?.value || '';
+      const draftQuote=document.getElementById('guestQuoteNote')?.value || '';
+      if(silent && (draftMessage || draftQuote || (document.activeElement?.tagName==='TEXTAREA' && resContainer.contains(document.activeElement))))return;
+      const sequence=++trackRequestSequence;
       resContainer.style.display = 'block';
-      resContainer.innerHTML = '<div style="text-align: center; color: var(--gold);"><i class="fa-solid fa-spinner fa-spin"></i> جاري فحص حالة الطلب...</div>';
+      if(!silent)resContainer.innerHTML = '<div style="text-align: center; color: var(--gold);"><i class="fa-solid fa-spinner fa-spin"></i> جاري فحص حالة الطلب...</div>';
 
       try {
         const url = `/api/client-portal/services/requests/track?request_no=${encodeURIComponent(requestNo)}&verification_code=${encodeURIComponent(verifyCode)}`;
-        let data;
-        if (window.ClientAPI) {
-          data = await window.ClientAPI.get(`/services/requests/track?request_no=${encodeURIComponent(requestNo)}&verification_code=${encodeURIComponent(verifyCode)}`);
-        } else {
-          const res = await fetch(url);
-          data = await res.json();
-        }
+        const res = await fetch(url, {cache:'no-store', credentials:'same-origin'});
+        const data = await res.json();
+        if(sequence!==trackRequestSequence || document.getElementById('trackModal').style.display!=='flex' || document.getElementById('trackRequestNoInput').value.trim()!==requestNo || document.getElementById('trackVerifyCodeInput').value.trim()!==verifyCode)return;
+        if(silent && ((document.getElementById('guestMessage')?.value||'') || (document.getElementById('guestQuoteNote')?.value||'') || (document.activeElement?.tagName==='TEXTAREA' && resContainer.contains(document.activeElement))))return;
 
         if (!data || !data.success || !data.request) {
           throw new Error(data?.message || 'الطلب غير موجود');
         }
 
         const r = data.request;
+        const panel=document.querySelector('#trackModal .track-modal-panel');
+        const oldScroll=panel?.scrollTop||0;
         const statusMap = {
           'new': { text: 'طلب جديد (قيد المراجعة الأولية)', color: '#60a5fa' },
           'under_review': { text: 'قيد المراجعة الفنية ودراسة المخططات', color: '#f59e0b' },
           'pricing': { text: 'جاري إعداد عرض السعر وجداول الكميات', color: '#fbbf24' },
+          'pending_manager': { text: 'بانتظار موافقة الإدارة', color: '#fbbf24' },
+          'manager_changes': { text: 'قيد تعديل العرض', color: '#fbbf24' },
+          'client_changes': { text: 'أعيد بملاحظاتك', color: '#fbbf24' },
+          'client_accepted': { text: 'تمت الموافقة على العرض', color: '#34d399' },
           'quoted': { text: 'تم إعداد عرض السعر والتواصل معكم', color: '#34d399' },
           'converted': { text: 'تم اعتماده وتحويله لمشروع رسمي', color: '#10b981' },
           'rejected': { text: 'ملغي أو معتذر عنه', color: '#f87171' }
@@ -1286,21 +1392,65 @@
 
         resContainer.innerHTML = `
           <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--gold); border-radius: 14px; padding: 14px; font-size: 0.82rem; text-align: right;">
-            <div style="font-weight: 800; color: #FFFFFF; font-size: 0.95rem; margin-bottom: 6px;">طلب رقم: <span style="color: var(--gold);">${r.request_no}</span></div>
+            <div style="font-weight: 800; color: #FFFFFF; font-size: 0.95rem; margin-bottom: 6px;">طلب رقم: <span style="color: var(--gold);">${escapeHtml(r.request_no)}</span></div>
             <div style="margin-bottom: 4px;">العميل: <b>${escapeHtml(r.client_name)}</b></div>
-            <div style="margin-bottom: 4px;">الحالة: <b style="color: ${st.color};">${st.text}</b></div>
-            ${r.quoted_amount ? `<div style="margin-bottom: 4px;">مبلغ عرض السعر: <b style="color: #34d399;">${r.quoted_amount} ${r.currency || 'YER'}</b></div>` : ''}
-            ${r.admin_notes ? `<div style="margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 8px;">ملاحظات الإدارة: ${escapeHtml(r.admin_notes)}</div>` : ''}
+            <div style="margin-bottom: 4px;">الحالة: <b style="color: ${st.color};">${escapeHtml(st.text)}</b></div>
+            ${r.quoted_amount != null ? `<div style="margin-bottom: 4px;">مبلغ عرض السعر: <b style="color: #34d399;">${escapeHtml(r.quoted_amount)} ${escapeHtml(r.currency || 'YER')}</b></div>` : ''}
+            ${r.quote ? `<div style="white-space:pre-wrap;margin-top:10px">تفاصيل العرض: ${escapeHtml(r.quote.details)}<br>مدة التنفيذ: ${escapeHtml(r.quote.duration)}</div>${r.status === 'quoted' && r.source === 'guest' ? `<textarea id="guestQuoteNote" class="form-input-srv" placeholder="ملاحظاتك عند طلب التعديل"></textarea><button class="btn btn-primary" onclick="guestQuoteResponse(${Number(r.quote.id)},'accept')">الموافقة على العرض</button> <button class="btn btn-secondary" onclick="guestQuoteResponse(${Number(r.quote.id)},'changes')">إعادة العرض بملاحظات</button>` : ''}` : ''}
+            ${r.messages && r.source === 'guest' ? `<div><h4>مراسلات الطلب</h4>${r.messages.map(m=>`<p>${escapeHtml(m.actor_type==='guest'?'أنت':'رواسي عدن')}: ${escapeHtml(m.message)}</p>`).join('')}<textarea id="guestMessage" class="form-input-srv" maxlength="4000" aria-describedby="guestMessageFeedback" oninput="clearGuestMessageFeedback()" placeholder="رسالة إلى مشرف الخدمة"></textarea><p id="guestMessageFeedback" class="guest-message-feedback" role="status" aria-live="polite" hidden></p><button id="guestSendMessageBtn" type="button" class="btn btn-secondary" onclick="guestSendMessage()">إرسال الرسالة</button></div>` : ''}
             <div style="margin-top: 8px; color: var(--text-muted); font-size: 0.75rem;">تاريخ التقديم: ${new Date(r.created_at).toLocaleString('ar-YE')}</div>
           </div>
         `;
+        if(silent && panel)panel.scrollTop=oldScroll;
+        if(document.getElementById('guestMessage'))document.getElementById('guestMessage').value=draftMessage;
+        if(document.getElementById('guestQuoteNote'))document.getElementById('guestQuoteNote').value=draftQuote;
       } catch (err) {
+        if(silent || sequence!==trackRequestSequence)return;
         resContainer.innerHTML = `
           <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 10px; color: #fca5a5; font-size: 0.8rem; text-align: center;">
-            <i class="fa-solid fa-circle-exclamation"></i> ${err.message}
+            <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(err.message)}
           </div>
         `;
       }
+    }
+
+    function clearGuestMessageFeedback() {
+      const feedback=document.getElementById('guestMessageFeedback');
+      const input=document.getElementById('guestMessage');
+      if(feedback){feedback.hidden=true;feedback.textContent='';}
+      if(input)input.removeAttribute('aria-invalid');
+    }
+
+    async function guestSendMessage() {
+      const input=document.getElementById('guestMessage');
+      const feedback=document.getElementById('guestMessageFeedback');
+      const button=document.getElementById('guestSendMessageBtn');
+      if(!input || !feedback || !button || button.disabled)return;
+      const message=input.value.trim();
+      if(!message){
+        feedback.textContent='يرجى كتابة رسالتك أولاً، فلا يمكن إرسال رسالة فارغة.';
+        feedback.hidden=false;input.setAttribute('aria-invalid','true');input.focus();return;
+      }
+      clearGuestMessageFeedback();button.disabled=true;
+      try {
+        const response=await fetch('/api/client-portal/services/requests/guest-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),message})});
+        const data=await response.json();
+        if(!response.ok || !data.success)throw new Error(data.message||'تعذر إرسال الرسالة');
+        input.value='';await executeTrackRequest();
+      } catch(err) {
+        feedback.textContent='تعذر إرسال الرسالة الآن. يرجى التحقق من الاتصال والمحاولة مجددًا.';
+        feedback.hidden=false;
+      } finally {button.disabled=false;}
+    }
+
+    async function guestQuoteResponse(quoteId,decision) {
+      const note=document.getElementById('guestQuoteNote').value.trim();
+      if(decision==='changes'&&!note){alert('يرجى كتابة الملاحظات');return;}
+      if(decision==='accept'&&!confirm('تأكيد الموافقة على عرض السعر؟'))return;
+      try {
+        const response=await fetch('/api/client-portal/services/requests/guest-response',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),decision,quote_id:quoteId,note})});
+        const data=await response.json();if(!data.success)throw new Error(data.message);await executeTrackRequest();
+      } catch(err){alert(err.message||'تعذر إرسال الرد');}
     }
 
     function escapeHtml(str) {

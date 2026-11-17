@@ -161,23 +161,27 @@ const Accounting = {
   voucherAccounts(kind) {
     const byId = new Map([...(this.allAccounts || []), ...(this.accounts || [])].map(account => [String(account.id), account]));
     return (this.accounts || []).filter(account => {
-      if (kind !== 'expense') return true;
+      if (kind !== 'expense' && kind !== 'receipt') return true;
+      let receiptAllowed = false;
       const seen = new Set();
       for (let current = account; current && !seen.has(current); current = byId.get(String(current.parent_id))) {
         seen.add(current);
         const text = `${current.type || current.account_type || ''} ${current.name || current.account_name || ''}`
           .normalize('NFKC').toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآ]/g, 'ا');
-        if (/ايراد|revenue|income/.test(text) || String(current.code || current.account_code || '').startsWith('4')) return false;
+        const code = String(current.code || current.account_code || '');
+        const revenue = /ايراد|revenue|income/.test(text) || code.startsWith('4');
+        if (kind === 'expense' && revenue) return false;
+        if (revenue || code.startsWith('11101') || code.startsWith('11102') || ['cash', 'bank'].includes(current.analytical_type)) receiptAllowed = true;
       }
-      return true;
+      return kind === 'receipt' ? receiptAllowed : true;
     });
   },
 
   refreshAllAccountSelects() {
     if (this.accounts && this.accounts.length) {
       const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${this.financialTypeLabel(a.type || a.account_type)})`;
-      this.populateSelectCustom('rcAccountSelect', this.accounts, formatLeafAcc);
-      this.populateSelectCustom('modalRcAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('rcAccountSelect', this.voucherAccounts('receipt'), formatLeafAcc);
+      this.populateSelectCustom('modalRcAccountSelect', this.voucherAccounts('receipt'), formatLeafAcc);
       this.populateSelectCustom('expAccountSelect', this.voucherAccounts('expense'), formatLeafAcc);
       this.populateSelectCustom('modalExpAccountSelect', this.voucherAccounts('expense'), formatLeafAcc);
       this.populateSelectCustom('modalCustodyAccountSelect', this.accounts, formatLeafAcc);
@@ -186,7 +190,7 @@ const Accounting = {
       // تعيين الحسابات الافتراضية الذكية للشاشات السريعة إن لم تكن محددة
       const rcAcc = document.getElementById('rcAccountSelect');
       if (rcAcc && (!rcAcc.value || rcAcc.value === '')) {
-        const defClientAcc = this.accounts.find(a => (a.code && a.code.startsWith('123')) || (a.name && a.name.includes('عملاء')));
+        const defClientAcc = this.voucherAccounts('receipt').find(a => /revenue|إيراد|ايراد/.test(a.type) || String(a.code).startsWith('4'));
         if (defClientAcc) rcAcc.value = defClientAcc.id;
       }
 
@@ -238,7 +242,8 @@ const Accounting = {
     if (!el || !el.options || !Array.isArray(items)) return;
     const isExpense = ['expAccountSelect', 'modalExpAccountSelect'].includes(elementId);
     if (isExpense) items = this.voucherAccounts.call({ accounts: items, allAccounts: this.allAccounts }, 'expense');
-    const defaultOption = el.options[0] && !el.options[0].value ? el.options[0].outerHTML : '<option value="">اختر...</option>';
+    const operationCenter = ['rcCostCenterSelect', 'modalRcCostCenterSelect', 'expCostCenterSelect', 'modalExpCostCenterSelect', 'reviewVoucherCostCenter'].includes(elementId);
+    const defaultOption = operationCenter ? '<option value="">تلقائي من الحساب / بدون مركز</option>' : el.options[0] && !el.options[0].value ? el.options[0].outerHTML : '<option value="">اختر...</option>';
     el.innerHTML = defaultOption + items.map(item => `<option value="${item.id}">${formatFn(item)}</option>`).join('');
   },
 
@@ -1192,7 +1197,7 @@ const Accounting = {
     // ملء قوائم الحسابات، المشاريع، ومراكز التكلفة فوراً
     if (this.accounts && this.accounts.length) {
       const formatLeafAcc = a => `${a.code || a.account_code} - ${a.name || a.account_name} (${this.financialTypeLabel(a.type || a.account_type)})`;
-      this.populateSelectCustom('modalRcAccountSelect', this.accounts, formatLeafAcc);
+      this.populateSelectCustom('modalRcAccountSelect', this.voucherAccounts('receipt'), formatLeafAcc);
     }
     if (this.costCenters && this.costCenters.length) {
       this.populateSelectCustom('modalRcCostCenterSelect', this.costCenters, cc => `${cc.code} - ${cc.name}`);
@@ -1260,7 +1265,7 @@ const Accounting = {
     const local_amount = currency === 'ر.ي' ? Number(amount) : (parseFloat(document.getElementById('modalRcLocalAmount')?.value) || (Number(amount) * exchange_rate));
     const settlement_account_id = document.getElementById('modalRcFinancialAccountSelect')?.value || null;
     const notes = document.getElementById('modalRcNotes').value;
-    const idempotency_key = 'rc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const idempotency_key = this.financialSaveKey('modalReceiptForm');
 
     if (!client_id && !client_name) {
       App.showToast('يرجى اختيار أو كتابة اسم العميل', 'error');
@@ -1320,6 +1325,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('modalReceiptForm');
         App.showToast(data.message || 'تم حفظ السند', 'success');
         App.closeModal('newReceiptModal');
         const form = document.getElementById('modalReceiptForm');
@@ -1337,8 +1343,7 @@ const Accounting = {
             App.openClientChainModal(client_id);
           }
         }
-        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
-        this.loadCashMovement();
+
         
         // إمكانية الطباعة الفورية
         if (confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
@@ -1409,7 +1414,7 @@ const Accounting = {
     try {
       const res = await fetch('/api/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': this.financialSaveKey('quickReceiptForm') },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('rcSupportingFiles'),
           type: 'قبض',
@@ -1430,6 +1435,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('quickReceiptForm');
         App.showToast(`تم حفظ سند القبض بنجاح (${data.receipt_no})`, 'success');
         this.resetReceiptForm();
         this.fetchNextNumbers();
@@ -1516,7 +1522,7 @@ const Accounting = {
     try {
       const res = await fetch('/api/expenses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': this.financialSaveKey('quickExpenseForm') },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('expSupportingFiles'),
           expense_type,
@@ -1538,6 +1544,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('quickExpenseForm');
         App.showToast(`تم حفظ سند الصرف بنجاح (${data.receipt_no})`, 'success');
         this.resetExpenseForm();
         this.fetchNextNumbers();
@@ -1805,14 +1812,14 @@ const Accounting = {
       return;
     }
 
-    const idempotency_key = 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const idempotency_key = this.financialSaveKey('modalExpenseForm');
 
     try {
       const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': idempotency_key
+          'Idempotency-Key': idempotency_key
         },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('modalExpSupportingFiles'),
@@ -1839,6 +1846,7 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('modalExpenseForm');
         App.showToast(`تم حفظ سند الصرف بنجاح (${data.receipt_no})`, 'success');
         App.closeModal('newExpenseModal');
         const form = document.getElementById('modalExpenseForm');
@@ -2461,7 +2469,8 @@ const Accounting = {
     document.getElementById('clientPartyNo').value = '';
     document.getElementById('clientModalTitle').textContent = 'إضافة عميل جديد';
     document.getElementById('clientStatusGroup').hidden = true;
-    document.getElementById('clientPrevBal').disabled = false;
+    document.getElementById('clientPrevBal').disabled = true;
+    document.getElementById('clientOpeningBalanceGroup').hidden = true;
     App.openModal('newClientModal');
   },
 
@@ -2473,6 +2482,7 @@ const Accounting = {
       const client = json.data;
       this.openNewClientModal();
       document.getElementById('clientEditId').value = id;
+      document.getElementById('clientOpeningBalanceGroup').hidden = false;
       document.getElementById('clientPartyNo').value = client.party_no || '';
       document.getElementById('clientModalTitle').textContent = 'تعديل بيانات العميل';
       document.getElementById('clientStatusGroup').hidden = false;
@@ -2517,7 +2527,7 @@ const Accounting = {
         method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name, company, phone, email, address, previous_balance: editId ? undefined : previous_balance, currency, notes,
+          name, company, phone, email, address, previous_balance: editId ? undefined : 0, currency, notes,
           status: editId ? document.getElementById('clientStatus').value : undefined,
           account_code: '12301001'
         })
@@ -3013,7 +3023,17 @@ const Accounting = {
     if (modal) modal.style.display = 'none';
   },
 
+  setSupplierCreationMode(isNew) {
+    for (const [id, display] of [['supplierPaymentPolicyFields', 'grid'], ['supplierAdditionalFields', 'block']]) {
+      const section = document.getElementById(id);
+      if (section) { section.hidden = isNew; section.style.display = isNew ? 'none' : display; }
+    }
+    const paymentType = document.getElementById('suppPaymentDocType');
+    if (paymentType) { paymentType.disabled = isNew; paymentType.required = !isNew; }
+  },
+
   openNewSupplierModal(targetSelectId = null) {
+    this.setSupplierCreationMode(true);
     this._targetSupplierSelectId = targetSelectId;
     const form = document.getElementById('newSupplierForm');
     if (form) form.reset();
@@ -3061,6 +3081,7 @@ const Accounting = {
 
   async openEditSupplierModal(supplierId) {
     if (!supplierId) return;
+    this.setSupplierCreationMode(false);
     const form = document.getElementById('newSupplierForm');
     if (form) form.reset();
 
@@ -3307,6 +3328,11 @@ const Accounting = {
       delete payload.balance;
       delete payload.bank_iban;
       delete payload.supply_lead_time_days;
+      if (!isEdit) {
+        delete payload.payment_document_type;
+        delete payload.invoice_attachment;
+        delete payload.notes;
+      }
       payload.status = isEdit ? document.getElementById('supplierStatus').value : 'active';
       const res = await fetch(url, {
         method,
@@ -3423,7 +3449,7 @@ const Accounting = {
         <td style="text-align: center;">
           <div style="display: flex; gap: 6px; justify-content: center;">
             <button class="btn btn-sm btn-secondary" onclick="Accounting.viewJournalDetails(${je.id})" title="عرض تفاصيل وسطور القيد">👁️ تفاصيل</button>
-            ${je.status === 'draft' ? `<button class="btn btn-sm btn-secondary" onclick="Accounting.editJournalDraft(${je.id})">تعديل</button><button class="btn btn-sm btn-primary" onclick="Accounting.postDraft('journal', ${je.id})">ترحيل</button>` : ''}
+            ${je.status === 'draft' ? `<button class="btn btn-sm btn-secondary" onclick="Accounting.editJournalDraft(${je.id})">تعديل</button><button class="btn btn-sm btn-primary" onclick="Accounting.postDraft('journal', ${je.id})">ترحيل</button>${this.draftDeleteButton('journal', je.id)}` : ''}
             <button class="btn btn-sm btn-secondary" onclick="Accounting.viewSupportingDocuments('journal', ${je.id})">📎 المؤيدات</button><button class="btn btn-sm btn-primary" onclick="Accounting.printJournalEntryById(${je.id})" title="طباعة أو حفظ PDF">🖨️ PDF</button>
           </div>
         </td>
@@ -3549,7 +3575,7 @@ const Accounting = {
       </td>
       <td>
         <select class="form-control je-line-cost-center" aria-label="مركز تكلفة السطر" style="font-size: 0.85rem;" onchange="Accounting.onJournalAccountChange('${rowId}')">
-          <option value="">بدون مركز تكلفة...</option>
+          <option value="">تلقائي من الحساب / بدون مركز</option>
           ${centerOptions}
         </select>
       </td>
@@ -3710,17 +3736,7 @@ const Accounting = {
       return;
     }
 
-    // 1. فحص فوري لحالة الفترة المحاسبية
-    try {
-      const pCheck = await (await fetch(`/api/accounting/check-period?date=${date}`)).json();
-      if (pCheck && pCheck.isOpen === false) {
-        App.showToast(pCheck.message || 'الفترة المحاسبية لهذا التاريخ مغلقة رسمياً', 'error');
-        return;
-      }
-    } catch (err) {
-      console.warn('Period check warning:', err);
-    }
-
+    // The save endpoint validates the period; avoid a separate network round trip.
     const rows = document.querySelectorAll('#journalLinesTableBody tr');
     if (rows.length < 2) {
       App.showToast('يجب تسجيل سطرين على الأقل (طرف مدين وطرف دائن)', 'error');
@@ -3796,7 +3812,7 @@ const Accounting = {
       const editingId = this.editingJournalId;
       const res = await fetch('/api/accounting/journal-entries' + (editingId ? `/${editingId}` : ''), {
         method: editingId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': this.financialSaveKey('modalJournalForm') },
         body: JSON.stringify({
           supporting_documents: await this.readSupportingDocuments('modalJeSupportingFiles'),
           date,
@@ -3810,9 +3826,10 @@ const Accounting = {
       });
       const data = await res.json();
       if (data.success) {
+        this.completeFinancialSave('modalJournalForm');
         App.showToast(data.message || 'تم حفظ القيد بنجاح', 'success');
         App.closeModal('newJournalModal');
-        await this.loadJournalEntries();
+        this.loadJournalEntries();
         if (data.id || editingId) this.viewJournalDetails(data.id || editingId);
       } else {
         App.showToast(data.message || 'فشل حفظ القيد اليومي', 'error');
@@ -3848,6 +3865,66 @@ const Accounting = {
       tbody.lastElementChild.querySelector('.je-line-desc').value = line.notes || '';
     }
     this.calcJournalBalance();
+  },
+
+  financialSaveKey(formId) {
+    return this._financialSaves?.[formId]?.key;
+  },
+
+  completeFinancialSave(formId) {
+    if (this._financialSaves) delete this._financialSaves[formId];
+    try { sessionStorage.removeItem('financial-save:' + formId); } catch {}
+  },
+
+  async withFinancialSave(formId, operation) {
+    this._financialBusy ||= {};
+    if (this._financialBusy[formId]) return;
+    const form = document.getElementById(formId);
+    if (!form) return;
+    this._financialBusy[formId] = true;
+    const buttons = Array.from(form.querySelectorAll('[type="submit"]'));
+    const previous = buttons.map(button => [button, button.disabled, button.innerHTML]);
+    try {
+      const signature = JSON.stringify([this.editingJournalId || null, Array.from(form.querySelectorAll('input, select, textarea')).map(input =>
+        [input.id, input.value, input.checked, Array.from(input.files || []).map(file => [file.name, file.size, file.lastModified])])]);
+      let state = this._financialSaves?.[formId];
+      try { state = JSON.parse(sessionStorage.getItem('financial-save:' + formId)) || state; } catch {}
+      if (!state || state.signature !== signature) state = { signature, key: 'save_' + (globalThis.crypto?.randomUUID?.() || Date.now() + '_' + Math.random().toString(36).slice(2)) };
+      this._financialSaves ||= {};
+      this._financialSaves[formId] = state;
+      try { sessionStorage.setItem('financial-save:' + formId, JSON.stringify(state)); } catch {}
+      for (const button of buttons) { button.disabled = true; button.textContent = 'جاري الحفظ...'; }
+      return await operation();
+    } finally {
+      this._financialBusy[formId] = false;
+      for (const [button, disabled, html] of previous) { button.disabled = disabled; button.innerHTML = html; }
+    }
+  },
+
+  draftDeleteButton(kind, id) {
+    const permission = { journal: 'accounting:approve', expense: 'expenses:cancel', receipt: 'revenues:cancel' }[kind];
+    if (!permission || typeof Auth === 'undefined' || !Auth.hasPermission(permission)) return '';
+    return `<button type="button" class="btn btn-danger btn-sm" onclick="Accounting.deleteDraft('${kind}', ${Number(id)})">حذف المسودة</button>`;
+  },
+
+  async deleteDraft(kind, id) {
+    const route = { journal: 'accounting/journal-entries', expense: 'expenses', receipt: 'payments' }[kind];
+    if (!route || !confirm('هل تريد حذف هذه المسودة قبل الترحيل؟')) return;
+    this._deletingDrafts ||= new Set();
+    const key = kind + ':' + id;
+    if (this._deletingDrafts.has(key)) return;
+    this._deletingDrafts.add(key);
+    try {
+      const response = await fetch(`/api/${route}/${Number(id)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'تعذر حذف المسودة');
+      App.showToast(result.message, 'success');
+      App.closeModal('voucherReviewModal');
+      if (kind === 'journal') await this.loadJournalEntries();
+      else if (kind === 'expense') await App.loadExpensesTable();
+      else await App.loadRevenuesTable();
+    } catch (error) { App.showToast(error.message, 'error'); }
+    finally { this._deletingDrafts.delete(key); }
   },
 
   async postDraft(kind, id) {
@@ -4211,7 +4288,7 @@ const Accounting = {
     if (!tbody) return;
 
     if (!accounts || accounts.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد حسابات مسجلة في الدليل</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد حسابات مسجلة في الدليل</td></tr>`;
       return;
     }
 
@@ -4244,13 +4321,11 @@ const Accounting = {
         </td>
         <td>
           <strong style="${isRestricted ? 'text-decoration: line-through;' : ''}">${a.name || a.account_name}</strong>
-          ${a.parent_name ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">تابع لـ: ${a.parent_code} - ${a.parent_name}</div>` : ''}
-          <div style="font-size:0.75rem;color:var(--text-secondary)">نوع الحساب التحليلي: ${{general:"عام",cash:"صندوق",bank:"بنك",employee_receivables:"ذمم موظفين",customers:"عملاء",suppliers:"موردين"}[a.analytical_type] || "عام"}</div>
-          ${a.default_cost_center_name ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">مركز التكلفة: ${a.default_cost_center_code || ''} - ${a.default_cost_center_name}</div>` : ''}
+          <div style="font-size:0.75rem;color:var(--text-secondary)">رقم الحساب التحليلي: ${this.escapeJournalDescription(String(a.code || a.account_code || ''))}</div><div style="font-size:0.75rem;color:var(--text-secondary)">نوع الحساب التحليلي: ${{general:"عام",cash:"صندوق",bank:"بنك",employee_receivables:"ذمم موظفين",customers:"عملاء",suppliers:"موردين"}[a.analytical_type] || "عام"}</div>
+          <div style="font-size: 0.75rem; color: var(--text-secondary);">استخدام مراكز التكلفة: ${Number(a.cost_center_required) === 1 ? 'إلزامي' : 'غير إلزامي'}</div>
         </td>
         <td><span class="badge" style="${typeBadges[a.type || a.account_type] || 'background: #334155; color: #fff;'}">${this.financialTypeLabel(a.type || a.account_type)}</span></td>
         <td>${levelBadge}</td>
-        <td style="font-weight: bold; font-family: monospace; direction: ltr; text-align: left;">${App.formatNumber(a.current_balance || a.balance || 0)} ر.ي</td>
         <td style="text-align: center;">
           ${isRestricted 
             ? '<span class="badge" style="background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4);">🔒 موقوف / مقيد</span>' 
@@ -4297,35 +4372,54 @@ const Accounting = {
     select.value = selected;
   },
 
-  async loadAccountCostCenters(edit = false, selected = null) {
+  async loadAccountCostCenters(edit = false, required = 0, selected = null) {
+    const select = document.getElementById(edit ? 'editAccCostCenter' : 'modalAccCostCenter');
+    select.value = Number(required) === 1 ? '1' : '0';
     const response = await fetch('/api/accounting/cost-centers', { cache: 'no-store' });
     const result = await response.json();
     if (!response.ok || !result.success) throw new Error('تعذر تحميل مراكز التكلفة');
-    const select = document.getElementById(edit ? 'editAccCostCenter' : 'modalAccCostCenter');
-    select.replaceChildren(new Option('اختر مركز التكلفة...', ''));
-    for (const center of result.data || []) {
-      if (!center.status || center.status === 'active') select.add(new Option(`${center.code} - ${center.name}`, center.id));
-    }
-    select.value = selected ? String(selected) : '';
+    const centers = document.getElementById(edit ? 'editAccDefaultCostCenter' : 'modalAccDefaultCostCenter');
+    centers.replaceChildren(new Option('بدون مركز افتراضي', ''));
+    for (const center of result.data || []) if (!center.status || center.status === 'active') centers.add(new Option(center.code + ' - ' + center.name, center.id));
+    centers.value = selected ? String(selected) : '';
     this.updateAccountCenterRequirement(edit);
   },
 
   updateAccountCenterRequirement(edit = false) {
     const prefix = edit ? 'editAcc' : 'modalAcc';
-    const parentId = document.getElementById(prefix + 'ParentSelect')?.value;
-    const parent = (this.allAccounts || []).find(account => String(account.id) === String(parentId));
-    const typeSelect = document.getElementById(prefix + 'Type');
-    if (parent && typeSelect) typeSelect.value = parent.type;
-    const type = String(parent?.type || typeSelect?.value || '').trim().toLowerCase();
-    const required = ['expense', 'revenue', 'cost', 'مصروفات', 'تكاليف', 'إيرادات', 'ايرادات'].includes(type);
     const select = document.getElementById(prefix + 'CostCenter');
-    if (select) select.required = required;
+    if (select) select.required = true;
     const label = document.getElementById(prefix + 'CostCenterLabel');
-    if (label) label.textContent = required ? 'مركز التكلفة * (إلزامي لهذا النوع)' : 'مركز التكلفة (اختياري لهذا النوع)';
+    if (label) label.textContent = 'استخدام مراكز التكلفة لهذا الحساب';
+    const type = document.getElementById(prefix + 'Type')?.value;
+    const typeLabel = this.financialTypeLabel(type);
+    const required = ['المصروفات', 'الإيرادات', 'التكاليف'].includes(typeLabel) || select?.value === '1';
+    const center = document.getElementById(prefix + 'DefaultCostCenter');
+    if (center) center.required = required;
+    const centerLabel = document.getElementById(prefix + 'DefaultCostCenterLabel');
+    if (centerLabel) centerLabel.textContent = 'مركز التكلفة الافتراضي' + (required ? ' * (إلزامي لهذا الحساب)' : ' (اختياري)');
+  },
+
+  chooseAccountParent() {
+    const type = document.getElementById('modalAccType').value;
+    const candidates = (this.allAccounts || []).filter(account => this.financialTypeLabel(account.type) === this.financialTypeLabel(type) && [1, 2, 3, 5].includes(String(account.code).length) && (!account.status || account.status === 'active'));
+    candidates.sort((a, b) => String(b.code).length - String(a.code).length || String(a.code).localeCompare(String(b.code)));
+    document.getElementById('modalAccParentSelect').value = candidates[0] ? String(candidates[0].id) : '';
+  },
+
+  inferAccountParent(edit = false) {
+    const prefix = edit ? 'editAcc' : 'modalAcc';
+    const code = document.getElementById(prefix + 'Code').value.trim();
+    const length = { 2: 1, 3: 2, 5: 3, 8: 5 }[code.length];
+    const parent = length ? (this.allAccounts || []).find(account => String(account.code) === code.slice(0, length)) : null;
+    document.getElementById(prefix + 'ParentSelect').value = parent ? String(parent.id) : '';
+    if (parent) document.getElementById(prefix + 'Type').value = parent.type;
+    this.updateAccountCenterRequirement(edit);
+    this.analyticalAccountNumber(edit);
   },
 
   async openNewAccountModal() {
-    document.getElementById('modalAccAnalyticalType').value = 'general';
+    document.getElementById('modalAccAnalyticalType').value = '';
     const c = document.getElementById('modalAccCode');
     const n = document.getElementById('modalAccName');
     const t = document.getElementById('modalAccType');
@@ -4337,6 +4431,7 @@ const Accounting = {
     if (p) p.value = '';
     if (s) s.value = 'active';
     this.populateParentSelects();
+    this.chooseAccountParent();
     this.suggestAccountCode();
     try { await this.loadAccountCostCenters(); }
     catch (error) { return App.showToast(error.message, 'error'); }
@@ -4373,6 +4468,7 @@ const Accounting = {
       if (json.success && json.suggested_code) {
         if ((document.getElementById('modalAccParentSelect')?.value || '') !== parent_id) return;
         codeInput.value = json.suggested_code;
+        this.analyticalAccountNumber();
       } else {
         codeInput.value = '';
         App.showToast(json.message || 'تعذر اقتراح رقم الحساب', 'error');
@@ -4389,7 +4485,8 @@ const Accounting = {
     const type = document.getElementById('modalAccType')?.value?.trim();
     const parent_id = document.getElementById('modalAccParentSelect')?.value || null;
     const status = document.getElementById('modalAccStatus')?.value || 'active';
-    const default_cost_center_id = document.getElementById('modalAccCostCenter')?.value || null;
+    const cost_center_required = Number(document.getElementById('modalAccCostCenter').value);
+    const default_cost_center_id = document.getElementById('modalAccDefaultCostCenter').value || null;
 
     if (!code || !name || !type) {
       App.showToast('يرجى ملء جميع الحقول المطلوبة', 'error');
@@ -4400,7 +4497,7 @@ const Accounting = {
       const res = await fetch('/api/accounting/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, type, parent_id, status, default_cost_center_id, analytical_type: document.getElementById('modalAccAnalyticalType').value })
+        body: JSON.stringify({ code, name, type, parent_id, status, cost_center_required, default_cost_center_id, analytical_type: document.getElementById('modalAccAnalyticalType').value })
       });
       const data = await res.json();
       if (data.success) {
@@ -4427,6 +4524,7 @@ const Accounting = {
 
     document.getElementById('editAccId').value = acc.id;
     document.getElementById('editAccCode').value = acc.code || acc.account_code || '';
+    this.analyticalAccountNumber(true);
     document.getElementById('editAccName').value = acc.name || acc.account_name || '';
     this.populateAccountTypes('editAccType', acc.type || acc.account_type || 'asset');
     if (document.getElementById('editAccStatus')) {
@@ -4443,7 +4541,7 @@ const Accounting = {
           .join('');
     }
 
-    try { await this.loadAccountCostCenters(true, acc.default_cost_center_id); }
+    try { await this.loadAccountCostCenters(true, acc.cost_center_required, acc.default_cost_center_id); }
     catch (error) { return App.showToast(error.message, 'error'); }
     App.openModal('editAccountModal');
   },
@@ -4456,7 +4554,8 @@ const Accounting = {
     const type = document.getElementById('editAccType')?.value?.trim();
     const parent_id = document.getElementById('editAccParentSelect')?.value || null;
     const status = document.getElementById('editAccStatus')?.value || 'active';
-    const default_cost_center_id = document.getElementById('editAccCostCenter')?.value || null;
+    const cost_center_required = Number(document.getElementById('editAccCostCenter').value);
+    const default_cost_center_id = document.getElementById('editAccDefaultCostCenter').value || null;
 
     if (!id || !code || !name) {
       App.showToast('يرجى ملء جميع الحقول الإلزامية', 'error');
@@ -4467,7 +4566,7 @@ const Accounting = {
       const res = await fetch(`/api/accounting/accounts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, type, parent_id, status, default_cost_center_id, analytical_type: document.getElementById('editAccAnalyticalType').value })
+        body: JSON.stringify({ code, name, type, parent_id, status, cost_center_required, default_cost_center_id, analytical_type: document.getElementById('editAccAnalyticalType').value })
       });
       const data = await res.json();
       if (data.success) {
@@ -4654,7 +4753,10 @@ const Accounting = {
     document.getElementById('editCcCode').value = cc.code || '';
     document.getElementById('editCcName').value = cc.name || '';
     if (document.getElementById('editCcType')) {
-      document.getElementById('editCcType').value = cc.type || 'مشروع';
+      const select = document.getElementById('editCcType');
+      const type = cc.type || 'مشروع';
+      if (![...select.options].some(option => option.value === type)) select.add(new Option(type, type));
+      select.value = type;
     }
     if (document.getElementById('editCcStatus')) {
       document.getElementById('editCcStatus').value = cc.status || 'active';
@@ -4868,7 +4970,8 @@ const Accounting = {
   // ================== إدارة الفترات المحاسبية وإغلاق الحسابات ==================
   async openPeriodsModal() {
     let modal = document.getElementById('accountingPeriodsModal');
-    if (!modal) {
+    if (!modal || !document.getElementById('newPeriodFormContainer')) {
+      if (modal) modal.remove();
       modal = document.createElement('div');
       modal.id = 'accountingPeriodsModal';
       modal.className = 'modal-overlay';
@@ -4939,6 +5042,8 @@ const Accounting = {
     }
 
     App.openModal('accountingPeriodsModal');
+    const createPeriodButton = modal.querySelector('button[onclick="Accounting.showNewPeriodForm()"]');
+    if (createPeriodButton) createPeriodButton.hidden = typeof Auth === 'undefined' || !Auth.hasPermission('accounting:create');
     await this.loadPeriodsTable();
   },
 
@@ -4950,47 +5055,21 @@ const Accounting = {
   async loadPeriodsTable() {
     const tbody = document.getElementById('accountingPeriodsTableBody');
     if (!tbody) return;
-
     try {
-      const res = await fetch('/api/accounting/periods');
-      const json = await res.json();
-      if (!json.success || !json.data || json.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">لا توجد فترات محاسبية مسجلة</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = json.data.map(p => {
-        const isClosed = p.status === 'closed';
-        const badge = isClosed 
-          ? `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid #ef4444;">🔒 مغلقة</span>`
-          : `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid #22c55e;">🟢 مفتوحة</span>`;
-
-        let actionBtn = '';
-        if (isClosed) {
-          actionBtn = `<button class="btn btn-sm btn-warning" onclick="Accounting.promptReopenPeriod(${p.id}, '${p.period_name}')" style="padding: 3px 8px; font-size: 0.78rem;">🔓 إعادة فتح</button>`;
-        } else {
-          actionBtn = `<button class="btn btn-sm btn-danger" onclick="Accounting.promptClosePeriod(${p.id}, '${p.period_name}')" style="padding: 3px 8px; font-size: 0.78rem;">🔒 إغلاق الفترة</button>`;
-        }
-
-        const notes = isClosed 
-          ? `أغلقت بواسطة: ${p.closed_by || 'المدير'} ${p.closing_reason ? `(${p.closing_reason})` : ''}`
-          : (p.reopen_reason ? `أعيد فتحها: ${p.reopen_reason}` : 'جاهزة للعمليات');
-
-        return `
-          <tr>
-            <td style="font-weight: bold; color: #fff;">${p.period_name}</td>
-            <td>${p.start_date}</td>
-            <td>${p.end_date}</td>
-            <td>${badge}</td>
-            <td style="font-size: 0.8rem; color: var(--text-secondary);">${notes}</td>
-            <td style="text-align: center;">${actionBtn}</td>
-          </tr>
-        `;
-      }).join('');
-    } catch (e) {
-      console.error(e);
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #f87171;">فشل جلب الفترات المحاسبية</td></tr>';
-    }
+      const response = await fetch('/api/accounting/periods');
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'تعذر تحميل الفترات');
+      this.accountingPeriods = result.data || [];
+      const escape = value => this.escapeJournalDescription(String(value ?? ''));
+      const can = permission => typeof Auth !== 'undefined' && Auth.hasPermission(permission);
+      tbody.innerHTML = this.accountingPeriods.length ? this.accountingPeriods.map(period => {
+        const closed = period.status === 'closed';
+        const action = closed
+          ? (can('accounting:approve') ? '<button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.reopenAccountingPeriod(' + Number(period.id) + ')">إعادة فتح</button>' : '')
+          : (can('accounting:approve,accounting:close_period') ? '<button type="button" class="btn btn-danger btn-sm" onclick="Accounting.openPeriodToClose(' + Number(period.id) + ')">إغلاق الفترة</button>' : '');
+        return '<tr><td>' + escape(period.period_name) + '</td><td>' + escape(period.start_date) + '</td><td>' + escape(period.end_date) + '</td><td>' + (closed ? 'مغلقة' : 'مفتوحة') + '</td><td>' + escape(period.notes || period.reopen_reason || '') + '</td><td>' + action + '</td></tr>';
+      }).join('') : '<tr><td colspan="6">لا توجد فترات محاسبية مسجلة.</td></tr>';
+    } catch (error) { tbody.innerHTML = '<tr><td colspan="6">تعذر تحميل الفترات.</td></tr>'; App.showToast(error.message, 'error'); }
   },
 
   async submitNewPeriod() {
@@ -4998,7 +5077,7 @@ const Accounting = {
     const start_date = document.getElementById('newPeriodStart')?.value;
     const end_date = document.getElementById('newPeriodEnd')?.value;
 
-    if (!period_name || !start_date || !end_date) {
+    if (!period_name || !start_date || !end_date || start_date > end_date) {
       App.showToast('جميع الحقول مطلوبة لإضافة الفترة', 'error');
       return;
     }
@@ -5209,45 +5288,7 @@ const Accounting = {
   // ============================================================
   // 🔒 إدارة الفترات المحاسبية وإقفال الحسابات (Period Closing)
   // ============================================================
-  async loadPeriods() {
-    const tbody = document.getElementById('accountingPeriodsTableBody');
-    if (!tbody) return;
-
-    try {
-      const res = await fetch('/api/accounting/periods');
-      const json = await res.json();
-      if (!json.success || !json.data || json.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">لا توجد فترات محاسبية مسجلة</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = json.data.map(p => {
-        const isClosed = p.status === 'closed';
-        const badge = isClosed
-          ? `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171;">مغلقة رسمياً 🔒</span>`
-          : `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80;">مفتوحة للعمليات 🟢</span>`;
-
-        const actionBtn = isClosed
-          ? `<button type="button" class="btn btn-secondary btn-sm" data-action="reopen-period" data-period-id="${p.id}" onclick="Accounting.reopenPeriod(${p.id})">إعادة فتح 🔓</button>`
-          : `<button type="button" class="btn btn-danger btn-sm" data-action="close-period-modal" data-period-id="${p.id}" data-period-name="${p.period_name}" onclick="Accounting.openClosePeriodModal(${p.id}, '${p.period_name}', '${p.start_date}', '${p.end_date}')">إقفال الفترة 🔒</button>`;
-
-        return `
-          <tr>
-            <td><strong>${p.period_name}</strong></td>
-            <td>${p.fiscal_year}</td>
-            <td>${p.start_date}</td>
-            <td>${p.end_date}</td>
-            <td>${badge}</td>
-            <td style="font-size: 0.85rem; color: var(--text-secondary);">${isClosed ? (p.closed_by || 'المدير المالي') : '—'}</td>
-            <td>${actionBtn}</td>
-          </tr>
-        `;
-      }).join('');
-    } catch (e) {
-      console.error('Error loading periods:', e);
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #f87171;">تعذر تحميل الفترات المحاسبية</td></tr>';
-    }
-  },
+  async loadPeriods() { return this.loadPeriodsTable(); },
 
   openClosePeriodModal(periodId, periodName, startDate = '', endDate = '') {
     let modal = document.getElementById('periodCloseModal');
@@ -5606,6 +5647,16 @@ const Accounting = {
     }
   }
 };
+
+
+// Guard before any validation/file read/network await, including Enter and double clicks.
+for (const [method, form] of [["submitReceiptVoucherModal","modalReceiptForm"],["submitReceiptVoucher","quickReceiptForm"],["submitExpenseVoucher","quickExpenseForm"],["submitExpenseVoucherModal","modalExpenseForm"],["submitJournalEntryModal","modalJournalForm"]]) {
+  const save = Accounting[method];
+  Accounting[method] = function(event) {
+    event?.preventDefault();
+    return this.withFinancialSave(form, () => save.call(this, event));
+  };
+}
 
 if (typeof window !== 'undefined') {
   window.Accounting = Accounting;

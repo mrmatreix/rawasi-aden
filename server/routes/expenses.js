@@ -1,3 +1,4 @@
+const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
 const router = express.Router();
@@ -94,7 +95,7 @@ router.get('/types-summary', requirePermission('expenses:view'), async (req, res
 });
 
 // إنشاء سند صرف جديد (مسودة أو ترحيل فوري) مع توثيق المنشئ وفحص الفترة
-router.post('/', requirePermission('expenses:create'), async (req, res) => {
+router.post('/', requirePermission('expenses:create'), financialSave, async (req, res) => {
   try {
     const {
       expense_type,
@@ -232,7 +233,8 @@ router.post('/', requirePermission('expenses:create'), async (req, res) => {
         if (bExists) validBankAccId = bExists.id;
       }
     }
-    const finalCcId = await AccountingService.resolveOptionalCostCenter(cost_center_id);
+    let finalCcId = await AccountingService.resolveAccountOperationCenter(leafAccount, cost_center_id);
+    if (settlementAccount) finalCcId = await AccountingService.resolveAccountOperationCenter(settlementAccount, finalCcId);
 
     const accId = leafAccount.id;
     const rawCreatorId = req.user?.id || null;
@@ -514,6 +516,8 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
       : exp.payment_method === 'تحويل بنكي' ? (await AccountingService.resolveBankAccount(exp.bank_account_id, exp.bank_name)).coaAccount : await AccountingService.resolveCashAccount();
 
     await transaction(async (tx) => {
+      const current = await lockFinancialDocument(tx, 'expenses', exp.id);
+      if (current.status !== exp.status) throw Object.assign(new Error('تغيّرت حالة المستند؛ حدّث السجل قبل الترحيل'), { statusCode: 409 });
       const purchase = await tx.get('SELECT * FROM project_purchases WHERE linked_expense_id = ? LIMIT 1', [exp.id]);
       const labor = await tx.get('SELECT * FROM project_labor_expenses WHERE linked_expense_id = ? LIMIT 1', [exp.id]);
       if (purchase && labor) throw new Error('لا يمكن ربط السند ببندين معاً');
@@ -612,7 +616,7 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
     const method = req.body.payment_method ?? exp.payment_method;
     const accountId = Number(req.body.account_id ?? exp.account_id);
     const settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id);
-    const costCenterId = await AccountingService.resolveOptionalCostCenter(
+    const costCenterId = await AccountingService.resolveAccountOperationCenter(await AccountingService.assertLeafAccount(accountId),
       req.body.cost_center_id !== undefined ? req.body.cost_center_id : exp.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {
@@ -721,8 +725,13 @@ router.delete('/:id', requirePermission('expenses:cancel'), async (req, res) => 
     await FinancialControlService.assertPeriodOpen(exp.date);
 
     // فك أي روابط بنود فرعية تشير لهذه المسودة قبل حذفها (حتى لا تبقى معلقة)
-    await ProjectCostService.clearLinksToExpense(req.params.id);
-    await run('DELETE FROM expenses WHERE id = ?', [req.params.id]);
+    await ProjectCostService.ensureSchema();
+    await transaction(async tx => {
+      FinancialControlService.assertDeletable(await lockFinancialDocument(tx, 'expenses', req.params.id));
+      await ProjectCostService.clearLinksToExpense(req.params.id, tx);
+      await tx.run("DELETE FROM supporting_documents WHERE entity_type = 'expense' AND entity_id = ?", [req.params.id]);
+      await tx.run('DELETE FROM expenses WHERE id = ?', [req.params.id]);
+    });
 
     await logAudit(req, {
       action: 'DELETE_DRAFT',

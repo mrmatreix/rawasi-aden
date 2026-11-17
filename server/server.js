@@ -80,6 +80,7 @@ app.use('/api/material-management', requireAuth, require('./routes/material_mana
 app.use('/api/project-closeout', requireAuth, require('./routes/project_closeout'));
 app.use('/api/profitability', requireAuth, require('./routes/profitability'));
 app.use('/api/cash-flow', requireAuth, require('./routes/cash_flow'));
+app.use('/api/project-setup', requireAuth, require('./routes/project_setup'));
 app.use('/api/contracts', requireAuth, require('./routes/contract_lifecycle'));
 app.use('/api/contracts', requireAuth, require('./routes/contract_alerts'));
 app.use('/api/client-portal', require('./routes/client_portal'));
@@ -272,6 +273,9 @@ if (require.main === module) {
     console.log(`🌐 System URL: http://localhost:${PORT}`);
     console.log(`💼 Port:       ${PORT}`);
     console.log('===========================================================');
+
+    if (process.env.ENABLE_SERVICE_REQUEST_RETENTION !== 'false') try { require('./services/serviceRequestRetentionService').start(); }
+    catch (err) { console.error('Request retention scheduler failed:',err.message); }
 
     if (!config.schedulersEnabled) return;
 

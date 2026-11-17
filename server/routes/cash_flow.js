@@ -28,7 +28,7 @@ router.get('/', requirePermission('accounting:view,reports:view,cash:view'), asy
     res.json(data);
   } catch (error) {
     console.error('❌ [CashFlow API] خطأ أثناء جلب قائمة التدفقات النقدية الفعلية:', error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       code: 'REPORT_ERROR',
       message: 'تعذر جلب قائمة التدفقات النقدية الفعلية',
@@ -48,7 +48,7 @@ router.get('/statement', requirePermission('accounting:view,reports:view,cash:vi
     res.json(data);
   } catch (error) {
     console.error('❌ [CashFlow API] خطأ أثناء جلب بيان التدفق النقدي:', error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       code: 'REPORT_ERROR',
       message: 'تعذر جلب بيان التدفق النقدي',
@@ -79,7 +79,7 @@ router.get('/projection', requirePermission('accounting:view,reports:view'), asy
     res.json(data);
   } catch (error) {
     console.error('❌ [CashFlow API] خطأ أثناء جلب توقعات التدفق النقدي:', error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: 'تعذر جلب توقعات التدفق النقدي',
       error: error.message
@@ -103,7 +103,7 @@ router.get('/month/:month', requirePermission('accounting:view,reports:view'), a
     });
   } catch (error) {
     console.error(`❌ [CashFlow API] خطأ أثناء جلب تدفق شهر [${req.params.month}]:`, error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: 'تعذر جلب تفاصيل الشهر المحدد',
       error: error.message
@@ -123,7 +123,7 @@ router.get('/project/:projectId', requirePermission('projects:view,accounting:vi
     res.json(data);
   } catch (error) {
     console.error(`❌ [CashFlow API] خطأ أثناء جلب تدفق المشروع [${req.params.projectId}]:`, error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'تعذر جلب تدفق المشروع',
       error: error.message
@@ -144,7 +144,7 @@ router.get('/scenarios', requirePermission('accounting:view,reports:view'), asyn
     res.json(data);
   } catch (error) {
     console.error('❌ [CashFlow API] خطأ أثناء توليد سيناريوهات التدفق النقدي:', error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: 'تعذر توليد سيناريوهات التدفق النقدي',
       error: error.message
@@ -168,7 +168,7 @@ router.post('/projection/regenerate', requirePermission('accounting:create,accou
     });
   } catch (error) {
     console.error('❌ [CashFlow API] خطأ أثناء إعادة توليد التوقعات:', error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: 'فشلت إعادة احتساب توقعات التدفق النقدي',
       error: error.message

@@ -9,6 +9,14 @@ const ProjectCostService = require('../services/projectCostService');
 const FinancialControlService = require('../services/financialControlService');
 const CashBoxService = require('../services/cashBoxService');
 const { checkPeriodOpen } = require('../services/periodService');
+async function catalogReference(value, previous = null) {
+  if (value === undefined) return previous;
+  if (value === null || value === '') return null;
+  const id = Number(value);
+  const item = Number.isInteger(id) && id > 0 ? await get('SELECT id,status FROM work_item_catalog WHERE id=?', [id]) : null;
+  if (!item || (item.status !== 'active' && id !== Number(previous)) || await get('SELECT id FROM work_item_catalog WHERE parent_id=?', [id])) throw Object.assign(new Error('اختر بندًا مرجعيًا طرفيًا نشطًا'), {statusCode:400});
+  return id;
+}
 
 // فرض نطاق المشروع الإلزامي وحماية العمليات على كافة مسارات إدارة المشاريع
 router.use('/:projectId', requireScope({ projectParam: 'projectId' }), (req, res, next) => {
@@ -377,7 +385,7 @@ router.post('/:projectId/boq', async (req, res) => {
 
     const {
       item_no, description, category = 'أعمال خرسانية', unit = 'م3',
-      contract_qty = 0, executed_qty = 0, unit_rate = 0, status = 'جاري التنفيذ', notes
+      contract_qty = 0, executed_qty = 0, unit_rate = 0, status = 'جاري التنفيذ', notes = ''
     } = req.body;
 
     if (!item_no || !description) {
@@ -387,21 +395,22 @@ router.post('/:projectId/boq', async (req, res) => {
     const cQty = Number(contract_qty) || 0;
     const rate = Number(unit_rate) || 0;
     const total = cQty * rate;
+    const workItem = await catalogReference(req.body.work_item_id);
 
     const result = await run(`
       INSERT INTO project_boq (
         project_id, item_no, description, category, unit,
-        contract_qty, executed_qty, unit_rate, total_amount, status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        contract_qty, executed_qty, unit_rate, total_amount, status, notes, work_item_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       projectId, item_no, description, category, unit,
-      cQty, Number(executed_qty) || 0, rate, total, status, notes
+      cQty, Number(executed_qty) || 0, rate, total, status, notes, workItem
     ]);
 
     const created = await get('SELECT * FROM project_boq WHERE id = ?', [result.lastInsertRowid]);
     res.json({ success: true, message: 'تمت إضافة بند جدول الكميات بنجاح', data: created });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء إضافة بند BOQ', error: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.statusCode ? err.message : 'خطأ أثناء إضافة بند BOQ', error: err.message });
   }
 });
 
@@ -697,12 +706,13 @@ router.get('/:projectId/boq/sample-template', async (req, res) => {
 router.put('/:projectId/boq/:id', async (req, res) => {
   try {
     const {
-      item_no, description, category, unit,
+      item_no = null, description = null, category = null, unit = null,
       contract_qty, executed_qty, unit_rate, status, notes
     } = req.body;
 
     const existing = await get('SELECT * FROM project_boq WHERE id = ? AND project_id = ?', [req.params.id, req.params.projectId]);
     if (!existing) return res.status(404).json({ success: false, message: 'البند غير موجود' });
+    const workItem = await catalogReference(req.body.work_item_id, existing.work_item_id);
 
     const cQty = contract_qty !== undefined ? Number(contract_qty) : existing.contract_qty;
     const rate = unit_rate !== undefined ? Number(unit_rate) : existing.unit_rate;
@@ -719,17 +729,17 @@ router.put('/:projectId/boq/:id', async (req, res) => {
         unit_rate = ?,
         total_amount = ?,
         status = COALESCE(?, status),
-        notes = COALESCE(?, notes)
+        notes = COALESCE(?, notes), work_item_id = ?
       WHERE id = ? AND project_id = ?
     `, [
       item_no, description, category, unit,
       cQty, executed_qty !== undefined ? Number(executed_qty) : null,
-      rate, total, status, notes, req.params.id, req.params.projectId
+      rate, total, status ?? null, notes ?? null, workItem, req.params.id, req.params.projectId
     ]);
 
     res.json({ success: true, message: 'تم تحديث بند جدول الكميات بنجاح' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -764,9 +774,9 @@ router.post('/:projectId/quotations', async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const {
-      quotation_no, client_id, title, date, valid_until,
-      items_json, subtotal = 0, discount = 0, tax_vat = 0, total_amount = 0,
-      currency = 'ر.ي', payment_terms, delivery_period, status = 'مسودة', notes
+      quotation_no, client_id, title, date, valid_until = null,
+      items_json = null, subtotal = 0, discount = 0, tax_vat = 0, total_amount = 0,
+      currency = 'ر.ي', payment_terms = '', delivery_period = '', status = 'مسودة', notes = ''
     } = req.body;
 
     const countRes = await get('SELECT COUNT(*) as cnt FROM project_quotations');

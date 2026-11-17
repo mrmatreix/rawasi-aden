@@ -6,11 +6,76 @@
 
 const express = require('express');
 const router = express.Router();
-router.use(require('../middleware/security').requirePermission('settings:users'));
+router.use(async (req,res,next)=>{
+  const path=req.path,read=req.method==='GET';let action=read?'view':req.method==='DELETE'?'delete':req.method==='POST'&&path==='/'?'create':'edit';
+  if(req.user.role==='service_supervisor') {
+    if(!path.startsWith('/service-requests') || /\/(assignee|convert-to-project|manager-decision|message-decision)$/.test(path))return res.status(403).json({success:false,message:'الإجراء غير متاح لحساب المشرف'});
+    const match=path.match(/^\/service-requests\/(\d+)(?:\/|$)/);
+    if(match){try{const request=await require('../database/db').get('SELECT assigned_to FROM service_requests WHERE id=?',[Number(match[1])]);if(!request||Number(request.assigned_to)!==Number(req.user.id))return res.status(404).json({success:false,message:'الطلب غير موجود أو غير مسند إليك'});}catch{return res.status(500).json({success:false,message:'تعذر التحقق من نطاق الطلب'});}}
+  }
+  if(path==='/service-request-supervisor')action='requests_assign_supervisor';
+  else if(path.startsWith('/services-catalog'))action=read?'view':'services';
+  else if(path.startsWith('/messages'))action='messages';
+  else if(path.startsWith('/service-requests'))action=read||path.endsWith('/read-messages')?'requests_view':path.endsWith('/convert-to-project')?'requests_convert':'requests_edit';
+  else if(path.endsWith('/reset-password'))action='reset_password';
+  else if(path.endsWith('/revoke-sessions'))action='sessions';
+  else if(/\/(invite-preview|send-invite)$/.test(path))action='invite';
+  else if(path.endsWith('/projects')&&!read)action='permissions';
+  require('../middleware/security').requirePermission('client_app:'+action)(req,res,next);
+});
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../database/db');
 const { logAudit } = require('../services/auditService');
+const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
+const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
+const retention = require('../services/serviceRequestRetentionService');
+function isRequestSupervisor(user) {
+  if(!user)return false;
+  let permissions=[];try{permissions=JSON.parse(user.permissions||user.role_permissions||'[]');}catch{}
+  return ['client_app:requests_view','client_app:requests_edit','client_app:requests_review'].every(permission=>require('../middleware/security').hasUserPermission({...user,permissions},permission));
+}
+async function findRequestSupervisor(id) {
+  return db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[id]);
+}
+
+router.get('/guest-access-settings', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  try {const row=await db.get("SELECT value FROM settings WHERE `key`='guest_request_access_days'");const days=Number(row?.value);res.json({success:true,days:Number.isInteger(days)&&days>=1&&days<=365?days:30});} catch {res.status(500).json({success:false,message:'تعذر قراءة الإعداد'});}
+});
+router.get('/service-request-retention', async (req,res) => {
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  try{res.json({success:true,days:await retention.getDays(),scheduler_enabled:process.env.ENABLE_SERVICE_REQUEST_RETENTION!=='false'});}catch{res.status(500).json({success:false,message:'تعذر قراءة مدة الاحتفاظ'});}
+});
+router.put('/service-request-retention', async (req,res) => {
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  const days=req.body.days===null?null:Number(req.body.days);if(days!==null&&(!Number.isInteger(days)||days<1||days>3650))return res.status(400).json({success:false,message:'حدد مدة من يوم إلى 3650 يوماً أو عطل الحذف التلقائي'});
+  try{if(days===null)await db.run('DELETE FROM settings WHERE `key`=?',[retention.DAYS_KEY]);else await db.run('INSERT OR REPLACE INTO settings (`key`,value) VALUES (?,?)',[retention.DAYS_KEY,String(days)]);await logAudit(req,{action:'SERVICE_REQUEST_RETENTION_SET',entity_type:'settings',details:days?`حذف الطلبات غير المؤرشفة بعد ${days} يوم من إنشائها`:'تعطيل الحذف التلقائي'});res.json({success:true,days});}catch{res.status(500).json({success:false,message:'تعذر حفظ مدة الاحتفاظ'});}
+});
+router.put('/guest-access-settings', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'الإعداد متاح للمدير العام'});
+  const days=Number(req.body.days);if(!Number.isInteger(days)||days<1||days>365)return res.status(400).json({success:false,message:'اختر مدة من يوم إلى 365 يوماً'});
+  try {const row=await db.get("SELECT `key` FROM settings WHERE `key`='guest_request_access_days'");if(row)await db.run("UPDATE settings SET `value`=? WHERE `key`='guest_request_access_days'",[String(days)]);else await db.run("INSERT INTO settings (`key`,`value`) VALUES ('guest_request_access_days',?)",[String(days)]);await logAudit(req,{action:'GUEST_ACCESS_DAYS_SET',entity_type:'settings',details:`مدة متابعة الزائر ${days} يوم`});res.json({success:true,days});}catch{res.status(500).json({success:false,message:'تعذر حفظ الإعداد'});}
+});
+
+router.get('/service-request-supervisor', async (req,res) => {
+  try {const row=await db.get("SELECT value FROM settings WHERE `key`='service_request_supervisor_id'");res.json({success:true,supervisor_id:Number(row?.value)||null});}
+  catch(err){res.status(500).json({success:false,message:'تعذر قراءة إعداد المشرف'});}
+});
+router.put('/service-request-supervisor', async (req,res) => {
+  try {
+    const id=Number(req.body.supervisor_id);
+    const user=await db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[id]);
+    if(!user) return res.status(400).json({success:false,message:'اختر مستخدماً نشطاً'});
+    let permissions=[];try{permissions=JSON.parse(user.permissions||user.role_permissions||'[]');}catch{}
+    if(!['client_app:requests_view','client_app:requests_edit','client_app:requests_review'].every(permission=>require('../middleware/security').hasUserPermission({...user,permissions},permission)))return res.status(400).json({success:false,message:'المشرف يحتاج صلاحيات عرض الطلبات وتحديثها واعتماد مراجعتها'});
+    const existing=await db.get("SELECT `key` FROM settings WHERE `key`='service_request_supervisor_id'");
+    if(existing) await db.run("UPDATE settings SET `value`=? WHERE `key`='service_request_supervisor_id'",[String(id)]);
+    else await db.run("INSERT INTO settings (`key`,`value`) VALUES ('service_request_supervisor_id',?)",[String(id)]);
+    await logAudit(req,{action:'SERVICE_REQUEST_SUPERVISOR_SET',entity_type:'users',entity_id:id,details:'تعيين مشرف استقبال طلبات الخدمات'});
+    res.json({success:true});
+  } catch(err){console.error('supervisor setting',err);res.status(500).json({success:false,message:'تعذر حفظ إعداد المشرف'});}
+});
 
 /**
  * GET /api/admin/client-users
@@ -77,6 +142,128 @@ router.get('/stats', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب إحصائيات الإدارة' });
+  }
+});
+
+// =========================================================================
+// كتالوج الخدمات المعروضة للزوار والعملاء في بوابة العملاء
+// =========================================================================
+router.get('/services-catalog', async (req, res) => {
+  try {
+    const services = await db.query(`
+      SELECT id, code, title, category, description, icon, is_active, display_order, created_at
+      FROM engineering_services
+      ORDER BY CASE category
+        WHEN 'design' THEN 10 WHEN 'execution' THEN 20 WHEN 'finishing' THEN 30
+        WHEN 'systems' THEN 40 WHEN 'infrastructure' THEN 50 WHEN 'consulting' THEN 60
+        WHEN 'supply' THEN 70 ELSE 90 END, display_order ASC, id ASC
+    `);
+    res.json({ success: true, services: services || [] });
+  } catch (err) {
+    console.error('Fetch services catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر تحميل كتالوج الخدمات' });
+  }
+});
+
+router.post('/services-catalog', async (req, res) => {
+  try {
+    const { code, title, category, description, icon, display_order, is_active } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    if (!cleanTitle || cleanTitle.length > 200) return res.status(400).json({ success: false, message: 'اسم الخدمة مطلوب وبحد أقصى 200 حرف' });
+    const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 50) || null;
+    const duplicate = cleanCode ? await db.get('SELECT id FROM engineering_services WHERE code = ?', [cleanCode]) : null;
+    if (duplicate) return res.status(409).json({ success: false, message: 'رمز الخدمة مستخدم مسبقاً' });
+    const result = await db.run(`
+      INSERT INTO engineering_services (code, title, category, description, icon, is_active, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, parseDisplayOrder(display_order)]);
+    const serviceId = result.lastID || result.lastInsertRowid || result.insertId || result.id;
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_CREATE', entity_type: 'engineering_services', entity_id: serviceId, details: `إضافة خدمة للبوابة: ${cleanTitle}` });
+    res.status(201).json({ success: true, id: serviceId, message: 'تمت إضافة الخدمة وستظهر للزوار عند تفعيلها' });
+  } catch (err) {
+    console.error('Create service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر إضافة الخدمة' });
+  }
+});
+
+// كتالوج جاهز قابل للإدراج مرة واحدة؛ لا يستبدل الخدمات أو التعديلات الموجودة.
+const RECOMMENDED_VISITOR_SERVICES = [
+  ['ARCH-DESIGN', 'التصميم المعماري والإنشائي', 'design', 'إعداد المخططات المعمارية والإنشائية المتكاملة وفق احتياج المشروع والمتطلبات الفنية.', 'fa-solid fa-compass-drafting', 10],
+  ['ENG-SUPERVISION', 'الإشراف الهندسي وإدارة المشاريع', 'design', 'متابعة التنفيذ وضبط الجودة والبرنامج الزمني والتنسيق بين أطراف المشروع.', 'fa-solid fa-helmet-safety', 20],
+  ['GENERAL-CONTRACT', 'المقاولات العامة وتسليم المفتاح', 'execution', 'تنفيذ المشروع كاملاً من التجهيز وحتى التسليم وفق المواصفات والاتفاق المعتمد.', 'fa-solid fa-building', 30],
+  ['BUILD-CONSTRUCT', 'تنفيذ المباني السكنية والتجارية', 'execution', 'تنفيذ الفلل والمباني والمنشآت التجارية بأعمال إنشائية منظمة ومتابعة مستمرة.', 'fa-solid fa-city', 40],
+  ['RENOVATION', 'الترميم والتأهيل والصيانة', 'finishing', 'معالجة وتجديد المباني القائمة وتحسين كفاءتها ومظهرها.', 'fa-solid fa-screwdriver-wrench', 50],
+  ['FINISHING', 'التشطيبات الداخلية والخارجية', 'finishing', 'أعمال التشطيبات المتكاملة للأسقف والجدران والأرضيات والواجهات.', 'fa-solid fa-paint-roller', 60],
+  ['INTERIOR-DESIGN', 'التصميم والديكور الداخلي', 'finishing', 'تصميم المساحات الداخلية واختيار الخامات والألوان وتنفيذ الديكور.', 'fa-solid fa-couch', 70],
+  ['WATER-SEWER', 'شبكات المياه والصرف الصحي', 'infrastructure', 'تصميم وتنفيذ شبكات المياه والصرف والتوصيلات الداخلية والخارجية.', 'fa-solid fa-faucet-drip', 80],
+  ['ELECTRICAL', 'الأعمال الكهربائية', 'systems', 'تنفيذ التمديدات واللوحات والإنارة وأنظمة الحماية الكهربائية.', 'fa-solid fa-bolt', 90],
+  ['SOLAR-ENERGY', 'أنظمة الطاقة الشمسية', 'systems', 'تصميم وتركيب حلول الطاقة الشمسية المناسبة للمباني والمنشآت.', 'fa-solid fa-solar-panel', 100],
+  ['HVAC-FIRE', 'التكييف والتهوية وأنظمة الحريق', 'systems', 'حلول التكييف والتهوية والإنذار والإطفاء بما يلائم المشروع.', 'fa-solid fa-temperature-arrow-down', 110],
+  ['PERMITS', 'المخططات والتراخيص الهندسية', 'consulting', 'إعداد المخططات والملفات المطلوبة للإجراءات والتراخيص الهندسية.', 'fa-solid fa-file-signature', 120],
+  ['QUANTITY-SURVEY', 'حصر الكميات وإعداد المقايسات', 'consulting', 'إعداد جداول الكميات والمواصفات والتكلفة التقديرية للمشروع.', 'fa-solid fa-ruler-combined', 130],
+  ['FEASIBILITY', 'دراسات الجدوى والتسعير الفني', 'consulting', 'تحليل الاحتياجات والتكلفة والبدائل وإعداد عرض فني أولي.', 'fa-solid fa-chart-line', 140],
+  ['SURVEY', 'الرفع المساحي وتخطيط المواقع', 'infrastructure', 'رفع الموقع وتحديد المناسيب والحدود وتجهيز بيانات التخطيط والتنفيذ.', 'fa-solid fa-map-location-dot', 150],
+  ['SUPPLY-INSTALL', 'توريد وتركيب المواد والمعدات', 'supply', 'توريد وتركيب المواد والمعدات ذات الصلة بالمشروع حسب المواصفات المعتمدة.', 'fa-solid fa-truck-fast', 160]
+];
+
+router.post('/services-catalog/add-recommended', async (req, res) => {
+  try {
+    let added = 0;
+    let normalized = 0;
+    const legacyCategories = new Set(['التصميم والإشراف', 'المقاولات', 'ترميم وصيانة', 'تشطيبات', 'بنية تحتية', 'أنظمة', 'استشارات', 'توريد', 'survey']);
+    for (const [code, title, category, description, icon, displayOrder] of RECOMMENDED_VISITOR_SERVICES) {
+      const exists = await db.get('SELECT id, category FROM engineering_services WHERE code = ?', [code]);
+      if (exists) {
+        if (legacyCategories.has(exists.category)) {
+          await db.run('UPDATE engineering_services SET category = ? WHERE id = ?', [category, exists.id]);
+          normalized += 1;
+        }
+        continue;
+      }
+      await db.run(`INSERT INTO engineering_services (code, title, category, description, icon, is_active, display_order) VALUES (?, ?, ?, ?, ?, 1, ?)`, [code, title, category, description, icon, displayOrder]);
+      added += 1;
+    }
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_RECOMMENDED_SEED', entity_type: 'engineering_services', entity_id: null, details: `إضافة ${added} خدمة مقترحة وتوحيد ${normalized} نوع خدمة في كتالوج الزوار` });
+    res.json({ success: true, added, normalized, total: RECOMMENDED_VISITOR_SERVICES.length, message: added ? `تمت إضافة ${added} خدمة مقترحة وتنسيق ${normalized} خدمة` : normalized ? `تم تنسيق أنواع ${normalized} خدمة موجودة` : 'جميع الخدمات المقترحة موجودة ومنسقة مسبقاً' });
+  } catch (err) {
+    console.error('Add recommended services error:', err);
+    res.status(500).json({ success: false, message: 'تعذر إضافة الخدمات المقترحة' });
+  }
+});
+
+router.put('/services-catalog/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT id, title FROM engineering_services WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'الخدمة غير موجودة' });
+    const { code, title, category, description, icon, display_order, is_active } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    if (!cleanTitle || cleanTitle.length > 200) return res.status(400).json({ success: false, message: 'اسم الخدمة مطلوب وبحد أقصى 200 حرف' });
+    const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 50) || null;
+    const duplicate = cleanCode ? await db.get('SELECT id FROM engineering_services WHERE code = ? AND id != ?', [cleanCode, id]) : null;
+    if (duplicate) return res.status(409).json({ success: false, message: 'رمز الخدمة مستخدم مسبقاً' });
+    await db.run(`UPDATE engineering_services SET code = ?, title = ?, category = ?, description = ?, icon = ?, is_active = ?, display_order = ? WHERE id = ?`, [cleanCode, cleanTitle, String(category || 'general').trim().slice(0, 100), String(description || '').trim().slice(0, 2000), String(icon || 'fa-solid fa-compass-drafting').trim().slice(0, 100), is_active === false || is_active === 0 ? 0 : 1, parseDisplayOrder(display_order), id]);
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_UPDATE', entity_type: 'engineering_services', entity_id: id, details: `تعديل خدمة البوابة: ${existing.title} → ${cleanTitle}` });
+    res.json({ success: true, message: 'تم حفظ تعديل الخدمة' });
+  } catch (err) {
+    console.error('Update service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر تعديل الخدمة' });
+  }
+});
+
+router.delete('/services-catalog/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT id, title FROM engineering_services WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'الخدمة غير موجودة' });
+    const used = await db.get('SELECT COUNT(*) AS count FROM service_request_items WHERE service_id = ?', [id]);
+    if (Number(used?.count || 0) > 0) return res.status(409).json({ success: false, message: 'لا يمكن حذف خدمة مرتبطة بطلبات سابقة؛ أخفها بدلاً من ذلك' });
+    await db.run('DELETE FROM engineering_services WHERE id = ?', [id]);
+    await logAudit(req, { action: 'ENGINEERING_SERVICE_DELETE', entity_type: 'engineering_services', entity_id: id, details: `حذف خدمة غير مستخدمة من البوابة: ${existing.title}` });
+    res.json({ success: true, message: 'تم حذف الخدمة' });
+  } catch (err) {
+    console.error('Delete service catalog error:', err);
+    res.status(500).json({ success: false, message: 'تعذر حذف الخدمة' });
   }
 });
 
@@ -320,6 +507,7 @@ router.get('/:id/details', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    if (typeof req.body.password !== 'string' || req.body.password.length < 6 || req.body.password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور وتأكيدها غير متطابقين'});
     const { client_id, email, password, full_name, phone, role, status, two_factor_enabled, project_ids } = req.body;
 
     if (!client_id || !email || !password || !full_name) {
@@ -461,6 +649,7 @@ router.put('/:id', async (req, res) => {
     }
 
     const updates = [];
+    if(role&&role!==user.role&&!require('../middleware/security').hasUserPermission(req.user,'client_app:permissions'))return res.status(403).json({success:false,message:'تغيير دور حساب العميل يتطلب صلاحية تعيين الصلاحيات'});
     const params = [];
 
     if (full_name) { updates.push('full_name = ?'); params.push(String(full_name).trim()); }
@@ -489,7 +678,7 @@ router.put('/:id', async (req, res) => {
       entity_type: 'client_users',
       entity_id: userId,
       old_values: user,
-      new_values: req.body,
+      new_values: {full_name,phone,role,status,two_factor_enabled},
       details: `تحديث بيانات حساب العميل (${user.full_name}) - الحالة الجديدة: ${status || user.status}`
     });
 
@@ -505,11 +694,13 @@ router.put('/:id', async (req, res) => {
  */
 router.post('/:id/reset-password', async (req, res) => {
   try {
+    if (req.body.new_password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور وتأكيدها غير متطابقين'});
     const userId = parseInt(req.params.id, 10);
     const { new_password } = req.body;
 
-    if (!new_password || String(new_password).length < 6) {
-      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل' });
+    const password = String(new_password || '');
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تتكون من 6 خانات على الأقل' });
     }
 
     const user = await db.get(`SELECT id, full_name, email FROM client_users WHERE id = ?`, [userId]);
@@ -518,9 +709,9 @@ router.post('/:id/reset-password', async (req, res) => {
     }
 
     const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(String(new_password), salt);
+    const hash = bcrypt.hashSync(password, salt);
 
-    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
+    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, otp_code = NULL, otp_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_PASSWORD_RESET',
@@ -529,15 +720,44 @@ router.post('/:id/reset-password', async (req, res) => {
       details: `تمت إعادة تعيين كلمة المرور لحساب العميل: ${user.full_name} (${user.email})`
     });
 
-    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور بنجاح وإبطال الجلسات السابقة' });
+    res.json({ success: true, message: 'تمت إعادة تعيين كلمة المرور وإلغاء ربط الجهاز ورمز التحقق السابقين' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في إعادة تعيين كلمة المرور' });
   }
 });
 
+const makeTempPassword = () => `Rawasi#${crypto.randomBytes(5).toString('base64url')}`;
+const makeOtpCode = () => crypto.randomInt(100000, 1000000).toString();
+const buildInviteText = ({ fullName, email, tempPassword, otpCode, portalUrl, message }) => {
+  const greeting = String(message || `مرحباً ${fullName}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.`).trim();
+  return `${greeting}\n\nالبريد: ${email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${portalUrl}`;
+};
+
+// معاينة قابلة للتحرير: لا تحفظ كلمة مرور ولا رمزاً قبل تأكيد الإرسال.
+router.get('/:id/invite-preview', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const user = await db.get(`SELECT id, full_name, email, phone, status FROM client_users WHERE id = ?`, [userId]);
+    if (!user) return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
+    if (user.status !== 'active') return res.status(400).json({ success: false, message: 'لا يمكن إرسال دعوة لحساب غير نشط' });
+    const portalUrl = `${req.protocol}://${req.get('host')}/client-app/`;
+    res.json({
+      success: true,
+      preview: {
+        user_id: user.id, full_name: user.full_name, email: user.email, phone: user.phone,
+        temp_password: makeTempPassword(), otp_code: makeOtpCode(), expiry_days: 7,
+        message: `مرحباً ${user.full_name}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.`,
+        portal_url: portalUrl
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر تجهيز معاينة دعوة التفعيل' });
+  }
+});
+
 /**
  * POST /api/admin/client-users/:id/send-invite
- * توليد ودعوة العميل لتفعيل حسابه ودخوله لأول مرة (Invitation / Temp Access)
+ * يثبت بيانات الدخول فقط بعد مراجعة المدير وتأكيده للإرسال.
  */
 router.post('/:id/send-invite', async (req, res) => {
   try {
@@ -547,23 +767,38 @@ router.post('/:id/send-invite', async (req, res) => {
       return res.status(404).json({ success: false, message: 'حساب العميل غير موجود' });
     }
 
-    // إنشاء كلمة مرور مؤقتة وتثبيتها
-    const tempPassword = 'Rawasi#' + crypto.randomBytes(3).toString('hex').toUpperCase();
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    if (user.status !== 'active') return res.status(400).json({ success: false, message: 'لا يمكن إرسال دعوة لحساب غير نشط' });
+    const requested = req.body || {};
+    const tempPassword = String(requested.temp_password || makeTempPassword()).trim();
+    const otpCode = String(requested.otp_code || makeOtpCode()).trim();
+    const expiryDays = Math.max(1, Math.min(30, Number(requested.expiry_days) || 7));
+    const portalUrl = `${req.protocol}://${req.get('host')}/client-app/`;
+    if (tempPassword.length < 10 || tempPassword.length > 128) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور المؤقتة يجب أن تكون بين 10 و128 حرفاً' });
+    }
+    if (!/^\d{6}$/.test(otpCode)) {
+      return res.status(400).json({ success: false, message: 'رمز OTP يجب أن يتكون من 6 أرقام إنجليزية' });
+    }
+    const message = String(requested.message || '').trim().slice(0, 600);
+    const defaultShareText = buildInviteText({ fullName: user.full_name, email: user.email, tempPassword, otpCode, portalUrl, message });
+    const whatsappShareText = String(requested.whatsapp_share_text || defaultShareText).trim().slice(0, 2500);
+    if (!whatsappShareText) {
+      return res.status(400).json({ success: false, message: 'نص رسالة واتساب لا يمكن أن يكون فارغاً' });
+    }
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(tempPassword, salt);
 
     await db.run(`
       UPDATE client_users 
-      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', '+7 days'), updated_at = CURRENT_TIMESTAMP 
+      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', ?), updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [hash, otpCode, userId]);
+    `, [hash, otpCode, `+${expiryDays} days`, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_INVITE_SENT',
       entity_type: 'client_users',
       entity_id: userId,
-      details: `تم إصداره وتجهيز دعوة تفعيل جديدة لحساب العميل: ${user.full_name}`
+      details: `تم اعتماد وتجهيز دعوة تفعيل جديدة لحساب العميل: ${user.full_name} (صلاحية رمز التفعيل: ${expiryDays} أيام)`
     });
 
     res.json({
@@ -576,8 +811,9 @@ router.post('/:id/send-invite', async (req, res) => {
         phone: user.phone,
         temp_password: tempPassword,
         otp_code: otpCode,
-        portal_url: `${req.protocol}://${req.get('host')}/client-app/`,
-        whatsapp_share_text: `مرحباً ${user.full_name}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.\n\nالبريد: ${user.email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${req.protocol}://${req.get('host')}/client-app/`
+        portal_url: portalUrl,
+        expiry_days: expiryDays,
+        whatsapp_share_text: whatsappShareText
       }
     });
   } catch (err) {
@@ -777,6 +1013,7 @@ router.get('/service-requests', async (req, res) => {
     `;
     const params = [];
 
+    if(req.user.role==='service_supervisor'){query+=' AND sr.assigned_to = ?';params.push(req.user.id);}
     if (status && status !== 'all') {
       query += ` AND sr.status = ?`;
       params.push(status);
@@ -794,6 +1031,8 @@ router.get('/service-requests', async (req, res) => {
     query += ` ORDER BY sr.id DESC`;
 
     const requests = await db.query(query, params);
+    const archiveRows=await db.query('SELECT `key` FROM settings WHERE `key` LIKE ?',['service_request_archive_%']);
+    const archiveSet=new Set((archiveRows||[]).map(row=>row.key));
 
     // إحصائيات الطلبات
     const stats = await db.get(`
@@ -806,15 +1045,16 @@ router.get('/service-requests', async (req, res) => {
         SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS converted_count,
         SUM(CASE WHEN source = 'guest' THEN 1 ELSE 0 END) AS guest_count,
         SUM(CASE WHEN source = 'registered_client' THEN 1 ELSE 0 END) AS registered_count
-      FROM service_requests
-    `);
+      FROM service_requests ${req.user.role==='service_supervisor'?'WHERE assigned_to = ?':''}
+    `,req.user.role==='service_supervisor'?[req.user.id]:[]);
 
     // جلب قائمة الموظفين للإسناد
-    const engineers = await db.query(`SELECT id, username, full_name AS name, role FROM users WHERE status = 'active' OR status IS NULL`);
+    const candidates = await db.query(`SELECT u.id,u.username,u.full_name AS name,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.status = 'active' OR u.status IS NULL`);
+    const engineers=req.user.role==='service_supervisor'?[]:(candidates||[]).filter(isRequestSupervisor).map(({id,username,name,role})=>({id,username,name,role}));
 
     res.json({
       success: true,
-      requests: requests || [],
+      requests: (requests || []).map(r=>({...r,is_archived:archiveSet.has(retention.archiveKey(r.id))})),
       engineers: engineers || [],
       stats: {
         total: Number(stats?.total_count || 0),
@@ -837,6 +1077,74 @@ router.get('/service-requests', async (req, res) => {
  * GET /api/admin/client-users/service-requests/:id
  * تفاصيل طلب خدمة محدد مع الخدمات المختارة والمرفقات
  */
+router.get('/service-requests/workflow-access', (req,res) => {
+  const can=permission=>require('../middleware/security').hasUserPermission(req.user,permission);
+  res.set('Cache-Control','no-store');
+  res.json({success:true,access:{user_id:req.user.id,can_view:can('client_app:requests_view'),can_edit:can('client_app:requests_edit'),can_review:can('client_app:requests_review'),can_convert:can('client_app:requests_convert'),can_assign_supervisor:can('client_app:requests_assign_supervisor'),is_manager:req.user.role==='admin'}});
+});
+
+router.get('/service-requests/contacts', async (req,res) => {
+  try {
+    const users=await db.query("SELECT u.id,u.username,u.full_name AS name,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.status='active' OR u.status IS NULL");
+    const contacts=(users||[]).filter(u=>{let permissions=[];try{permissions=JSON.parse(u.permissions||u.role_permissions||'[]');}catch{}return require('../middleware/security').hasUserPermission({...u,permissions},'client_app:requests_view');}).map(({id,username,name,role})=>({id,username,name,role}));
+    res.json({success:true,contacts});
+  }catch{res.status(500).json({success:false,message:'تعذر تحميل جهات التواصل'});}
+});
+
+router.get('/service-requests/inbox', async (req,res) => {
+  try {
+    const userId=Number(req.user.id),admin=req.user.role==='admin',scope=req.user.role==='service_supervisor'?' AND sr.assigned_to=?':'',params=req.user.role==='service_supervisor'?[userId]:[];
+    const incoming=admin?"'message_from_client','message_pending_approval'":"'message_from_client'";
+    const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.updated_at,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND (e.event_type IN (${incoming}) OR e.event_type=?)) AS last_incoming,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_from_client') AS last_guest,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_to_client') AS last_reply,
+      (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND (e.event_type IN ('message_from_client','message_to_client','message_pending_approval','message_declined') OR e.event_type IN (?,?))) AS last_message
+      FROM service_requests sr WHERE sr.source='guest' ${scope} ORDER BY sr.updated_at DESC,sr.id DESC`,[`internal_to_${userId}`,`internal_to_${userId}`,`internal_read_to_${userId}`,...params]);
+    const prefix=`staff_message_read_${userId}_`;
+    const marks=await db.query('SELECT `key`,value FROM settings WHERE `key` LIKE ?',[prefix+'%']);
+    const read=new Map((marks||[]).map(row=>[row.key,Number(row.value)||0]));
+    res.set('Cache-Control','no-store');
+    res.json({success:true,conversations:(rows||[]).filter(r=>r.last_message).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,updated_at:r.updated_at,unread:Number(r.last_incoming||0)>(read.get(prefix+r.id)||0),reply_status:r.last_guest?(Number(r.last_reply||0)>Number(r.last_guest)?'replied':'unanswered'):'none'}))});
+  }catch(err){console.error('service request inbox',err);res.status(500).json({success:false,message:'تعذر تحميل المراسلات'});}
+});
+
+router.post('/service-requests/:id/read-messages', async (req,res) => {
+  try {
+    const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({success:false,message:'رقم الطلب غير صالح'});
+    const request=await db.get('SELECT id FROM service_requests WHERE id=?',[id]);if(!request)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    const row=await db.get('SELECT MAX(id) AS id FROM service_request_events WHERE request_id=?',[id]);const key=`staff_message_read_${Number(req.user.id)}_${id}`,value=String(Number(row?.id)||0);
+    await db.transaction(async tx=>{const existing=await tx.get('SELECT `key` FROM settings WHERE `key`=?',[key]);if(existing)await tx.run('UPDATE settings SET value=? WHERE `key`=?',[value,key]);else await tx.run('INSERT INTO settings (`key`,value) VALUES (?,?)',[key,value]);});
+    res.json({success:true});
+  }catch(err){console.error('mark messages read',err);res.status(500).json({success:false,message:'تعذر تحديث حالة القراءة'});}
+});
+
+router.get('/service-requests/alerts', async (req,res) => {
+  try {
+    const admin=req.user.role==='admin';
+    const customerSupport=req.user.role!=='service_supervisor' && require('../middleware/security').hasUserPermission(req.user,'client_app:requests_assign_supervisor');
+    const unanswered=`EXISTS (SELECT 1 FROM service_request_events guest WHERE guest.request_id=sr.id AND guest.event_type='message_from_client' AND guest.id > COALESCE((SELECT MAX(reply.id) FROM service_request_events reply WHERE reply.request_id=sr.id AND reply.event_type IN ('message_pending_approval','message_approved','message_rejected','message_to_client')),0))`;
+    const returnedMessage=`EXISTS (SELECT 1 FROM service_request_events d WHERE d.request_id=sr.id AND d.event_type='message_declined' AND d.id > COALESCE((SELECT MAX(n.id) FROM service_request_events n WHERE n.request_id=sr.id AND n.event_type IN ('message_pending_approval','message_to_client')),0))`;
+    const internal=`EXISTS (SELECT 1 FROM service_request_events i WHERE i.request_id=sr.id AND i.event_type='internal_to_${Number(req.user.id)}')`;
+    const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered} OR ${internal})` : `((sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage})) OR ${internal}${customerSupport?" OR sr.status='new'":''})`;
+    const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
+      (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
+      FROM service_requests sr WHERE sr.source='guest' AND ${req.user.role==='service_supervisor'?`sr.assigned_to=${Number(req.user.id)} AND `:''}${work}
+      ORDER BY sr.updated_at DESC, sr.id DESC LIMIT 100`,admin?[]:[req.user.id]);
+    res.json({success:true,alerts:(rows||[]).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,status:r.status,pending_messages:admin?Number(r.pending_messages||0):0,updated_at:r.updated_at}))});
+  } catch(err){console.error('guest request alerts',err);res.status(500).json({success:false,message:'تعذر تحميل تنبيهات ردود الزوار'});}
+});
+
+router.put('/service-requests/:id/archive',async(req,res)=>{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الأرشفة متاحة للمدير العام فقط'});
+  const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<1||typeof req.body.archived!=='boolean')return res.status(400).json({success:false,message:'حدد حالة الأرشفة'});
+  try{if(!await retention.setArchived(id,req.body.archived))return res.status(404).json({success:false,message:'الطلب غير موجود'});await logAudit(req,{action:'SERVICE_REQUEST_ARCHIVE',entity_type:'service_requests',entity_id:id,details:req.body.archived?'حفظ الطلب في الأرشيف':'إلغاء أرشفة الطلب'});res.json({success:true,archived:req.body.archived});}catch{res.status(500).json({success:false,message:'تعذر تحديث الأرشيف'});}
+});
+router.delete('/service-requests/:id',async(req,res)=>{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,message:'الحذف متاح للمدير العام فقط'});
+  const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({success:false,message:'رقم الطلب غير صالح'});
+  try{const removed=await retention.deleteRequest(id);if(!removed)return res.status(404).json({success:false,message:'الطلب غير موجود'});await logAudit(req,{action:'SERVICE_REQUEST_DELETE',entity_type:'service_requests',entity_id:id,details:`حذف الطلب ${removed.request_no} يدوياً`});res.json({success:true,cleanupPending:removed.cleanupPending,message:removed.cleanupPending?'تم حذف الطلب؛ إزالة بعض المرفقات قيد المتابعة':'تم حذف الطلب ومحتوياته'});}catch(err){console.error('request deletion',err);res.status(500).json({success:false,message:'تعذر حذف الطلب'});}
+});
 router.get('/service-requests/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -844,7 +1152,7 @@ router.get('/service-requests/:id', async (req, res) => {
       SELECT 
         sr.*,
         u.username AS assigned_username,
-        u.name AS assigned_name
+        COALESCE(u.full_name, u.username) AS assigned_name
       FROM service_requests sr
       LEFT JOIN users u ON sr.assigned_to = u.id
       WHERE sr.id = ?
@@ -860,6 +1168,9 @@ router.get('/service-requests/:id', async (req, res) => {
       LEFT JOIN engineering_services es ON sri.service_id = es.id
       WHERE sri.request_id = ?
     `, [id]);
+    await db.run('UPDATE service_request_events SET event_type=? WHERE request_id=? AND event_type=?',[`internal_read_to_${Number(req.user.id)}`,id,`internal_to_${Number(req.user.id)}`]);
+    const quotes = await db.query('SELECT * FROM service_request_quotes WHERE request_id = ? ORDER BY version DESC', [id]);
+    const events = await db.query('SELECT * FROM service_request_events WHERE request_id = ? ORDER BY id DESC', [id]);
 
     let attachments = [];
     try {
@@ -873,7 +1184,7 @@ router.get('/service-requests/:id', async (req, res) => {
       request: {
         ...request,
         attachments,
-        items: items || []
+        items: items || [], quotes, events
       }
     });
   } catch (err) {
@@ -885,6 +1196,24 @@ router.get('/service-requests/:id', async (req, res) => {
  * PUT /api/admin/client-users/service-requests/:id
  * تحديث حالة طلب الخدمة، تعيين موظف، حفظ عرض السعر وملاحظات الإدارة
  */
+router.put('/service-requests/:id/assignee', async (req,res) => {
+  const id=Number(req.params.id), assigneeId=Number(req.body.assigned_to);
+  if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(assigneeId)||assigneeId<=0)return res.status(400).json({success:false,message:'حدد الموظف أو المهندس المسؤول'});
+  try {
+    const assignee=await findRequestSupervisor(assigneeId);
+    if(!isRequestSupervisor(assignee))return res.status(400).json({success:false,message:'اختر مشرفاً نشطاً يملك صلاحيات عرض الطلبات وتحديثها واعتماد مراجعتها'});
+    const saved=await db.transaction(async tx=>{
+      const request=await tx.get('SELECT id FROM service_requests WHERE id=?',[id]);if(!request)return false;
+      await tx.run('UPDATE service_requests SET assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',[assigneeId,id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'request_assigned',`تم إسناد الطلب للمستخدم ${assigneeId}`]);
+      return true;
+    });
+    if(!saved)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await logAudit(req,{action:'SERVICE_REQUEST_ASSIGNED',entity_type:'service_requests',entity_id:id,details:`إسناد الطلب للمستخدم ${assigneeId}`});
+    res.json({success:true});
+  } catch(err){console.error('assign service request',err);res.status(500).json({success:false,message:'تعذر تعيين المسؤول'});}
+});
+
 router.put('/service-requests/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -894,17 +1223,30 @@ router.put('/service-requests/:id', async (req, res) => {
     if (!request) {
       return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
     }
+    if(req.user.role==='service_supervisor' && ((assigned_to!==undefined && Number(assigned_to)!==Number(request.assigned_to)) || status==='rejected')) return res.status(403).json({success:false,message:'تغيير المسؤول أو رفض الطلب غير متاح للمشرف'});
 
     const newStatus = status || request.status;
+    if (!['new', 'under_review', 'pricing', 'rejected'].includes(newStatus) || !['new', 'under_review', 'pricing', 'rejected', 'client_changes', 'manager_changes'].includes(request.status)) {
+      return res.status(409).json({success:false,message:'استخدم إجراءات اعتماد العرض لتغيير هذه الحالة'});
+    }
     const newAssignedTo = assigned_to !== undefined ? (assigned_to ? parseInt(assigned_to, 10) : null) : request.assigned_to;
+    if (newAssignedTo && Number(newAssignedTo)!==Number(request.assigned_to) && !isRequestSupervisor(await findRequestSupervisor(newAssignedTo))) return res.status(400).json({success:false,message:'اختر مشرفاً نشطاً يملك صلاحيات عرض الطلبات وتحديثها واعتماد مراجعتها'});
     const newAdminNotes = admin_notes !== undefined ? admin_notes : request.admin_notes;
+    if (newStatus === 'pricing' && request.status !== 'pricing') {
+      if (!require('../middleware/security').hasUserPermission(req.user,'client_app:requests_review')) return res.status(403).json({success:false,message:'اعتماد مراجعة المتطلبات والكميات يتطلب صلاحية مشرف الخدمة'});
+      if (!newAssignedTo) return res.status(400).json({success:false,message:'عيّن المشرف المسؤول أولاً'});
+      if (!String(newAdminNotes || '').trim()) return res.status(400).json({success:false,message:'سجّل نتيجة مراجعة المتطلبات والكميات في ملاحظات الإدارة الهندسية قبل التسعير'});
+    }
     const newQuote = quoted_amount !== undefined ? (quoted_amount ? parseFloat(quoted_amount) : null) : request.quoted_amount;
+    if (newQuote !== null && (!Number.isFinite(newQuote) || newQuote < 0)) return res.status(400).json({success:false,message:'المبلغ غير صالح'});
 
-    await db.run(`
+    const saved = await db.run(`
       UPDATE service_requests
       SET status = ?, assigned_to = ?, admin_notes = ?, quoted_amount = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [newStatus, newAssignedTo, newAdminNotes, newQuote, id]);
+      WHERE id = ? AND status = ?
+    `, [newStatus, newAssignedTo, newAdminNotes, newQuote, id, request.status]);
+    if (!saved.changes) return res.status(409).json({success:false,message:'تغيرت حالة الطلب، أعد فتحه'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'request_updated',`الحالة: ${newStatus}؛ المسؤول: ${newAssignedTo || 'غير معين'}؛ ملاحظات المراجعة: ${newAdminNotes || 'لا يوجد'}`]);
 
     await logAudit(req, {
       action: 'SERVICE_REQUEST_UPDATED',
@@ -927,82 +1269,102 @@ router.put('/service-requests/:id', async (req, res) => {
  * POST /api/admin/client-users/service-requests/:id/convert-to-project
  * تحويل طلب الخدمة إلى مشروع رسمي في النظام
  */
+router.post('/service-requests/:id/message', async (req,res) => {
+  const id=Number(req.params.id), message=String(req.body.message||'').trim();
+  if(!message || message.length>4000) return res.status(400).json({success:false,message:'أدخل رسالة لا تزيد عن 4000 حرف'});
+  try {
+    const request=await db.get('SELECT id,client_user_id,request_no,source FROM service_requests WHERE id=?',[id]);
+    if(!request) return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    const pending=request.source==='guest' && !(req.user.role==='admin' && req.body.send_direct===true);
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,pending?'message_pending_approval':'message_to_client',message]);
+    if(request.source!=='guest' && request.client_user_id) await require('../services/pushNotificationService').sendToClientUser(request.client_user_id,{title:'رسالة جديدة بشأن طلبك',body:`لديك رسالة جديدة بشأن الطلب ${request.request_no}`,referenceType:'service_request',referenceId:id});
+    res.json({success:true,pending_approval:pending});
+  } catch(err) {res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/service-requests/:id/internal-message', async (req,res) => {
+  const id=Number(req.params.id), recipient=Number(req.body.recipient_id), message=String(req.body.message||'').trim();
+  if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(recipient)||recipient<=0||!message||message.length>4000)return res.status(400).json({success:false,message:'اختر المستلم واكتب رسالة لا تزيد عن 4000 حرف'});
+  try {
+    const user=await findRequestSupervisor(recipient);let permissions=[];try{permissions=JSON.parse(user?.permissions||user?.role_permissions||'[]');}catch{}
+    if(!user||!require('../middleware/security').hasUserPermission({...user,permissions},'client_app:requests_view'))return res.status(400).json({success:false,message:'المستلم غير نشط أو لا يملك صلاحية عرض الطلبات'});
+    const request=await db.get('SELECT id FROM service_requests WHERE id=?',[id]);if(!request)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,`internal_to_${recipient}`,message]);
+    await db.run('UPDATE service_requests SET updated_at=CURRENT_TIMESTAMP WHERE id=?',[id]);
+    res.json({success:true});
+  }catch(err){console.error('internal service message',err);res.status(500).json({success:false,message:'تعذر إرسال الرسالة الداخلية'});}
+});
+
+router.post('/service-requests/:id/message-decision', async (req,res) => {
+  if(req.user.role!=='admin') return res.status(403).json({success:false,message:'اعتماد الرد متاح للمدير العام فقط'});
+  const id=Number(req.params.id),eventId=Number(req.body.event_id),decision=req.body.decision,note=String(req.body.note||'').trim();
+  if(!Number.isSafeInteger(id)||!Number.isSafeInteger(eventId)||!['approve','reject'].includes(decision)||note.length>4000||(decision==='reject'&&!note))return res.status(400).json({success:false,message:'أدخل ملاحظات المدير عند رفض الرد'});
+  try {const result=await db.transaction(async tx=>{
+    const event=await tx.get("SELECT id,message FROM service_request_events WHERE id=? AND request_id=? AND event_type='message_pending_approval'",[eventId,id]);
+    if(!event)return false;
+    const changed=await tx.run("UPDATE service_request_events SET event_type=? WHERE id=? AND request_id=? AND event_type='message_pending_approval'",[decision==='approve'?'message_approved':'message_rejected',eventId,id]);
+    if(!changed.changes)return false;
+    await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'manager',req.user.id,decision==='approve'?'message_to_client':'message_declined',decision==='approve'?event.message:note]);
+    if(decision==='reject')await tx.run("UPDATE service_requests SET updated_at=CURRENT_TIMESTAMP WHERE id=?",[id]);
+    return true;
+  }); if(!result)return res.status(409).json({success:false,message:'الرد لم يعد بانتظار الاعتماد'});res.json({success:true});}catch(err){console.error('message approval',err);res.status(500).json({success:false,message:'تعذر تسجيل القرار'});}
+});
+
+router.post('/service-requests/:id/quote', async (req, res) => {
+  try {
+    const id = Number(req.params.id), amount = Number(req.body.amount);
+    const details = String(req.body.details || '').trim(), duration = String(req.body.duration || '').trim();
+    if (!details || !duration || req.body.amount === '' || !Number.isFinite(amount) || amount < 0 || details.length > 12000 || duration.length > 200)
+      return res.status(400).json({success:false,message:'أدخل تفاصيل العرض والمدة ومبلغًا صالحًا'});
+    const result = await db.transaction(async tx => {
+      const request = await tx.get('SELECT * FROM service_requests WHERE id = ?', [id]);
+      if (!request) return {status:404,message:'الطلب غير موجود'};
+      if (!['pricing','client_changes','manager_changes'].includes(request.status) || !request.assigned_to)
+        return {status:409,message:'عيّن المسؤول وأكمل مراجعة الطلب قبل إعداد العرض'};
+      const version = Number((await tx.get('SELECT MAX(version) AS version FROM service_request_quotes WHERE request_id = ?', [id])).version || 0) + 1;
+      await tx.run('INSERT INTO service_request_quotes (request_id,version,details,duration,amount,currency,state,created_by) VALUES (?,?,?,?,?,?,?,?)', [id,version,details,duration,amount,request.currency || 'YER','pending_manager',req.user.id]);
+      await tx.run("UPDATE service_requests SET status='pending_manager', updated_at=CURRENT_TIMESTAMP WHERE id=?",[id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'staff',req.user.id,'quote_submitted',`عرض رقم ${version} بانتظار موافقة المدير العام`]);
+      return {status:200,version};
+    });
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch (err) { console.error('submit request quote',err); res.status(500).json({success:false,message:'تعذر حفظ العرض'}); }
+});
+
+router.post('/service-requests/:id/manager-decision', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({success:false,message:'اعتماد العرض متاح للمدير العام فقط'});
+  const decision = req.body.decision, note = String(req.body.note || '').trim();
+  if (!['approve','return'].includes(decision) || (decision === 'return' && !note) || note.length > 4000) return res.status(400).json({success:false,message:'حدد القرار وأدخل سبب الإعادة إن وجد'});
+  try {
+    const result = await db.transaction(async tx => {
+      const id = Number(req.params.id), quote = await tx.get("SELECT * FROM service_request_quotes WHERE request_id=? AND state='pending_manager' ORDER BY version DESC LIMIT 1",[id]);
+      if (!quote) return {status:409,message:'لا يوجد عرض سعر بانتظار موافقة المدير. أرسل العرض للموافقة أولاً.'};
+      if (Number(req.body.quote_id) !== Number(quote.id)) return {status:409,message:'تغير عرض السعر؛ أعد فتح الطلب لمراجعة العرض الحالي.'};
+      const updated = await tx.run("UPDATE service_requests SET status=?, quoted_amount=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending_manager'",[decision === 'approve' ? 'quoted' : 'manager_changes',decision === 'approve' ? quote.amount : null,id]);
+      if (!updated.changes) return {status:409,message:'حالة الطلب تغيرت'};
+      await tx.run('UPDATE service_request_quotes SET state=?, approved_by=?, approved_at=CURRENT_TIMESTAMP WHERE id=? AND state=?',[decision === 'approve' ? 'sent' : 'returned',req.user.id,quote.id,'pending_manager']);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'manager',req.user.id,decision === 'approve' ? 'quote_approved' : 'quote_returned',note]);
+      return {status:200};
+    });
+    if(result.status===200 && decision==='approve') {
+      const request=await db.get('SELECT client_user_id,request_no FROM service_requests WHERE id=?',[Number(req.params.id)]);
+      if(request?.client_user_id) await require('../services/pushNotificationService').sendToClientUser(request.client_user_id,{title:'عرض سعر جاهز للمراجعة',body:`عرض السعر الخاص بالطلب ${request.request_no} جاهز لمراجعتك`,referenceType:'service_request',referenceId:Number(req.params.id)});
+    }
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch(err) { console.error('manager quote decision',err); res.status(500).json({success:false,message:'تعذر تسجيل القرار'}); }
+});
+
 router.post('/service-requests/:id/convert-to-project', async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    const request = await db.get(`SELECT * FROM service_requests WHERE id = ?`, [id]);
-    if (!request) {
-      return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
-    }
-
-    // 1. فحص وجود العميل أو إنشائه في دليل العملاء
-    let clientId = null;
-    if (request.client_user_id) {
-      const cu = await db.get(`SELECT client_id FROM client_users WHERE id = ?`, [request.client_user_id]);
-      clientId = cu?.client_id;
-    }
-    if (!clientId) {
-      const existingClient = await db.get(`SELECT id FROM clients WHERE phone = ? OR name = ?`, [request.phone, request.client_name]);
-      if (existingClient) {
-        clientId = existingClient.id;
-      } else {
-        const ledgerAccount = await db.get(`SELECT id FROM accounts WHERE code = '12301001'`);
-        if (!ledgerAccount) {
-          return res.status(409).json({ success: false, message: 'تعذر إنشاء العميل: الحساب 12301001 غير موجود في دليل الحسابات' });
-        }
-        const clientInsert = await db.run(`
-          INSERT INTO clients (account_id, name, phone, email, notes, created_at)
-          VALUES (?, ?, ?, ?, 'تم الإنشاء تلقائياً من طلب خدمة مكتب الهندسة والمقاولات ' || ?, CURRENT_TIMESTAMP)
-        `, [ledgerAccount.id, request.client_name, request.phone, request.email, request.request_no]);
-        clientId = clientInsert.lastID || clientInsert.insertId;
-      }
-    }
-
-    // 2. إنشاء المشروع
-    const projName = request.project_name || `مشروع ${request.client_name} - ${request.project_type || 'أعمال هندسية'}`;
-    const projCode = `PRJ-${Date.now().toString().slice(-4)}`;
-    const contractVal = request.quoted_amount || request.estimated_budget || 0;
-
-    const projNotes = request.description || ('مشروع محول من طلب الخدمة: ' + request.request_no);
-    const projInsert = await db.run(`
-      INSERT INTO projects (
-        code, name, client_id, status, contract_value, location, description, notes, created_at
-      ) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [
-      projCode,
-      projName,
-      clientId,
-      contractVal,
-      request.location || 'عدن',
-      projNotes,
-      projNotes
-    ]);
-
-    const newProjectId = projInsert.lastID || projInsert.insertId;
-
-    // 3. تحديث حالة طلب الخدمة إلى محول
-    await db.run(`
-      UPDATE service_requests
-      SET status = 'converted', admin_notes = COALESCE(admin_notes, '') || ' [تم التحويل لمشروع كود: ' || ? || ']', updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [projCode, id]);
-
-    await logAudit(req, {
-      action: 'SERVICE_REQUEST_CONVERTED',
-      entity_type: 'service_requests',
-      entity_id: id,
-      details: `تم تحويل طلب الخدمة (${request.request_no}) إلى مشروع (${projName}) بكود (${projCode})`
-    });
-
-    res.json({
-      success: true,
-      message: `تم تحويل الطلب بنجاح إلى مشروع جديد بكود: ${projCode}`,
-      project_id: newProjectId,
-      project_code: projCode
-    });
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({success:false,message:'رقم الطلب غير صالح'});
+    const result = await require('../services/serviceRequestConversionService').convertServiceRequest(db, id, req.user.id);
+    await logAudit(req, {action:'SERVICE_REQUEST_CONVERTED',entity_type:'service_requests',entity_id:id,details:`تم تحويل طلب الخدمة (${result.requestNo}) إلى مشروع (${result.projectName}) بكود (${result.projectCode})`});
+    res.json({success:true,message:`تم تحويل الطلب بنجاح إلى مشروع جديد بكود: ${result.projectCode}`,project_id:result.projectId,project_code:result.projectCode,cost_center_id:result.costCenterId});
   } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({success:false,message:err.message});
     console.error('Convert to project error:', err);
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحويل الطلب إلى مشروع' });
+    res.status(500).json({success:false,message:'حدث خطأ أثناء تحويل الطلب إلى مشروع'});
   }
 });
 

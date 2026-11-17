@@ -344,10 +344,25 @@ router.post('/auth/forgot-password', async (req, res) => {
 router.get('/services', async (req, res) => {
   try {
     const services = await db.query(`
-      SELECT id, code, title, category, description, icon, display_order
+      SELECT id, code, title,
+        CASE category
+          WHEN 'التصميم والإشراف' THEN 'design'
+          WHEN 'المقاولات' THEN 'execution'
+          WHEN 'ترميم وصيانة' THEN 'finishing'
+          WHEN 'تشطيبات' THEN 'finishing'
+          WHEN 'أنظمة' THEN 'systems'
+          WHEN 'بنية تحتية' THEN 'infrastructure'
+          WHEN 'استشارات' THEN 'consulting'
+          WHEN 'توريد' THEN 'supply'
+          WHEN 'survey' THEN 'infrastructure'
+          ELSE category END AS category,
+        description, icon, display_order
       FROM engineering_services
       WHERE is_active = 1
-      ORDER BY display_order ASC, id ASC
+      ORDER BY CASE category
+        WHEN 'design' THEN 10 WHEN 'execution' THEN 20 WHEN 'finishing' THEN 30
+        WHEN 'systems' THEN 40 WHEN 'infrastructure' THEN 50 WHEN 'consulting' THEN 60
+        WHEN 'supply' THEN 70 ELSE 90 END, display_order ASC, id ASC
     `);
 
     res.json({
@@ -435,17 +450,11 @@ router.post('/services/requests', async (req, res) => {
       }
     }
 
-    // 3. توليد رقم طلب فريد SR-YYYY-XXXX
-    const currentYear = new Date().getFullYear();
-    const countRow = await db.get(`
-      SELECT COUNT(id) as total FROM service_requests
-      WHERE request_no LIKE ?
-    `, [`SR-${currentYear}-%`]);
-    const nextSeq = (Number(countRow?.total || 0) + 1).toString().padStart(4, '0');
-    const requestNo = `SR-${currentYear}-${nextSeq}`;
+    // Reserve a durable sequence before saving files, including after request deletion.
+    const requestNo=await require('../services/serviceRequestRetentionService').reserveNumber(new Date().getFullYear());
 
     // توليد كود تحقق آمن
-    const verificationCode = require('crypto').randomInt(100000,1000000).toString();
+    const verificationCode = require('crypto').randomBytes(14).toString('hex');
 
     // 4. معالجة وحفظ المرفقات المرفوعة بأمان
     if(!Array.isArray(attachments)||attachments.length>10)throw Object.assign(new Error('الحد الأقصى عشرة مرفقات'),{statusCode:400});
@@ -497,14 +506,22 @@ router.post('/services/requests', async (req, res) => {
     const cleanNotes = notes ? String(notes).trim() : null;
     const budgetNum = estimated_budget ? parseFloat(estimated_budget) : null;
 
+    const supervisorSetting=await db.get("SELECT value FROM settings WHERE `key`='service_request_supervisor_id'");
+    let supervisorId=Number(supervisorSetting?.value)||null;
+    if(supervisorId){
+      const supervisor=await db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[supervisorId]);
+      let permissions=[];try{permissions=JSON.parse(supervisor?.permissions||supervisor?.role_permissions||'[]');}catch{}
+      if(!supervisor || !require('../middleware/security').hasUserPermission({...supervisor,permissions},'client_app:requests_review'))supervisorId=null;
+    }
+
     const requestId = await db.transaction(async tx=>{
     const insertResult = await tx.run(`
       INSERT INTO service_requests (
         request_no, client_user_id, source, client_name, phone, email,
         project_name, project_type, location, description,
         estimated_budget, currency, expected_start_date, notes,
-        attachments, status, verification_code, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        attachments, status, verification_code, assigned_to, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       requestNo,
       clientUserId,
@@ -521,7 +538,8 @@ router.post('/services/requests', async (req, res) => {
       expected_start_date || null,
       cleanNotes,
       JSON.stringify(savedAttachments),
-      verificationCode
+      verificationCode,
+      supervisorId
     ]);
 
     const requestId = insertResult.lastID || insertResult.insertId;
@@ -533,6 +551,9 @@ router.post('/services/requests', async (req, res) => {
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
       `, [requestId, s.id, s.title]);
     }
+
+    await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)', [requestId,'system',null,'request_received','مرحباً بكم في رواسي عدن، استلمنا طلبكم وسيتم تحويله للمشرف لمراجعته والتواصل معكم.']);
+    if(supervisorId) await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[requestId,'system',null,'supervisor_assigned',`أُحيل الطلب إلى مشرف الخدمة رقم ${supervisorId}`]);
 
       return requestId;
     });
@@ -553,9 +574,15 @@ router.post('/services/requests', async (req, res) => {
       console.warn('Could not insert audit log for service request:', auditErr);
     }
 
+    if (source === 'guest') {
+      const configured=await db.get("SELECT value FROM settings WHERE `key`='guest_request_access_days'");
+      const days=Number(configured?.value); const lifetime=Number.isInteger(days)&&days>=1&&days<=365?days:30;
+      const token=jwt.sign({type:'guest_request',request_no:requestNo,verification_code:verificationCode},CLIENT_JWT_SECRET,{algorithm:'HS256',expiresIn:lifetime*86400});
+      res.cookie('rawasi_guest_request',token,{httpOnly:true,secure:!['localhost','127.0.0.1','::1'].includes(req.hostname),sameSite:'lax',path:'/api/client-portal/services/requests',maxAge:lifetime*86400000});
+    }
     res.json({
       success: true,
-      message: 'تم إرسال طلبكم بنجاح إلى إدارة مكتب رواسي عدن. سيقوم مهندسونا بالتواصل معكم في أقرب وقت.',
+      message: 'مرحباً بكم في رواسي عدن، استلمنا طلبكم وسيتم تحويله للمشرف لمراجعته والتواصل معكم.',
       data: {
         request_id: requestId,
         request_no: requestNo,
@@ -579,7 +606,21 @@ router.post('/services/requests', async (req, res) => {
  * GET /api/client-portal/services/requests/track
  * متابعة حالة الطلب للزائر باستخدام رقم الطلب ورمز التحقق
  */
+router.get('/services/requests/guest-session', async (req,res) => {
+  res.set('Cache-Control','no-store');
+  try {
+    const part=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('rawasi_guest_request='));
+    const token=part ? decodeURIComponent(part.slice('rawasi_guest_request='.length)) : '';
+    const data=jwt.verify(token,CLIENT_JWT_SECRET,{algorithms:['HS256']});
+    if(data.type!=='guest_request'||!data.request_no||!/^[a-f0-9]{28}$/.test(data.verification_code||'')) throw new Error('invalid');
+    const found=await db.get("SELECT id FROM service_requests WHERE request_no=? AND verification_code=? AND source='guest'",[data.request_no,data.verification_code]);
+    if(!found) throw new Error('invalid');
+    res.json({success:true,request_no:data.request_no,verification_code:data.verification_code,expires_at:new Date(data.exp*1000).toISOString()});
+  } catch {res.status(401).json({success:false,message:'انتهت جلسة متابعة الزائر أو لم تبدأ'});}
+});
+
 router.get('/services/requests/track', async (req, res) => {
+  res.set('Cache-Control','no-store');
   try {
     const { request_no, verification_code } = req.query;
     if (!request_no || !verification_code) {
@@ -591,8 +632,10 @@ router.get('/services/requests/track', async (req, res) => {
 
     const request = await db.get(`
       SELECT 
-        sr.id, sr.request_no, sr.client_name, sr.project_name, sr.project_type,
-        sr.location, sr.status, sr.admin_notes, sr.quoted_amount, sr.currency,
+        sr.id, sr.request_no, sr.client_name, sr.project_name, sr.project_type, sr.source,
+        sr.location, sr.status,
+        CASE WHEN EXISTS (SELECT 1 FROM service_request_quotes q WHERE q.request_id=sr.id AND q.state IN ('sent','accepted')) THEN sr.quoted_amount ELSE NULL END AS quoted_amount,
+        sr.currency,
         sr.created_at, sr.updated_at
       FROM service_requests sr
       WHERE UPPER(sr.request_no) = UPPER(?) AND sr.verification_code = ?
@@ -608,6 +651,10 @@ router.get('/services/requests/track', async (req, res) => {
     const items = await db.query(`
       SELECT service_title FROM service_request_items WHERE request_id = ?
     `, [request.id]);
+    if (String(verification_code).length >= 28) {
+      request.quote = await db.get("SELECT id,version,details,duration,amount,currency,state FROM service_request_quotes WHERE request_id=? AND state IN ('sent','accepted') ORDER BY version DESC LIMIT 1",[request.id]);
+      request.messages = await db.query("SELECT actor_type,message,created_at FROM service_request_events WHERE request_id=? AND event_type IN ('request_received','message_to_client','message_from_client') ORDER BY id",[request.id]);
+    }
 
     res.json({
       success: true,
@@ -621,10 +668,84 @@ router.get('/services/requests/track', async (req, res) => {
   }
 });
 
+router.post('/services/requests/guest-message', async (req,res) => {
+  const {request_no,verification_code}=req.body, message=String(req.body.message||'').trim();
+  if(!request_no || !/^[a-f0-9]{28}$/.test(String(verification_code||'')) || !message || message.length>4000)return res.status(400).json({success:false,message:'أدخل رمز المتابعة والرسالة'});
+  try {
+    const request=await db.get("SELECT id FROM service_requests WHERE UPPER(request_no)=UPPER(?) AND verification_code=? AND source='guest'",[String(request_no).trim(),verification_code]);
+    if(!request)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[request.id,'guest',null,'message_from_client',message]);
+    res.json({success:true});
+  }catch(err){res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/services/requests/guest-response', async (req,res) => {
+  const {request_no,verification_code,decision,quote_id}=req.body;
+  const note=String(req.body.note||'').trim();
+  if(!request_no || !/^[a-f0-9]{28}$/.test(String(verification_code||'')) || !['accept','changes'].includes(decision) || (decision==='changes'&&!note) || note.length>4000)
+    return res.status(400).json({success:false,message:'بيانات الرد غير صالحة؛ للطلبات القديمة يرجى التواصل مع الإدارة'});
+  try {
+    const result=await db.transaction(async tx=>{
+      const request=await tx.get("SELECT id,status FROM service_requests WHERE UPPER(request_no)=UPPER(?) AND verification_code=? AND source='guest'",[String(request_no).trim(),verification_code]);
+      if(!request)return {status:404,message:'الطلب غير موجود'};
+      const quote=await tx.get("SELECT id FROM service_request_quotes WHERE request_id=? AND state='sent' ORDER BY version DESC LIMIT 1",[request.id]);
+      if(request.status!=='quoted'||!quote||Number(quote.id)!==Number(quote_id))return {status:409,message:'العرض تغير أو تمت الإجابة عليه'};
+      const updated=await tx.run("UPDATE service_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='quoted'",[decision==='accept'?'client_accepted':'client_changes',request.id]);
+      if(!updated.changes)return {status:409,message:'حالة الطلب تغيرت'};
+      await tx.run('UPDATE service_request_quotes SET state=?,client_response=?,client_responded_at=CURRENT_TIMESTAMP WHERE id=?',[decision==='accept'?'accepted':'changes_requested',note,quote.id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[request.id,'guest',null,decision==='accept'?'client_accepted':'client_changes',note]);
+      return {status:200};
+    });
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch(err){console.error('guest quote response',err);res.status(500).json({success:false,message:'تعذر تسجيل الرد'});}
+});
+
 // =========================================================================
 // المسارات المحمية بالكامل بـ requireClientAuth (Deny by Default)
 // =========================================================================
 router.use(requireClientAuth);
+
+// The authenticated client can only access requests submitted by that account.
+router.get('/my-service-requests', async (req, res) => {
+  try {
+    const requests = await db.query(`SELECT id,request_no,project_name,status,created_at,updated_at FROM service_requests WHERE client_user_id=? ORDER BY id DESC`,[req.clientUser.id]);
+    for (const request of requests) {
+      request.quote = await db.get(`SELECT id,version,details,duration,amount,currency,state,client_response,approved_at FROM service_request_quotes WHERE request_id=? AND state IN ('sent','accepted') ORDER BY version DESC LIMIT 1`,[request.id]);
+      request.messages = await db.query("SELECT actor_type,message,created_at FROM service_request_events WHERE request_id=? AND event_type IN ('request_received','message_to_client','message_from_client') ORDER BY id",[request.id]);
+    }
+    res.json({success:true,requests});
+  } catch(err) { console.error('client requests',err); res.status(500).json({success:false,message:'تعذر جلب الطلبات'}); }
+});
+
+router.post('/my-service-requests/:id/message', async (req,res) => {
+  const id=Number(req.params.id), message=String(req.body.message||'').trim();
+  if(!message || message.length>4000) return res.status(400).json({success:false,message:'أدخل رسالة لا تزيد عن 4000 حرف'});
+  try {
+    if(!(await db.get('SELECT id FROM service_requests WHERE id=? AND client_user_id=?',[id,req.clientUser.id]))) return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'client',req.clientUser.id,'message_from_client',message]);
+    res.json({success:true});
+  } catch(err) {res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/my-service-requests/:id/response', async (req,res) => {
+  const decision=req.body.decision, note=String(req.body.note||'').trim();
+  if (!['accept','changes'].includes(decision) || (decision==='changes'&&!note) || note.length>4000) return res.status(400).json({success:false,message:'أدخل الملاحظات عند طلب التعديل'});
+  try {
+    const result=await db.transaction(async tx=>{
+      const id=Number(req.params.id);
+      const request=await tx.get('SELECT id,status FROM service_requests WHERE id=? AND client_user_id=?',[id,req.clientUser.id]);
+      if(!request) return {status:404,message:'الطلب غير موجود'};
+      const quote=await tx.get("SELECT id FROM service_request_quotes WHERE request_id=? AND state='sent' ORDER BY version DESC LIMIT 1",[id]);
+      if(request.status!=='quoted'||!quote||quote.id!==Number(req.body.quote_id)) return {status:409,message:'العرض تغير أو تمت الإجابة عليه'};
+      const update=await tx.run("UPDATE service_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='quoted'",[decision==='accept'?'client_accepted':'client_changes',id]);
+      if(!update.changes)return {status:409,message:'حالة الطلب تغيرت'};
+      await tx.run('UPDATE service_request_quotes SET state=?,client_response=?,client_responded_at=CURRENT_TIMESTAMP WHERE id=?',[decision==='accept'?'accepted':'changes_requested',note,quote.id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'client',req.clientUser.id,decision==='accept'?'client_accepted':'client_changes',note]);
+      return {status:200};
+    });
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch(err) {console.error('client quote response',err);res.status(500).json({success:false,message:'تعذر تسجيل الرد'});}
+});
 
 /**
  * GET /api/client-portal/dashboard
