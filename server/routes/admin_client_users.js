@@ -6,10 +6,18 @@
 
 const express = require('express');
 const router = express.Router();
+const { isScopedRequestSupervisor, canAssignServiceRequests } = require('../middleware/security');
 router.use(async (req,res,next)=>{
   const path=req.path,read=req.method==='GET';let action=read?'view':req.method==='DELETE'?'delete':req.method==='POST'&&path==='/'?'create':'edit';
   if(req.user.role==='service_supervisor') {
     if(!path.startsWith('/service-requests') || /\/(assignee|convert-to-project|manager-decision|message-decision)$/.test(path))return res.status(403).json({success:false,message:'الإجراء غير متاح لحساب المشرف'});
+    const match=path.match(/^\/service-requests\/(\d+)(?:\/|$)/);
+    if(match){try{const request=await require('../database/db').get('SELECT assigned_to FROM service_requests WHERE id=?',[Number(match[1])]);if(!request||Number(request.assigned_to)!==Number(req.user.id))return res.status(404).json({success:false,message:'الطلب غير موجود أو غير مسند إليك'});}catch{return res.status(500).json({success:false,message:'تعذر التحقق من نطاق الطلب'});}}
+  } else if (isScopedRequestSupervisor(req.user)) {
+    // خيار "مشرف": بقية صلاحيات الموظف كما هي، لكن طلبات الزوار وردودهم مقصورة على ما أُسند إليه،
+    // ولا يستطيع إسناد الطلبات (ولا لنفسه) ولا تغيير مشرف الاستقبال الافتراضي.
+    if (/^\/service-requests\/\d+\/assignee$/.test(path) || (path === '/service-request-supervisor' && !read))
+      return res.status(403).json({success:false,message:'إسناد الطلبات يتم من خدمة العملاء أو المدير العام'});
     const match=path.match(/^\/service-requests\/(\d+)(?:\/|$)/);
     if(match){try{const request=await require('../database/db').get('SELECT assigned_to FROM service_requests WHERE id=?',[Number(match[1])]);if(!request||Number(request.assigned_to)!==Number(req.user.id))return res.status(404).json({success:false,message:'الطلب غير موجود أو غير مسند إليك'});}catch{return res.status(500).json({success:false,message:'تعذر التحقق من نطاق الطلب'});}}
   }
@@ -35,6 +43,19 @@ function isRequestSupervisor(user) {
   if(!user)return false;
   let permissions=[];try{permissions=JSON.parse(user.permissions||user.role_permissions||'[]');}catch{}
   return ['client_app:requests_view','client_app:requests_edit','client_app:requests_review'].every(permission=>require('../middleware/security').hasUserPermission({...user,permissions},permission));
+}
+/**
+ * من يُسند طلبات الزوار للمشرفين: المدير العام، أو حساب خدمة العملاء (مشرف الاستقبال المحدد
+ * في الإعدادات service_request_supervisor_id)، أو من يملك صلاحية تحديد/إسناد المشرفين.
+ * المشرف المقيّد (خيار "مشرف") لا يُسند أبداً، ولا لنفسه.
+ */
+async function canAssignRequests(user) {
+  if (!user || isScopedRequestSupervisor(user)) return false;
+  if (canAssignServiceRequests(user)) return true;
+  try {
+    const row = await db.get("SELECT value FROM settings WHERE `key`='service_request_supervisor_id'");
+    return Number(row?.value) > 0 && Number(row.value) === Number(user.id);
+  } catch { return false; }
 }
 async function findRequestSupervisor(id) {
   return db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[id]);
@@ -1032,7 +1053,7 @@ router.get('/service-requests', async (req, res) => {
     `;
     const params = [];
 
-    if(req.user.role==='service_supervisor'){query+=' AND sr.assigned_to = ?';params.push(req.user.id);}
+    if(isScopedRequestSupervisor(req.user)){query+=' AND sr.assigned_to = ?';params.push(req.user.id);}
     if (status && status !== 'all') {
       query += ` AND sr.status = ?`;
       params.push(status);
@@ -1064,12 +1085,12 @@ router.get('/service-requests', async (req, res) => {
         SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS converted_count,
         SUM(CASE WHEN source = 'guest' THEN 1 ELSE 0 END) AS guest_count,
         SUM(CASE WHEN source = 'registered_client' THEN 1 ELSE 0 END) AS registered_count
-      FROM service_requests ${req.user.role==='service_supervisor'?'WHERE assigned_to = ?':''}
-    `,req.user.role==='service_supervisor'?[req.user.id]:[]);
+      FROM service_requests ${isScopedRequestSupervisor(req.user)?'WHERE assigned_to = ?':''}
+    `,isScopedRequestSupervisor(req.user)?[req.user.id]:[]);
 
     // جلب قائمة الموظفين للإسناد
     const candidates = await db.query(`SELECT u.id,u.username,u.full_name AS name,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.status = 'active' OR u.status IS NULL`);
-    const engineers=req.user.role==='service_supervisor'?[]:(candidates||[]).filter(isRequestSupervisor).map(({id,username,name,role})=>({id,username,name,role}));
+    const engineers=!(await canAssignRequests(req.user))?[]:(candidates||[]).filter(isRequestSupervisor).map(({id,username,name,role})=>({id,username,name,role}));
 
     res.json({
       success: true,
@@ -1096,10 +1117,10 @@ router.get('/service-requests', async (req, res) => {
  * GET /api/admin/client-users/service-requests/:id
  * تفاصيل طلب خدمة محدد مع الخدمات المختارة والمرفقات
  */
-router.get('/service-requests/workflow-access', (req,res) => {
+router.get('/service-requests/workflow-access', async (req,res) => {
   const can=permission=>require('../middleware/security').hasUserPermission(req.user,permission);
   res.set('Cache-Control','no-store');
-  res.json({success:true,access:{user_id:req.user.id,can_view:can('client_app:requests_view'),can_edit:can('client_app:requests_edit'),can_review:can('client_app:requests_review'),can_convert:can('client_app:requests_convert'),can_assign_supervisor:can('client_app:requests_assign_supervisor'),is_manager:req.user.role==='admin'}});
+  res.json({success:true,access:{user_id:req.user.id,can_view:can('client_app:requests_view'),can_edit:can('client_app:requests_edit'),can_review:can('client_app:requests_review'),can_convert:can('client_app:requests_convert'),can_assign_supervisor:canAssignServiceRequests(req.user),can_assign:await canAssignRequests(req.user),is_scoped_supervisor:isScopedRequestSupervisor(req.user),is_manager:req.user.role==='admin'}});
 });
 
 router.get('/service-requests/contacts', async (req,res) => {
@@ -1112,7 +1133,7 @@ router.get('/service-requests/contacts', async (req,res) => {
 
 router.get('/service-requests/inbox', async (req,res) => {
   try {
-    const userId=Number(req.user.id),admin=req.user.role==='admin',scope=req.user.role==='service_supervisor'?' AND sr.assigned_to=?':'',params=req.user.role==='service_supervisor'?[userId]:[];
+    const userId=Number(req.user.id),admin=req.user.role==='admin',scope=isScopedRequestSupervisor(req.user)?' AND sr.assigned_to=?':'',params=isScopedRequestSupervisor(req.user)?[userId]:[];
     const incoming=admin?"'message_from_client','message_pending_approval'":"'message_from_client'";
     const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.updated_at,
       (SELECT MAX(e.id) FROM service_request_events e WHERE e.request_id=sr.id AND (e.event_type IN (${incoming}) OR e.event_type=?)) AS last_incoming,
@@ -1141,14 +1162,14 @@ router.post('/service-requests/:id/read-messages', async (req,res) => {
 router.get('/service-requests/alerts', async (req,res) => {
   try {
     const admin=req.user.role==='admin';
-    const customerSupport=req.user.role!=='service_supervisor' && require('../middleware/security').hasUserPermission(req.user,'client_app:requests_assign_supervisor');
+    const customerSupport=canAssignServiceRequests(req.user);
     const unanswered=`EXISTS (SELECT 1 FROM service_request_events guest WHERE guest.request_id=sr.id AND guest.event_type='message_from_client' AND guest.id > COALESCE((SELECT MAX(reply.id) FROM service_request_events reply WHERE reply.request_id=sr.id AND reply.event_type IN ('message_pending_approval','message_approved','message_rejected','message_to_client')),0))`;
     const returnedMessage=`EXISTS (SELECT 1 FROM service_request_events d WHERE d.request_id=sr.id AND d.event_type='message_declined' AND d.id > COALESCE((SELECT MAX(n.id) FROM service_request_events n WHERE n.request_id=sr.id AND n.event_type IN ('message_pending_approval','message_to_client')),0))`;
     const internal=`EXISTS (SELECT 1 FROM service_request_events i WHERE i.request_id=sr.id AND i.event_type='internal_to_${Number(req.user.id)}')`;
     const work=admin ? `(sr.status='pending_manager' OR EXISTS (SELECT 1 FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') OR ${unanswered} OR ${internal})` : `((sr.assigned_to=? AND (sr.status IN ('new','under_review','pricing','client_changes','manager_changes') OR ${unanswered} OR ${returnedMessage})) OR ${internal}${customerSupport?" OR sr.status='new'":''})`;
     const rows=await db.query(`SELECT sr.id,sr.request_no,sr.client_name,sr.status,sr.updated_at,
       (SELECT COUNT(*) FROM service_request_events e WHERE e.request_id=sr.id AND e.event_type='message_pending_approval') AS pending_messages
-      FROM service_requests sr WHERE sr.source='guest' AND ${req.user.role==='service_supervisor'?`sr.assigned_to=${Number(req.user.id)} AND `:''}${work}
+      FROM service_requests sr WHERE sr.source='guest' AND ${isScopedRequestSupervisor(req.user)?`sr.assigned_to=${Number(req.user.id)} AND `:''}${work}
       ORDER BY sr.updated_at DESC, sr.id DESC LIMIT 100`,admin?[]:[req.user.id]);
     res.json({success:true,alerts:(rows||[]).map(r=>({id:r.id,request_no:r.request_no,client_name:r.client_name,status:r.status,pending_messages:admin?Number(r.pending_messages||0):0,updated_at:r.updated_at}))});
   } catch(err){console.error('guest request alerts',err);res.status(500).json({success:false,message:'تعذر تحميل تنبيهات ردود الزوار'});}
@@ -1216,6 +1237,8 @@ router.get('/service-requests/:id', async (req, res) => {
  * تحديث حالة طلب الخدمة، تعيين موظف، حفظ عرض السعر وملاحظات الإدارة
  */
 router.put('/service-requests/:id/assignee', async (req,res) => {
+  // الإسناد للمدير العام أو خدمة العملاء (صلاحية تحديد المشرف)، ولا يملكه مشرف مقيّد حتى لنفسه
+  if(!(await canAssignRequests(req.user)))return res.status(403).json({success:false,message:'إسناد الطلبات يتم من خدمة العملاء أو المدير العام'});
   const id=Number(req.params.id), assigneeId=Number(req.body.assigned_to);
   if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(assigneeId)||assigneeId<=0)return res.status(400).json({success:false,message:'حدد الموظف أو المهندس المسؤول'});
   try {
@@ -1242,7 +1265,9 @@ router.put('/service-requests/:id', async (req, res) => {
     if (!request) {
       return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
     }
-    if(req.user.role==='service_supervisor' && ((assigned_to!==undefined && Number(assigned_to)!==Number(request.assigned_to)) || status==='rejected')) return res.status(403).json({success:false,message:'تغيير المسؤول أو رفض الطلب غير متاح للمشرف'});
+    // تغيير المسؤول من مسار التحديث العام يخضع لنفس قاعدة الإسناد (خدمة العملاء أو المدير العام)
+    if(assigned_to!==undefined && Number(assigned_to||0)!==Number(request.assigned_to||0) && !(await canAssignRequests(req.user))) return res.status(403).json({success:false,message:'إسناد الطلبات يتم من خدمة العملاء أو المدير العام'});
+    if(isScopedRequestSupervisor(req.user) && ((assigned_to!==undefined && Number(assigned_to)!==Number(request.assigned_to)) || status==='rejected')) return res.status(403).json({success:false,message:'تغيير المسؤول أو رفض الطلب غير متاح للمشرف'});
 
     const newStatus = status || request.status;
     if (!['new', 'under_review', 'pricing', 'rejected'].includes(newStatus) || !['new', 'under_review', 'pricing', 'rejected', 'client_changes', 'manager_changes'].includes(request.status)) {

@@ -260,6 +260,28 @@ function parseScopeArray(scopeVal) {
 /**
  * التحقق من صلاحية المستخدم على عملية معينة (Deny by Default)
  */
+/**
+ * مشرف طلبات مقيّد: لا يرى طلبات الزوار وردودهم إلا بعد إسنادها إليه.
+ * يشمل دور service_supervisor، وأي موظف فُعّل له خيار "مشرف" (client_app:supervisor) صراحةً.
+ * يُفحص الخيار في قائمة صلاحيات المستخدم نفسها، لا عبر hasUserPermission، حتى لا يُقيَّد
+ * المدير العام أو من يملك صلاحية شاملة (*) أو قالب مسؤول التطبيق.
+ */
+function isScopedRequestSupervisor(user) {
+  if (!user || user.role === 'admin') return false;
+  if (user.role === 'service_supervisor') return true;
+  let permissions = user.permissions;
+  if (!Array.isArray(permissions)) {
+    const raw = user.permissions || user.role_permissions || '[]';
+    try { permissions = JSON.parse(raw); } catch { permissions = String(raw).split(',').map(p => p.trim()); }
+  }
+  return Array.isArray(permissions) && permissions.includes('client_app:supervisor');
+}
+
+/** من يحق له إسناد طلبات الزوار للمشرفين: المدير العام، أو خدمة العملاء بصلاحية التحديد، وليس مشرفاً مقيّداً */
+function canAssignServiceRequests(user) {
+  return Boolean(user) && !isScopedRequestSupervisor(user) && hasUserPermission(user, 'client_app:requests_assign_supervisor');
+}
+
 function hasUserPermission(user, requiredPerm) {
   if (!user) return false;
 
@@ -504,6 +526,8 @@ module.exports = {
   requirePermission,
   requireScope,
   hasUserPermission,
+  isScopedRequestSupervisor,
+  canAssignServiceRequests,
   checkUserScope,
   parseScopeArray,
   JWT_SECRET

@@ -2373,6 +2373,8 @@
         document.getElementById('workflowAccessHint').textContent=roleSteps.join(' — ');
         for(const field of ['srvMessage','srvMessageRecipient','srvQuoteDetails','srvQuoteDuration','srvReqStatusSelect','srvReqAssigneeSelect','srvReqQuoteAmountInput','srvReqAdminNotesInput'])document.getElementById(field).disabled=!editable;
         for(const button of ['btnSendRequestMessage','btnSubmitRequestQuote','btnSaveRequestAssignee','btnSaveRequestUpdate'])document.getElementById(button).style.display=editable?'':'none';
+        // الإسناد للمشرفين: خدمة العملاء والمدير العام فقط (المشرف المقيّد لا يسند ولا لنفسه)
+        if(!access.can_assign){document.getElementById('btnSaveRequestAssignee').style.display='none';document.getElementById('srvReqAssigneeSelect').disabled=true;}
         for(const button of ['btnApproveRequestQuote','btnReturnRequestQuote','srvManagerNote'])document.getElementById(button).style.display=manager?'':'none';
         document.getElementById('srvReqStatusSelect').querySelector('option[value="pricing"]').disabled=!access.can_review;
         document.getElementById('btnConvertToProject').style.display=access.can_convert?'':'none';
