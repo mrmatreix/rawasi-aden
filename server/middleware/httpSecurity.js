@@ -1,5 +1,23 @@
 const config=require('../config/environment');
+// سياسة المحتوى: تمنع تحميل سكربتات أو إرسال بيانات إلى أي نطاق غير معتمد، وتمنع تضمين الصفحات في مواقع أخرى.
+// 'unsafe-inline' للسكربتات باقٍ مؤقتاً لأن الواجهات تعتمد على onclick المضمّنة.
+const CONTENT_SECURITY_POLICY=[
+ "default-src 'self'",
+ "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com",
+ "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+ "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
+ "img-src 'self' data: blob:",
+ "media-src 'self' data: blob:",
+ "connect-src 'self'",
+ "frame-src 'self' data: blob:",
+ "worker-src 'self' blob:",
+ "object-src 'none'",
+ "base-uri 'self'",
+ "form-action 'self'",
+ "frame-ancestors 'none'"
+].join('; ');
 function securityHeaders(req,res,next){
+ res.set('Content-Security-Policy',CONTENT_SECURITY_POLICY);
  res.set({'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Permissions-Policy':'geolocation=(), microphone=()','Cross-Origin-Resource-Policy':'same-origin'});
  if(config.isProd)res.set('Strict-Transport-Security','max-age=31536000; includeSubDomains');
  if(req.path.startsWith('/api/')||req.path.startsWith('/uploads/'))res.set('Cache-Control','no-store');
@@ -15,4 +33,4 @@ function originGuard(req,res,next){
  return res.status(403).json({success:false,message:'مصدر الطلب غير مسموح'});
 }
 function createRateLimiter({windowMs=60000,max=120}={}){const entries=new Map();const timer=setInterval(()=>{const now=Date.now();for(const [k,v]of entries)if(now>=v.until)entries.delete(k);},windowMs);timer.unref();return(req,res,next)=>{const key=req.ip||req.socket.remoteAddress;const now=Date.now();let entry=entries.get(key);if(!entry||now>=entry.until){entry={count:0,until:now+windowMs};entries.set(key,entry);}if(++entry.count>max){res.set('Retry-After',String(Math.ceil((entry.until-now)/1000)));return res.status(429).json({success:false,message:'طلبات كثيرة، يرجى المحاولة لاحقاً'});}next();};}
-module.exports={securityHeaders,corsOptions,originGuard,createRateLimiter};
+module.exports={CONTENT_SECURITY_POLICY,securityHeaders,corsOptions,originGuard,createRateLimiter};

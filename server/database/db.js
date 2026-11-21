@@ -2720,24 +2720,28 @@ const CLIENT_SECURITY_COLUMNS = [
   { name: 'session_version', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
   { name: 'otp_failed_count', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
   { name: 'otp_locked_until', mysql: 'VARCHAR(40) NULL', sqlite: 'TEXT' }
-];
+].map(col => ({ ...col, table: 'client_users' })).concat([
+  // قفل دخول الموظفين على مستوى الحساب (كلمة المرور + رمز 2FA + فك القفل) محفوظ في القاعدة
+  { table: 'users', name: 'failed_login_count', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
+  { table: 'users', name: 'login_locked_until', mysql: 'VARCHAR(40) NULL', sqlite: 'TEXT' }
+]);
 
 async function ensureClientSessionColumn() {
   for (const col of CLIENT_SECURITY_COLUMNS) {
     try {
       if (activeEngine === 'mysql' && mysqlPool) {
-        const [cols] = await mysqlPool.query('SHOW COLUMNS FROM client_users LIKE ?', [col.name]);
+        const [cols] = await mysqlPool.query(`SHOW COLUMNS FROM ${col.table} LIKE ?`, [col.name]);
         if (!cols || cols.length === 0) {
-          await mysqlPool.query(`ALTER TABLE client_users ADD COLUMN ${col.name} ${col.mysql}`);
+          await mysqlPool.query(`ALTER TABLE ${col.table} ADD COLUMN ${col.name} ${col.mysql}`);
         }
       } else if (sqliteDb) {
-        const cols = sqliteDb.prepare('PRAGMA table_info(client_users)').all().map(c => c.name);
+        const cols = sqliteDb.prepare(`PRAGMA table_info(${col.table})`).all().map(c => c.name);
         if (cols.length && !cols.includes(col.name)) {
-          sqliteDb.exec(`ALTER TABLE client_users ADD COLUMN ${col.name} ${col.sqlite};`);
+          sqliteDb.exec(`ALTER TABLE ${col.table} ADD COLUMN ${col.name} ${col.sqlite};`);
         }
       }
     } catch (err) {
-      console.error(`Client security column check failed (${col.name}):`, err.message);
+      console.error(`Security column check failed (${col.table}.${col.name}):`, err.message);
     }
   }
 }

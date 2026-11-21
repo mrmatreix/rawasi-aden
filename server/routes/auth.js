@@ -8,6 +8,10 @@ const {
   loginRateLimiter,
   recordFailedLogin,
   resetLoginAttempts,
+  getStaffLockRemainingMs,
+  registerStaffFailure,
+  clearStaffFailures,
+  staffLockedResponse,
   generateCsrfToken,
   requireAuth,
   JWT_SECRET
@@ -248,6 +252,16 @@ router.post('/2fa-config', verifyAdmin, async (req, res) => {
   }
 });
 
+// سجل تدقيق أمني لأحداث الدخول (نجاح، فشل، قفل) مع عنوان IP والجهاز. لا يُسجَّل أي رمز أو كلمة مرور.
+async function securityAudit(req, user, action, details = {}) {
+  const { logAudit } = require('../services/auditService');
+  const attempted = req.body && req.body.username ? String(req.body.username).trim().slice(0, 80) : null;
+  await logAudit({ ip: req.ip, socket: req.socket, headers: {}, user: { id: user?.id || null, username: user?.username || attempted || 'غير معروف' } }, {
+    action, entity_type: 'auth', entity_id: user?.id || null,
+    details: { ...details, user_agent: String(req.get('user-agent') || '').slice(0, 200) }
+  });
+}
+
 // دالة مركزية لإكمال جلسة تسجيل الدخول وتوليد التوكنات
 async function completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName } = {}) {
   const secSettings = await getSecuritySettings(user);
@@ -454,6 +468,7 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
 
   // نجاح الدخول - تصفير محاولات Rate Limit
   resetLoginAttempts(req);
+  await securityAudit(req, user, 'LOGIN_SUCCESS', { device: String(deviceStr).substring(0, 120) });
 
   return res.json({
     success: true,
@@ -493,6 +508,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     
     if (!user) {
       const failInfo = recordFailedLogin(req);
+      await securityAudit(req, null, 'LOGIN_FAILED', { stage: 'unknown_username' });
       if (failInfo.isLocked) {
         return res.status(429).json({
           success: false,
@@ -509,13 +525,16 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
-    if (user.status === 'inactive') {
-      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً، يرجى مراجعة إدارة النظام' });
-    }
+    const lockRemaining = getStaffLockRemainingMs(user);
+    if (lockRemaining) return staffLockedResponse(res, lockRemaining);
 
     const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
       const failInfo = recordFailedLogin(req);
+      const accountFail = await registerStaffFailure(user.id);
+      await securityAudit(req, user, accountFail.locked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', { stage: 'password' });
+      if (accountFail.locked) return staffLockedResponse(res, accountFail.lockoutSeconds * 1000);
+      failInfo.remainingAttempts = Math.min(failInfo.remainingAttempts, accountFail.remainingAttempts);
       if (failInfo.isLocked) {
         return res.status(429).json({
           success: false,
@@ -530,6 +549,11 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         remainingAttempts: failInfo.remainingAttempts,
         message: `اسم المستخدم أو كلمة المرور غير صحيحة (متبقي ${failInfo.remainingAttempts} محاولات قبل القفل المؤقت)`
       });
+    }
+
+    // حالة التعطيل تُكشف فقط بعد صحة كلمة المرور حتى لا تُستخدم لمعرفة أسماء الحسابات
+    if (user.status === 'inactive') {
+      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً، يرجى مراجعة إدارة النظام' });
     }
 
     // التحقق هل الحساب مفعل له 2FA (المدير العام أو أي مستخدم مفعّل له التحقق بخطوتين)
@@ -566,7 +590,8 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
-    // إكمال تسجيل الدخول الاعتيادي
+    // إكمال تسجيل الدخول الاعتيادي (عداد المحاولات لا يُصفّر قبل 2FA حتى لا تُعاد محاولات الرمز بلا حد)
+    await clearStaffFailures(user.id);
     return await completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName });
   } catch (err) {
     console.error('Login error:', err);
@@ -598,6 +623,8 @@ router.post('/verify-2fa', async (req, res) => {
     if (!user || user.status !== 'active') {
       return res.status(404).json({ success: false, message: 'المستخدم غير متاح' });
     }
+    const pinLockRemaining = getStaffLockRemainingMs(user);
+    if (pinLockRemaining) return staffLockedResponse(res, pinLockRemaining);
 
     // جلب الرمز السري المعتمد لـ 2FA الخاص بالمستخدم أو من إعدادات النظام
     let admin2FaPin = user.two_factor_pin;
@@ -627,13 +654,18 @@ router.post('/verify-2fa', async (req, res) => {
     const validPins = new Set([expectedPin]);
 
     if (!validPins.has(cleanCode)) {
+      const pinFail = await registerStaffFailure(user.id);
+      await securityAudit(req, user, pinFail.locked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', { stage: '2fa_pin' });
+      if (pinFail.locked) return staffLockedResponse(res, pinFail.lockoutSeconds * 1000);
       return res.status(401).json({
         success: false,
-        message: 'رمز التحقق بخطوتين (2FA) غير صحيح، يرجى التأكد من الرمز والمحاولة مجدداً'
+        remainingAttempts: pinFail.remainingAttempts,
+        message: `رمز التحقق بخطوتين (2FA) غير صحيح (متبقي ${pinFail.remainingAttempts} محاولات قبل قفل الحساب)`
       });
     }
 
     // اعتماد الجلسة وإصدار التوكن النهائي
+    await clearStaffFailures(user.id);
     return await completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName });
   } catch (err) {
     console.error('Verify 2FA error:', err);
@@ -860,18 +892,26 @@ router.post('/unlock', async (req, res) => {
 
     const cleanUsername = String(username).trim();
     const user = await get('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
+    // رسالة موحّدة حتى لا يكشف المسار وجود اسم المستخدم، وكل محاولة خاطئة تُحتسب على قفل الحساب نفسه
     if (!user) {
-      return res.status(401).json({ success: false, message: 'اسم المستخدم غير موجود' });
+      recordFailedLogin(req);
+      return res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى' });
     }
-
-    if (user.status === 'inactive') {
-      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً' });
-    }
+    const unlockLockRemaining = getStaffLockRemainingMs(user);
+    if (unlockLockRemaining) return staffLockedResponse(res, unlockLockRemaining);
 
     const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى' });
+      recordFailedLogin(req);
+      const unlockFail = await registerStaffFailure(user.id);
+      await securityAudit(req, user, unlockFail.locked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', { stage: 'screen_unlock' });
+      if (unlockFail.locked) return staffLockedResponse(res, unlockFail.lockoutSeconds * 1000);
+      return res.status(401).json({ success: false, remainingAttempts: unlockFail.remainingAttempts, message: `كلمة المرور غير صحيحة (متبقي ${unlockFail.remainingAttempts} محاولات قبل قفل الحساب)` });
     }
+    if (user.status === 'inactive') {
+      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً' });
+    }
+    await clearStaffFailures(user.id);
 
     const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
     await run('UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?', [nowIso, user.id]);

@@ -2375,10 +2375,18 @@ const Settings = {
           let tfaBadgeHtml = '';
           const has2Fa = (u.two_factor_enabled !== 0 && u.two_factor_enabled !== false);
           if (u.role === 'admin' || u.username === 'admin' || has2Fa) {
-            const currentPin = u.two_factor_pin || '123456';
+            // الرمز لا يُعرض أبداً؛ الخادم يرسل فقط هل هو مُعيَّن أم لا.
+            const pinSet = Boolean(u.two_factor_configured);
             tfaBadgeHtml = `<div style="margin-top: 5px;">
-              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="رمز التحقق بخطوتين (PIN) المعتمد لهذا الحساب - انقر للتعديل وتغيير الرمز">
-                🔐 PIN: <strong style="font-family: monospace; letter-spacing: 1px; color: #fbbf24;">${currentPin}</strong>
+              <span class="badge" style="background: ${pinSet ? 'rgba(212, 175, 55, 0.15)' : 'rgba(239, 68, 68, 0.12)'}; color: ${pinSet ? 'var(--gold-light)' : '#f87171'}; border: 1px solid ${pinSet ? 'rgba(212, 175, 55, 0.4)' : 'rgba(239, 68, 68, 0.4)'}; font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="${pinSet ? 'رمز التحقق بخطوتين مُعيَّن ومخفي - انقر لتغييره' : 'لم يُعيَّن رمز PIN لهذا الحساب - انقر لتعيينه'}">
+                ${pinSet ? '🔐 PIN مُعيَّن <strong style="font-family: monospace; letter-spacing: 2px;">••••••</strong>' : '⚠️ لا يوجد PIN — انقر لتعيينه'}
+              </span>
+            </div>`;
+          }
+          if (u.login_locked) {
+            tfaBadgeHtml += `<div style="margin-top: 5px;">
+              <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.45); font-size: 0.72rem; cursor: pointer;" onclick="Settings.unlockUserLogin(${u.id})" title="الحساب مقفل مؤقتاً بسبب محاولات دخول خاطئة - انقر لفك القفل">
+                ⛔ مقفل مؤقتاً — فك القفل
               </span>
             </div>`;
           }
@@ -3343,6 +3351,18 @@ const Settings = {
       } catch (e) {
         App.showToast('خطأ في الاتصال بالخادم', 'error');
       }
+    }
+  },
+
+  // ================== فك قفل الدخول المؤقت عن حساب ==================
+  async unlockUserLogin(userId) {
+    try {
+      const res = await fetch(`/api/users/${userId}/unlock-login`, { method: 'POST' });
+      const data = await res.json();
+      App.showToast(data.message || (res.ok ? 'تم فك القفل' : 'تعذر فك القفل'), res.ok && data.success ? 'success' : 'error');
+      if (res.ok && data.success) await this.loadUsers();
+    } catch (e) {
+      App.showToast('خطأ في الاتصال بالخادم', 'error');
     }
   },
 
