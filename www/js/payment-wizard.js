@@ -389,7 +389,7 @@ const PaymentWizard = {
         tr.innerHTML = `
           <td><strong>${t.transaction_no}</strong></td>
           <td>${t.transaction_date}</td>
-          <td><span style="color: ${t.direction === 'IN' ? '#10b981' : '#ef4444'}; font-weight: bold;">${t.direction === 'IN' ? 'قبض (IN)' : 'صرف (OUT)'}</span></td>
+          <td><span style="color: ${t.direction === 'IN' ? 'var(--color-success, #10b981)' : 'var(--color-danger, #ef4444)'}; font-weight: bold;">${t.direction === 'IN' ? 'قبض (IN)' : 'صرف (OUT)'}</span></td>
           <td>${t.context_name_ar || t.context_code}</td>
           <td>${t.instrument_name_ar || t.instrument_code}</td>
           <td>${t.channel_name_ar || t.channel_id}</td>
@@ -434,7 +434,7 @@ const PaymentWizard = {
     const box = document.getElementById('alertBox');
     box.style.display = 'block';
     box.style.backgroundColor = type === 'danger' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)';
-    box.style.color = type === 'danger' ? '#f87171' : '#34d399';
+    box.style.color = type === 'danger' ? 'var(--color-danger, #f87171)' : 'var(--color-success, #34d399)';
     box.style.border = type === 'danger' ? '1px solid #ef4444' : '1px solid #10b981';
     box.innerHTML = msg;
   },

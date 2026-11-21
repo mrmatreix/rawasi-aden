@@ -21,6 +21,7 @@ const TOKENS = new Map([
   ['#f87171', '--color-danger'], ['#ef4444', '--color-danger'], ['#fca5a5', '--color-danger'],
   ['#f59e0b', '--color-warning'], ['#fbbf24', '--color-warning'], ['#facc15', '--color-warning'],
   ['#f6d878', '--text-gold'], ['#f3cf65', '--text-gold'], ['#d4af37', '--text-gold'], ['#d6ad35', '--text-gold'], ['var(--gold-light)', '--text-gold'], ['var(--gold-primary)', '--text-gold'],
+  ['#a78bfa', '--color-purple'], ['#c4b5fd', '--color-purple'],
   ['#94a3b8', '--text-secondary'], ['#cbd5e1', '--text-secondary'], ['#a8b8cc', '--text-secondary'],
   ['#f8fafc', '--text-primary'], ['#f1f5f9', '--text-primary'], ['#e2e8f0', '--text-primary']
 ]);
@@ -49,9 +50,26 @@ function replaceColors(decls, stats) {
   });
 }
 
+/** الألوان داخل تعابير JavaScript: color: ${ok ? '#10b981' : '#f87171'} و el.style.color = ok ? '#10b981' : ... */
+function replaceQuotedLiterals(expr, stats) {
+  return expr.replace(/(['"])(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\1/g, (all, q, value) => {
+    const token = TOKENS.get(value.toLowerCase());
+    if (!token) return all;
+    stats.n++;
+    return q + 'var(' + token + ', ' + value + ')' + q;
+  });
+}
+
+function transformExpressions(src, stats) {
+  return src
+    .replace(/((?<![-\w])color\s*:\s*\$\{)([^{}]*)(\})/g, (all, a, expr, b) => a + replaceQuotedLiterals(expr, stats) + b)
+    .replace(/(\.style\.color\s*=\s*)([^;\n]+)/g, (all, a, expr) => a + replaceQuotedLiterals(expr, stats));
+}
+
 function transformMarkup(src, stats) {
   // style="..." و style='...' في HTML وقوالب JavaScript
-  return src.replace(/(\bstyle\s*=\s*)(["'])([^"'<>]*?)\2/g, (all, pre, q, decls) => pre + q + replaceColors(decls, stats) + q);
+  const out = src.replace(/(\bstyle\s*=\s*)(["'])([^"'<>]*?)\2/g, (all, pre, q, decls) => pre + q + replaceColors(decls, stats) + q);
+  return transformExpressions(out, stats);
 }
 
 function transformCss(src, stats) {

@@ -231,7 +231,7 @@ const ProjectControlUI = {
             <!-- مؤشر الانحراف والمطابقة -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center;">
               <span style="font-size: 0.82rem; color: var(--text-secondary); font-weight: bold; display: block; margin-bottom: 8px;">حجم الانحراف الرقابي (Variance)</span>
-              <div style="font-size: 2.8rem; font-weight: 900; color: ${Math.abs(d.variance) > 15 ? '#ef4444' : (Math.abs(d.variance) > 5 ? '#f59e0b' : '#10b981')}; font-family: monospace; line-height: 1;">
+              <div style="font-size: 2.8rem; font-weight: 900; color: ${Math.abs(d.variance) > 15 ? 'var(--color-danger, #ef4444)' : (Math.abs(d.variance) > 5 ? 'var(--color-warning, #f59e0b)' : 'var(--color-success, #10b981)')}; font-family: monospace; line-height: 1;">
                 ${d.variance > 0 ? '+' : ''}${d.variance}%
               </div>
               <span style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-top: 8px;">
@@ -589,7 +589,7 @@ const ProjectControlUI = {
                 <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: bold;">
                   ⏱️ إدارة الجدول الزمني الاحترافي
                 </span>
-                <span class="badge" style="background: ${comp.has_baseline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${comp.has_baseline ? '#10b981' : '#f59e0b'};">
+                <span class="badge" style="background: ${comp.has_baseline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${comp.has_baseline ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'};">
                   ${comp.has_baseline ? `📌 خط الأساس: ${comp.baseline?.name || 'معتمد'}` : '⚠️ لم يتم حفظ خط أساس بعد'}
                 </span>
               </div>
@@ -630,7 +630,7 @@ const ProjectControlUI = {
             </div>
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">أنشطة متأخرة عن الخطة</span>
-              <span class="hub-kpi-value" style="color: ${(comp.delayed_tasks_count || 0) > 0 ? '#f59e0b' : '#10b981'}; font-size: 1.6rem;">
+              <span class="hub-kpi-value" style="color: ${(comp.delayed_tasks_count || 0) > 0 ? 'var(--color-warning, #f59e0b)' : 'var(--color-success, #10b981)'}; font-size: 1.6rem;">
                 ${comp.delayed_tasks_count || 0} <small>نشاط</small>
               </span>
             </div>
@@ -940,10 +940,10 @@ const ProjectControlUI = {
           <div class="panel-header" style="flex-wrap: wrap; gap: 14px; border-bottom: 1px solid var(--border-light); padding-bottom: 16px;">
             <div>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
-                <span class="badge" style="background: ${h.cost_status === 'green' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${h.cost_status === 'green' ? '#10b981' : '#f87171'}; border: 1px solid ${h.cost_status === 'green' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}; font-weight: bold;">
+                <span class="badge" style="background: ${h.cost_status === 'green' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${h.cost_status === 'green' ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'}; border: 1px solid ${h.cost_status === 'green' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}; font-weight: bold;">
                   التكلفة (Cost): ${h.cost_status === 'green' ? 'ضمن الميزانية 🟢' : (h.cost_status === 'yellow' ? 'تحذير تجاوز 🟡' : 'تجاوز حرج 🔴')}
                 </span>
-                <span class="badge" style="background: ${h.schedule_status === 'green' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${h.schedule_status === 'green' ? '#10b981' : '#f59e0b'}; border: 1px solid ${h.schedule_status === 'green' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}; font-weight: bold;">
+                <span class="badge" style="background: ${h.schedule_status === 'green' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${h.schedule_status === 'green' ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'}; border: 1px solid ${h.schedule_status === 'green' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}; font-weight: bold;">
                   الزمن (Schedule): ${h.schedule_status === 'green' ? 'وفق الخطة 🟢' : 'متأخر عن الخطة 🟡'}
                 </span>
               </div>
@@ -971,7 +971,7 @@ const ProjectControlUI = {
             <div style="display: flex; align-items: flex-start; gap: 12px;">
               <span style="font-size: 1.8rem;">${isCpiHealthy && isSpiHealthy ? '🟢' : '🚨'}</span>
               <div>
-                <strong style="color: ${isCpiHealthy && isSpiHealthy ? '#34d399' : '#f87171'}; font-size: 1.05rem; display: block; margin-bottom: 4px;">
+                <strong style="color: ${isCpiHealthy && isSpiHealthy ? 'var(--color-success, #34d399)' : 'var(--color-danger, #f87171)'}; font-size: 1.05rem; display: block; margin-bottom: 4px;">
                   ${isCpiHealthy && isSpiHealthy ? 'الأداء المالي والهندسي سليم ومنضبط' : 'إنذار رقابي مبكر للإدارة التنفيذية:'}
                 </strong>
                 <p style="color: var(--text-primary, #f1f5f9); font-size: 0.9rem; margin: 0; line-height: 1.5;">
@@ -1043,12 +1043,12 @@ const ProjectControlUI = {
             <!-- CPI: مؤشر أداء التكلفة -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid ${isCpiHealthy ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}; border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: ${isCpiHealthy ? '#10b981' : '#f87171'}; font-weight: bold;">CPI: مؤشر أداء التكلفة</span>
-                <span class="badge" style="background: ${isCpiHealthy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${isCpiHealthy ? '#10b981' : '#f87171'};">
+                <span style="font-size: 0.8rem; color: ${isCpiHealthy ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'}; font-weight: bold;">CPI: مؤشر أداء التكلفة</span>
+                <span class="badge" style="background: ${isCpiHealthy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${isCpiHealthy ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'};">
                   ${m.CPI >= 1 ? 'وفر مالي ✅' : 'تجاوز تكلفة ❌'}
                 </span>
               </div>
-              <div style="font-size: 2.2rem; font-weight: 900; color: ${isCpiHealthy ? '#10b981' : '#f87171'}; font-family: monospace;">
+              <div style="font-size: 2.2rem; font-weight: 900; color: ${isCpiHealthy ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'}; font-family: monospace;">
                 ${m.CPI}
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
@@ -1059,12 +1059,12 @@ const ProjectControlUI = {
             <!-- SPI: مؤشر أداء الجدول الزمني -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid ${isSpiHealthy ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}; border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: ${isSpiHealthy ? '#10b981' : '#f59e0b'}; font-weight: bold;">SPI: مؤشر أداء الجدول</span>
-                <span class="badge" style="background: ${isSpiHealthy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${isSpiHealthy ? '#10b981' : '#f59e0b'};">
+                <span style="font-size: 0.8rem; color: ${isSpiHealthy ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'}; font-weight: bold;">SPI: مؤشر أداء الجدول</span>
+                <span class="badge" style="background: ${isSpiHealthy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${isSpiHealthy ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'};">
                   ${m.SPI >= 1 ? 'متقدم عن الخطة ⚡' : 'متأخر زمنياً ⏳'}
                 </span>
               </div>
-              <div style="font-size: 2.2rem; font-weight: 900; color: ${isSpiHealthy ? '#10b981' : '#f59e0b'}; font-family: monospace;">
+              <div style="font-size: 2.2rem; font-weight: 900; color: ${isSpiHealthy ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'}; font-family: monospace;">
                 ${m.SPI}
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
@@ -1078,7 +1078,7 @@ const ProjectControlUI = {
                 <span style="font-size: 0.8rem; color: var(--text-primary, #e2e8f0); font-weight: bold;">EAC: التكلفة النهائية المتوقعة</span>
                 <span class="badge" style="background: rgba(255, 255, 255, 0.08); color: var(--text-secondary, #cbd5e1);">Forecast at Completion</span>
               </div>
-              <div style="font-size: 1.8rem; font-weight: 800; color: ${m.EAC > m.BAC ? '#f87171' : '#10b981'}; font-family: monospace;">
+              <div style="font-size: 1.8rem; font-weight: 800; color: ${m.EAC > m.BAC ? 'var(--color-danger, #f87171)' : 'var(--color-success, #10b981)'}; font-family: monospace;">
                 ${App.formatNumber(m.EAC)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
@@ -1089,12 +1089,12 @@ const ProjectControlUI = {
             <!-- VAC: الانحراف المتوقع عند الإكمال -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: ${m.VAC >= 0 ? '#10b981' : '#f87171'}; font-weight: bold;">VAC: الانحراف النهائي المتوقع</span>
-                <span class="badge" style="background: ${m.VAC >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${m.VAC >= 0 ? '#10b981' : '#f87171'};">
+                <span style="font-size: 0.8rem; color: ${m.VAC >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'}; font-weight: bold;">VAC: الانحراف النهائي المتوقع</span>
+                <span class="badge" style="background: ${m.VAC >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${m.VAC >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'};">
                   ${m.VAC >= 0 ? 'وفر متوقع' : 'عجز متوقع'}
                 </span>
               </div>
-              <div style="font-size: 1.8rem; font-weight: 800; color: ${m.VAC >= 0 ? '#10b981' : '#f87171'}; font-family: monospace;">
+              <div style="font-size: 1.8rem; font-weight: 800; color: ${m.VAC >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'}; font-family: monospace;">
                 ${m.VAC > 0 ? '+' : ''}${App.formatNumber(m.VAC)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
@@ -1114,15 +1114,15 @@ const ProjectControlUI = {
               </div>
               <div>
                 <span style="font-size: 0.75rem; color: var(--text-secondary); display: block;">CV (انحراف التكلفة اللحظي):</span>
-                <strong style="font-family: monospace; font-size: 1.1rem; color: ${m.CV >= 0 ? '#10b981' : '#f87171'};">${m.CV > 0 ? '+' : ''}${App.formatNumber(m.CV)} ${d.currency}</strong>
+                <strong style="font-family: monospace; font-size: 1.1rem; color: ${m.CV >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'};">${m.CV > 0 ? '+' : ''}${App.formatNumber(m.CV)} ${d.currency}</strong>
               </div>
               <div>
                 <span style="font-size: 0.75rem; color: var(--text-secondary); display: block;">SV (انحراف الجدول الزمني):</span>
-                <strong style="font-family: monospace; font-size: 1.1rem; color: ${m.SV >= 0 ? '#10b981' : '#f59e0b'};">${m.SV > 0 ? '+' : ''}${App.formatNumber(m.SV)} ${d.currency}</strong>
+                <strong style="font-family: monospace; font-size: 1.1rem; color: ${m.SV >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'};">${m.SV > 0 ? '+' : ''}${App.formatNumber(m.SV)} ${d.currency}</strong>
               </div>
               <div>
                 <span style="font-size: 0.75rem; color: var(--text-secondary); display: block;">TCPI (الكفاءة المطلوبة للإكمال):</span>
-                <strong style="font-family: monospace; font-size: 1.1rem; color: ${m.TCPI > 1.1 ? '#f87171' : '#10b981'};">${m.TCPI}</strong>
+                <strong style="font-family: monospace; font-size: 1.1rem; color: ${m.TCPI > 1.1 ? 'var(--color-danger, #f87171)' : 'var(--color-success, #10b981)'};">${m.TCPI}</strong>
               </div>
             </div>
           </div>
@@ -1157,8 +1157,8 @@ const ProjectControlUI = {
                       <td><span style="font-family: monospace;">${App.formatNumber(h.pv || 0)}</span></td>
                       <td><span style="font-family: monospace; color: var(--color-success, #10b981);">${App.formatNumber(h.ev || 0)}</span></td>
                       <td><span style="font-family: monospace; color: var(--color-danger, #f87171);">${App.formatNumber(h.ac || 0)}</span></td>
-                      <td><strong style="color: ${h.cpi >= 1 ? '#10b981' : '#f87171'};">${h.cpi || '-'}</strong></td>
-                      <td><strong style="color: ${h.spi >= 1 ? '#10b981' : '#f59e0b'};">${h.spi || '-'}</strong></td>
+                      <td><strong style="color: ${h.cpi >= 1 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'};">${h.cpi || '-'}</strong></td>
+                      <td><strong style="color: ${h.spi >= 1 ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'};">${h.spi || '-'}</strong></td>
                       <td><span style="font-family: monospace;">${App.formatNumber(h.eac || 0)}</span></td>
                     </tr>
                   `).join('')}
@@ -1308,13 +1308,13 @@ const ProjectControlUI = {
             </div>
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">تقارير عدم المطابقة المفتوحة (NCR)</span>
-              <span class="hub-kpi-value" style="color: ${(s.ncr_open || 0) > 0 ? '#f59e0b' : '#10b981'}; font-size: 1.6rem;">
+              <span class="hub-kpi-value" style="color: ${(s.ncr_open || 0) > 0 ? 'var(--color-warning, #f59e0b)' : 'var(--color-success, #10b981)'}; font-size: 1.6rem;">
                 ${s.ncr_open || d.non_conformances?.filter(n => n.status !== 'closed').length || 0} <small>تقرير</small>
               </span>
             </div>
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">استفسارات RFI بانتظار الرد</span>
-              <span class="hub-kpi-value" style="color: ${(s.rfi_pending || 0) > 0 ? '#38bdf8' : '#10b981'}; font-size: 1.6rem;">
+              <span class="hub-kpi-value" style="color: ${(s.rfi_pending || 0) > 0 ? 'var(--color-info, #38bdf8)' : 'var(--color-success, #10b981)'}; font-size: 1.6rem;">
                 ${s.rfi_pending || d.rfis?.filter(r => r.status === 'open').length || 0} <small>طلب</small>
               </span>
             </div>
@@ -1496,11 +1496,11 @@ const ProjectControlUI = {
                     <strong style="color: var(--text-primary, #f1f5f9); display: block;">${c.title}</strong>
                     <span style="font-size: 0.75rem; color: var(--text-muted);">${c.justification || ''}</span>
                   </td>
-                  <td><span style="font-family: monospace; font-weight: bold; color: ${c.days_requested > 0 ? '#f59e0b' : 'inherit'};">${c.days_requested ? c.days_requested + ' يوم' : '-'}</span></td>
-                  <td><span style="font-family: monospace; font-weight: bold; color: ${c.amount_claimed > 0 ? '#10b981' : 'inherit'};">${c.amount_claimed ? App.formatNumber(c.amount_claimed) : '-'}</span></td>
+                  <td><span style="font-family: monospace; font-weight: bold; color: ${c.days_requested > 0 ? 'var(--color-warning, #f59e0b)' : 'inherit'};">${c.days_requested ? c.days_requested + ' يوم' : '-'}</span></td>
+                  <td><span style="font-family: monospace; font-weight: bold; color: ${c.amount_claimed > 0 ? 'var(--color-success, #10b981)' : 'inherit'};">${c.amount_claimed ? App.formatNumber(c.amount_claimed) : '-'}</span></td>
                   <td><span style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1);">${c.contractual_reference || 'شروط العقد العامة'}</span></td>
                   <td>
-                    <span class="badge" style="background: ${c.status === 'approved' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'}; color: ${c.status === 'approved' ? '#10b981' : '#f59e0b'};">
+                    <span class="badge" style="background: ${c.status === 'approved' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'}; color: ${c.status === 'approved' ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)'};">
                       ${c.status === 'approved' ? 'معتمدة ✅' : (c.status === 'rejected' ? 'مرفوضة ❌' : 'قيد التفاوض ⏳')}
                     </span>
                   </td>
@@ -1548,14 +1548,14 @@ const ProjectControlUI = {
                   </td>
                   <td><span style="font-size: 0.78rem; color: var(--text-secondary);">${n.location_details || 'الموقع العام'}</span></td>
                   <td>
-                    <span class="badge" style="background: ${n.severity === 'critical' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.2)'}; color: ${n.severity === 'critical' ? '#f87171' : '#fbbf24'};">
+                    <span class="badge" style="background: ${n.severity === 'critical' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.2)'}; color: ${n.severity === 'critical' ? 'var(--color-danger, #f87171)' : 'var(--color-warning, #fbbf24)'};">
                       ${n.severity === 'critical' ? 'جسيم 🔴' : (n.severity === 'moderate' ? 'متوسط 🟡' : 'بسيط 🟢')}
                     </span>
                   </td>
                   <td><span style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1);">${n.corrective_action || 'إعادة الفحص والإصلاح'}</span></td>
                   <td><span style="font-size: 0.78rem; color: var(--text-muted); font-family: monospace;">${n.inspection_date || '-'}</span></td>
                   <td>
-                    <span class="badge" style="background: ${n.status === 'closed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${n.status === 'closed' ? '#10b981' : '#f87171'};">
+                    <span class="badge" style="background: ${n.status === 'closed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${n.status === 'closed' ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'};">
                       ${n.status === 'closed' ? 'مغلق ومصحح ✅' : 'مفتوح بانتظار المعالجة ⚠️'}
                     </span>
                   </td>
@@ -1605,23 +1605,23 @@ const ProjectControlUI = {
                     </td>
                     <td><span style="font-size: 0.78rem; color: var(--text-gold);">${r.to_party || 'استشاري المشروع'}</span></td>
                     <td>
-                      <span class="badge" style="background: ${r.urgency === 'critical' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; color: ${r.urgency === 'critical' ? '#f87171' : '#38bdf8'};">
+                      <span class="badge" style="background: ${r.urgency === 'critical' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; color: ${r.urgency === 'critical' ? 'var(--color-danger, #f87171)' : 'var(--color-info, #38bdf8)'};">
                         ${r.urgency === 'critical' ? 'حرج وعاجل ⚡' : 'عادي'}
                       </span>
                     </td>
                     <td>
-                      <span style="font-size: 0.78rem; font-family: monospace; color: ${isOverdue ? '#f87171' : '#cbd5e1'};">
+                      <span style="font-size: 0.78rem; font-family: monospace; color: ${isOverdue ? 'var(--color-danger, #f87171)' : 'var(--text-secondary, #cbd5e1)'};">
                         ${r.required_by_date || '-'}
                         ${isOverdue ? ' (متأخر ⏳)' : ''}
                       </span>
                     </td>
                     <td>
-                      <span style="font-size: 0.78rem; color: ${r.response ? '#10b981' : 'var(--text-muted)'};">
+                      <span style="font-size: 0.78rem; color: ${r.response ? 'var(--color-success, #10b981)' : 'var(--text-muted)'};">
                         ${r.response || 'بانتظار الرد الرسمي من الاستشاري...'}
                       </span>
                     </td>
                     <td>
-                      <span class="badge" style="background: ${r.status === 'answered' ? 'rgba(16, 185, 129, 0.2)' : (isOverdue ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)')}; color: ${r.status === 'answered' ? '#10b981' : (isOverdue ? '#f87171' : '#f59e0b')};">
+                      <span class="badge" style="background: ${r.status === 'answered' ? 'rgba(16, 185, 129, 0.2)' : (isOverdue ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)')}; color: ${r.status === 'answered' ? 'var(--color-success, #10b981)' : (isOverdue ? 'var(--color-danger, #f87171)' : 'var(--color-warning, #f59e0b)')};">
                         ${r.status === 'answered' ? 'تم الرد ✅' : (isOverdue ? 'تأخر في الرد ⚠️' : 'قيد المراجعة ⏳')}
                       </span>
                     </td>

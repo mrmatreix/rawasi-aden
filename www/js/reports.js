@@ -634,12 +634,12 @@ await this.loadIncomeStatement();
         if (badge) {
           if (isBalanced) {
             badge.textContent = '⚖️ معادلة الميزانية: متزنة تماماً (الأصول = الخصوم + الملكية) ✓';
-            badge.style.color = '#4ade80';
+            badge.style.color = 'var(--color-success, #4ade80)';
             badge.style.background = 'rgba(34,197,94,0.15)';
           } else {
             const diff = json.reconciliation?.difference || Math.abs(totals.assets - totals.liabilities_plus_equity);
             badge.textContent = `⚠️ فارق ميزانية: ${Reports.formatNumber(diff)} ${this.reportCurrency()}`;
-            badge.style.color = '#f87171';
+            badge.style.color = 'var(--color-danger, #f87171)';
             badge.style.background = 'rgba(239,68,68,0.15)';
           }
         }
@@ -1440,8 +1440,8 @@ await this.loadIncomeStatement();
               <td style="color: var(--color-success, #4ade80);">${Reports.formatNumber(cash)}</td>
               <td style="color: var(--color-warning, #facc15);">${Reports.formatNumber(adv)}</td>
               <td style="color: var(--text-secondary, #94a3b8);">${Reports.formatNumber(ret)}</td>
-              <td style="color: ${profit >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${Reports.formatNumber(profit)}</td>
-              <td style="color: ${netCash >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${Reports.formatNumber(netCash)}</td>
+              <td style="color: ${profit >= 0 ? 'var(--color-success, #4ade80)' : 'var(--color-danger, #f87171)'}; font-weight: bold;">${Reports.formatNumber(profit)}</td>
+              <td style="color: ${netCash >= 0 ? 'var(--color-success, #4ade80)' : 'var(--color-danger, #f87171)'}; font-weight: bold;">${Reports.formatNumber(netCash)}</td>
               <td style="text-align: center;">
                 <button type="button" class="btn btn-secondary btn-sm" onclick="Reports.openRevenueRecognitionModal(${p.project_id})" title="إثبات إيراد دوري" style="padding: 3px 8px; font-size: 0.75rem; white-space: nowrap;">
                   إثبات POC

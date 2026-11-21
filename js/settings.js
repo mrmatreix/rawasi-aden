@@ -97,7 +97,7 @@ const Settings = {
           <td><span class="badge" style="background: rgba(212, 175, 55, 0.2); color: var(--text-gold, #d4af37);">${u.role === 'owner' ? 'مالك (Owner)' : (u.role === 'manager' ? 'مدير (Manager)' : 'مطلع (Viewer)')}</span></td>
           <td><span class="badge" style="background: rgba(59, 130, 246, 0.2); color: var(--color-info, #60a5fa);">${u.assigned_projects_count || 0} مشاريع</span></td>
           <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #34d399);">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
-          <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? '#34d399' : '#f87171'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
+          <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? 'var(--color-success, #34d399)' : 'var(--color-danger, #f87171)'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
           <td>
             <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: var(--color-success, #34d399); border-color: #10b981;">إدارة التفاصيل ↗</a>
             ${Auth.hasPermission('client_app:delete') ? `<button type="button" class="btn btn-secondary btn-sm client-app-delete" style="padding:3px 8px;color:var(--color-danger, #f87171);margin-right:4px" title="حذف حساب العميل">🗑️ حذف</button>` : ''}
@@ -2378,7 +2378,7 @@ const Settings = {
             // الرمز لا يُعرض أبداً؛ الخادم يرسل فقط هل هو مُعيَّن أم لا.
             const pinSet = Boolean(u.two_factor_configured);
             tfaBadgeHtml = `<div style="margin-top: 5px;">
-              <span class="badge" style="background: ${pinSet ? 'rgba(212, 175, 55, 0.15)' : 'rgba(239, 68, 68, 0.12)'}; color: ${pinSet ? 'var(--gold-light)' : '#f87171'}; border: 1px solid ${pinSet ? 'rgba(212, 175, 55, 0.4)' : 'rgba(239, 68, 68, 0.4)'}; font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="${pinSet ? 'رمز التحقق بخطوتين مُعيَّن ومخفي - انقر لتغييره' : 'لم يُعيَّن رمز PIN لهذا الحساب - انقر لتعيينه'}">
+              <span class="badge" style="background: ${pinSet ? 'rgba(212, 175, 55, 0.15)' : 'var(--color-danger-bg)'}; color: ${pinSet ? 'var(--text-gold)' : 'var(--color-danger)'}; border: 1px solid ${pinSet ? 'rgba(212, 175, 55, 0.4)' : 'var(--color-danger-border)'}; font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="${pinSet ? 'رمز التحقق بخطوتين مُعيَّن ومخفي - انقر لتغييره' : 'لم يُعيَّن رمز PIN لهذا الحساب - انقر لتعيينه'}">
                 ${pinSet ? '🔐 PIN مُعيَّن <strong style="font-family: monospace; letter-spacing: 2px;">••••••</strong>' : '⚠️ لا يوجد PIN — انقر لتعيينه'}
               </span>
             </div>`;
@@ -2834,7 +2834,7 @@ const Settings = {
       if (badge) {
         badge.textContent = 'منع أي جهاز جديد 🛡️';
         badge.style.background = 'rgba(16, 185, 129, 0.2)';
-        badge.style.color = '#10b981';
+        badge.style.color = 'var(--color-success, #10b981)';
       }
       if (note) {
         note.innerHTML = '🛡️ <strong>قفل على جهاز واحد:</strong> يُسمح للمستخدم بالدخول من جهاز واحد فقط معتمد، ويمنع النظام تماماً الدخول من أي جهاز آخر جديد.';
@@ -2847,7 +2847,7 @@ const Settings = {
       if (badge) {
         badge.textContent = 'جلسة واحدة (مخصص)';
         badge.style.background = 'rgba(239, 68, 68, 0.15)';
-        badge.style.color = '#f87171';
+        badge.style.color = 'var(--color-danger, #f87171)';
       }
       if (note) {
         note.innerHTML = '🔒 <strong>جلسة واحدة صارمة:</strong> يُسمح بتسجيل الدخول من جهاز واحد فقط، وسيتم تطبيق الإجراء المختار فوراً.';
@@ -2860,7 +2860,7 @@ const Settings = {
       if (badge) {
         badge.textContent = 'متعدد الأجهزة (مخصص)';
         badge.style.background = 'rgba(16, 185, 129, 0.15)';
-        badge.style.color = '#34d399';
+        badge.style.color = 'var(--color-success, #34d399)';
       }
       if (note) {
         note.innerHTML = '📱💻 <strong>أجهزة متعددة:</strong> يُسمح بفتح الحساب من عدة أجهزة في نفس الوقت حتى السقف المحدد.';
@@ -3697,7 +3697,7 @@ const Settings = {
           lastTestStatusEl.innerHTML = d.lastTest.status === 'passed' 
             ? '🟢 مجاز وسليم (Passed)' 
             : '🔴 فشل الفحص الأخير';
-          lastTestStatusEl.style.color = d.lastTest.status === 'passed' ? '#4ade80' : '#f87171';
+          lastTestStatusEl.style.color = d.lastTest.status === 'passed' ? 'var(--color-success, #4ade80)' : 'var(--color-danger, #f87171)';
         }
         if (lastTestDetailsEl) {
           lastTestDetailsEl.innerHTML = `${testDt.toLocaleDateString('ar-YE')} | ${d.lastTest.tablesCount} جدول | توازن الحسابات: ${d.lastTest.isBalanced ? 'متزن ⚖️' : 'غير متزن ⚠️'} | (${d.lastTest.durationMs}ms)`;
@@ -3705,7 +3705,7 @@ const Settings = {
       } else {
         if (lastTestStatusEl) {
           lastTestStatusEl.innerHTML = '⚠️ لم يتم إجراء اختبار بعد';
-          lastTestStatusEl.style.color = '#facc15';
+          lastTestStatusEl.style.color = 'var(--color-warning, #facc15)';
         }
         if (lastTestDetailsEl) lastTestDetailsEl.textContent = 'يُوصى بإجراء اختبار في بيئة معزولة Sandbox للتحقق من جاهزية الاستعادة';
       }
@@ -3717,10 +3717,10 @@ const Settings = {
       if (storagePersistEl) {
         if (d.storage.isRailwayPersistent) {
           storagePersistEl.innerHTML = '🟢 تخزين دائم مؤكد (Railway Volume Persistent) 🛡️';
-          storagePersistEl.style.color = '#4ade80';
+          storagePersistEl.style.color = 'var(--color-success, #4ade80)';
         } else {
           storagePersistEl.innerHTML = '⚠️ تخزين محلي داخل الحاوية (Ephemeral Storage) - يُنصح بربط Railway Volume';
-          storagePersistEl.style.color = '#facc15';
+          storagePersistEl.style.color = 'var(--color-warning, #facc15)';
         }
       }
 
@@ -4331,13 +4331,13 @@ const Settings = {
       if (statusBadge) {
         if (!d.enabled) {
           statusBadge.innerHTML = '🟡 معطل مؤقتاً';
-          statusBadge.style.color = '#facc15';
+          statusBadge.style.color = 'var(--color-warning, #facc15)';
         } else if (d.lastStatus === 'failed') {
           statusBadge.innerHTML = '🔴 فشل آخر نسخ';
-          statusBadge.style.color = '#f87171';
+          statusBadge.style.color = 'var(--color-danger, #f87171)';
         } else {
           statusBadge.innerHTML = '🟢 مفعل ومنتظم';
-          statusBadge.style.color = '#4ade80';
+          statusBadge.style.color = 'var(--color-success, #4ade80)';
         }
       }
 
@@ -4479,7 +4479,7 @@ const Settings = {
     if (resultBox) {
       resultBox.style.display = 'block';
       resultBox.style.background = 'rgba(255,255,255,0.05)';
-      resultBox.style.color = '#94a3b8';
+      resultBox.style.color = 'var(--text-secondary, #94a3b8)';
       resultBox.innerHTML = 'جاري اختبار المسار وصلاحيات الكتابة... ⏳';
     }
 
@@ -4493,13 +4493,13 @@ const Settings = {
       if (resultBox) {
         if (json.success) {
           resultBox.style.background = 'rgba(34, 197, 94, 0.15)';
-          resultBox.style.color = '#4ade80';
+          resultBox.style.color = 'var(--color-success, #4ade80)';
           resultBox.style.border = '1px solid rgba(34, 197, 94, 0.3)';
           resultBox.innerHTML = `<strong>${json.message}</strong><br><small style="direction:ltr; display:block; color:var(--text-primary, #f8fafc); font-family:monospace;">${json.resolvedPath}</small>`;
           if (pathStatus) pathStatus.innerHTML = '<span style="color:var(--color-success, #4ade80);">(مسار صالح ومؤكد ✅)</span>';
         } else {
           resultBox.style.background = 'rgba(239, 68, 68, 0.15)';
-          resultBox.style.color = '#f87171';
+          resultBox.style.color = 'var(--color-danger, #f87171)';
           resultBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
           resultBox.innerHTML = `<strong>⚠️ ${json.message}</strong>`;
           if (pathStatus) pathStatus.innerHTML = '<span style="color:var(--color-danger, #f87171);">(تعذر استخدام المسار ❌)</span>';
@@ -4508,7 +4508,7 @@ const Settings = {
     } catch (err) {
       if (resultBox) {
         resultBox.style.background = 'rgba(239, 68, 68, 0.15)';
-        resultBox.style.color = '#f87171';
+        resultBox.style.color = 'var(--color-danger, #f87171)';
         resultBox.innerHTML = 'خطأ أثناء الاتصال بالخادم لاختبار المسار';
       }
     }
@@ -4870,7 +4870,7 @@ const Settings = {
     if (resBox) {
       resBox.style.display = 'block';
       resBox.style.background = 'rgba(255,255,255,0.05)';
-      resBox.style.color = '#94a3b8';
+      resBox.style.color = 'var(--text-secondary, #94a3b8)';
       resBox.textContent = 'جاري اختبار الاتصال واستجابة السحابة... ⏳';
     }
 
@@ -4884,12 +4884,12 @@ const Settings = {
       if (resBox) {
         if (json.success) {
           resBox.style.background = 'rgba(16, 185, 129, 0.15)';
-          resBox.style.color = '#34d399';
+          resBox.style.color = 'var(--color-success, #34d399)';
           resBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
           resBox.innerHTML = `<strong>✅ ${json.message}</strong>${json.latencyMs ? ` <span style="font-size:0.75rem;">(${json.latencyMs} ms)</span>` : ''}`;
         } else {
           resBox.style.background = 'rgba(239, 68, 68, 0.15)';
-          resBox.style.color = '#f87171';
+          resBox.style.color = 'var(--color-danger, #f87171)';
           resBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
           resBox.innerHTML = `<strong>❌ ${json.message}</strong>`;
         }
@@ -4897,7 +4897,7 @@ const Settings = {
     } catch (e) {
       if (resBox) {
         resBox.style.background = 'rgba(239, 68, 68, 0.15)';
-        resBox.style.color = '#f87171';
+        resBox.style.color = 'var(--color-danger, #f87171)';
         resBox.textContent = 'تعذر الاتصال بالخادم لاختبار السحابة: ' + e.message;
       }
     } finally {
@@ -5116,7 +5116,7 @@ const Settings = {
     if (inspectBox) {
       inspectBox.style.display = 'block';
       inspectBox.style.background = 'rgba(255,255,255,0.05)';
-      inspectBox.style.color = '#94a3b8';
+      inspectBox.style.color = 'var(--text-secondary, #94a3b8)';
       inspectBox.textContent = 'جاري فحص التشفير والنزاهة وقراءة بيان الأرشيف... ⏳';
     }
 
@@ -5145,7 +5145,7 @@ const Settings = {
         const d = json.data;
         if (d.requiresPassphrase) {
           inspectBox.style.background = 'rgba(245, 158, 11, 0.15)';
-          inspectBox.style.color = '#fbbf24';
+          inspectBox.style.color = 'var(--color-warning, #fbbf24)';
           inspectBox.style.border = '1px solid rgba(245, 158, 11, 0.3)';
           inspectBox.innerHTML = `
             <strong>🔒 هذا الأرشيف مشفر بنظام AES-256-GCM</strong>
@@ -5156,7 +5156,7 @@ const Settings = {
         }
 
         inspectBox.style.background = 'rgba(16, 185, 129, 0.15)';
-        inspectBox.style.color = '#34d399';
+        inspectBox.style.color = 'var(--color-success, #34d399)';
         inspectBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
 
         const m = d.manifest;
@@ -5182,14 +5182,14 @@ const Settings = {
         App.showToast('تم فحص سلامة الأرشيف بنجاح وهو جاهز للاستعادة ✅', 'success');
       } else {
         inspectBox.style.background = 'rgba(239, 68, 68, 0.15)';
-        inspectBox.style.color = '#f87171';
+        inspectBox.style.color = 'var(--color-danger, #f87171)';
         inspectBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
         inspectBox.innerHTML = `<strong>❌ خطأ أثناء الفحص:</strong> ${json.message}`;
       }
     } catch (err) {
       if (inspectBox) {
         inspectBox.style.background = 'rgba(239, 68, 68, 0.15)';
-        inspectBox.style.color = '#f87171';
+        inspectBox.style.color = 'var(--color-danger, #f87171)';
         inspectBox.innerHTML = `<strong>خطأ في فحص الملف:</strong> ${err.message}`;
       }
     } finally {

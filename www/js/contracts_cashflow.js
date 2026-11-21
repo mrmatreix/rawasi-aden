@@ -406,7 +406,7 @@ const CashFlowUI = {
     const netEl = document.getElementById('cfKpiNetCash');
     const netVal = this.data.total_net_cash_flow || 0;
     netEl.textContent = `${App.formatNumber(netVal)} ر.ي`;
-    netEl.style.color = netVal >= 0 ? '#4ade80' : '#f87171';
+    netEl.style.color = netVal >= 0 ? 'var(--color-success, #4ade80)' : 'var(--color-danger, #f87171)';
   },
 
   renderMonthsTable() {
@@ -418,7 +418,7 @@ const CashFlowUI = {
         <td><strong>${m.period}</strong></td>
         <td style="color: var(--color-success, #4ade80); font-weight: bold;">+${App.formatNumber(m.expected_collections)} ر.ي</td>
         <td style="color: var(--color-danger, #f87171); font-weight: bold;">-${App.formatNumber(m.expected_payments)} ر.ي</td>
-        <td style="font-weight: bold; color: ${m.net_cash_flow >= 0 ? '#4ade80' : '#f87171'};">
+        <td style="font-weight: bold; color: ${m.net_cash_flow >= 0 ? 'var(--color-success, #4ade80)' : 'var(--color-danger, #f87171)'};">
           ${m.net_cash_flow >= 0 ? '+' : ''}${App.formatNumber(m.net_cash_flow)} ر.ي
         </td>
         <td style="font-weight: 800; color: var(--text-gold);">

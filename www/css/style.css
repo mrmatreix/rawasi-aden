@@ -47,6 +47,7 @@
   --color-info: #38bdf8;
   --color-info-bg: rgba(56, 189, 248, 0.15);
   --color-info-border: rgba(56, 189, 248, 0.40);
+  --color-purple: #a78bfa;
   --color-on-accent: #ffffff;
 
   /* المقاسات الموحّدة */
@@ -99,6 +100,12 @@ body.light-mode {
   --color-info: #0369a1;
   --color-info-bg: rgba(56, 189, 248, 0.14);
   --color-info-border: rgba(3, 105, 161, 0.35);
+  --color-purple: #6d28d9;
+  /* ألوان التمييز القديمة تُستخدم في الشارات كنص؛ نسخة أغمق للخلفيات الفاتحة */
+  --accent-blue: #0369a1;
+  --accent-green: #047857;
+  --accent-red: #b91c1c;
+  --accent-amber: #b45309;
   --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.18);

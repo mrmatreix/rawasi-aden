@@ -978,7 +978,7 @@ const App = {
                   <td style="text-align: center;">
                     <div style="display: flex; justify-content: center; gap: 4px; flex-wrap: wrap;">
                       <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);" title="عدد العقود المعتمدة">${contractCount} عقود</span>
-                      <span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa;" title="المشاريع المرتبطة">${projectCount} مشاريع</span>
+                      <span class="badge" style="background: rgba(139, 92, 246, 0.15); color: var(--color-purple, #a78bfa);" title="المشاريع المرتبطة">${projectCount} مشاريع</span>
                       <span class="badge" style="background: rgba(234, 179, 8, 0.15); color: var(--color-warning, #facc15);" title="المستخلصات والمطالبات">${billsCount} مستخلص</span>
                     </div>
                   </td>
@@ -1248,7 +1248,7 @@ const App = {
 
             <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; border-right: 4px solid ${fin.outstanding_balance > 0 ? '#f59e0b' : '#10b981'};">
               <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">إجمالي الرصيد المستحق (المتبقي له)</div>
-              <div style="font-size: 1.4rem; font-weight: 700; color: ${fin.outstanding_balance > 0 ? '#f59e0b' : '#10b981'};">
+              <div style="font-size: 1.4rem; font-weight: 700; color: ${fin.outstanding_balance > 0 ? 'var(--color-warning, #f59e0b)' : 'var(--color-success, #10b981)'};">
                 ${this.formatNumber(fin.outstanding_balance)} <span style="font-size: 0.8rem; font-weight: normal;">${currency}</span>
               </div>
               <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">(المفوتر - المسدد) ديناميكياً 100%</div>
@@ -2008,7 +2008,7 @@ const App = {
       if (badgeEl) {
         badgeEl.textContent = 'معطل';
         badgeEl.style.background = 'rgba(234, 179, 8, 0.2)';
-        badgeEl.style.color = '#facc15';
+        badgeEl.style.color = 'var(--color-warning, #facc15)';
         badgeEl.style.borderColor = 'rgba(234, 179, 8, 0.4)';
       }
     } else if (d.lastStatus === 'failed') {
@@ -2018,7 +2018,7 @@ const App = {
       if (badgeEl) {
         badgeEl.textContent = 'خطأ';
         badgeEl.style.background = 'rgba(239, 68, 68, 0.2)';
-        badgeEl.style.color = '#f87171';
+        badgeEl.style.color = 'var(--color-danger, #f87171)';
         badgeEl.style.borderColor = 'rgba(239, 68, 68, 0.4)';
       }
     } else {
@@ -2028,7 +2028,7 @@ const App = {
       if (badgeEl) {
         badgeEl.textContent = 'مفعل';
         badgeEl.style.background = 'rgba(34, 197, 94, 0.2)';
-        badgeEl.style.color = '#4ade80';
+        badgeEl.style.color = 'var(--color-success, #4ade80)';
         badgeEl.style.borderColor = 'rgba(34, 197, 94, 0.4)';
       }
     }
@@ -2274,7 +2274,7 @@ const App = {
               <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 1.4rem;">${isOfficial ? '📜' : '🏗️'}</span>
                 <div>
-                  <div style="font-size: 1rem; font-weight: 700; color: ${isOfficial ? '#38bdf8' : '#a78bfa'};">
+                  <div style="font-size: 1rem; font-weight: 700; color: ${isOfficial ? 'var(--color-info, #38bdf8)' : 'var(--color-purple, #a78bfa)'};">
                     ${isOfficial ? `عقد رسمي: ${contract.contract_no || ''} ${contract.title ? '- ' + contract.title : ''}` : 'مشاريع وأعمال مباشرة للعميل (أوامر تكليف)'}
                   </div>
                   <div style="font-size: 0.74rem; color: var(--text-secondary); margin-top: 2px;">
@@ -2305,7 +2305,7 @@ const App = {
                     <!-- رأس بطاقة المشروع -->
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
                       <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 1.1rem; color: #a78bfa;">🏗️</span>
+                        <span style="font-size: 1.1rem; color: var(--color-purple, #a78bfa);">🏗️</span>
                         <strong style="color: #fff; font-size: 0.95rem;">${p.name}</strong>
                         <span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary, #94a3b8); font-size: 0.72rem;">${p.code || ('PRJ-' + p.id)}</span>
                         <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green); font-size: 0.72rem;">${p.status || 'نشط'}</span>
@@ -2413,7 +2413,7 @@ const App = {
       // تنسيق مباشر من مصفوفة المشاريع والعقود المسطحة
       html = `
         <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 10px; padding: 16px;">
-          <div style="font-size: 1rem; font-weight: 700; color: #a78bfa; margin-bottom: 12px;">🏗️ المشاريع المرتبطة بالعميل (${allProjects.length}):</div>
+          <div style="font-size: 1rem; font-weight: 700; color: var(--color-purple, #a78bfa); margin-bottom: 12px;">🏗️ المشاريع المرتبطة بالعميل (${allProjects.length}):</div>
           <div style="display: flex; flex-direction: column; gap: 10px;">
             ${allProjects.map(p => `
               <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">

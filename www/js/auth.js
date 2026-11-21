@@ -1192,19 +1192,19 @@ const Auth = {
 
     if (ruleLen) {
       ruleLen.textContent = (evalResult.rules.hasLength ? '🟢' : '⚪') + ' 8+ خانات';
-      ruleLen.style.color = evalResult.rules.hasLength ? '#10b981' : 'var(--text-secondary)';
+      ruleLen.style.color = evalResult.rules.hasLength ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
     if (ruleNum) {
       ruleNum.textContent = (evalResult.rules.hasNumber ? '🟢' : '⚪') + ' أرقام';
-      ruleNum.style.color = evalResult.rules.hasNumber ? '#10b981' : 'var(--text-secondary)';
+      ruleNum.style.color = evalResult.rules.hasNumber ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
     if (ruleMix) {
       ruleMix.textContent = (evalResult.rules.hasMixed ? '🟢' : '⚪') + ' أحرف A-z';
-      ruleMix.style.color = evalResult.rules.hasMixed ? '#10b981' : 'var(--text-secondary)';
+      ruleMix.style.color = evalResult.rules.hasMixed ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
     if (ruleSym) {
       ruleSym.textContent = (evalResult.rules.hasSymbol ? '🟢' : '⚪') + ' رموز خاصة';
-      ruleSym.style.color = evalResult.rules.hasSymbol ? '#10b981' : 'var(--text-secondary)';
+      ruleSym.style.color = evalResult.rules.hasSymbol ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
   },
 
@@ -1283,15 +1283,15 @@ const Auth = {
     if (this.lockTimeoutMinutes === 0) {
       badge.textContent = 'معطل';
       badge.style.background = 'rgba(148, 163, 184, 0.15)';
-      badge.style.color = '#94a3b8';
+      badge.style.color = 'var(--text-secondary, #94a3b8)';
     } else if (this.lockTimeoutMinutes === 60) {
       badge.textContent = '60 دقيقة';
       badge.style.background = 'rgba(212, 175, 55, 0.2)';
-      badge.style.color = '#d4af37';
+      badge.style.color = 'var(--text-gold, #d4af37)';
     } else {
       badge.textContent = `${this.lockTimeoutMinutes} دقيقة`;
       badge.style.background = 'rgba(212, 175, 55, 0.2)';
-      badge.style.color = '#d4af37';
+      badge.style.color = 'var(--text-gold, #d4af37)';
     }
   },
 
@@ -1524,11 +1524,11 @@ const Auth = {
     if (isMulti) {
       badge.textContent = `متعددة (${limit})`;
       badge.style.background = 'rgba(16, 185, 129, 0.2)';
-      badge.style.color = '#10b981';
+      badge.style.color = 'var(--color-success, #10b981)';
     } else {
       badge.textContent = 'جلسة واحدة';
       badge.style.background = 'rgba(59, 130, 246, 0.2)';
-      badge.style.color = '#60a5fa';
+      badge.style.color = 'var(--color-info, #60a5fa)';
     }
   },
 

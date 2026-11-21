@@ -3678,11 +3678,11 @@ const Accounting = {
       if (isBalanced) {
         statusEl.innerHTML = '✅ القيد متزن 100% وجاهز للحفظ';
         statusEl.style.background = 'rgba(34, 197, 94, 0.15)';
-        statusEl.style.color = '#4ade80';
+        statusEl.style.color = 'var(--color-success, #4ade80)';
       } else {
         statusEl.innerHTML = `⚠️ القيد غير متزن (الفارق: ${App.formatNumber(diff)})`;
         statusEl.style.background = 'rgba(239, 68, 68, 0.15)';
-        statusEl.style.color = '#f87171';
+        statusEl.style.color = 'var(--color-danger, #f87171)';
       }
     }
 
@@ -5429,7 +5429,7 @@ const Accounting = {
 
     badge.textContent = 'جاري الفحص...';
     badge.style.background = 'rgba(56, 189, 248, 0.2)';
-    badge.style.color = '#38bdf8';
+    badge.style.color = 'var(--color-info, #38bdf8)';
     details.innerHTML = 'جاري التحقق من القيود وسندات الصرف والقبض المعلقة...';
     btn.style.display = 'none';
 
@@ -5444,13 +5444,13 @@ const Accounting = {
       if (total_unposted === 0) {
         badge.textContent = '✓ جميع العمليات مرحلة';
         badge.style.background = 'rgba(16, 185, 129, 0.2)';
-        badge.style.color = '#10b981';
+        badge.style.color = 'var(--color-success, #10b981)';
         details.innerHTML = '<span style="color: var(--color-success, #10b981);">✓ جميع قيود اليومية وسندات الصرف والقبض ضمن نطاق هذه الفترة مرحلة ومعتمدة بالكامل، يمكنك الإقفال بأمان.</span>';
         btn.style.display = 'none';
       } else {
         badge.textContent = `⚠️ يوجد ${total_unposted} عملية غير مرحلة`;
         badge.style.background = 'rgba(239, 68, 68, 0.2)';
-        badge.style.color = '#ef4444';
+        badge.style.color = 'var(--color-danger, #ef4444)';
         details.innerHTML = `
           <div style="margin-bottom: 6px; color: var(--color-danger, #f87171);">
             يوجد عمليات لم يتم ترحيلها بعد ضمن تواريخ هذه الفترة:
