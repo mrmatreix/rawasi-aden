@@ -18,6 +18,7 @@ files.push('tests/integration/guest_message_journey.test.js');
 files.push('tests/integration/supervisor_scope.test.js');
 files.push('tests/integration/global_search.test.js');
 files.push('tests/security/staff_login_lock.test.js');
+files.push('tests/security/staff_cookie_session.test.js');
 if(fs.existsSync(path.join(root,'tests/security/hardening.test.js')))files.push('tests/security/hardening.test.js');
 try{
  let result=spawnSync(process.execPath,['tests/create_fixture.js'],{cwd:root,env,stdio:'inherit',windowsHide:true});

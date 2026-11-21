@@ -14,10 +14,15 @@ const {
   staffLockedResponse,
   generateCsrfToken,
   requireAuth,
+  getStaffToken,
+  setStaffCookie,
+  clearStaffCookie,
   JWT_SECRET
 } = require('../middleware/security');
 
 router.post('/realtime-ticket',requireAuth,(req,res)=>res.json({success:true,ticket:jwt.sign({id:req.user.id,purpose:'realtime'},JWT_SECRET,{expiresIn:'60s'})}));
+// ترحيل جلسة قديمة: المتصفح الذي كان يحفظ التوكن في التخزين يرسله مرة واحدة في الترويسة فيُنقل إلى كوكي HttpOnly ثم يُحذف من التخزين
+router.post('/session-cookie',requireAuth,(req,res)=>{const {token,source}=getStaffToken(req);if(source!=='header')return res.json({success:true,cookieSession:true});setStaffCookie(req,res,token);let tokenExpiresAt=null;try{const {exp}=jwt.decode(token)||{};if(exp)tokenExpiresAt=new Date(exp*1000).toISOString();}catch{}res.json({success:true,cookieSession:true,tokenExpiresAt});});
 router.get('/staff-access',requireAuth,require('../middleware/security').requirePermission('client_app:staff_login'),(req,res)=>res.json({success:true}));
 
 function getRoleDefaultPermissions(role) {
@@ -470,10 +475,17 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   resetLoginAttempts(req);
   await securityAudit(req, user, 'LOGIN_SUCCESS', { device: String(deviceStr).substring(0, 120) });
 
+  // المتصفح يحمل الجلسة في كوكي HttpOnly ولا يستلم التوكن نفسه؛ تطبيق الجوال يستلمه كالسابق
+  setStaffCookie(req, res, token);
+  const cookieMode = String(req.headers['x-auth-mode'] || '').toLowerCase() === 'cookie';
+  let tokenExpiresAt = null;
+  try { const { exp } = jwt.decode(token) || {}; if (exp) tokenExpiresAt = new Date(exp * 1000).toISOString(); } catch {}
+
   return res.json({
     success: true,
     message: `مرحباً بك ${user.full_name}! تم تسجيل الدخول بنجاح`,
-    token,
+    ...(cookieMode ? { cookieSession: true } : { token }),
+    tokenExpiresAt,
     csrfToken,
     sessionId,
     dbStatus,
@@ -675,12 +687,11 @@ router.post('/verify-2fa', async (req, res) => {
 
 // 2. نبض الحفاظ على الجلسة والتحقق من عدم تكرار الدخول
 router.post('/heartbeat', requireAuth, async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const { token } = getStaffToken(req);
+  if (!token) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await get('SELECT id, is_logged_in, session_token, active_sessions, status, full_name, username FROM users WHERE id = ?', [decoded.id]);
@@ -733,12 +744,11 @@ router.post('/heartbeat', requireAuth, async (req, res) => {
 
 // 3. التحقق من صحة الجلسة (Verify Token)
 router.get('/me', requireAuth, async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const { token } = getStaffToken(req);
+  if (!token) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token, active_sessions, branch_id, branch, department_id, department, allowed_projects, allowed_branches, allowed_departments FROM users WHERE id = ?', [decoded.id]);
@@ -804,16 +814,17 @@ router.get('/me', requireAuth, async (req, res) => {
 });
 
 // 4. تسجيل الخروج وإنهاء الجلسة فوراً
-router.post('/logout', requireAuth, async (req, res) => {
+// يُمسح الكوكي حتى لو كانت الجلسة منتهية (فيرفضها requireAuth بـ 401)
+router.post('/logout', (req, res, next) => { clearStaffCookie(req, res); next(); }, requireAuth, async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
+    const { token: sessionToken } = getStaffToken(req);
     let userId = req.user.id;
     let username = req.user.username;
     let currentSessionId = null;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    if (sessionToken) {
       try {
-        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+        const decoded = jwt.verify(sessionToken, JWT_SECRET);
         userId = userId || decoded.id;
         username = username || decoded.username;
         currentSessionId = decoded.sessionId;

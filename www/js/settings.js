@@ -66,9 +66,7 @@ const Settings = {
   async loadClientUsersForSettings() {
     try {
       if (!Auth.hasPermission('client_app:view')) return;
-      const token = sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-      const res = await fetch('/api/admin/client-users', { headers });
+      const res = await fetch('/api/admin/client-users');
       const json = await res.json();
       if (!json.success) return;
 
@@ -122,11 +120,7 @@ const Settings = {
     }
 
     try {
-      const token = localStorage.getItem('rawasi_token') || sessionStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
-      const res = await fetch(`/api/admin/client-users/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetch(`/api/admin/client-users/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         if (typeof App !== 'undefined' && App.showNotification) {
@@ -3401,12 +3395,12 @@ const Settings = {
         || sessionStorage.getItem('rawasi_token')
         || '';
 
-      const downloadUrl = `/api/settings/backup${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      const downloadUrl = `/api/settings/backup`;
 
       // محاولة التنزيل المباشر كـ Blob مع توثيق التوكن لضمان الحفظ الموثوق
       const res = await fetch(downloadUrl, {
         method: 'GET',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        headers: {} // الجلسة في كوكي HttpOnly يرسله المتصفح تلقائياً
       });
 
       if (!res.ok) {
@@ -3455,7 +3449,7 @@ const Settings = {
         || '';
       if (token) {
         App.showToast('جاري بدء التنزيل المباشر كحل بديل...', 'info');
-        window.location.href = `/api/settings/backup?token=${encodeURIComponent(token)}`;
+        window.location.href = `/api/settings/backup`;
       } else {
         App.showToast(e.message || 'خطأ في تنزيل النسخة الاحتياطية', 'error');
       }
@@ -3473,11 +3467,11 @@ const Settings = {
         || localStorage.getItem('rawasi_token')
         || sessionStorage.getItem('rawasi_token')
         || '';
-      const url = `/api/settings/backups/download/${encodeURIComponent(fileName)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      const url = `/api/settings/backups/download/${encodeURIComponent(fileName)}`;
       
       const res = await fetch(url, {
         method: 'GET',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        headers: {} // الجلسة في كوكي HttpOnly يرسله المتصفح تلقائياً
       });
 
       if (!res.ok) {
@@ -3505,7 +3499,7 @@ const Settings = {
         || sessionStorage.getItem('rawasi_token')
         || '';
       if (token) {
-        window.location.href = `/api/settings/backups/download/${encodeURIComponent(fileName)}?token=${encodeURIComponent(token)}`;
+        window.location.href = `/api/settings/backups/download/${encodeURIComponent(fileName)}`;
       } else {
         App.showToast('تعذر تنزيل النسخة المحددة', 'error');
       }
@@ -4080,13 +4074,13 @@ const Settings = {
         || localStorage.getItem('rawasi_token')
         || sessionStorage.getItem('rawasi_token')
         || '';
-      const url = `/api/settings/backup/download-record/${encodeURIComponent(idOrName)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      const url = `/api/settings/backup/download-record/${encodeURIComponent(idOrName)}`;
 
       App.showToast(`جاري تنزيل النسخة الاحتياطية (${fileName})...`, 'info');
 
       const res = await fetch(url, {
         method: 'GET',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        headers: {} // الجلسة في كوكي HttpOnly يرسله المتصفح تلقائياً
       });
 
       if (!res.ok) {
@@ -4114,7 +4108,7 @@ const Settings = {
         || sessionStorage.getItem('rawasi_token')
         || '';
       if (token) {
-        window.location.href = `/api/settings/backup/download-record/${encodeURIComponent(idOrName)}?token=${encodeURIComponent(token)}`;
+        window.location.href = `/api/settings/backup/download-record/${encodeURIComponent(idOrName)}`;
       } else {
         App.showToast('تعذر تنزيل النسخة المحددة', 'error');
       }

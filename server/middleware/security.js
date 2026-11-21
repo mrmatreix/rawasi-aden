@@ -137,6 +137,53 @@ setInterval(() => {
 
 
 // ==========================================
+// جلسة الموظفين في كوكي HttpOnly
+// ==========================================
+// المتصفح يحمل التوكن في كوكي لا تقرؤه سكربتات الصفحة (حماية من سرقة الجلسة عبر XSS).
+// تطبيق الجوال يستمر بإرسال Authorization: Bearer كالسابق.
+const STAFF_COOKIE = 'rawasi_token';
+const COOKIE_SESSION_MARKER = 'cookie-session'; // قيمة غير سرية يضعها المتصفح مكان التوكن
+const looksLikeJwt = t => typeof t === 'string' && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(t);
+
+function readCookie(req, name) {
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) {
+      try { return decodeURIComponent(part.slice(i + 1).trim()); } catch { return null; }
+    }
+  }
+  return null;
+}
+
+/** مصدر توكن الموظف: الترويسة أولاً، ثم الكوكي، ثم ?token= (لتذاكر البث اللحظي فقط) */
+function getStaffToken(req) {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    const t = header.slice(7).trim();
+    if (looksLikeJwt(t)) return { token: t, source: 'header' };
+  }
+  const cookie = readCookie(req, STAFF_COOKIE);
+  if (looksLikeJwt(cookie)) return { token: cookie, source: 'cookie' };
+  const q = req.query && req.query.token;
+  if (looksLikeJwt(q)) return { token: q, source: 'query' };
+  return { token: null, source: null };
+}
+
+function isLocalHost(req) {
+  return ['localhost', '127.0.0.1', '::1'].includes(String(req.hostname || ''));
+}
+
+function setStaffCookie(req, res, token) {
+  let maxAge;
+  try { const { exp } = jwt.decode(token) || {}; if (exp) maxAge = Math.max(0, exp * 1000 - Date.now()); } catch {}
+  res.cookie(STAFF_COOKIE, token, { httpOnly: true, secure: !isLocalHost(req), sameSite: 'strict', path: '/', ...(maxAge ? { maxAge } : {}) });
+}
+
+function clearStaffCookie(req, res) {
+  res.clearCookie(STAFF_COOKIE, { httpOnly: true, secure: !isLocalHost(req), sameSite: 'strict', path: '/' });
+}
+
+// ==========================================
 // 2. نظام التحقق من رمز الـ CSRF (CSRF Token)
 // ==========================================
 // توليد رمز CSRF عشوائي وموثوق
@@ -179,11 +226,12 @@ const verifyCsrfToken = (req, res, next) => {
     return next();
   }
 
-  // إذا تم إرسال توكن مصادقة Bearer معتمد أو ترويسة طلب أصلية (XMLHttpRequest)
-  const customHeader = req.headers['x-requested-with'];
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    try { const decoded=jwt.verify(authHeader.slice(7),JWT_SECRET,{algorithms:['HS256']}); if(decoded.id&&!decoded.isPending2FA) return next(); } catch {}
+  // توكن Bearer صريح في الترويسة لا يرسله المتصفح تلقائياً فلا خطر CSRF.
+  // الكوكي يُرسل تلقائياً، لذا يُشترط معه ترويسة X-Requested-With التي لا تستطيع النماذج العابرة للمواقع إضافتها
+  // (و originGuard + SameSite=Strict يمنعان الطلبات من مصادر أخرى أصلاً).
+  const { token, source } = getStaffToken(req);
+  if (token && (source === 'header' || (source === 'cookie' && req.headers['x-requested-with'] === 'XMLHttpRequest'))) {
+    try { const decoded=jwt.verify(token,JWT_SECRET,{algorithms:['HS256']}); if(decoded.id&&!decoded.isPending2FA) return next(); } catch {}
   }
 
   return res.status(403).json({
@@ -197,15 +245,7 @@ const verifyCsrfToken = (req, res, next) => {
 // 3. التحقق من المصادقة (Require Authentication)
 // ==========================================
 const requireAuth = async (req, res, next) => {
-  let token = null;
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
-  } else if (req.query && req.query.token) {
-    token = req.query.token;
-  } else if (req.cookies && req.cookies.rawasi_token) {
-    token = req.cookies.rawasi_token;
-  }
+  const { token, source } = getStaffToken(req);
 
   if (!token) {
     return res.status(401).json({
@@ -223,6 +263,9 @@ const requireAuth = async (req, res, next) => {
         message: '⛔ الحساب يتطلب التحقق بخطوتين (2FA). لا يمكن الوصول إلى النظام بالتوكن المؤقت قبل إدخال رمز التحقق الأمني.'
       });
     }
+    // التوكن في الرابط يظهر في السجلات وسجل المتصفح، فلا يُقبل إلا لتذاكر البث القصيرة (60 ثانية)
+    if (source === 'query' && decoded.purpose !== 'realtime') return res.status(401).json({success:false,message:'لا يُقبل توكن الجلسة في الرابط'});
+    req.authSource = source;
     if (decoded.purpose === 'realtime' && !/^\/(?:api\/contracts\/(?:alerts\/)?stream|ws(?:\/(?:alerts|contracts))?|alerts\/ws)(?:\?|$)/.test(req.originalUrl||req.url||'')) return res.status(401).json({success:false,message:'رمز مخصص للتنبيهات فقط'});
     if (!decoded.id || decoded.type === 'client') return res.status(401).json({success:false,message:'جلسة غير مصرح بها'});
     const current = await require('../database/db').get('SELECT id,username,full_name,role,status,permissions,allowed_projects,allowed_branches,allowed_departments,branch_id,department_id,session_token,active_sessions,(SELECT permissions FROM roles WHERE name=users.role LIMIT 1) AS role_permissions FROM users WHERE id = ?', [decoded.id]);
@@ -551,6 +594,11 @@ const requireScope = (options = {}) => {
 };
 
 module.exports = {
+  STAFF_COOKIE,
+  COOKIE_SESSION_MARKER,
+  getStaffToken,
+  setStaffCookie,
+  clearStaffCookie,
   loginRateLimiter,
   recordFailedLogin,
   resetLoginAttempts,

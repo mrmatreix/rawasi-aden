@@ -34,15 +34,14 @@
           headers = { ...headers };
         }
 
-        // 1. إضافة توكن المصادقة Authorization تلقائياً إذا لم يكن مضافاً وكان المستخدم مسجلاً
+        // 1. الجلسة في كوكي HttpOnly يرسله المتصفح تلقائياً؛ لا يُضاف توكن إلا إن كان توكناً حقيقياً (غير متوقع في المتصفح)
         if (!headers['Authorization'] && !headers['authorization']) {
-          const activeToken = (window.Auth && window.Auth.token)
-            || sessionStorage.getItem('rawasi_token')
-            || localStorage.getItem('rawasi_token');
-          if (activeToken) {
+          const activeToken = window.Auth && window.Auth.token;
+          if (activeToken && activeToken !== 'cookie-session') {
             headers['Authorization'] = `Bearer ${activeToken}`;
           }
         }
+        headers['X-Requested-With'] = 'XMLHttpRequest';
 
         // 2. إضافة توكن CSRF للعمليات غير الآمنة (POST, PUT, DELETE, PATCH)
         const method = (init.method || 'GET').toUpperCase();
@@ -77,6 +76,8 @@
 
 const Auth = {
   currentUser: null,
+  // لا يحمل التوكن الحقيقي أبداً: الجلسة في كوكي HttpOnly، وهذه القيمة غير السرية تعني "مسجّل الدخول عبر الكوكي"
+  COOKIE_SESSION: 'cookie-session',
   token: null,
   sessionId: null,
   csrfToken: null,
@@ -110,19 +111,45 @@ const Auth = {
     sensitiveKeys.forEach(k => {
       try { localStorage.removeItem(k); } catch(e){}
     });
-    // ترحيل الجلسة الآمنة تلقائياً
+    // لا يبقى أي توكن جلسة في التخزين (تقرؤه أي سكربت في الصفحة)؛ يُعاد التوكن القديم مرة واحدة للترحيل إلى الكوكي
+    let legacyToken = null;
     try {
-      const legacyToken = localStorage.getItem('rawasi_token');
-      const legacyUser = localStorage.getItem('rawasi_user');
-      if (legacyToken && !sessionStorage.getItem('rawasi_token')) {
-        sessionStorage.setItem('rawasi_token', legacyToken);
+      for (const store of [sessionStorage, localStorage]) {
+        for (const key of ['rawasi_token', 'token']) {
+          const v = store.getItem(key);
+          if (v && !legacyToken && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(v)) legacyToken = v;
+          store.removeItem(key);
+        }
       }
-      if (legacyUser && !sessionStorage.getItem('rawasi_user')) {
-        sessionStorage.setItem('rawasi_user', legacyUser);
-      }
-      localStorage.removeItem('rawasi_token');
-      localStorage.removeItem('rawasi_user');
     } catch (e) {}
+    return legacyToken;
+  },
+
+  // نقل جلسة قديمة كانت محفوظة في التخزين إلى كوكي HttpOnly دون إعادة تسجيل الدخول
+  async adoptLegacySession(legacyToken) {
+    try {
+      const fetchFn = window._rawasiOriginalFetch || window.fetch;
+      const res = await fetchFn('/api/auth/session-cookie', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${legacyToken}`, 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.tokenExpiresAt) sessionStorage.setItem('rawasi_token_exp', data.tokenExpiresAt);
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  // تسجيل حالة الجلسة بعد الدخول (بدون حفظ التوكن)
+  _storeSession(data) {
+    this.token = this.COOKIE_SESSION;
+    this.sessionId = data.sessionId;
+    this.currentUser = data.user;
+    sessionStorage.setItem('rawasi_session_active', 'true');
+    sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+    localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+    if (data.tokenExpiresAt) sessionStorage.setItem('rawasi_token_exp', data.tokenExpiresAt);
   },
 
   // جلب رمز CSRF من الخادم
@@ -150,23 +177,21 @@ const Auth = {
 
   // تهيئة نظام الدخول والمصادقة
   async init() {
-    this.purgeSensitiveLocalStorage();
+    const legacyToken = this.purgeSensitiveLocalStorage();
+    if (legacyToken) await this.adoptLegacySession(legacyToken);
     this.initLockEngine();
     this.fetchSecuritySettings();
     this.fetchCsrfToken();
 
-    // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها
-    const savedToken = sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token');
+    // الجلسة نفسها في كوكي HttpOnly؛ بيانات المستخدم المحفوظة (غير السرية) تسمح بعرض النظام فوراً ثم يتحقق الخادم منها
     const savedUserStr = sessionStorage.getItem('rawasi_user') || localStorage.getItem('rawasi_user');
 
-    if (savedToken && savedUserStr) {
+    if (savedUserStr) {
       try {
-        this.token = savedToken;
+        this.token = this.COOKIE_SESSION;
         this.currentUser = JSON.parse(savedUserStr);
         sessionStorage.setItem('rawasi_session_active', 'true');
-        sessionStorage.setItem('rawasi_token', savedToken);
         sessionStorage.setItem('rawasi_user', savedUserStr);
-        localStorage.setItem('rawasi_token', savedToken);
         localStorage.setItem('rawasi_user', savedUserStr);
 
         // إذا كانت الشاشة مقفلة قبل إعادة تحميل الصفحة
@@ -243,13 +268,10 @@ const Auth = {
     this.token = null;
     this.sessionId = null;
     this.currentUser = null;
-    sessionStorage.removeItem('rawasi_token');
     sessionStorage.removeItem('rawasi_user');
     sessionStorage.removeItem('rawasi_session_active');
-    if (expiredToken && localStorage.getItem('rawasi_token') === expiredToken) {
-      localStorage.removeItem('rawasi_token');
-      localStorage.removeItem('rawasi_user');
-    }
+    sessionStorage.removeItem('rawasi_token_exp');
+    if (expiredToken) localStorage.removeItem('rawasi_user');
     if (username) localStorage.setItem('rawasi_last_username', username);
     this.showLogin();
     const errorBox = document.getElementById('loginErrorMsg');
@@ -422,7 +444,7 @@ const Auth = {
 
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'cookie' },
         body: JSON.stringify({ 
           username, 
           password, 
@@ -486,7 +508,7 @@ const Auth = {
         return;
       }
 
-      if (data.success && data.token && data.user) {
+      if (data.success && (data.cookieSession || data.token) && data.user) {
         // إيقاف مؤقت الحظر وإخفاء الصندوق عند النجاح
         if (this._rateLimitTimer) {
           clearInterval(this._rateLimitTimer);
@@ -496,15 +518,7 @@ const Auth = {
         if (rateLimitBox) rateLimitBox.style.display = 'none';
 
         this._pendingCredentials = null;
-        this.token = data.token;
-        this.sessionId = data.sessionId;
-        this.currentUser = data.user;
-
-        sessionStorage.setItem('rawasi_session_active', 'true');
-        sessionStorage.setItem('rawasi_token', this.token);
-        sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
-        localStorage.setItem('rawasi_token', this.token);
-        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+        this._storeSession(data);
         sessionStorage.removeItem('rawasi_is_locked');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || username);
@@ -747,7 +761,7 @@ const Auth = {
 
       const res = await fetch('/api/auth/verify-2fa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'cookie' },
         body: JSON.stringify({
           tempToken: this._pending2FAToken,
           code: code,
@@ -759,22 +773,14 @@ const Auth = {
 
       const data = await res.json();
 
-      if (data.success && data.token && data.user) {
+      if (data.success && (data.cookieSession || data.token) && data.user) {
         const modal = document.getElementById('twoFactorModal');
         if (modal) modal.style.display = 'none';
 
         this._pending2FAToken = null;
         this._pending2FAUser = null;
         this._pendingCredentials = null;
-        this.token = data.token;
-        this.sessionId = data.sessionId;
-        this.currentUser = data.user;
-
-        sessionStorage.setItem('rawasi_session_active', 'true');
-        sessionStorage.setItem('rawasi_token', this.token);
-        sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
-        localStorage.setItem('rawasi_token', this.token);
-        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+        this._storeSession(data);
         sessionStorage.removeItem('rawasi_is_locked');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || 'admin');
@@ -902,11 +908,10 @@ const Auth = {
     } catch (e) {}
 
     // مسح بيانات الجلسة الحالية من sessionStorage و localStorage
-    sessionStorage.removeItem('rawasi_token');
     sessionStorage.removeItem('rawasi_user');
     sessionStorage.removeItem('rawasi_session_active');
     sessionStorage.removeItem('rawasi_is_locked');
-    localStorage.removeItem('rawasi_token');
+    sessionStorage.removeItem('rawasi_token_exp');
     localStorage.removeItem('rawasi_user');
     localStorage.removeItem('rawasi_last_logout_backup');
     this.purgeSensitiveLocalStorage();
@@ -1534,14 +1539,12 @@ const Auth = {
 
   // حساب وتنسيق تاريخ ووقت انتهاء الجلسة الحالية من التوكن (JWT)
   getCurrentSessionExpiryFormatted() {
-    const token = this.token || localStorage.getItem('rawasi_token') || localStorage.getItem('token');
-    if (!token) return 'غير متوفر (يرجى تسجيل الدخول)';
+    if (!this.token) return 'غير متوفر (يرجى تسجيل الدخول)';
     try {
-      const parts = token.split('.');
-      if (parts.length < 2) return 'غير محدد';
-      const payload = JSON.parse(atob(parts[1]));
-      if (!payload.exp) return 'جلسة دائمة (بدون انتهاء)';
-      const expDate = new Date(payload.exp * 1000);
+      // التوكن نفسه في كوكي HttpOnly لا تقرؤه الصفحة؛ الخادم يرسل وقت انتهائه عند الدخول
+      const expIso = sessionStorage.getItem('rawasi_token_exp');
+      if (!expIso) return 'غير محدد';
+      const expDate = new Date(expIso);
       
       const dateStr = expDate.toLocaleDateString('ar-YE', {
         year: 'numeric',
