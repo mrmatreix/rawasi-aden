@@ -1316,11 +1316,11 @@ const App = {
                   </div>
                   <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">رقم الحساب (مقنّع):</span>
-                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: var(--color-info, #38bdf8);">${bank.account_number_masked}</code>
+                    <code dir="ltr" style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 2px 8px; border-radius: 4px; color: var(--color-info, #38bdf8);">${bank.account_number_masked}</code>
                   </div>
                   <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">رقم الآيبان IBAN (مقنّع):</span>
-                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: var(--color-info, #38bdf8);">${bank.iban_masked}</code>
+                    <code dir="ltr" style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 2px 8px; border-radius: 4px; color: var(--color-info, #38bdf8);">${bank.iban_masked}</code>
                   </div>
                 </div>
                 <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border-color, #334155); text-align: center;">
@@ -1516,14 +1516,14 @@ const App = {
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-secondary);">رقم الحساب الكامل:</span>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.account_number}</code>
+              <code dir="ltr" style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.account_number}</code>
               <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.account_number}'); App.showToast('تم نسخ رقم الحساب بنجاح', 'success');" title="نسخ">📋</button>
             </div>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-secondary);">رقم الآيبان الكامل (IBAN):</span>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.iban}</code>
+              <code dir="ltr" style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.iban}</code>
               <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.iban}'); App.showToast('تم نسخ رقم الآيبان بنجاح', 'success');" title="نسخ">📋</button>
             </div>
           </div>
@@ -2243,7 +2243,7 @@ const App = {
 
     if (rawContracts.length === 0 && allProjects.length === 0 && allBills.length === 0) {
       container.innerHTML = `
-        <div style="background: rgba(15,23,42,0.4); border: 1px dashed var(--border-color); border-radius: 8px; padding: 25px; text-align: center; color: var(--text-secondary);">
+        <div style="background: var(--bg-sunken, rgba(15,23,42,0.4)); border: 1px dashed var(--border-color); border-radius: 8px; padding: 25px; text-align: center; color: var(--text-secondary);">
           <div style="font-size: 1.8rem; margin-bottom: 8px;">📂</div>
           <p>لا توجد عقود أو مشاريع مرتبطة بهذا العميل حتى الآن.</p>
           <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
@@ -2322,27 +2322,27 @@ const App = {
 
                     <!-- شبكة المؤشرات المالية المصغرة للمشروع -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin-bottom: 10px; font-size: 0.72rem; text-align: center;">
-                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">قيمة المشروع:</span>
                         <div style="font-weight: 700; color: var(--color-info, #38bdf8);">${this.formatNumber(fin.contract_value || p.contract_value || 0)}</div>
                       </div>
-                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">المنجز (Gross):</span>
                         <div style="font-weight: 700; color: #fff;">${this.formatNumber(fin.gross_billed || 0)}</div>
                       </div>
-                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">صافي المطالبات:</span>
                         <div style="font-weight: 700; color: var(--text-gold);">${this.formatNumber(fin.net_billed || 0)}</div>
                       </div>
-                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">المحصل:</span>
                         <div style="font-weight: 700; color: var(--accent-green);">${this.formatNumber(fin.total_collected || 0)}</div>
                       </div>
-                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">محتجز الضمان:</span>
                         <div style="font-weight: 700; color: var(--color-warning, #f59e0b);">${this.formatNumber(fin.active_retention || 0)}</div>
                       </div>
-                      <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
                         <span style="color: var(--accent-red); font-weight: 700;">المتبقي المستحق:</span>
                         <div style="font-weight: 800; color: var(--accent-red);">${this.formatNumber(fin.outstanding_due || 0)}</div>
                       </div>
@@ -2412,7 +2412,7 @@ const App = {
     } else {
       // تنسيق مباشر من مصفوفة المشاريع والعقود المسطحة
       html = `
-        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 10px; padding: 16px;">
+        <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 10px; padding: 16px;">
           <div style="font-size: 1rem; font-weight: 700; color: var(--color-purple, #a78bfa); margin-bottom: 12px;">🏗️ المشاريع المرتبطة بالعميل (${allProjects.length}):</div>
           <div style="display: flex; flex-direction: column; gap: 10px;">
             ${allProjects.map(p => `

@@ -49,6 +49,8 @@
   --color-info-border: rgba(56, 189, 248, 0.40);
   --color-purple: #a78bfa;
   --color-on-accent: #ffffff;
+  /* لوحة غائرة (صندوق داخل بطاقة) */
+  --bg-sunken: rgba(15, 23, 42, 0.6);
 
   /* المقاسات الموحّدة */
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
@@ -101,6 +103,7 @@ body.light-mode {
   --color-info-bg: rgba(56, 189, 248, 0.14);
   --color-info-border: rgba(3, 105, 161, 0.35);
   --color-purple: #6d28d9;
+  --bg-sunken: #eef2f7;
   /* ألوان التمييز القديمة تُستخدم في الشارات كنص؛ نسخة أغمق للخلفيات الفاتحة */
   --accent-blue: #0369a1;
   --accent-green: #047857;
@@ -1108,7 +1111,7 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 .page-title {
   font-size: 1.42rem;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--text-primary);
   letter-spacing: -0.3px;
   display: flex;
   align-items: center;
@@ -4003,7 +4006,7 @@ body.light-mode .bottom-nav-item.active span {
 }
 
 .hub-tab-count {
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.35));
   padding: 1px 6px;
   border-radius: 10px;
   font-size: 0.7rem;
@@ -4937,7 +4940,7 @@ body.light-mode .toast-action-btn:hover {
   align-items: center;
   gap: 6px;
   padding: 10px 18px;
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--bg-sunken, rgba(15, 23, 42, 0.4));
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 0.84rem;
   color: var(--text-secondary, #94a3b8);
@@ -5116,7 +5119,7 @@ body.light-mode .breadcrumbs-bar {
   display: flex;
   gap: 6px;
   padding: 8px 14px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.2));
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   overflow-x: auto;
 }
@@ -5225,7 +5228,7 @@ body.light-mode .breadcrumbs-bar {
 
 .cmd-footer {
   padding: 8px 16px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.25));
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   justify-content: space-between;
@@ -5248,7 +5251,7 @@ body.light-mode .breadcrumbs-bar {
   justify-content: space-between;
   padding: 12px 16px;
   border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  background: rgba(15, 23, 42, 0.3);
+  background: var(--bg-sunken, rgba(15, 23, 42, 0.3));
   flex-wrap: wrap;
   gap: 12px;
   font-size: 0.84rem;
@@ -5320,7 +5323,7 @@ body.light-mode .pagination-btn {
 }
 
 .pagination-size-select {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.2));
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   color: var(--text-primary, #e2e8f0);
   border-radius: 6px;
@@ -5734,7 +5737,7 @@ body.light-mode .filter-preset-btn:hover, body.light-mode .filter-preset-btn.act
 }
 
 .backup-path-code {
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.35));
   padding: 2px 6px;
   border-radius: 4px;
   font-family: monospace;
@@ -5880,7 +5883,7 @@ button.tab-btn.active::after,
 
 .tab-btn .tab-count-badge,
 .tab-btn span[id*="Count"] {
-  background: rgba(0, 0, 0, 0.45) !important;
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.45)) !important;
   color: var(--text-secondary, #94a3b8) !important;
   padding: 1px 7px !important;
   border-radius: 12px !important;
@@ -5951,7 +5954,7 @@ button.tab-btn.active::after,
 .btn-chain-bill {
   background: linear-gradient(135deg, rgba(217, 119, 6, 0.35), rgba(180, 83, 9, 0.2)) !important;
   border: 1px solid #f59e0b !important;
-  color: #fde68a !important;
+  color: var(--color-warning, #fde68a) !important;
 }
 .btn-chain-bill:hover {
   background: linear-gradient(135deg, rgba(217, 119, 6, 0.55), rgba(180, 83, 9, 0.35)) !important;
@@ -5962,7 +5965,7 @@ button.tab-btn.active::after,
 .btn-chain-receipt {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.15)) !important;
   border: 1px solid #10b981 !important;
-  color: #a7f3d0 !important;
+  color: var(--color-success, #a7f3d0) !important;
 }
 .btn-chain-receipt:hover {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.45), rgba(5, 150, 105, 0.25)) !important;
@@ -5973,7 +5976,7 @@ button.tab-btn.active::after,
 .btn-chain-statement {
   background: linear-gradient(135deg, rgba(14, 165, 233, 0.25), rgba(2, 132, 199, 0.15)) !important;
   border: 1px solid #38bdf8 !important;
-  color: #bae6fd !important;
+  color: var(--color-info, #bae6fd) !important;
 }
 .btn-chain-statement:hover {
   background: linear-gradient(135deg, rgba(14, 165, 233, 0.45), rgba(2, 132, 199, 0.25)) !important;

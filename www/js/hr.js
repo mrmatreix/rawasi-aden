@@ -425,7 +425,7 @@ const HR = {
                 <li><strong style="color:var(--text-gold);">بدل طبيعة عمل (30% - مميز بالأصفر):</strong> نسبة وظيفية تعادل 30% من الأساسي.</li>
                 <li><strong>بدل غلاء معيشة:</strong> مبلغ مقطوع (100,000 ر.ي للإدارة العليا / 90,000 ر.ي لباقي الكادر).</li>
                 <li><strong style="color:var(--text-gold);">بدل تأمين صحي (مميز بالأصفر):</strong> مبلغ مقطوع (50,000 ر.ي للإدارة العليا / 30,000 ر.ي للموظفين).</li>
-                <li style="margin-top:4px; padding-top:6px; border-top:1px dashed rgba(56,189,248,0.25); color:#7dd3fc;">
+                <li style="margin-top:4px; padding-top:6px; border-top:1px dashed rgba(56,189,248,0.25); color:var(--color-info, #7dd3fc);">
                   <strong>إجمالي الاستحقاق (Gross):</strong> مجموع الأساسي وكافة البدلات المنتظمة الخمسة.
                 </li>
               </ul>

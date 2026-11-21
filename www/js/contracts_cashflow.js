@@ -268,7 +268,7 @@ const ContractAlertsUI = {
     const currentIdx = stages.findIndex(s => s.key === currentStage);
 
     let html = `
-      <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+      <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
           <div>
             <h4 style="color: var(--text-gold); margin: 0;">عقد رقم [${data.contract.contract_no || data.contract.id}]: ${data.contract.title || ''}</h4>

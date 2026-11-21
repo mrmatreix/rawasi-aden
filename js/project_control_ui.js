@@ -69,7 +69,7 @@ const ProjectControlUI = {
   renderAuthRequired(container, featureTitle) {
     if (!container) return;
     container.innerHTML = `
-      <div class="panel-card" style="padding: 40px 24px; text-align: center; border: 1px dashed var(--gold-primary); background: rgba(15, 23, 42, 0.7); border-radius: 12px; margin: 20px 0;">
+      <div class="panel-card" style="padding: 40px 24px; text-align: center; border: 1px dashed var(--gold-primary); background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border-radius: 12px; margin: 20px 0;">
         <div style="font-size: 2.8rem; margin-bottom: 12px;">🔒</div>
         <h4 style="color: var(--text-gold); margin-bottom: 8px; font-size: 1.15rem;">يرجى تسجيل الدخول أولاً</h4>
         <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.6;">
@@ -86,7 +86,7 @@ const ProjectControlUI = {
   renderNoProjectSelected(container, featureTitle) {
     if (!container) return;
     container.innerHTML = `
-      <div class="panel-card" style="padding: 36px 20px; text-align: center; border: 1px dashed var(--border-color); background: rgba(15, 23, 42, 0.5); border-radius: 12px; margin: 20px 0;">
+      <div class="panel-card" style="padding: 36px 20px; text-align: center; border: 1px dashed var(--border-color); background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border-radius: 12px; margin: 20px 0;">
         <div style="font-size: 2.5rem; margin-bottom: 12px;">📁</div>
         <h4 style="color: var(--text-primary); margin-bottom: 8px;">يرجى تحديد المشروع أولاً</h4>
         <p style="color: var(--text-secondary); margin-bottom: 18px; font-size: 0.9rem;">
@@ -211,7 +211,7 @@ const ProjectControlUI = {
           <!-- بطاقة المقارنة الرئيسية الكبرى -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 20px 0;">
             <!-- النسبة المسجلة الحالية -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center; position: relative;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center; position: relative;">
               <span style="font-size: 0.82rem; color: var(--text-secondary); font-weight: bold; display: block; margin-bottom: 8px;">النسبة الحالية المسجلة بالنظام</span>
               <div style="font-size: 3rem; font-weight: 900; color: var(--text-gold); font-family: monospace; line-height: 1;">
                 ${d.current_manual_percentage}%
@@ -225,11 +225,11 @@ const ProjectControlUI = {
               <div style="font-size: 3rem; font-weight: 900; color: var(--color-success, #10b981); font-family: monospace; line-height: 1;">
                 ${d.recommended_percentage}%
               </div>
-              <span style="font-size: 0.76rem; color: #a7f3d0; display: block; margin-top: 8px;">مستخلصة من 5 محاور هندسية موثقة</span>
+              <span style="font-size: 0.76rem; color: var(--color-success, #a7f3d0); display: block; margin-top: 8px;">مستخلصة من 5 محاور هندسية موثقة</span>
             </div>
 
             <!-- مؤشر الانحراف والمطابقة -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center;">
               <span style="font-size: 0.82rem; color: var(--text-secondary); font-weight: bold; display: block; margin-bottom: 8px;">حجم الانحراف الرقابي (Variance)</span>
               <div style="font-size: 2.8rem; font-weight: 900; color: ${Math.abs(d.variance) > 15 ? 'var(--color-danger, #ef4444)' : (Math.abs(d.variance) > 5 ? 'var(--color-warning, #f59e0b)' : 'var(--color-success, #10b981)')}; font-family: monospace; line-height: 1;">
                 ${d.variance > 0 ? '+' : ''}${d.variance}%
@@ -254,7 +254,7 @@ const ProjectControlUI = {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
             
             <!-- 1. كميات BOQ المنفذة -->
-            <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight: 700; color: var(--color-info, #38bdf8);">1. كميات BOQ المنفذة</span>
                 <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);">الوزن: 35%</span>
@@ -273,7 +273,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- 2. المستخلصات المعتمدة -->
-            <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight: 700; color: var(--color-success, #10b981);">2. المستخلصات المعتمدة من المالك</span>
                 <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981);">الوزن: 25%</span>
@@ -292,7 +292,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- 3. تقارير الموقع الميدانية -->
-            <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight: 700; color: var(--color-warning, #f59e0b);">3. تقارير الموقع اليومية</span>
                 <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--color-warning, #f59e0b);">الوزن: 15%</span>
@@ -310,7 +310,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- 4. تكلفة الأعمال المنفذة -->
-            <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight: 700; color: #a855f7;">4. نسبة تكلفة الأعمال المنصرفة</span>
                 <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">الوزن: 15%</span>
@@ -329,7 +329,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- 5. اعتماد المهندس أو الاستشاري -->
-            <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight: 700; color: var(--text-gold);">5. شهادات الاستشاري / المهندس</span>
                 <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--text-gold);">الوزن: 10%</span>
@@ -620,21 +620,21 @@ const ProjectControlUI = {
 
           <!-- شريط الإحصائيات الأربعة للجدول الزمني -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 18px 0;">
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">إجمالي أنشطة WBS</span>
               <span class="hub-kpi-value" style="color: var(--color-info, #38bdf8); font-size: 1.6rem;">${stats.total_activities || activities.length} <small>نشاط</small></span>
             </div>
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">أنشطة المسار الحرج (Critical)</span>
               <span class="hub-kpi-value" style="color: var(--color-danger, #ef4444); font-size: 1.6rem;">${stats.critical_activities || 0} <small>حرج 🔴</small></span>
             </div>
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">أنشطة متأخرة عن الخطة</span>
               <span class="hub-kpi-value" style="color: ${(comp.delayed_tasks_count || 0) > 0 ? 'var(--color-warning, #f59e0b)' : 'var(--color-success, #10b981)'}; font-size: 1.6rem;">
                 ${comp.delayed_tasks_count || 0} <small>نشاط</small>
               </span>
             </div>
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">مدة المشروع الإجمالية المخططة</span>
               <span class="hub-kpi-value" style="color: var(--text-gold); font-size: 1.6rem;">${stats.project_duration_days || '-'} <small>يوم</small></span>
             </div>
@@ -689,7 +689,7 @@ const ProjectControlUI = {
                         <strong style="color: var(--text-gold); font-family: monospace;">${a.wbs_code || '-'}</strong>
                       </td>
                       <td>
-                        <div style="padding-right: ${(Math.max(0, (a.level || 1) - 1)) * 18}px; font-weight: ${a.level === 1 ? '800' : '500'}; color: #f1f5f9;">
+                        <div style="padding-right: ${(Math.max(0, (a.level || 1) - 1)) * 18}px; font-weight: ${a.level === 1 ? '800' : '500'}; color: var(--text-primary, #f1f5f9);">
                           ${a.level > 1 ? '↳ ' : ''}${a.name}
                         </div>
                       </td>
@@ -985,7 +985,7 @@ const ProjectControlUI = {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
 
             <!-- PV: القيمة المخططة -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <span style="font-size: 0.8rem; color: var(--color-info, #38bdf8); font-weight: bold;">PV: القيمة المخططة</span>
                 <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);">Planned Value</span>
@@ -999,7 +999,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- EV: القيمة المكتسبة -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <span style="font-size: 0.8rem; color: var(--color-success, #10b981); font-weight: bold;">EV: القيمة المكتسبة</span>
                 <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981);">Earned Value</span>
@@ -1013,7 +1013,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- AC: التكلفة الفعلية -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <span style="font-size: 0.8rem; color: var(--color-danger, #f87171); font-weight: bold;">AC: التكلفة الفعلية</span>
                 <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #f87171);">Actual Cost</span>
@@ -1027,7 +1027,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- BAC: إجمالي الميزانية -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <span style="font-size: 0.8rem; color: var(--text-gold); font-weight: bold;">BAC: ميزانية الإكمال</span>
                 <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--text-gold);">Budget at Completion</span>
@@ -1073,7 +1073,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- EAC: التكلفة المتوقعة عند الإكمال -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <span style="font-size: 0.8rem; color: var(--text-primary, #e2e8f0); font-weight: bold;">EAC: التكلفة النهائية المتوقعة</span>
                 <span class="badge" style="background: rgba(255, 255, 255, 0.08); color: var(--text-secondary, #cbd5e1);">Forecast at Completion</span>
@@ -1087,7 +1087,7 @@ const ProjectControlUI = {
             </div>
 
             <!-- VAC: الانحراف المتوقع عند الإكمال -->
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <span style="font-size: 0.8rem; color: ${m.VAC >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'}; font-weight: bold;">VAC: الانحراف النهائي المتوقع</span>
                 <span class="badge" style="background: ${m.VAC >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${m.VAC >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #f87171)'};">
@@ -1105,7 +1105,7 @@ const ProjectControlUI = {
           </div>
 
           <!-- تفاصيل المؤشرات الإضافية: ETC و TCPI و CV و SV -->
-          <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-light); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+          <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.4)); border: 1px solid var(--border-light); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
             <h5 style="color: var(--text-gold); margin: 0 0 12px 0; font-size: 0.95rem;">🔍 مؤشرات الكفاءة التشغيلية التكميلية</h5>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
               <div>
@@ -1294,25 +1294,25 @@ const ProjectControlUI = {
 
           <!-- شريط الـ 4 مؤشرات الرقمية للسجلات -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 18px 0;">
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">المخاطر المفتوحة والحرجة</span>
               <span class="hub-kpi-value" style="color: var(--color-danger, #f87171); font-size: 1.6rem;">
                 ${s.risk_summary?.critical || 0} <small>حرج</small> / ${s.risk_summary?.total || d.risks?.length || 0}
               </span>
             </div>
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">المطالبات المالية وتمديد الوقت</span>
               <span class="hub-kpi-value" style="color: var(--text-gold); font-size: 1.6rem;">
                 ${d.claims?.length || 0} <small>مطالبة</small>
               </span>
             </div>
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">تقارير عدم المطابقة المفتوحة (NCR)</span>
               <span class="hub-kpi-value" style="color: ${(s.ncr_open || 0) > 0 ? 'var(--color-warning, #f59e0b)' : 'var(--color-success, #10b981)'}; font-size: 1.6rem;">
                 ${s.ncr_open || d.non_conformances?.filter(n => n.status !== 'closed').length || 0} <small>تقرير</small>
               </span>
             </div>
-            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
+            <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">استفسارات RFI بانتظار الرد</span>
               <span class="hub-kpi-value" style="color: ${(s.rfi_pending || 0) > 0 ? 'var(--color-info, #38bdf8)' : 'var(--color-success, #10b981)'}; font-size: 1.6rem;">
                 ${s.rfi_pending || d.rfis?.filter(r => r.status === 'open').length || 0} <small>طلب</small>

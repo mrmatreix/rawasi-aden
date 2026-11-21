@@ -1004,13 +1004,13 @@ await this.loadIncomeStatement();
         const infoEl = document.getElementById('repClientInfo');
         if (infoEl) {
           infoEl.innerHTML = `
-            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; margin-bottom: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; margin-bottom: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div>
                   <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 1.2rem;">${client.name} ${client.company ? `<span style="font-size: 0.85rem; color: var(--color-info, #38bdf8);">(${client.company})</span>` : ''}</h3>
                   <span style="font-size: 0.8rem; color: var(--text-secondary);">الهاتف: ${client.phone || '-'} | العنوان: ${client.address || '-'}</span>
                 </div>
-                <div style="display: flex; gap: 14px; background: rgba(0,0,0,0.3); padding: 8px 16px; border-radius: 8px;">
+                <div style="display: flex; gap: 14px; background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 8px 16px; border-radius: 8px;">
                   <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المطالبات:</span> <strong style="color:var(--accent-red)">${Reports.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></div>
                   <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المحصل:</span> <strong style="color:var(--accent-green)">${Reports.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></div>
                   <div><span style="font-size:0.75rem;color:var(--text-secondary)">الرصيد المستحق:</span> <strong style="color:var(--text-gold);font-size:1.1rem">${Reports.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></div>

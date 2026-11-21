@@ -365,14 +365,14 @@ const ProjectHub = {
 
           <div style="margin-bottom: 14px;">
             <h5 style="color: var(--text-gold); margin-bottom: 6px;">نطاق العمل ومسؤوليات المقاول:</h5>
-            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
+            <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
               ${contract.scope_of_work || 'لم يتم إدخال نطاق العمل التفصيلي.'}
             </div>
           </div>
 
           <div>
             <h5 style="color: var(--text-gold); margin-bottom: 6px;">شروط الدفع وصرف المستحقات:</h5>
-            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
+            <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
               ${contract.payment_terms || 'دفعات شهرية منتظمة وفق المستخلصات المعتمدة.'}
             </div>
           </div>
@@ -2098,7 +2098,7 @@ const ProjectHub = {
           <td style="background: rgba(212,175,55,0.06);">
             <input type="number" step="0.01" min="0" value="${it.current_qty || 0}"
                    class="form-control form-control-sm"
-                   style="width: 85px; font-weight: 700; color: var(--text-gold); background: rgba(0,0,0,0.3); border-color: rgba(212,175,55,0.4);"
+                   style="width: 85px; font-weight: 700; color: var(--text-gold); background: var(--bg-sunken, rgba(0,0,0,0.3)); border-color: rgba(212,175,55,0.4);"
                    oninput="ProjectHub.onIpcItemQtyChange(${idx}, this.value)">
           </td>
           <td><strong id="ipcRowCumQty_${idx}">${App.formatNumber(it.cumulative_qty || 0)}</strong></td>
@@ -2371,7 +2371,7 @@ const ProjectHub = {
           <div style="background: linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(14,28,50,0.6) 100%); border: 1px solid rgba(34,197,94,0.35); border-radius: var(--radius-sm); padding: 16px; display: flex; flex-direction: column; justify-content: center;">
             <span style="font-size: 0.76rem; color: var(--text-secondary);">صافي المبلغ المستحق للصرف للمقاول:</span>
             <h2 style="color: var(--accent-green); font-size: 1.6rem; margin: 6px 0 10px 0;">${App.formatNumber(inv.net_amount)} <small style="font-size: 0.85rem;">${curr}</small></h2>
-            <div style="background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: var(--radius-sm); font-size: 0.8rem; line-height: 1.4; color: #fff;">
+            <div style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 8px 10px; border-radius: var(--radius-sm); font-size: 0.8rem; line-height: 1.4; color: #fff;">
               <span style="color: var(--text-gold); font-size: 0.72rem; display: block;">المبلغ كتابةً:</span>
               ${inv.tafqeet || '-'}
             </div>
@@ -2443,7 +2443,7 @@ const ProjectHub = {
 
         <div style="margin-bottom: 10px;">
           <h5 style="color: #fff; margin-bottom: 4px; font-size: 0.88rem;">🔨 الأعمال المنفذة خلال اليوم:</h5>
-          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
+          <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
             ${r.work_performed}
           </div>
         </div>
@@ -2537,14 +2537,14 @@ const ProjectHub = {
 
         <div style="margin-bottom: 10px;">
           <h5 style="color: #fff; margin-bottom: 4px; font-size: 0.88rem;">📊 ملخص إنجازات وأعمال الأسبوع:</h5>
-          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
+          <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
             ${w.achievements_summary}
           </div>
         </div>
 
         <div style="margin-bottom: 10px;">
           <h5 style="color: var(--text-gold); margin-bottom: 4px; font-size: 0.88rem;">🎯 خطة العمل المستهدفة للأسبوع القادم:</h5>
-          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
+          <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
             ${w.next_week_plan || 'متابعة الأعمال المجدولة.'}
           </div>
         </div>
@@ -2847,7 +2847,7 @@ const ProjectHub = {
           </div>
         </div>
 
-        <div style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: var(--radius-sm); font-size: 0.86rem; color: var(--text-secondary, #cbd5e1); line-height: 1.6; margin-bottom: 18px;">
+        <div style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 14px; border-radius: var(--radius-sm); font-size: 0.86rem; color: var(--text-secondary, #cbd5e1); line-height: 1.6; margin-bottom: 18px;">
           <strong>إقرار ومخالصة:</strong> بموجب هذه الشهادة الختامية، يقر الطرفان بانتهاء كافة الأعمال المنفذة ومطابقتها للمواصفات الهندسية المعتمدة، وتصفية كافة الالتزامات المالية والتعاقدية المتبادلة دون أي مطالبات لاحقة.
         </div>
 

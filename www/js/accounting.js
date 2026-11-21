@@ -2831,7 +2831,7 @@ const Accounting = {
               <i class="fa fa-external-link"></i> فتح الصورة بالحجم الكامل ↗️
             </a>
           </div>
-          <div style="display: flex; justify-content: center; align-items: center; min-height: 400px; max-height: 72vh; overflow: auto; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 12px;">
+          <div style="display: flex; justify-content: center; align-items: center; min-height: 400px; max-height: 72vh; overflow: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border-radius: 8px; padding: 12px;">
             <img src="${item.data}" alt="${item.name || 'مستند'}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.6); object-fit: contain; cursor: zoom-in;" onclick="window.open('${item.data}', '_blank')">
           </div>
         `;
@@ -4044,7 +4044,7 @@ const Accounting = {
         const contentEl = document.getElementById('viewJeContent');
         if (contentEl) {
           contentEl.innerHTML = `
-            <div style="background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 14px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 14px;">
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">رقم القيد:</span> <strong style="color: var(--text-gold);">${je.display_no || je.entry_no}</strong></div>
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">التاريخ:</span> <strong>${je.date}</strong></div>
@@ -4293,11 +4293,11 @@ const Accounting = {
     }
 
     const typeBadges = {
-      'أصول': 'background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3);',
-      'خصوم': 'background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);',
+      'أصول': 'background: rgba(56,189,248,0.15); color: var(--color-info, #38bdf8); border: 1px solid rgba(56,189,248,0.3);',
+      'خصوم': 'background: rgba(239,68,68,0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3);',
       'حقوق ملكية': 'background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3);',
-      'إيرادات': 'background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);',
-      'مصروفات': 'background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3);',
+      'إيرادات': 'background: rgba(16,185,129,0.15); color: var(--color-success, #10b981); border: 1px solid rgba(16,185,129,0.3);',
+      'مصروفات': 'background: rgba(245,158,11,0.15); color: var(--color-warning, #f59e0b); border: 1px solid rgba(245,158,11,0.3);',
       'تكاليف': 'background: rgba(249,115,22,0.15); color: #fb923c; border: 1px solid rgba(249,115,22,0.3);'
     };
 
@@ -4336,7 +4336,7 @@ const Accounting = {
             <button class="btn btn-sm btn-secondary" onclick="Accounting.openEditAccountModal(${a.id})" title="تعديل بيانات الحساب" style="padding: 2px 7px; font-size: 0.78rem;">
               ✏️ تعديل
             </button>
-            <button class="btn btn-sm" onclick="Accounting.toggleAccountStatus(${a.id})" title="${isRestricted ? 'فك التقييد وتنشيط الحساب' : 'تقييد وتوقيف الحساب'}" style="padding: 2px 7px; font-size: 0.78rem; ${isRestricted ? 'background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.3);' : 'background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);'}">
+            <button class="btn btn-sm" onclick="Accounting.toggleAccountStatus(${a.id})" title="${isRestricted ? 'فك التقييد وتنشيط الحساب' : 'تقييد وتوقيف الحساب'}" style="padding: 2px 7px; font-size: 0.78rem; ${isRestricted ? 'background: rgba(34,197,94,0.15); color: var(--color-success, #22c55e); border: 1px solid rgba(34,197,94,0.3);' : 'background: rgba(239,68,68,0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3);'}">
               ${isRestricted ? '🔓 تنشيط' : '🔒 تقييد'}
             </button>
             <button class="btn btn-sm btn-danger" onclick="Accounting.deleteAccount(${a.id}, '${(a.code || '').replace(/'/g, "\\'")}', '${(a.name || '').replace(/'/g, "\\'")}')" title="حذف الحساب من الدليل" style="padding: 2px 7px; font-size: 0.78rem;">

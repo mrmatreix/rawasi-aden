@@ -1108,7 +1108,7 @@
           </div>
 
           <!-- شريط مسار مجلد المشروع الفعلي في الويندوز -->
-          <div class="hub-folder-bar" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 10px 16px; margin: 12px 0 14px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div class="hub-folder-bar" style="background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 10px 16px; margin: 12px 0 14px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 280px;">
               <span style="font-size: 1.4rem;">📁</span>
               <div style="flex: 1;">
@@ -1720,7 +1720,7 @@
             </div>
 
             <!-- معلومات المجلد والمسار الكامل -->
-            <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+            <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.4)); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div>
                   <span style="color: var(--text-gold); font-weight: bold; font-size: 0.85rem;">المسار الفعلي على القرص:</span>
@@ -1805,7 +1805,7 @@
             </div>
 
             <!-- بطاقات معلومات المستند الرسمية -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); padding: 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
               <div>
                 <span style="font-size: 0.76rem; color: var(--text-secondary); display: block;">السادة (العميل):</span>
                 <strong style="color: var(--text-primary, #f1f5f9); font-size: 0.96rem;" id="intQuoClientName">عوض صالح عوض</strong>
@@ -2951,7 +2951,7 @@
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-        <div class="panel-card" style="margin: 0; background: rgba(15,23,42,0.6);">
+        <div class="panel-card" style="margin: 0; background: var(--bg-sunken, rgba(15,23,42,0.6));">
           <h4 style="color: var(--accent-blue); margin-bottom: 12px; display: flex; justify-content: space-between;">
             <span>الأصول والموجودات (1)</span>
             <span style="font-size: 0.8rem; color: var(--text-secondary);">أرصدة مدينة</span>
@@ -2970,7 +2970,7 @@
           </div>
         </div>
 
-        <div class="panel-card" style="margin: 0; background: rgba(15,23,42,0.6);">
+        <div class="panel-card" style="margin: 0; background: var(--bg-sunken, rgba(15,23,42,0.6));">
           <h4 style="color: var(--accent-amber); margin-bottom: 12px; display: flex; justify-content: space-between;">
             <span>الالتزامات وحقوق الملكية (2)</span>
             <span style="font-size: 0.8rem; color: var(--text-secondary);">أرصدة دائنة</span>
@@ -4695,7 +4695,7 @@
                 </div>
               </div>
 
-              <div id="onlineDbTestResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.2); border: 1px solid var(--border-light); margin-bottom: 16px;"></div>
+              <div id="onlineDbTestResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: var(--bg-sunken, rgba(0,0,0,0.2)); border: 1px solid var(--border-light); margin-bottom: 16px;"></div>
 
               <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
                 <button type="button" id="btnTestOnlineDb" class="btn btn-secondary" onclick="Settings.testOnlineDb()">
@@ -4719,7 +4719,7 @@
             </div>
 
             <!-- مربع حالة اتصال ومحرك MySQL النشط -->
-            <div id="mysqlStatusBox" style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px;">
+            <div id="mysqlStatusBox" style="background: var(--bg-sunken, rgba(0,0,0,0.25)); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px;">
               <!-- يتم تحديثه ديناميكياً عبر Settings.loadMysqlStatus() -->
               <div style="color: var(--text-secondary); font-size: 0.85rem;">جاري فحص حالة خادم ومحرك MySQL...</div>
             </div>
@@ -4750,7 +4750,7 @@
               </div>
 
               <!-- مربع نتيجة فحص الاتصال -->
-              <div id="mysqlTestResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); margin-bottom: 16px;"></div>
+              <div id="mysqlTestResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid var(--border-light); margin-bottom: 16px;"></div>
 
               <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 20px;">
                 <button type="button" id="btnTestMysql" class="btn btn-secondary" onclick="Settings.testMysqlConnection()">
@@ -4777,7 +4777,7 @@
               </button>
             </div>
 
-            <div id="mysqlMigrationResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); margin-top: 16px;"></div>
+            <div id="mysqlMigrationResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid var(--border-light); margin-top: 16px;"></div>
           </div>
 
           <!-- بطاقة: الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين المعتمد -->
@@ -5060,7 +5060,7 @@
               <button class="modal-close-btn" onclick="App.closeModal('drProductionRestoreModal')">&times;</button>
             </div>
             <div style="padding: 14px 0;">
-              <div style="background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.5; color: #fecaca;">
+              <div style="background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.5; color: var(--color-danger, #fecaca);">
                 <div style="font-weight: 700; font-size: 1rem; margin-bottom: 6px; color: #fff;">⚠️ تحذير عالي الأهمية:</div>
                 استعادة نسخة احتياطية ستقوم باستبدال قاعدة بيانات الإنتاج الحالية بحالة النسخة المحددة.
                 <br>
@@ -5449,7 +5449,7 @@
 
       <div style="padding: 18px 20px;">
         <!-- شريط التدفق التفاعلي المرئي لسلسلة دورة حياة العميل -->
-        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px;">
+        <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px;">
           <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-gold); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
             <span>⚡ تسلسل الأثر المالي الآلي في حساب العميل</span>
             <span style="font-size: 0.72rem; color: var(--accent-green); font-weight: normal;">● نظام آلي متكامل بدون انحراف (Zero Drift)</span>
@@ -5695,7 +5695,7 @@
         </div>
 
         <!-- قسم الحسابات التعاقدية وحاسبة نسبة الإنجاز الآلية -->
-        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+        <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
           <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-gold); margin-bottom: 8px;">
             🧮 الاحتساب التعاقدي للمستخلص وربط نسبة الإنجاز
           </div>
@@ -5710,7 +5710,7 @@
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-              <div style="background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 6px; font-size: 0.75rem;">
+              <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 6px 10px; border-radius: 6px; font-size: 0.75rem;">
                 <span style="color: var(--text-secondary);">الإنجاز التراكمي السابق:</span>
                 <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 2px;">
                   <strong id="modalBillPrevProgressPct" style="color: var(--text-secondary, #94a3b8); font-size: 0.95rem;">0%</strong>
@@ -5724,7 +5724,7 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
                   <input type="range" id="modalBillProgressSlider" min="0" max="100" value="0" step="0.5" style="flex: 1; accent-color: var(--accent-green); cursor: pointer;" oninput="App.onBillProgressSliderChange(this.value)">
-                  <input type="number" id="modalBillProgressInput" min="0" max="100" value="0" step="0.1" style="width: 55px; padding: 1px 4px; font-size: 0.78rem; text-align: center; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: #fff;" oninput="App.onBillProgressInputChange(this.value)">
+                  <input type="number" id="modalBillProgressInput" min="0" max="100" value="0" step="0.1" style="width: 55px; padding: 1px 4px; font-size: 0.78rem; text-align: center; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-sunken, rgba(0,0,0,0.3)); color: #fff;" oninput="App.onBillProgressInputChange(this.value)">
                   <span style="color: #fff; font-size: 0.75rem;">%</span>
                 </div>
               </div>
@@ -5823,7 +5823,7 @@
         </div>
 
         <!-- شريط تحديد نسبة الإنجاز الجديد -->
-        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+        <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <label style="font-weight: 700; color: #fff; margin-bottom: 0; font-size: 0.85rem;">نسبة الإنجاز الفعلي المعتمدة (%):</label>
             <strong id="projProgSliderValLabel" style="font-size: 1.15rem; color: var(--accent-green);">0%</strong>
@@ -6077,7 +6077,7 @@
 <div id="supplierAdditionalFields" hidden style="display: none;">
         <p style="color: var(--text-secondary); font-size: 0.8rem;">التجميعات التالية للعرض فقط وتُحسب من الفواتير والسندات المرتبطة بالمورد؛ تبدأ بصفر للمورد الجديد.</p>
         <!-- القسم 3: التجميعات المالية التلقائية (Real-time Live Aggregations) -->
-        <div id="suppFinancialsSummaryCard" style="background: rgba(15, 23, 42, 0.7); border: 1px dashed var(--border-color, #334155); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+        <div id="suppFinancialsSummaryCard" style="background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border: 1px dashed var(--border-color, #334155); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <span style="font-weight: 700; font-size: 0.9rem; color: var(--accent-amber, #f59e0b);">
               <i class="fa fa-calculator"></i> التجميعات المالية للمورد (تُحسب تلقائياً من واقع فواتير وسندات النظام):
@@ -6142,7 +6142,7 @@
                ondragover="Accounting.onInvoiceDragOver(event)" 
                ondragleave="Accounting.onInvoiceDragLeave(event)" 
                ondrop="Accounting.onInvoiceDrop(event)"
-               style="border: 2px dashed rgba(148, 163, 184, 0.25); border-radius: 8px; padding: 14px; text-align: center; background: rgba(15, 23, 42, 0.4); transition: all 0.2s;">
+               style="border: 2px dashed rgba(148, 163, 184, 0.25); border-radius: 8px; padding: 14px; text-align: center; background: var(--bg-sunken, rgba(15, 23, 42, 0.4)); transition: all 0.2s;">
 
             <div id="suppInvoiceEmptyState" style="color: var(--text-muted); font-size: 0.82rem; padding: 6px 0;">
               <i class="fa fa-cloud-upload-alt" style="font-size: 1.8rem; color: #64748b; margin-bottom: 6px; display: block;"></i>
@@ -6194,10 +6194,10 @@
 
           <!-- إطار إرشادي لتحديد أبعاد الفاتورة (A4 Scanner Frame) -->
           <div id="scannerOverlayFrame" style="position: absolute; inset: 16px; border: 2px dashed rgba(56, 189, 248, 0.7); border-radius: 6px; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 10px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #38bdf8; background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 4px; align-self: flex-start;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--color-info, #38bdf8); background: var(--bg-sunken, rgba(0,0,0,0.6)); padding: 2px 8px; border-radius: 4px; align-self: flex-start;">
               <span>ضع الفاتورة داخل هذا الإطار</span>
             </div>
-            <div style="align-self: flex-end; font-size: 0.72rem; color: #10b981; background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 4px;">
+            <div style="align-self: flex-end; font-size: 0.72rem; color: var(--color-success, #10b981); background: var(--bg-sunken, rgba(0,0,0,0.6)); padding: 2px 8px; border-radius: 4px;">
               <span>جاهز للمسح الضوئي</span>
             </div>
           </div>
@@ -7093,7 +7093,7 @@
       </div>
 
       <!-- شريط اختيار وتخصيص المستخدم المستهدف (للمدير العام) -->
-      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           <span style="font-size: 0.88rem; color: var(--text-gold, #d4af37); font-weight: bold; display: flex; align-items: center; gap: 5px;">
             <span>👑 تخصيص الأمان للمستخدم:</span>
@@ -7125,7 +7125,7 @@
             </div>
 
             <!-- صندوق خيارات الجلسات المتعددة وسقف الأجهزة -->
-            <div id="multiSessionControlsBox" style="background: rgba(15, 23, 42, 0.5); border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div id="multiSessionControlsBox" style="background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
               <!-- سقف الأجهزة -->
               <div style="display: flex; align-items: center; gap: 8px;" id="boxDeviceLimit">
                 <span style="font-size: 0.85rem; color: var(--text-secondary, #94a3b8); font-weight: 600;">سقف الأجهزة:</span>
@@ -7148,8 +7148,8 @@
             </div>
 
             <!-- شريط الجهاز المعتمد عند تفعيل منع أي جهاز جديد -->
-            <div id="authorizedDeviceBox" style="display: none; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 6px 10px; margin-top: 8px; justify-content: space-between; align-items: center; gap: 8px;">
-              <span id="authorizedDeviceText" style="font-size: 0.76rem; color: #6ee7b7;">📱 الجهاز المعتمد: لم يسجل أي جهاز بعد (سيتم اعتماد أول جهاز يسجل منه)</span>
+            <div id="authorizedDeviceBox" style="display: none; background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 6px 10px; margin-top: 8px; justify-content: space-between; align-items: center; gap: 8px;">
+              <span id="authorizedDeviceText" style="font-size: 0.76rem; color: var(--color-success, #6ee7b7);">📱 الجهاز المعتمد: لم يسجل أي جهاز بعد (سيتم اعتماد أول جهاز يسجل منه)</span>
               <button type="button" class="btn btn-sm" id="btnResetAuthorizedDevice" onclick="Auth.resetAuthorizedDevice()" style="font-size: 0.7rem; padding: 2px 8px; color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); display: none;">🔄 فك قفل الجهاز</button>
             </div>
           </div>
@@ -7182,7 +7182,7 @@
               <button type="button" class="token-expiry-btn" data-exp="custom" id="btnExpiryCustom" onclick="Auth.setTokenExpiry('custom')" style="width: 100%;">
                 <span>⏰ مخصص (فترة وساعات العمل)</span>
               </button>
-              <div id="customExpiryBox" style="display: none; margin-top: 8px; padding: 10px 12px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px;">
+              <div id="customExpiryBox" style="display: none; margin-top: 8px; padding: 10px 12px; background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px;">
                 <div style="font-size: 0.78rem; font-weight: 700; color: var(--color-success, #34d399); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
                   <span>⏰ ساعات العمل المسموحة (خلال 24 ساعة):</span>
                   <span id="customWorkHoursSummary" style="font-size: 0.74rem; color: var(--color-success, #10b981); font-weight: bold; background: rgba(16, 185, 129, 0.15); padding: 1px 6px; border-radius: 4px;">8 ساعات عمل</span>
@@ -7260,7 +7260,7 @@
             <small id="userPasswordHint" style="font-size: 0.72rem; color: var(--text-secondary); display: none;">اترك الحقل فارغاً إذا كنت لا ترغب في تغيير كلمة المرور الحالية.</small>
 
             <!-- مؤشر قوة كلمة المرور التفاعلي -->
-            <div id="userPasswordStrengthBox" class="password-strength-box" style="display: none; margin-top: 8px; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div id="userPasswordStrengthBox" class="password-strength-box" style="display: none; margin-top: 8px; background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <span style="font-size: 0.75rem; color: var(--text-secondary);">مؤشر الأمان والقوة:</span>
                 <span class="strength-text" style="font-size: 0.78rem; font-weight: bold;"></span>
@@ -7345,7 +7345,7 @@
                 <span>الوصول لكافة المشاريع الحالية والمستقبلية (*)</span>
               </label>
             </div>
-            <div id="userProjectsScopeContainer" style="display: none; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px;">
+            <div id="userProjectsScopeContainer" style="display: none; max-height: 120px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px;">
               <div id="userProjectsCheckList" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
                 <!-- تُعبأ المشاريع برمجياً بواسطة JS -->
               </div>
@@ -7365,7 +7365,7 @@
                 </div>
               </div>
             </div>
-            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer; color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer; color: var(--text-primary); background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">
               <input type="checkbox" id="user2FaEnabledVal" checked style="accent-color: var(--gold-primary); cursor: pointer;">
               <span style="font-weight: 600;">تفعيل التحقق بخطوتين</span>
             </label>
@@ -7736,12 +7736,12 @@
 
               <!-- شريط الجهاز المعتمد للمستخدم عند تفعيل القفل -->
               <div id="userSecBoundDeviceBox" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 4px 8px; margin-bottom: 8px; justify-content: space-between; align-items: center; gap: 6px;">
-                <span id="userSecBoundDeviceText" style="font-size: 0.72rem; color: #6ee7b7;">📱 الجهاز المعتمد: لم يسجل بعد</span>
+                <span id="userSecBoundDeviceText" style="font-size: 0.72rem; color: var(--color-success, #6ee7b7);">📱 الجهاز المعتمد: لم يسجل بعد</span>
                 <button type="button" class="btn btn-sm" id="btnUserSecResetBoundDevice" onclick="Settings.resetUserBoundDevice()" style="font-size: 0.68rem; padding: 1px 6px; color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3); background: transparent; display: none;">فك الربط</button>
               </div>
 
               <!-- خيارات الجلسات المتعددة -->
-              <div id="userSecMultiControls" style="display: none; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px;">
+              <div id="userSecMultiControls" style="display: none; background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px dashed rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px;">
                   <label style="font-size: 0.74rem; color: var(--text-secondary, #cbd5e1); font-weight: 600;">سقف الأجهزة:</label>
                   <select id="userSecDeviceLimit" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 95px; background: #0f172a; color: #f8fafc;">
@@ -7777,7 +7777,7 @@
                 </div>
 
                 <!-- صندوق فترة وساعات العمل المسموحة -->
-                <div id="userSecWorkHoursBox" style="display: none; background: rgba(15, 23, 42, 0.7); border: 1px dashed rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 6px 8px; margin-top: 6px;">
+                <div id="userSecWorkHoursBox" style="display: none; background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border: 1px dashed rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 6px 8px; margin-top: 6px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <span style="font-size: 0.72rem; color: var(--color-success, #34d399); font-weight: 700;">فترة العمل (24 ساعة):</span>
                     <span id="userSecWorkDurationBadge" style="font-size: 0.7rem; color: var(--color-success, #10b981); font-weight: bold;">8 ساعات</span>
@@ -7893,7 +7893,7 @@
         </div>
 
         <!-- مربع نتيجة الفحص والمعاينة -->
-        <div id="vaultRestoreInspectionBox" style="display: none; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;"></div>
+        <div id="vaultRestoreInspectionBox" style="display: none; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;"></div>
 
         <div style="display: flex; gap: 10px; justify-content: flex-end;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.inspectSelectedArchive()" id="btnInspectArchive">
@@ -8332,7 +8332,7 @@
         </div>
 
         <!-- خيارات ومعايير الاستيراد -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: var(--radius-sm);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; background: var(--bg-sunken, rgba(0,0,0,0.2)); padding: 12px; border-radius: var(--radius-sm);">
           <div>
             <label style="font-size: 0.82rem; font-weight: 700; color: #fff; margin-bottom: 6px; display: block;">وضع الاستيراد (Import Mode):</label>
             <div style="display: flex; gap: 14px; font-size: 0.82rem;">
@@ -8425,11 +8425,11 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
           <div class="form-group">
             <label>الكمية التعاقدية المعتمدة</label>
-            <input type="text" id="quickBoqContractQty" class="form-control" readonly style="background: rgba(0,0,0,0.25); color: var(--text-secondary); font-weight: 700;">
+            <input type="text" id="quickBoqContractQty" class="form-control" readonly style="background: var(--bg-sunken, rgba(0,0,0,0.25)); color: var(--text-secondary); font-weight: 700;">
           </div>
           <div class="form-group">
             <label>فئة السعر التعاقدي</label>
-            <input type="text" id="quickBoqUnitRate" class="form-control" readonly style="background: rgba(0,0,0,0.25); color: var(--text-secondary); font-weight: 700;">
+            <input type="text" id="quickBoqUnitRate" class="form-control" readonly style="background: var(--bg-sunken, rgba(0,0,0,0.25)); color: var(--text-secondary); font-weight: 700;">
           </div>
         </div>
 
@@ -8851,7 +8851,7 @@
       </div>
 
       <!-- تبديل الوضع: ربط تفصيلي بجدول الكميات أو إدخال إجمالي -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); flex-wrap: wrap; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); flex-wrap: wrap; gap: 8px;">
         <div style="display: flex; gap: 12px; font-size: 0.84rem;">
           <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="radio" name="ipcMode" value="boq" checked onchange="ProjectHub.toggleIpcMode()">
@@ -8948,7 +8948,7 @@
           </div>
           <div class="form-group">
             <label>يُخصم: المستخلصات السابقة المعتمدة</label>
-            <input type="number" id="ipcModalPrevBills" class="form-control" value="0" readonly style="background: rgba(0,0,0,0.25); color: var(--text-secondary);" oninput="ProjectHub.calcIpcNet()">
+            <input type="number" id="ipcModalPrevBills" class="form-control" value="0" readonly style="background: var(--bg-sunken, rgba(0,0,0,0.25)); color: var(--text-secondary);" oninput="ProjectHub.calcIpcNet()">
           </div>
           <div class="form-group">
             <label style="color: var(--text-gold); font-weight: 700;">قيمة الأعمال الجارية الحالية (Gross Work)</label>
@@ -8991,7 +8991,7 @@
                 <span style="color: var(--accent-green);" id="ipcModalCurrency">-</span>
               </div>
             </div>
-            <div style="flex: 1; max-width: 450px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: var(--radius-sm);">
+            <div style="flex: 1; max-width: 450px; background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 8px 12px; border-radius: var(--radius-sm);">
               <span style="font-size: 0.7rem; color: var(--text-gold); display: block;">التفقيط المالي الرسمي (كتابةً):</span>
               <span id="ipcModalTafqeetDisplay" style="font-size: 0.82rem; font-weight: 700; color: #fff; line-height: 1.4;">فقط صفر ريال لا غير</span>
             </div>
@@ -9476,12 +9476,12 @@
         </p>
 
         <!-- حالة المسار الحالي -->
-        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px;">
+        <div style="background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <span style="font-size: 0.8rem; color: var(--text-gold); font-weight: bold;">📍 المسار المعتمد حالياً:</span>
             <span id="baseFolderStatusBadge" class="drawing-badge-status approved" style="font-size: 0.72rem;">المسار الافتراضي</span>
           </div>
-          <div id="baseFolderCurrentPathDisplay" style="font-size: 0.84rem; font-family: monospace; color: var(--color-info, #38bdf8); direction: ltr; text-align: right; word-break: break-all; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px dashed rgba(56,189,248,0.3);">
+          <div id="baseFolderCurrentPathDisplay" style="font-size: 0.84rem; font-family: monospace; color: var(--color-info, #38bdf8); direction: ltr; text-align: right; word-break: break-all; background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 8px 12px; border-radius: 6px; border: 1px dashed rgba(56,189,248,0.3);">
             جاري التحميل...
           </div>
         </div>
