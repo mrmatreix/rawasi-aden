@@ -583,3 +583,7 @@ body {
 .sr-chat__compose textarea { min-height: 44px; flex: 1; }
 .sr-chat__compose .btn { width: 46px; height: 46px; padding: 0; flex: none; display: grid; place-items: center; }
 @media (max-width: 360px) { .sr-decide__btns { grid-template-columns: 1fr; } }
+.sr-chat__log { scrollbar-width: thin; scrollbar-color: rgba(148,163,184,.35) transparent; }
+.sr-chat__log::-webkit-scrollbar { width: 6px; }
+.sr-chat__log::-webkit-scrollbar-thumb { background: rgba(148,163,184,.35); border-radius: 6px; }
+.sr-chat__log::-webkit-scrollbar-track { background: transparent; }
