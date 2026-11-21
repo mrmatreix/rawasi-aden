@@ -94,13 +94,13 @@ const Settings = {
           <td><strong>${this.escapeText(u.full_name)}</strong></td>
           <td>${this.escapeText(u.client_company || u.client_name || '-') }</td>
           <td><div>${this.escapeText(u.email)}</div><small style="color: var(--text-muted);">${this.escapeText(u.phone || '')}</small></td>
-          <td><span class="badge" style="background: rgba(212, 175, 55, 0.2); color: #d4af37;">${u.role === 'owner' ? 'مالك (Owner)' : (u.role === 'manager' ? 'مدير (Manager)' : 'مطلع (Viewer)')}</span></td>
-          <td><span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">${u.assigned_projects_count || 0} مشاريع</span></td>
-          <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
+          <td><span class="badge" style="background: rgba(212, 175, 55, 0.2); color: var(--text-gold, #d4af37);">${u.role === 'owner' ? 'مالك (Owner)' : (u.role === 'manager' ? 'مدير (Manager)' : 'مطلع (Viewer)')}</span></td>
+          <td><span class="badge" style="background: rgba(59, 130, 246, 0.2); color: var(--color-info, #60a5fa);">${u.assigned_projects_count || 0} مشاريع</span></td>
+          <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #34d399);">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
           <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? '#34d399' : '#f87171'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
           <td>
-            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: #34d399; border-color: #10b981;">إدارة التفاصيل ↗</a>
-            ${Auth.hasPermission('client_app:delete') ? `<button type="button" class="btn btn-secondary btn-sm client-app-delete" style="padding:3px 8px;color:#f87171;margin-right:4px" title="حذف حساب العميل">🗑️ حذف</button>` : ''}
+            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: var(--color-success, #34d399); border-color: #10b981;">إدارة التفاصيل ↗</a>
+            ${Auth.hasPermission('client_app:delete') ? `<button type="button" class="btn btn-secondary btn-sm client-app-delete" style="padding:3px 8px;color:var(--color-danger, #f87171);margin-right:4px" title="حذف حساب العميل">🗑️ حذف</button>` : ''}
           </td>
         `;
         const deleteButton=tr.querySelector('.client-app-delete');
@@ -1193,7 +1193,7 @@ const Settings = {
     return `
       <div style="margin-top: 14px; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 0.74rem; color: #64748b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
         <div style="flex: 1; text-align: right;">${c.footer_notes || ''}</div>
-        <div style="display: flex; gap: 14px; align-items: center; font-size: 0.7rem; color: #94a3b8;">
+        <div style="display: flex; gap: 14px; align-items: center; font-size: 0.7rem; color: var(--text-secondary, #94a3b8);">
           ${showPrintTime ? `<span>تاريخ ووقت الطباعة: <strong>${todayDate} ${timeStr}</strong> | المستخدم: <strong style="color: #0f2744;">${userName}</strong></span>` : ''}
           ${showPageNums ? `<span style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-weight: bold; color: #475569;">وثيقة رسمية معتمدة</span>` : ''}
         </div>
@@ -2049,7 +2049,7 @@ const Settings = {
                 ${payrollShowAllowances ? `<td>120,000</td>` : ''}
                 ${payrollShowDeductions ? `<td>(15,000)</td>` : ''}
                 <td style="font-weight:bold;color:#047857;">555,000 ر.ي</td>
-                ${payrollShowEmpSignature ? `<td style="font-size:0.65rem;color:#94a3b8;">.....................</td>` : ''}
+                ${payrollShowEmpSignature ? `<td style="font-size:0.65rem;color:var(--text-secondary, #94a3b8);">.....................</td>` : ''}
               </tr>
               <tr>
                 <td>EMP-02</td>
@@ -2059,7 +2059,7 @@ const Settings = {
                 ${payrollShowAllowances ? `<td>80,000</td>` : ''}
                 ${payrollShowDeductions ? `<td>(10,000)</td>` : ''}
                 <td style="font-weight:bold;color:#047857;">390,000 ر.ي</td>
-                ${payrollShowEmpSignature ? `<td style="font-size:0.65rem;color:#94a3b8;">.....................</td>` : ''}
+                ${payrollShowEmpSignature ? `<td style="font-size:0.65rem;color:var(--text-secondary, #94a3b8);">.....................</td>` : ''}
               </tr>
               <tr style="background:#f0fdf4;font-weight:bold;">
                 <td colspan="3">إجمالي مسير الرواتب المستحق:</td>
@@ -2348,7 +2348,7 @@ const Settings = {
             scopeParts.push(`🏗️ مشاريع محددة`);
           }
           if (scopeParts.length > 0) {
-            scopeHtml = `<div style="font-size: 0.72rem; color: #38bdf8; margin-top: 3px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
+            scopeHtml = `<div style="font-size: 0.72rem; color: var(--color-info, #38bdf8); margin-top: 3px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
           }
 
           // User security & session badge
@@ -2361,14 +2361,14 @@ const Settings = {
             const exp = uSec.jwt_token_expiry || '8h';
             const label = isLock ? `جهاز معتمد واحد (${exp})` : (isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`);
             const icon = isLock ? '🔒' : '🛡️';
-            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="إعدادات أمان مخصصة لهذا المستخدم - انقر للتعديل">${icon} ${label} ⭐</span></div>`;
+            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="إعدادات أمان مخصصة لهذا المستخدم - انقر للتعديل">${icon} ${label} ⭐</span></div>`;
           } else {
             const isLock = Auth.securitySettings?.session_overflow_action === 'lock_device';
             const isSingle = Auth.securitySettings?.session_mode === 'single' || isLock;
             const devLimit = Auth.securitySettings?.session_device_limit || 3;
             const exp = Auth.securitySettings?.jwt_token_expiry || '8h';
             const label = isLock ? `جهاز معتمد واحد (${exp})` : (isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`);
-            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="يرث الإعدادات العامة للنظام - انقر لتخصيص هذا المستخدم">⚙️ عام: ${label}</span></div>`;
+            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: var(--text-secondary, #94a3b8); border: 1px solid rgba(148, 163, 184, 0.2); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="يرث الإعدادات العامة للنظام - انقر لتخصيص هذا المستخدم">⚙️ عام: ${label}</span></div>`;
           }
 
           // 2FA PIN Badge
@@ -2385,7 +2385,7 @@ const Settings = {
           }
           if (u.login_locked) {
             tfaBadgeHtml += `<div style="margin-top: 5px;">
-              <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.45); font-size: 0.72rem; cursor: pointer;" onclick="Settings.unlockUserLogin(${u.id})" title="الحساب مقفل مؤقتاً بسبب محاولات دخول خاطئة - انقر لفك القفل">
+              <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.45); font-size: 0.72rem; cursor: pointer;" onclick="Settings.unlockUserLogin(${u.id})" title="الحساب مقفل مؤقتاً بسبب محاولات دخول خاطئة - انقر لفك القفل">
                 ⛔ مقفل مؤقتاً — فك القفل
               </span>
             </div>`;
@@ -2399,8 +2399,8 @@ const Settings = {
 
           const isOnline = !!u.is_currently_online;
           const onlineBadge = isOnline
-            ? `<div style="margin-top: 4px;"><span class="badge" style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; padding: 2px 8px;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#10b981; margin-left:4px; box-shadow: 0 0 6px #10b981;"></span>متصل الآن 🟢</span></div>`
-            : `<div style="margin-top: 4px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: #94a3b8; font-size: 0.72rem; padding: 2px 8px;">غير متصل ⚪</span></div>`;
+            ? `<div style="margin-top: 4px;"><span class="badge" style="background: rgba(16, 185, 129, 0.18); color: var(--color-success, #34d399); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; padding: 2px 8px;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#10b981; margin-left:4px; box-shadow: 0 0 6px #10b981;"></span>متصل الآن 🟢</span></div>`
+            : `<div style="margin-top: 4px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: var(--text-secondary, #94a3b8); font-size: 0.72rem; padding: 2px 8px;">غير متصل ⚪</span></div>`;
 
           const isRootAdmin = u.username === 'admin' || u.id === 1;
           const isCurrentUserAdmin = Auth.currentUser?.role === 'admin' || Auth.currentUser?.username === 'admin';
@@ -2408,7 +2408,7 @@ const Settings = {
           return `
             <tr>
               <td>
-                <div style="font-weight: 700; color: var(--gold-light); font-size: 0.9rem;">${u.username}</div>
+                <div style="font-weight: 700; color: var(--text-gold); font-size: 0.9rem;">${u.username}</div>
                 <div style="font-size: 0.72rem; color: var(--text-secondary);">ID: #${u.id}</div>
               </td>
               <td><strong>${u.full_name}</strong></td>
@@ -2433,12 +2433,12 @@ const Settings = {
                     ✏️ تعديل
                   </button>
                   ${isCurrentUserAdmin ? `
-                    <button type="button" class="btn btn-secondary btn-sm" style="color: #10b981; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); font-weight: 600;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="تخصيص سياسة الأمان والجلسات لهذا المستخدم">
+                    <button type="button" class="btn btn-secondary btn-sm" style="color: var(--color-success, #10b981); border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); font-weight: 600;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="تخصيص سياسة الأمان والجلسات لهذا المستخدم">
                       🛡️ أمان وجلسات
                     </button>
                   ` : ''}
                   ${isOnline ? `
-                    <button type="button" class="btn btn-secondary btn-sm" style="color: #fbbf24; border-color: rgba(245,158,11,0.4);" onclick="Settings.disconnectUser(${u.id}, '${u.full_name || u.username}')" title="إنهاء الجلسة وفصل المستخدم عن النظام لمنع التكرار">
+                    <button type="button" class="btn btn-secondary btn-sm" style="color: var(--color-warning, #fbbf24); border-color: rgba(245,158,11,0.4);" onclick="Settings.disconnectUser(${u.id}, '${u.full_name || u.username}')" title="إنهاء الجلسة وفصل المستخدم عن النظام لمنع التكرار">
                       🔌 فصل
                     </button>
                   ` : ''}
@@ -2518,7 +2518,7 @@ const Settings = {
       projectsList.innerHTML = (meta?.projects || []).map(p => {
         const checked = !isAll && allowedProjIds.some(id => String(id) === String(p.id));
         return `
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: #f1f5f9; cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text-primary, #f1f5f9); cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;">
             <input type="checkbox" class="user-proj-scope-chk" value="${p.id}" ${checked ? 'checked' : ''} style="accent-color: #38bdf8;">
             <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</span>
           </label>
@@ -2801,10 +2801,10 @@ const Settings = {
       if (isLockDevice || sec?.authorized_device_id) {
         boundBox.style.display = 'flex';
         if (sec?.authorized_device_id) {
-          boundText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#38bdf8;">${sec.authorized_device_name || 'جهاز مسجل'}</span>`;
+          boundText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:var(--color-info, #38bdf8);">${sec.authorized_device_name || 'جهاز مسجل'}</span>`;
           if (boundResetBtn) boundResetBtn.style.display = 'inline-block';
         } else {
-          boundText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#94a3b8;">لم يسجل بعد (سيتم قفل أول جهاز).</span>`;
+          boundText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:var(--text-secondary, #94a3b8);">لم يسجل بعد (سيتم قفل أول جهاز).</span>`;
           if (boundResetBtn) boundResetBtn.style.display = 'none';
         }
       } else {
@@ -3545,7 +3545,7 @@ const Settings = {
     const dropzoneText = document.getElementById('selectedBackupFileName');
     if (dropzoneText) {
       const sizeKB = (file.size / 1024).toFixed(1);
-      dropzoneText.innerHTML = `<strong style="color: var(--gold-light);">الملف المحدد:</strong> ${file.name} (${sizeKB} KB)`;
+      dropzoneText.innerHTML = `<strong style="color: var(--text-gold);">الملف المحدد:</strong> ${file.name} (${sizeKB} KB)`;
     }
 
     const confirmBtn = document.getElementById('btnConfirmRestore');
@@ -3585,7 +3585,7 @@ const Settings = {
             return `
               <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
                 <div>
-                  <div style="font-size: 0.85rem; font-weight: 600; color: var(--gold-light);">${b.fileName}</div>
+                  <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-gold);">${b.fileName}</div>
                   <div style="font-size: 0.75rem; color: var(--text-secondary);">${dateStr} | ${sizeKB} KB</div>
                 </div>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.selectServerBackup('${b.fileName}')">
@@ -3680,8 +3680,8 @@ const Settings = {
         const dt = new Date(d.lastBackup.createdAt);
         const sizeMb = (d.lastBackup.size / (1024 * 1024)).toFixed(2);
         if (lastBackupDateEl) lastBackupDateEl.textContent = `${dt.toLocaleDateString('ar-YE')} ${dt.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}`;
-        if (lastBackupFileEl) lastBackupFileEl.innerHTML = `<span style="color:var(--gold-light); font-weight:600;">${d.lastBackup.fileName}</span> <span style="color:#94a3b8;">(${sizeMb} MB)</span> ${d.lastBackup.encrypted ? '🔒' : '📄'}`;
-        if (lastBackupHashEl) lastBackupHashEl.innerHTML = `<code style="font-size:0.72rem; color:#38bdf8;">SHA-256: ${d.lastBackup.sha256 ? d.lastBackup.sha256.slice(0, 16) + '...' : '-'}</code>`;
+        if (lastBackupFileEl) lastBackupFileEl.innerHTML = `<span style="color:var(--text-gold); font-weight:600;">${d.lastBackup.fileName}</span> <span style="color:var(--text-secondary, #94a3b8);">(${sizeMb} MB)</span> ${d.lastBackup.encrypted ? '🔒' : '📄'}`;
+        if (lastBackupHashEl) lastBackupHashEl.innerHTML = `<code style="font-size:0.72rem; color:var(--color-info, #38bdf8);">SHA-256: ${d.lastBackup.sha256 ? d.lastBackup.sha256.slice(0, 16) + '...' : '-'}</code>`;
       } else {
         if (lastBackupDateEl) lastBackupDateEl.textContent = 'لا توجد نسخ مسجلة بعد';
         if (lastBackupFileEl) lastBackupFileEl.textContent = '-';
@@ -3755,34 +3755,34 @@ const Settings = {
         const sizeMb = (rec.file_size / (1024 * 1024)).toFixed(2);
         
         // نوع النسخة
-        let typeBadge = '<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">يدوي 👤</span>';
-        if (rec.backup_type === 'scheduled_daily') typeBadge = '<span class="badge" style="background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3);">مجدول يومي 📅</span>';
+        let typeBadge = '<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8); border: 1px solid rgba(56, 189, 248, 0.3);">يدوي 👤</span>';
+        if (rec.backup_type === 'scheduled_daily') typeBadge = '<span class="badge" style="background: rgba(74, 222, 128, 0.15); color: var(--color-success, #4ade80); border: 1px solid rgba(74, 222, 128, 0.3);">مجدول يومي 📅</span>';
         if (rec.backup_type === 'scheduled_weekly') typeBadge = '<span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3);">مجدول أسبوعي 📆</span>';
-        if (rec.backup_type === 'scheduled_monthly') typeBadge = '<span class="badge" style="background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3);">مجدول شهري 🗓️</span>';
-        if (rec.backup_type === 'logout') typeBadge = '<span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);">خروج 🚪</span>';
+        if (rec.backup_type === 'scheduled_monthly') typeBadge = '<span class="badge" style="background: rgba(234, 179, 8, 0.15); color: var(--color-warning, #facc15); border: 1px solid rgba(234, 179, 8, 0.3);">مجدول شهري 🗓️</span>';
+        if (rec.backup_type === 'logout') typeBadge = '<span class="badge" style="background: rgba(148, 163, 184, 0.15); color: var(--text-secondary, #94a3b8); border: 1px solid rgba(148, 163, 184, 0.3);">خروج 🚪</span>';
         if (rec.backup_type === 'pre_migration') typeBadge = '<span class="badge" style="background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3);">أمان قبل الترقية ⚙️</span>';
 
         // التشفير
         const encBadge = rec.encrypted 
-          ? '<span style="color:#4ade80; font-size:0.8rem; font-weight:600;" title="مشفر عبر AES-256-GCM">🔒 مشفر</span>'
-          : '<span style="color:#94a3b8; font-size:0.8rem;">📄 غير مشفر</span>';
+          ? '<span style="color:var(--color-success, #4ade80); font-size:0.8rem; font-weight:600;" title="مشفر عبر AES-256-GCM">🔒 مشفر</span>'
+          : '<span style="color:var(--text-secondary, #94a3b8); font-size:0.8rem;">📄 غير مشفر</span>';
 
         // حالة التحقق
         const integrityBadge = rec.integrity_check_result === 'ok'
-          ? '<span style="color:#4ade80; font-size:0.8rem;">سليمة ✅</span>'
-          : `<span style="color:#f87171; font-size:0.8rem;">⚠️ ${rec.integrity_check_result || 'غير محدد'}</span>`;
+          ? '<span style="color:var(--color-success, #4ade80); font-size:0.8rem;">سليمة ✅</span>'
+          : `<span style="color:var(--color-danger, #f87171); font-size:0.8rem;">⚠️ ${rec.integrity_check_result || 'غير محدد'}</span>`;
 
         // حالة اختبار الاستعادة
-        let testBadge = '<span style="color:#facc15; font-size:0.75rem;">لم تُختبر</span>';
+        let testBadge = '<span style="color:var(--color-warning, #facc15); font-size:0.75rem;">لم تُختبر</span>';
         if (rec.test_status === 'test_passed') {
-          testBadge = '<span style="color:#4ade80; font-size:0.78rem; font-weight:600;" title="تم فحص وتأكيد الاستعادة في بيئة معزولة Sandbox">🧪 مجاز بنجاح</span>';
+          testBadge = '<span style="color:var(--color-success, #4ade80); font-size:0.78rem; font-weight:600;" title="تم فحص وتأكيد الاستعادة في بيئة معزولة Sandbox">🧪 مجاز بنجاح</span>';
         } else if (rec.test_status === 'test_failed') {
-          testBadge = '<span style="color:#f87171; font-size:0.78rem; font-weight:600;">❌ فشل الاختبار</span>';
+          testBadge = '<span style="color:var(--color-danger, #f87171); font-size:0.78rem; font-weight:600;">❌ فشل الاختبار</span>';
         }
 
         // الحماية
         const protectIcon = rec.is_protected
-          ? `<button type="button" class="btn btn-sm" onclick="Settings.toggleBackupProtection(${rec.id}, 1)" title="نسخة محمية من الحذف التلقائي. اضغط لإلغاء التثبيت" style="background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4);">📌 مثبتة ومحمية</button>`
+          ? `<button type="button" class="btn btn-sm" onclick="Settings.toggleBackupProtection(${rec.id}, 1)" title="نسخة محمية من الحذف التلقائي. اضغط لإلغاء التثبيت" style="background: rgba(234, 179, 8, 0.2); color: var(--color-warning, #facc15); border: 1px solid rgba(234, 179, 8, 0.4);">📌 مثبتة ومحمية</button>`
           : `<button type="button" class="btn btn-sm btn-secondary" onclick="Settings.toggleBackupProtection(${rec.id}, 0)" title="تثبيت وحماية من الحذف التلقائي">📌 حماية</button>`;
 
         const safeFileName = rec.file_name.replace(/'/g, "\\'");
@@ -3790,8 +3790,8 @@ const Settings = {
         return `
           <tr>
             <td>
-              <div style="font-weight:600; color:var(--gold-light); font-size:0.88rem; direction:ltr; text-align:right;">${rec.file_name}</div>
-              <div style="font-size:0.72rem; color:#94a3b8; font-family:monospace;">${rec.backup_uid}</div>
+              <div style="font-weight:600; color:var(--text-gold); font-size:0.88rem; direction:ltr; text-align:right;">${rec.file_name}</div>
+              <div style="font-size:0.72rem; color:var(--text-secondary, #94a3b8); font-family:monospace;">${rec.backup_uid}</div>
             </td>
             <td>${typeBadge}</td>
             <td><strong>${sizeMb} MB</strong></td>
@@ -3804,10 +3804,10 @@ const Settings = {
               <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.downloadBackupRecord('${rec.id}', '${safeFileName}')" title="تنزيل النسخة" style="margin-left: 4px;">
                 📥
               </button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.runSandboxTest('${rec.id}', '${safeFileName}')" title="فحص واختبار الاستعادة في بيئة معزولة Sandbox" style="border-color: #38bdf8; color: #38bdf8; margin-left: 4px;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.runSandboxTest('${rec.id}', '${safeFileName}')" title="فحص واختبار الاستعادة في بيئة معزولة Sandbox" style="border-color: #38bdf8; color: var(--color-info, #38bdf8); margin-left: 4px;">
                 🧪 فحص Sandbox
               </button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.openProductionRestoreModal('${rec.id}', '${safeFileName}', ${rec.encrypted ? 1 : 0})" title="استعادة إلى الإنتاج مع نسخة أمان وتراجع تلقائي" style="border-color: #f59e0b; color: #f59e0b; margin-left: 4px;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.openProductionRestoreModal('${rec.id}', '${safeFileName}', ${rec.encrypted ? 1 : 0})" title="استعادة إلى الإنتاج مع نسخة أمان وتراجع تلقائي" style="border-color: #f59e0b; color: var(--color-warning, #f59e0b); margin-left: 4px;">
                 ↩️ استعادة
               </button>
               ${rec.is_protected ? '' : `
@@ -3920,18 +3920,18 @@ const Settings = {
           resultBox.style.display = 'block';
           resultBox.className = 'alert alert-success';
           resultBox.innerHTML = `
-            <div style="font-weight: 700; font-size: 1rem; color: #4ade80; margin-bottom: 8px;">
+            <div style="font-weight: 700; font-size: 1rem; color: var(--color-success, #4ade80); margin-bottom: 8px;">
               ✅ اجتازت النسخة الاحتياطية الاختبار التجريبي بنجاح تام!
             </div>
-            <div style="font-size: 0.85rem; line-height: 1.6; color: #f8fafc;">
+            <div style="font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #f8fafc);">
               <div>• <strong>فحص بنية B-Tree و SQLite:</strong> سليم ومطابق للمواصفات (${d.integrityResult})</div>
               <div>• <strong>إجمالي الجداول المفحوصة:</strong> ${d.stats?.total_tables || 0} جدول</div>
               <div>• <strong>مستخدمي النظام النشطين:</strong> ${d.stats?.users_count || 0} مستخدم</div>
               <div>• <strong>حسابات دليل الحسابات:</strong> ${d.stats?.accounts_count || 0} حساب</div>
               <div>• <strong>القيود المحاسبية اليومية:</strong> ${d.stats?.journal_entries_count || 0} قيد</div>
-              <div>• <strong>ميزان المراجعة والاتزان:</strong> ${d.stats?.is_balanced ? '<span style="color:#4ade80;">متزن تماماً (المدين = الدائن) ⚖️</span>' : '<span style="color:#f87171;">غير متزن ⚠️</span>'}</div>
+              <div>• <strong>ميزان المراجعة والاتزان:</strong> ${d.stats?.is_balanced ? '<span style="color:var(--color-success, #4ade80);">متزن تماماً (المدين = الدائن) ⚖️</span>' : '<span style="color:var(--color-danger, #f87171);">غير متزن ⚠️</span>'}</div>
               <div>• <strong>زمن التنفيذ والفحص:</strong> ${d.durationMs} ملي ثانية</div>
-              <div style="margin-top: 6px; font-size: 0.78rem; color: #94a3b8;">
+              <div style="margin-top: 6px; font-size: 0.78rem; color: var(--text-secondary, #94a3b8);">
                 * تم فحص النسخة في مجلد عمل مؤقت معزول وتم حذفه فوراً دون المساس إطلاقاً ببيانات الإنتاج الحالية.
               </div>
             </div>
@@ -3945,8 +3945,8 @@ const Settings = {
           resultBox.style.display = 'block';
           resultBox.className = 'alert alert-danger';
           resultBox.innerHTML = `
-            <div style="font-weight: 700; color: #f87171; margin-bottom: 4px;">❌ فشل اختبار الاستعادة:</div>
-            <div style="font-size: 0.85rem; color: #fca5a5;">${json.message || 'حدث خطأ غير معروف'}</div>
+            <div style="font-weight: 700; color: var(--color-danger, #f87171); margin-bottom: 4px;">❌ فشل اختبار الاستعادة:</div>
+            <div style="font-size: 0.85rem; color: var(--color-danger, #fca5a5);">${json.message || 'حدث خطأ غير معروف'}</div>
           `;
         }
         App.showToast(json.message || 'فشل فحص النسخة', 'error');
@@ -4255,7 +4255,7 @@ const Settings = {
           return `
             <tr>
               <td>
-                <div style="font-weight: 700; color: var(--gold-light); font-size: 0.85rem;">${b.fileName}</div>
+                <div style="font-weight: 700; color: var(--text-gold); font-size: 0.85rem;">${b.fileName}</div>
                 <small style="color: var(--text-secondary);">${b.notes || '-'}</small>
               </td>
               <td><span class="badge badge-secondary">${b.username || 'مستخدم'}</span></td>
@@ -4361,7 +4361,7 @@ const Settings = {
         if (d.nextRun && d.enabled) {
           const nrDate = new Date(d.nextRun);
           const nextTime = `${nrDate.toLocaleDateString('ar-YE')} ${nrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}`;
-          nextRunText.innerHTML = `${nextTime} <span style="font-size:0.8rem; color:#94a3b8;">(${d.countdownText || ''})</span>`;
+          nextRunText.innerHTML = `${nextTime} <span style="font-size:0.8rem; color:var(--text-secondary, #94a3b8);">(${d.countdownText || ''})</span>`;
         } else {
           nextRunText.textContent = d.enabled ? 'جاري الحساب...' : 'الجدولة متوقفة';
         }
@@ -4369,11 +4369,11 @@ const Settings = {
 
       if (pathStatus) {
         if (d.storagePathExists && d.storagePathWritable) {
-          pathStatus.innerHTML = '<span style="color:#4ade80;">(مسار صالح ومؤكد ✅)</span>';
+          pathStatus.innerHTML = '<span style="color:var(--color-success, #4ade80);">(مسار صالح ومؤكد ✅)</span>';
         } else if (d.storagePathExists) {
-          pathStatus.innerHTML = '<span style="color:#facc15;">(المسار موجود - يتطلب فحص الصلاحيات)</span>';
+          pathStatus.innerHTML = '<span style="color:var(--color-warning, #facc15);">(المسار موجود - يتطلب فحص الصلاحيات)</span>';
         } else {
-          pathStatus.innerHTML = '<span style="color:#38bdf8;">(سيتم إنشاء المجلد تلقائياً)</span>';
+          pathStatus.innerHTML = '<span style="color:var(--color-info, #38bdf8);">(سيتم إنشاء المجلد تلقائياً)</span>';
         }
       }
     } catch (e) {
@@ -4495,14 +4495,14 @@ const Settings = {
           resultBox.style.background = 'rgba(34, 197, 94, 0.15)';
           resultBox.style.color = '#4ade80';
           resultBox.style.border = '1px solid rgba(34, 197, 94, 0.3)';
-          resultBox.innerHTML = `<strong>${json.message}</strong><br><small style="direction:ltr; display:block; color:#f8fafc; font-family:monospace;">${json.resolvedPath}</small>`;
-          if (pathStatus) pathStatus.innerHTML = '<span style="color:#4ade80;">(مسار صالح ومؤكد ✅)</span>';
+          resultBox.innerHTML = `<strong>${json.message}</strong><br><small style="direction:ltr; display:block; color:var(--text-primary, #f8fafc); font-family:monospace;">${json.resolvedPath}</small>`;
+          if (pathStatus) pathStatus.innerHTML = '<span style="color:var(--color-success, #4ade80);">(مسار صالح ومؤكد ✅)</span>';
         } else {
           resultBox.style.background = 'rgba(239, 68, 68, 0.15)';
           resultBox.style.color = '#f87171';
           resultBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
           resultBox.innerHTML = `<strong>⚠️ ${json.message}</strong>`;
-          if (pathStatus) pathStatus.innerHTML = '<span style="color:#f87171;">(تعذر استخدام المسار ❌)</span>';
+          if (pathStatus) pathStatus.innerHTML = '<span style="color:var(--color-danger, #f87171);">(تعذر استخدام المسار ❌)</span>';
         }
       }
     } catch (err) {
@@ -4611,7 +4611,7 @@ const Settings = {
           resultBox.innerHTML = `
             <div style="color: var(--accent-red); font-weight: 700; margin-bottom: 4px;">⚠️ فشل الاتصال بخادم MySQL</div>
             <div style="font-size: 0.82rem; color: var(--text-secondary);">${json.message}</div>
-            <div style="font-size: 0.78rem; color: var(--gold-light); margin-top: 6px;">💡 تلميح: تأكد من تشغيل خادم MySQL (مثل XAMPP أو WampServer أو خدمة MySQL)، أو فحص كلمة المرور واسم المستخدم.</div>
+            <div style="font-size: 0.78rem; color: var(--text-gold); margin-top: 6px;">💡 تلميح: تأكد من تشغيل خادم MySQL (مثل XAMPP أو WampServer أو خدمة MySQL)، أو فحص كلمة المرور واسم المستخدم.</div>
           `;
         }
       }
@@ -4681,7 +4681,7 @@ const Settings = {
     }
     if (resultBox) {
       resultBox.style.display = 'block';
-      resultBox.innerHTML = '<div style="color: var(--gold-light);">جاري قراءة الجداول من SQLite وتحويلها إلى MySQL، يرجى الانتظار بضع ثوانٍ... ⏳</div>';
+      resultBox.innerHTML = '<div style="color: var(--text-gold);">جاري قراءة الجداول من SQLite وتحويلها إلى MySQL، يرجى الانتظار بضع ثوانٍ... ⏳</div>';
     }
 
     try {
@@ -4739,11 +4739,11 @@ const Settings = {
       const badge = document.getElementById('cloudStatusBadge');
       if (badge) {
         if (config.lastSyncStatus === 'success') {
-          badge.innerHTML = '<span style="color: #34d399;">🟢 متزامن ومحمي سحابياً</span>';
+          badge.innerHTML = '<span style="color: var(--color-success, #34d399);">🟢 متزامن ومحمي سحابياً</span>';
         } else if (config.lastSyncStatus === 'failed') {
-          badge.innerHTML = '<span style="color: #f87171;">⚠️ تعثرت آخر مزامنة</span>';
+          badge.innerHTML = '<span style="color: var(--color-danger, #f87171);">⚠️ تعثرت آخر مزامنة</span>';
         } else {
-          badge.innerHTML = '<span style="color: #38bdf8;">☁️ جاهز للمزامنة</span>';
+          badge.innerHTML = '<span style="color: var(--color-info, #38bdf8);">☁️ جاهز للمزامنة</span>';
         }
       }
 
@@ -5003,21 +5003,21 @@ const Settings = {
       const isBundle = item.includeProjectsFiles || item.fileName.includes('bundle');
 
       const encBadge = isEnc
-        ? '<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.75rem;">🔒 مشفر AES-256</span>'
+        ? '<span style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #34d399); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.75rem;">🔒 مشفر AES-256</span>'
         : '<span style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">🔓 قياسي (غير مشفر)</span>';
 
       const typeBadge = isBundle
-        ? '<span style="color: var(--gold-light); font-weight: 600;">📦 أرشيف نظام شامل</span>'
+        ? '<span style="color: var(--text-gold); font-weight: 600;">📦 أرشيف نظام شامل</span>'
         : '<span style="color: var(--accent-blue);">🗄️ قاعدة بيانات فقط</span>';
 
       const cloudBadge = item.cloudSynced
-        ? '<span style="color: #38bdf8; display: inline-flex; align-items: center; gap: 4px;">☁️ مرفوع سحابياً</span>'
+        ? '<span style="color: var(--color-info, #38bdf8); display: inline-flex; align-items: center; gap: 4px;">☁️ مرفوع سحابياً</span>'
         : '<span style="color: var(--text-secondary); display: inline-flex; align-items: center; gap: 4px;">💻 محلي بالخزنة</span>';
 
       return `
         <tr>
           <td>
-            <div style="font-weight: 600; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">${item.fileName}</div>
+            <div style="font-weight: 600; color: var(--text-primary, #f8fafc); font-family: monospace; font-size: 0.85rem;">${item.fileName}</div>
             ${item.sha256 ? `<small style="color: var(--text-secondary); font-size: 0.68rem; font-family: monospace;">SHA: ${item.sha256.substring(0, 16)}...</small>` : ''}
           </td>
           <td>${typeBadge}</td>
@@ -5031,7 +5031,7 @@ const Settings = {
                 📥 تنزيل
               </a>
               ${!item.cloudSynced ? `
-                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.syncToCloudNow('${item.fileName}')" title="رفع إلى السحابة" style="padding: 4px 8px; color: #38bdf8;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.syncToCloudNow('${item.fileName}')" title="رفع إلى السحابة" style="padding: 4px 8px; color: var(--color-info, #38bdf8);">
                   ☁️ رفع
                 </button>
               ` : ''}
@@ -5070,7 +5070,7 @@ const Settings = {
 
     if (preselectedFileName) {
       if (dropHeader) dropHeader.textContent = 'تم اختيار نسخة من الخزنة السحابية:';
-      if (dropName) dropName.innerHTML = `<strong style="color: #38bdf8;">${preselectedFileName}</strong>`;
+      if (dropName) dropName.innerHTML = `<strong style="color: var(--color-info, #38bdf8);">${preselectedFileName}</strong>`;
     } else {
       if (dropHeader) dropHeader.textContent = 'اضغط هنا لاختيار ملف الأرشيف (.rawasi.enc / .zip / .db)';
       if (dropName) dropName.textContent = 'أو اسحب وأفلت الملف هنا مباشرة';
@@ -5091,7 +5091,7 @@ const Settings = {
     const sizeKB = (file.size / 1024).toFixed(1);
 
     if (dropHeader) dropHeader.textContent = 'الملف المحدد للاستعادة:';
-    if (dropName) dropName.innerHTML = `<strong style="color: var(--gold-light);">${file.name}</strong> (${sizeKB} KB)`;
+    if (dropName) dropName.innerHTML = `<strong style="color: var(--text-gold);">${file.name}</strong> (${sizeKB} KB)`;
 
     const confirmBtn = document.getElementById('btnConfirmEncryptedRestore');
     if (confirmBtn) confirmBtn.disabled = true; // يتطلب فحص أولاً
@@ -5163,7 +5163,7 @@ const Settings = {
         let detailsHtml = '';
         if (m) {
           detailsHtml = `
-            <div style="margin-top: 6px; font-size: 0.8rem; color: #f8fafc; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
+            <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-primary, #f8fafc); border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
               <div><strong>تاريخ إنشاء الأرشيف:</strong> ${new Date(m.timestamp).toLocaleString('ar-YE')}</div>
               <div><strong>نوع الحزمة:</strong> ${m.archive_type} | <strong>المشاريع المرفقة:</strong> ${d.projectFilesCount} ملف</div>
               ${m.stats ? `<div><strong>الإحصائيات:</strong> ${m.stats.projectsCount || 0} مشروع | ${m.stats.contractsCount || 0} عقد | ${m.stats.vouchersCount || 0} سند مالي</div>` : ''}

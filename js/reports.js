@@ -443,15 +443,15 @@ await this.loadIncomeStatement();
           } else {
             tbody.innerHTML = accounts.map(a => `
               <tr>
-                <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${a.code}</td>
+                <td style="font-family: monospace; font-weight: bold; color: var(--text-gold);">${a.code}</td>
                 <td><strong>${a.name}</strong><small style="display:block">${a.account_kind === 'main' ? 'رئيسي (تجميعي)' : 'فرعي'}</small></td>
                 <td><span class="badge badge-info">${this.financialTypeLabel(a.type)}</span></td>
                 <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_debit > 0 ? Reports.formatNumber(a.opening_debit) : '-'}</td>
                 <td style="text-align: left; direction: ltr; font-family: monospace;">${a.opening_credit > 0 ? Reports.formatNumber(a.opening_credit) : '-'}</td>
                 <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green);">${a.period_debit > 0 ? Reports.formatNumber(a.period_debit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8;">${a.period_credit > 0 ? Reports.formatNumber(a.period_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--color-info, #38bdf8);">${a.period_credit > 0 ? Reports.formatNumber(a.period_credit) : '-'}</td>
                 <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--accent-green);">${a.closing_debit > 0 ? Reports.formatNumber(a.closing_debit) : '-'}</td>
-                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: #38bdf8;">${a.closing_credit > 0 ? Reports.formatNumber(a.closing_credit) : '-'}</td>
+                <td style="text-align: left; direction: ltr; font-family: monospace; font-weight: bold; color: var(--color-info, #38bdf8);">${a.closing_credit > 0 ? Reports.formatNumber(a.closing_credit) : '-'}</td>
               </tr>
             `).join('');
           }
@@ -465,9 +465,9 @@ await this.loadIncomeStatement();
               <td style="text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(totals.opening_debit || 0)}</td>
               <td style="text-align: left; direction: ltr; font-family: monospace;">${Reports.formatNumber(totals.opening_credit || 0)}</td>
               <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${Reports.formatNumber(totals.period_debit || totals.total_debit || 0)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${Reports.formatNumber(totals.period_credit || totals.total_credit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--color-info, #38bdf8); font-size: 1.05rem;">${Reports.formatNumber(totals.period_credit || totals.total_credit || 0)}</td>
               <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--accent-green); font-size: 1.05rem;">${Reports.formatNumber(totals.closing_debit || totals.balance_debit || 0)}</td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: #38bdf8; font-size: 1.05rem;">${Reports.formatNumber(totals.closing_credit || totals.balance_credit || 0)}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--color-info, #38bdf8); font-size: 1.05rem;">${Reports.formatNumber(totals.closing_credit || totals.balance_credit || 0)}</td>
             </tr>
           `;
         }
@@ -598,7 +598,7 @@ await this.loadIncomeStatement();
         tbody.innerHTML = movements.length ? movements.map(row => `
           <tr>
             <td>${row.date || '-'}</td>
-            <td style="font-family:monospace; color:var(--gold-light);">${row.entry_no || '-'}</td>
+            <td style="font-family:monospace; color:var(--text-gold);">${row.entry_no || '-'}</td>
             <td>${row.reference || '-'}</td>
             <td>${row.description || row.notes || '-'}</td>
             <td>${row.cost_center_name ? `${row.cost_center_code || ''} - ${row.cost_center_name}` : 'عام'}</td>
@@ -800,7 +800,7 @@ await this.loadIncomeStatement();
             <tr style="background: rgba(212,175,55,0.15); font-weight: bold; font-size: 1.05rem;">
               <td>صافي التغير في النقدية خلال الفترة</td>
               <td colspan="2"></td>
-              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--gold-light);">${Reports.formatNumber(d.net_cash_change || 0)} ${this.reportCurrency()}</td>
+              <td style="text-align: left; direction: ltr; font-family: monospace; color: var(--text-gold);">${Reports.formatNumber(d.net_cash_change || 0)} ${this.reportCurrency()}</td>
             </tr>
             <tr style="background: rgba(255,255,255,0.06); font-weight: bold;">
               <td>رصيد النقدية والبنوك في نهاية المدة</td>
@@ -859,9 +859,9 @@ await this.loadIncomeStatement();
                 <tr>
                   <td><strong>${p.name}</strong> <small style="color:var(--text-secondary)">(${p.code})</small></td>
                   <td>${p.client_name || '-'}</td>
-                  <td style="color: var(--gold-light); font-weight: bold;">${Reports.formatNumber(p.contract_value || 0)}</td>
+                  <td style="color: var(--text-gold); font-weight: bold;">${Reports.formatNumber(p.contract_value || 0)}</td>
                   <td style="color: var(--accent-red);">${Reports.formatNumber(p.actual_cost || 0)}</td>
-                  <td style="color: #38bdf8; font-weight: 600;">${Reports.formatNumber(p.recognized_revenue || 0)}</td>
+                  <td style="color: var(--color-info, #38bdf8); font-weight: 600;">${Reports.formatNumber(p.recognized_revenue || 0)}</td>
                   <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">
                     ${Reports.formatNumber(p.calculated_actual_profit || 0)}
                   </td>
@@ -934,8 +934,8 @@ await this.loadIncomeStatement();
             tbody.innerHTML = d.centers.map(cc => {
               const isProfit = (cc.net_profit || 0) >= 0;
               const statusBadge = isProfit
-                ? `<span class="badge" style="background: rgba(34,197,94,0.15); color: #4ade80;">ربح محقق (${cc.profit_margin}%)</span>`
-                : `<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171;">عجز / خسارة (${cc.profit_margin}%)</span>`;
+                ? `<span class="badge" style="background: rgba(34,197,94,0.15); color: var(--color-success, #4ade80);">ربح محقق (${cc.profit_margin}%)</span>`
+                : `<span class="badge" style="background: rgba(239,68,68,0.15); color: var(--color-danger, #f87171);">عجز / خسارة (${cc.profit_margin}%)</span>`;
 
               return `
                 <tr>
@@ -943,8 +943,8 @@ await this.loadIncomeStatement();
                   <td><strong style="color: #fff;">${cc.name}</strong></td>
                   <td><span class="badge badge-info">${this.financialTypeLabel(cc.type || 'مركز تكلفة')}</span></td>
                   <td>${cc.project_name || '-'}</td>
-                  <td style="color: var(--gold-light); font-weight: bold;">${Reports.formatNumber(cc.total_revenue || 0)} ${this.reportCurrency()}</td>
-                  <td style="color: #38bdf8; font-weight: bold;">${Reports.formatNumber(cc.total_expense || 0)} ${this.reportCurrency()}</td>
+                  <td style="color: var(--text-gold); font-weight: bold;">${Reports.formatNumber(cc.total_revenue || 0)} ${this.reportCurrency()}</td>
+                  <td style="color: var(--color-info, #38bdf8); font-weight: bold;">${Reports.formatNumber(cc.total_expense || 0)} ${this.reportCurrency()}</td>
                   <td style="color: ${isProfit ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${Reports.formatNumber(cc.net_profit || 0)} ${this.reportCurrency()}</td>
                   <td>${statusBadge}</td>
                 </tr>
@@ -1007,13 +1007,13 @@ await this.loadIncomeStatement();
             <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; margin-bottom: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div>
-                  <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 1.2rem;">${client.name} ${client.company ? `<span style="font-size: 0.85rem; color: #38bdf8;">(${client.company})</span>` : ''}</h3>
+                  <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 1.2rem;">${client.name} ${client.company ? `<span style="font-size: 0.85rem; color: var(--color-info, #38bdf8);">(${client.company})</span>` : ''}</h3>
                   <span style="font-size: 0.8rem; color: var(--text-secondary);">الهاتف: ${client.phone || '-'} | العنوان: ${client.address || '-'}</span>
                 </div>
                 <div style="display: flex; gap: 14px; background: rgba(0,0,0,0.3); padding: 8px 16px; border-radius: 8px;">
                   <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المطالبات:</span> <strong style="color:var(--accent-red)">${Reports.formatNumber(summary.total_invoiced || 0)} ${cCurr}</strong></div>
                   <div><span style="font-size:0.75rem;color:var(--text-secondary)">إجمالي المحصل:</span> <strong style="color:var(--accent-green)">${Reports.formatNumber(summary.total_collected || 0)} ${cCurr}</strong></div>
-                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">الرصيد المستحق:</span> <strong style="color:var(--gold-light);font-size:1.1rem">${Reports.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></div>
+                  <div><span style="font-size:0.75rem;color:var(--text-secondary)">الرصيد المستحق:</span> <strong style="color:var(--text-gold);font-size:1.1rem">${Reports.formatNumber(summary.outstanding_balance || 0)} ${cCurr}</strong></div>
                 </div>
               </div>
             </div>
@@ -1117,15 +1117,15 @@ await this.loadIncomeStatement();
                 <div style="display: grid; grid-template-columns: repeat(3, auto); gap: 14px;">
                   <div style="background: rgba(59,130,246,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
                     <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي الاستحقاق (له):</div>
-                    <strong style="color: #3b82f6;">${Reports.formatNumber(summary.total_invoiced || 0)} ${sCurr}</strong>
+                    <strong style="color: var(--color-info, #3b82f6);">${Reports.formatNumber(summary.total_invoiced || 0)} ${sCurr}</strong>
                   </div>
                   <div style="background: rgba(16,185,129,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
                     <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي المسدد (عليه):</div>
-                    <strong style="color: #10b981;">${Reports.formatNumber(summary.total_paid || 0)} ${sCurr}</strong>
+                    <strong style="color: var(--color-success, #10b981);">${Reports.formatNumber(summary.total_paid || 0)} ${sCurr}</strong>
                   </div>
                   <div style="background: rgba(245,158,11,0.1); padding: 8px 14px; border-radius: 6px; text-align: center;">
                     <div style="font-size: 0.72rem; color: var(--text-secondary);">صافي الرصيد المستحق:</div>
-                    <strong style="color: #f59e0b; font-size: 1.05rem;">${Reports.formatNumber(summary.outstanding_balance || 0)} ${sCurr}</strong>
+                    <strong style="color: var(--color-warning, #f59e0b); font-size: 1.05rem;">${Reports.formatNumber(summary.outstanding_balance || 0)} ${sCurr}</strong>
                   </div>
                 </div>
               </div>
@@ -1143,7 +1143,7 @@ await this.loadIncomeStatement();
               return `
                 <tr>
                   <td style="white-space: nowrap; font-family: monospace;">${s.date || '-'}</td>
-                  <td><span class="badge" style="background: rgba(59,130,246,0.12); color: #3b82f6; font-size: 0.78rem;">${s.type}</span></td>
+                  <td><span class="badge" style="background: rgba(59,130,246,0.12); color: var(--color-info, #3b82f6); font-size: 0.78rem;">${s.type}</span></td>
                   <td style="font-weight: 600; font-family: monospace;">${s.ref || '-'}</td>
                   <td style="color: var(--accent-amber); font-weight: 700; text-align: right;">${s.credit ? Reports.formatNumber(s.credit) : '-'}</td>
                   <td style="color: var(--accent-green); font-weight: 700; text-align: right;">${s.debit ? Reports.formatNumber(s.debit) : '-'}</td>
@@ -1159,7 +1159,7 @@ await this.loadIncomeStatement();
                   <td colspan="3" style="text-align: center;">الإجمالي العام</td>
                   <td style="color: var(--accent-amber); text-align: right;">${Reports.formatNumber(summary.total_invoiced || 0)}</td>
                   <td style="color: var(--accent-green); text-align: right;">${Reports.formatNumber(summary.total_paid || 0)}</td>
-                  <td style="color: #f59e0b; text-align: right; font-size: 1.05rem;">${Reports.formatNumber(summary.outstanding_balance || 0)}</td>
+                  <td style="color: var(--color-warning, #f59e0b); text-align: right; font-size: 1.05rem;">${Reports.formatNumber(summary.outstanding_balance || 0)}</td>
                   <td>${summary.outstanding_balance === 0 ? 'مسوى بالكامل ✓' : 'متبقي مستحق'}</td>
                 </tr>
               `;
@@ -1431,15 +1431,15 @@ await this.loadIncomeStatement();
             <tr>
               <td><strong>${p.project_name}</strong><br><small style="color: var(--text-secondary);">${p.project_code || ''}</small></td>
               <td>${p.client_name || '-'}</td>
-              <td style="color: var(--gold-light); font-weight: 600;">${Reports.formatNumber(contractVal)}</td>
+              <td style="color: var(--text-gold); font-weight: 600;">${Reports.formatNumber(contractVal)}</td>
               <td style="color: var(--accent-red);">${Reports.formatNumber(actualCost)}</td>
               <td><strong>${pocPct}%</strong></td>
-              <td style="color: #38bdf8; font-weight: 600;">${Reports.formatNumber(recRev)}</td>
+              <td style="color: var(--color-info, #38bdf8); font-weight: 600;">${Reports.formatNumber(recRev)}</td>
               <td style="color: var(--accent-green);">${Reports.formatNumber(billed)}</td>
               <td>${Reports.formatNumber(wip)}</td>
-              <td style="color: #4ade80;">${Reports.formatNumber(cash)}</td>
-              <td style="color: #facc15;">${Reports.formatNumber(adv)}</td>
-              <td style="color: #94a3b8;">${Reports.formatNumber(ret)}</td>
+              <td style="color: var(--color-success, #4ade80);">${Reports.formatNumber(cash)}</td>
+              <td style="color: var(--color-warning, #facc15);">${Reports.formatNumber(adv)}</td>
+              <td style="color: var(--text-secondary, #94a3b8);">${Reports.formatNumber(ret)}</td>
               <td style="color: ${profit >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${Reports.formatNumber(profit)}</td>
               <td style="color: ${netCash >= 0 ? '#4ade80' : '#f87171'}; font-weight: bold;">${Reports.formatNumber(netCash)}</td>
               <td style="text-align: center;">

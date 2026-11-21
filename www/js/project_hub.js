@@ -336,7 +336,7 @@ const ProjectHub = {
         <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 18px;">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
             <div>
-              <span style="font-size: 0.74rem; color: var(--gold-light); font-weight: 700;">رقم العقد: ${contract.contract_no || 'CNT'}</span>
+              <span style="font-size: 0.74rem; color: var(--text-gold); font-weight: 700;">رقم العقد: ${contract.contract_no || 'CNT'}</span>
               <h3 style="color: #fff; margin: 4px 0 0 0; font-size: 1.15rem;">${contract.title || 'عقد تنفيذ أعمال مقاولات'}</h3>
             </div>
             <span class="drawing-badge-status approved">${contract.status || 'ساري'}</span>
@@ -350,7 +350,7 @@ const ProjectHub = {
               </tr>
               <tr>
                 <td style="font-weight: 700; color: var(--text-secondary);">الطرف الثاني (المقاول):</td>
-                <td style="font-weight: 800; color: var(--gold-light);">${contract.second_party || 'شركة رواسي عدن للهندسة والمقاولات'}</td>
+                <td style="font-weight: 800; color: var(--text-gold);">${contract.second_party || 'شركة رواسي عدن للهندسة والمقاولات'}</td>
               </tr>
               <tr>
                 <td style="font-weight: 700; color: var(--text-secondary);">تاريخ توقيع العقد:</td>
@@ -364,15 +364,15 @@ const ProjectHub = {
           </table>
 
           <div style="margin-bottom: 14px;">
-            <h5 style="color: var(--gold-light); margin-bottom: 6px;">نطاق العمل ومسؤوليات المقاول:</h5>
-            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: #e2e8f0;">
+            <h5 style="color: var(--text-gold); margin-bottom: 6px;">نطاق العمل ومسؤوليات المقاول:</h5>
+            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
               ${contract.scope_of_work || 'لم يتم إدخال نطاق العمل التفصيلي.'}
             </div>
           </div>
 
           <div>
-            <h5 style="color: var(--gold-light); margin-bottom: 6px;">شروط الدفع وصرف المستحقات:</h5>
-            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: #e2e8f0;">
+            <h5 style="color: var(--text-gold); margin-bottom: 6px;">شروط الدفع وصرف المستحقات:</h5>
+            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: var(--radius-sm); font-size: 0.86rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
               ${contract.payment_terms || 'دفعات شهرية منتظمة وفق المستخلصات المعتمدة.'}
             </div>
           </div>
@@ -381,8 +381,8 @@ const ProjectHub = {
         <!-- العمود المالي والشروط الجزائية -->
         <div style="display: flex; flex-direction: column; gap: 14px;">
           <div style="background: linear-gradient(135deg, rgba(212,175,55,0.12) 0%, rgba(14,28,50,0.6) 100%); border: 1px solid rgba(212,175,55,0.35); border-radius: var(--radius-md); padding: 16px;">
-            <span style="font-size: 0.76rem; color: var(--gold-light);">القيمة الإجمالية للعقد</span>
-            <h2 style="color: #fff; font-size: 1.45rem; margin: 4px 0 10px 0;">${App.formatNumber(contract.contract_value)} <small style="font-size:0.8rem; color:var(--gold-light)">${curr}</small></h2>
+            <span style="font-size: 0.76rem; color: var(--text-gold);">القيمة الإجمالية للعقد</span>
+            <h2 style="color: #fff; font-size: 1.45rem; margin: 4px 0 10px 0;">${App.formatNumber(contract.contract_value)} <small style="font-size:0.8rem; color:var(--text-gold)">${curr}</small></h2>
             
             <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem; border-top: 1px dashed rgba(212,175,55,0.3); padding-top: 10px;">
               <div style="display: flex; justify-content: space-between;">
@@ -518,7 +518,7 @@ const ProjectHub = {
             ${d.file_name ? `<div style="font-size: 0.72rem; color: var(--accent-blue);">📁 ${d.file_name}</div>` : ''}
           </td>
           <td><span class="badge badge-income" style="background: rgba(56,189,248,0.15); color: var(--accent-blue);">${d.category}</span></td>
-          <td>${d.scale || '1:100'} | <strong style="color:var(--gold-light)">${d.revision || 'Rev 0'}</strong></td>
+          <td>${d.scale || '1:100'} | <strong style="color:var(--text-gold)">${d.revision || 'Rev 0'}</strong></td>
           <td>
             <div>تقديم: ${d.submission_date || '-'}</div>
             <div style="font-size: 0.75rem; color: var(--text-secondary);">اعتماد: ${d.approval_date || '-'}</div>
@@ -739,12 +739,12 @@ const ProjectHub = {
 
       return `
         <tr style="${isOverbilled ? 'background: rgba(239,68,68,0.03);' : ''}">
-          <td><strong style="color: var(--gold-light);">${b.item_no}</strong></td>
+          <td><strong style="color: var(--text-gold);">${b.item_no}</strong></td>
           <td>
             <div style="font-weight: 700; color: #fff;">${b.description}</div>
             ${b.notes ? `<div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">📝 ${b.notes}</div>` : ''}
           </td>
-          <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #cbd5e1; font-size: 0.72rem;">${b.category || 'عام'}</span></td>
+          <td><span class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-secondary, #cbd5e1); font-size: 0.72rem;">${b.category || 'عام'}</span></td>
           <td style="text-align: center;"><strong>${b.unit}</strong></td>
           <td><strong>${App.formatNumber(cQty)}</strong></td>
           <td>
@@ -755,7 +755,7 @@ const ProjectHub = {
           </td>
           <td>${remainingHtml}</td>
           <td>${App.formatNumber(rate)} <small>${curr}</small></td>
-          <td style="color: var(--gold-light); font-weight: 800;">${App.formatNumber(cTotal)} <small>${curr}</small></td>
+          <td style="color: var(--text-gold); font-weight: 800;">${App.formatNumber(cTotal)} <small>${curr}</small></td>
           <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(eTotal)} <small>${curr}</small></td>
           <td>
             <div style="display: flex; align-items: center; gap: 6px;">
@@ -775,9 +775,9 @@ const ProjectHub = {
       `;
     }).join('') + `
       <tr style="background: rgba(212,175,55,0.08); font-weight: 800;">
-        <td colspan="4" style="text-align: right; color: var(--gold-light);">المجموع الإجمالي للبنود المعروضة:</td>
+        <td colspan="4" style="text-align: right; color: var(--text-gold);">المجموع الإجمالي للبنود المعروضة:</td>
         <td colspan="4"></td>
-        <td style="color: var(--gold-light); font-size: 1.05rem;">${App.formatNumber(subtotalContract)} ${curr}</td>
+        <td style="color: var(--text-gold); font-size: 1.05rem;">${App.formatNumber(subtotalContract)} ${curr}</td>
         <td style="color: var(--accent-green); font-size: 1.05rem;">${App.formatNumber(subtotalExecuted)} ${curr}</td>
         <td colspan="2"></td>
       </tr>
@@ -1024,13 +1024,13 @@ const ProjectHub = {
     tbody.innerHTML = items.slice(0, 100).map((it, idx) => `
       <tr>
         <td>${idx + 1}</td>
-        <td><strong style="color: var(--gold-light);">${it.item_no}</strong></td>
+        <td><strong style="color: var(--text-gold);">${it.item_no}</strong></td>
         <td>${it.description}</td>
-        <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #cbd5e1;">${it.category}</span></td>
+        <td><span class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-secondary, #cbd5e1);">${it.category}</span></td>
         <td>${it.unit}</td>
         <td><strong>${App.formatNumber(it.contract_qty)}</strong></td>
         <td>${App.formatNumber(it.unit_rate)}</td>
-        <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(it.total_amount)}</td>
+        <td style="color: var(--text-gold); font-weight: 700;">${App.formatNumber(it.total_amount)}</td>
       </tr>
     `).join('') + (items.length > 100 ? `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">... والمزيد من البنود (${items.length - 100} بند إضافي)</td></tr>` : '');
   },
@@ -1424,7 +1424,7 @@ const ProjectHub = {
           <td><strong>${q.title}</strong></td>
           <td>${q.date}</td>
           <td>${q.valid_until || '-'}</td>
-          <td style="color: var(--gold-light); font-weight: 800;">${App.formatNumber(q.total_amount)} <small>${curr}</small></td>
+          <td style="color: var(--text-gold); font-weight: 800;">${App.formatNumber(q.total_amount)} <small>${curr}</small></td>
           <td><span class="drawing-badge-status ${q.status === 'معتمد' ? 'approved' : 'pending'}">${q.status}</span></td>
           <td>
             <div style="display: flex; gap: 4px;">
@@ -1552,10 +1552,10 @@ const ProjectHub = {
       `;
     }).join('') + `
       <tr style="background: rgba(212,175,55,0.08); font-weight: 800;">
-        <td style="color: var(--gold-light);">الإجمالي العام:</td>
+        <td style="color: var(--text-gold);">الإجمالي العام:</td>
         <td style="color: #fff;">${App.formatNumber(totalPlanned)} ${curr}</td>
         <td style="color: ${totalActual > totalPlanned ? 'var(--accent-red)' : 'var(--accent-green)'};">${App.formatNumber(totalActual)} ${curr}</td>
-        <td colspan="3" style="color: var(--gold-light);">
+        <td colspan="3" style="color: var(--text-gold);">
           ${totalPlanned >= totalActual ? `صافي الوفر المالي: +${App.formatNumber(totalPlanned - totalActual)} ${curr}` : `إجمالي العجز والتجاوز: -${App.formatNumber(totalActual - totalPlanned)} ${curr}`}
         </td>
       </tr>
@@ -1644,8 +1644,8 @@ const ProjectHub = {
         <tr>
           <td><strong>${c.change_no}</strong></td>
           <td><strong>${c.title}</strong></td>
-          <td><span class="badge badge-income" style="background:rgba(212,175,55,0.15); color:var(--gold-light);">${c.type}</span></td>
-          <td style="color: var(--gold-light); font-weight: 800;">+${App.formatNumber(c.amount)} <small>${curr}</small></td>
+          <td><span class="badge badge-income" style="background:rgba(212,175,55,0.15); color:var(--text-gold);">${c.type}</span></td>
+          <td style="color: var(--text-gold); font-weight: 800;">+${App.formatNumber(c.amount)} <small>${curr}</small></td>
           <td>+${c.time_extension_days || 0} يوم</td>
           <td>${c.reason}</td>
           <td><span class="drawing-badge-status approved">${c.status}</span></td>
@@ -1659,8 +1659,8 @@ const ProjectHub = {
       `;
     }).join('') + `
       <tr style="background: rgba(212,175,55,0.08); font-weight: 800;">
-        <td colspan="3" style="text-align: right; color: var(--gold-light);">إجمالي الأثر المالي لأوامر التغيير:</td>
-        <td colspan="5" style="color: var(--gold-light); font-size: 1.05rem;">+${App.formatNumber(totalAmount)} ${curr}</td>
+        <td colspan="3" style="text-align: right; color: var(--text-gold);">إجمالي الأثر المالي لأوامر التغيير:</td>
+        <td colspan="5" style="color: var(--text-gold); font-size: 1.05rem;">+${App.formatNumber(totalAmount)} ${curr}</td>
       </tr>
     `;
   },
@@ -1752,7 +1752,7 @@ const ProjectHub = {
       `;
     }).join('') + `
       <tr style="background: rgba(212,175,55,0.08); font-weight: 800;">
-        <td colspan="4" style="text-align: right; color: var(--gold-light);">إجمالي فواتير المشتريات:</td>
+        <td colspan="4" style="text-align: right; color: var(--text-gold);">إجمالي فواتير المشتريات:</td>
         <td style="color: #fff;">${App.formatNumber(totalVal)} ${curr}</td>
         <td colspan="3" style="color: var(--accent-green);">المسدد: ${App.formatNumber(totalPaid)} ${curr} (المتبقي: ${App.formatNumber(totalVal - totalPaid)} ${curr})</td>
       </tr>
@@ -1969,8 +1969,8 @@ const ProjectHub = {
 
       return `
         <tr>
-          <td><strong style="color: var(--gold-light); font-size: 0.95rem;">${i.invoice_no}</strong></td>
-          <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #cbd5e1;">${i.invoice_type}</span></td>
+          <td><strong style="color: var(--text-gold); font-size: 0.95rem;">${i.invoice_no}</strong></td>
+          <td><span class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-secondary, #cbd5e1);">${i.invoice_type}</span></td>
           <td>${i.date}</td>
           <td style="font-size: 0.74rem; color: var(--text-secondary);">${periodStr}</td>
           <td><strong>${App.formatNumber(i.cumulative_work_done)}</strong> <small>${curr}</small></td>
@@ -2087,7 +2087,7 @@ const ProjectHub = {
     tbody.innerHTML = this.ipcDraftItems.map((it, idx) => {
       return `
         <tr>
-          <td><strong style="color: var(--gold-light);">${it.item_no}</strong></td>
+          <td><strong style="color: var(--text-gold);">${it.item_no}</strong></td>
           <td>
             <div style="font-weight: 600; color: #fff;">${it.description}</div>
             <div style="font-size: 0.68rem; color: var(--text-secondary);">${it.category || ''}</div>
@@ -2098,12 +2098,12 @@ const ProjectHub = {
           <td style="background: rgba(212,175,55,0.06);">
             <input type="number" step="0.01" min="0" value="${it.current_qty || 0}"
                    class="form-control form-control-sm"
-                   style="width: 85px; font-weight: 700; color: var(--gold-light); background: rgba(0,0,0,0.3); border-color: rgba(212,175,55,0.4);"
+                   style="width: 85px; font-weight: 700; color: var(--text-gold); background: rgba(0,0,0,0.3); border-color: rgba(212,175,55,0.4);"
                    oninput="ProjectHub.onIpcItemQtyChange(${idx}, this.value)">
           </td>
           <td><strong id="ipcRowCumQty_${idx}">${App.formatNumber(it.cumulative_qty || 0)}</strong></td>
           <td>${App.formatNumber(it.unit_rate)}</td>
-          <td style="color: var(--gold-light); font-weight: 700;" id="ipcRowCurAmt_${idx}">${App.formatNumber(it.current_amount || 0)}</td>
+          <td style="color: var(--text-gold); font-weight: 700;" id="ipcRowCurAmt_${idx}">${App.formatNumber(it.current_amount || 0)}</td>
           <td id="ipcRowPct_${idx}"><span class="badge" style="background: rgba(255,255,255,0.05);">${it.completion_pct || 0}%</span></td>
         </tr>
       `;
@@ -2297,7 +2297,7 @@ const ProjectHub = {
       if (items.length > 0) {
         itemsHtml = `
           <div style="margin-top: 18px;">
-            <h5 style="color: var(--gold-light); margin-bottom: 8px;">كشف تفريغ وحصر بنود جدول الكميات للمستخلص:</h5>
+            <h5 style="color: var(--text-gold); margin-bottom: 8px;">كشف تفريغ وحصر بنود جدول الكميات للمستخلص:</h5>
             <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
               <table class="custom-table" style="font-size: 0.76rem;">
                 <thead style="position: sticky; top: 0; background: var(--bg-surface); z-index: 2;">
@@ -2317,15 +2317,15 @@ const ProjectHub = {
                 <tbody>
                   ${items.map(it => `
                     <tr>
-                      <td><strong style="color: var(--gold-light);">${it.item_no}</strong></td>
+                      <td><strong style="color: var(--text-gold);">${it.item_no}</strong></td>
                       <td>${it.description}</td>
                       <td>${it.unit}</td>
                       <td>${App.formatNumber(it.contract_qty)}</td>
                       <td>${App.formatNumber(it.previous_qty || 0)}</td>
-                      <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(it.current_qty || 0)}</td>
+                      <td style="color: var(--text-gold); font-weight: 700;">${App.formatNumber(it.current_qty || 0)}</td>
                       <td><strong>${App.formatNumber(it.cumulative_qty || (Number(it.previous_qty || 0) + Number(it.current_qty || 0)))}</strong></td>
                       <td>${App.formatNumber(it.unit_rate)}</td>
-                      <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(it.current_amount || 0)}</td>
+                      <td style="color: var(--text-gold); font-weight: 700;">${App.formatNumber(it.current_amount || 0)}</td>
                       <td><span class="badge" style="background: rgba(255,255,255,0.05);">${it.completion_pct || 0}%</span></td>
                     </tr>
                   `).join('')}
@@ -2351,8 +2351,8 @@ const ProjectHub = {
                   <td style="color: var(--accent-red); font-weight: 700;">-${App.formatNumber(inv.previous_bills_amount)} ${curr}</td>
                 </tr>
                 <tr style="background: rgba(212,175,55,0.06);">
-                  <td style="color: var(--gold-light); font-weight: 700;">قيمة الأعمال الجارية الحالية (Gross Work):</td>
-                  <td style="color: var(--gold-light); font-weight: 800; font-size: 1rem;">${App.formatNumber(inv.current_gross_amount)} ${curr}</td>
+                  <td style="color: var(--text-gold); font-weight: 700;">قيمة الأعمال الجارية الحالية (Gross Work):</td>
+                  <td style="color: var(--text-gold); font-weight: 800; font-size: 1rem;">${App.formatNumber(inv.current_gross_amount)} ${curr}</td>
                 </tr>
                 <tr>
                   <td style="color: var(--text-secondary);">يُخصم: استهلاك الدفعة المقدمة (${inv.advance_pct || 10}%):</td>
@@ -2372,7 +2372,7 @@ const ProjectHub = {
             <span style="font-size: 0.76rem; color: var(--text-secondary);">صافي المبلغ المستحق للصرف للمقاول:</span>
             <h2 style="color: var(--accent-green); font-size: 1.6rem; margin: 6px 0 10px 0;">${App.formatNumber(inv.net_amount)} <small style="font-size: 0.85rem;">${curr}</small></h2>
             <div style="background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: var(--radius-sm); font-size: 0.8rem; line-height: 1.4; color: #fff;">
-              <span style="color: var(--gold-light); font-size: 0.72rem; display: block;">المبلغ كتابةً:</span>
+              <span style="color: var(--text-gold); font-size: 0.72rem; display: block;">المبلغ كتابةً:</span>
               ${inv.tafqeet || '-'}
             </div>
             <div style="margin-top: 10px; display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary);">
@@ -2430,12 +2430,12 @@ const ProjectHub = {
       <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 18px; margin-bottom: 14px;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-light); padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
           <div>
-            <span style="font-weight: 800; color: var(--gold-light); font-size: 1.02rem;">${r.report_no}</span>
+            <span style="font-weight: 800; color: var(--text-gold); font-size: 1.02rem;">${r.report_no}</span>
             <span style="color: var(--text-secondary); font-size: 0.82rem; margin-right: 10px;">📅 التاريخ: <strong>${r.date}</strong></span>
           </div>
           <div style="display: flex; gap: 6px; align-items: center;">
             <span class="badge badge-income" style="background:rgba(56,189,248,0.15); color:var(--accent-blue);">👷 العمالة: ${r.manpower_count}</span>
-            <span class="badge badge-income" style="background:rgba(212,175,55,0.15); color:var(--gold-light);">☀️ الطقس: ${r.weather}</span>
+            <span class="badge badge-income" style="background:rgba(212,175,55,0.15); color:var(--text-gold);">☀️ الطقس: ${r.weather}</span>
             <button class="btn btn-secondary btn-sm" onclick="ProjectHub.printDailyReportDoc(${r.id})" title="طباعة">🖨️</button>
             <button class="btn btn-danger btn-sm" onclick="ProjectHub.deleteDailyReport(${r.id})" title="حذف">🗑️</button>
           </div>
@@ -2443,7 +2443,7 @@ const ProjectHub = {
 
         <div style="margin-bottom: 10px;">
           <h5 style="color: #fff; margin-bottom: 4px; font-size: 0.88rem;">🔨 الأعمال المنفذة خلال اليوم:</h5>
-          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: #e2e8f0;">
+          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
             ${r.work_performed}
           </div>
         </div>
@@ -2452,7 +2452,7 @@ const ProjectHub = {
           <div><strong>المعدات العاملة:</strong> ${r.equipment_summary || 'معدات يدوية واعتيادية'}</div>
           <div><strong>المواد الموردة:</strong> ${r.materials_received || 'لا توجد توريدات اليوم'}</div>
           <div><strong>السلامة والجودة:</strong> ${r.safety_notes || 'مطابق لمعايير السلامة'}</div>
-          <div><strong>المهندس المشرف:</strong> <strong style="color:var(--gold-light)">${r.site_engineer || 'م. الموقع'}</strong></div>
+          <div><strong>المهندس المشرف:</strong> <strong style="color:var(--text-gold)">${r.site_engineer || 'م. الموقع'}</strong></div>
         </div>
       </div>
     `).join('');
@@ -2524,7 +2524,7 @@ const ProjectHub = {
       <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 18px; margin-bottom: 14px;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-light); padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
           <div>
-            <span style="font-weight: 800; color: var(--gold-light); font-size: 1.05rem;">${w.report_no} (الأسبوع ${w.week_no || '1'})</span>
+            <span style="font-weight: 800; color: var(--text-gold); font-size: 1.05rem;">${w.report_no} (الأسبوع ${w.week_no || '1'})</span>
             <span style="color: var(--text-secondary); font-size: 0.82rem; margin-right: 10px;">الفترة من <strong>${w.date_from}</strong> إلى <strong>${w.date_to}</strong></span>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
@@ -2537,14 +2537,14 @@ const ProjectHub = {
 
         <div style="margin-bottom: 10px;">
           <h5 style="color: #fff; margin-bottom: 4px; font-size: 0.88rem;">📊 ملخص إنجازات وأعمال الأسبوع:</h5>
-          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: #e2e8f0;">
+          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
             ${w.achievements_summary}
           </div>
         </div>
 
         <div style="margin-bottom: 10px;">
-          <h5 style="color: var(--gold-light); margin-bottom: 4px; font-size: 0.88rem;">🎯 خطة العمل المستهدفة للأسبوع القادم:</h5>
-          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: #e2e8f0;">
+          <h5 style="color: var(--text-gold); margin-bottom: 4px; font-size: 0.88rem;">🎯 خطة العمل المستهدفة للأسبوع القادم:</h5>
+          <div style="background: rgba(0,0,0,0.25); padding: 10px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.6; color: var(--text-primary, #e2e8f0);">
             ${w.next_week_plan || 'متابعة الأعمال المجدولة.'}
           </div>
         </div>
@@ -2799,7 +2799,7 @@ const ProjectHub = {
       <div class="settlement-summary-card">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 12px; margin-bottom: 16px;">
           <div>
-            <span style="font-size: 0.76rem; color: var(--gold-light);">سند التصفية الختامية: ${settlement ? settlement.settlement_no : `SET-PRJ-${this.currentProjectId}`}</span>
+            <span style="font-size: 0.76rem; color: var(--text-gold);">سند التصفية الختامية: ${settlement ? settlement.settlement_no : `SET-PRJ-${this.currentProjectId}`}</span>
             <h3 style="color: #fff; margin: 4px 0 0 0;">شهادة الحساب الختامي والمخالصة المالية والتشغيلية</h3>
           </div>
           <span class="drawing-badge-status approved">${settlement ? settlement.status : 'جاهز للاعتماد'}</span>
@@ -2807,18 +2807,18 @@ const ProjectHub = {
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 20px;">
           <div>
-            <h5 style="color: var(--gold-light); margin-bottom: 10px;">1. ملخص القيمة التعاقدية والتنفيذية:</h5>
+            <h5 style="color: var(--text-gold); margin-bottom: 10px;">1. ملخص القيمة التعاقدية والتنفيذية:</h5>
             <div class="settlement-metric-row">
               <span style="color: var(--text-secondary);">قيمة العقد الأصلية:</span>
               <strong>${App.formatNumber(origVal)} ${curr}</strong>
             </div>
             <div class="settlement-metric-row">
               <span style="color: var(--text-secondary);">إجمالي أوامر التغيير المعتمدة (+):</span>
-              <strong style="color: var(--gold-light);">+${App.formatNumber(changeOrdersVal)} ${curr}</strong>
+              <strong style="color: var(--text-gold);">+${App.formatNumber(changeOrdersVal)} ${curr}</strong>
             </div>
             <div class="settlement-metric-row">
               <span style="color: #fff; font-weight: 700;">القيمة التعاقدية المعدلة النهائية:</span>
-              <strong style="color: var(--gold-light); font-size: 1.05rem;">${App.formatNumber(revisedVal)} ${curr}</strong>
+              <strong style="color: var(--text-gold); font-size: 1.05rem;">${App.formatNumber(revisedVal)} ${curr}</strong>
             </div>
             <div class="settlement-metric-row">
               <span style="color: var(--text-secondary);">إجمالي قيمة الأعمال المنفذة فعلياً:</span>
@@ -2827,7 +2827,7 @@ const ProjectHub = {
           </div>
 
           <div>
-            <h5 style="color: var(--gold-light); margin-bottom: 10px;">2. المقبوضات والاستقطاعات والضمان:</h5>
+            <h5 style="color: var(--text-gold); margin-bottom: 10px;">2. المقبوضات والاستقطاعات والضمان:</h5>
             <div class="settlement-metric-row">
               <span style="color: var(--text-secondary);">إجمالي ما تم سداده من المالك (-):</span>
               <strong style="color: var(--accent-blue);">${App.formatNumber(paymentsReceived)} ${curr}</strong>
@@ -2847,7 +2847,7 @@ const ProjectHub = {
           </div>
         </div>
 
-        <div style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: var(--radius-sm); font-size: 0.86rem; color: #cbd5e1; line-height: 1.6; margin-bottom: 18px;">
+        <div style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: var(--radius-sm); font-size: 0.86rem; color: var(--text-secondary, #cbd5e1); line-height: 1.6; margin-bottom: 18px;">
           <strong>إقرار ومخالصة:</strong> بموجب هذه الشهادة الختامية، يقر الطرفان بانتهاء كافة الأعمال المنفذة ومطابقتها للمواصفات الهندسية المعتمدة، وتصفية كافة الالتزامات المالية والتعاقدية المتبادلة دون أي مطالبات لاحقة.
         </div>
 
@@ -3876,11 +3876,11 @@ const ProjectHub = {
             </div>
           </td>
           <td>
-            <span class="badge" style="background: rgba(212,175,55,0.15); color: var(--gold-light); font-size: 0.78rem;">
+            <span class="badge" style="background: rgba(212,175,55,0.15); color: var(--text-gold); font-size: 0.78rem;">
               ${f.subfolder}
             </span>
           </td>
-          <td style="font-weight: 600; color: #cbd5e1;">${f.sizeFormatted}</td>
+          <td style="font-weight: 600; color: var(--text-secondary, #cbd5e1);">${f.sizeFormatted}</td>
           <td style="font-size: 0.82rem; color: var(--text-secondary);">${modDate}</td>
           <td>
             <div style="display: flex; gap: 6px;">
@@ -4379,26 +4379,26 @@ const ProjectHub = {
 
       return `
         <tr style="transition: background 0.15s ease;">
-          <td style="text-align: center; font-weight: bold; color: var(--gold-light);">${it.item_no || (idx + 1)}</td>
-          <td style="font-weight: 600; color: #f8fafc;">
+          <td style="text-align: center; font-weight: bold; color: var(--text-gold);">${it.item_no || (idx + 1)}</td>
+          <td style="font-weight: 600; color: var(--text-primary, #f8fafc);">
             ${it.description}
             ${it.category ? `<span style="display:block; font-size:0.72rem; color:var(--text-secondary);">${it.category}</span>` : ''}
           </td>
           <td style="text-align: center;"><span class="badge" style="background: rgba(255,255,255,0.06);">${it.unit}</span></td>
           <td style="text-align: center; font-weight: bold;">${it.quantity}</td>
           <td style="text-align: center; font-family: monospace;">${App.formatNumber(it.unit_price)}</td>
-          <td style="text-align: center; font-weight: bold; font-family: monospace; color: #34d399;">${App.formatNumber(it.total)}</td>
+          <td style="text-align: center; font-weight: bold; font-family: monospace; color: var(--color-success, #34d399);">${App.formatNumber(it.total)}</td>
           <td style="text-align: center;">
-            <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 0.74rem;">
+            <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: var(--color-info, #60a5fa); border: 1px solid rgba(59, 130, 246, 0.3); font-size: 0.74rem;">
               ${it.boq_item_no || 'BOQ'}
             </span>
           </td>
           <td>
-            <div style="font-size: 0.8rem; color: #cbd5e1; font-weight: 500;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary, #cbd5e1); font-weight: 500;">
               📦 ${it.material_name || it.description}
             </div>
             <div style="font-size: 0.72rem; color: var(--text-secondary);">
-              الرصيد: <b style="color:#e2e8f0;">${it.stock_quantity || 0}</b> ${it.stock_unit || it.unit}
+              الرصيد: <b style="color:var(--text-primary, #e2e8f0);">${it.stock_quantity || 0}</b> ${it.stock_unit || it.unit}
             </div>
           </td>
           <td style="text-align: center;">
@@ -4407,10 +4407,10 @@ const ProjectHub = {
             </span>
           </td>
           <td>
-            <div style="font-size: 0.8rem; color: #f1f5f9; font-weight: 500;">
+            <div style="font-size: 0.8rem; color: var(--text-primary, #f1f5f9); font-weight: 500;">
               🏢 ${it.supplier_name || 'مورد معتمد'}
             </div>
-            <div style="font-size: 0.74rem; color: var(--gold-light); font-family: monospace; margin-top: 1px;">
+            <div style="font-size: 0.74rem; color: var(--text-gold); font-family: monospace; margin-top: 1px;">
               📞 <a href="tel:${it.supplier_phone}" style="color: inherit; text-decoration: none;">${it.supplier_phone || '775566778'}</a>
             </div>
           </td>

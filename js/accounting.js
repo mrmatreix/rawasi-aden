@@ -611,7 +611,7 @@ const Accounting = {
 
     const hint = document.getElementById('modalRcBillRemainingHint');
     if (hint) {
-      hint.innerHTML = `<span style="color: var(--gold-light); font-weight: bold;">المتبقي من هذا المستخلص: ${App.formatNumber(rem)} ر.ي</span> (إجمالي المستخلص: ${App.formatNumber(net)} ر.ي)`;
+      hint.innerHTML = `<span style="color: var(--text-gold); font-weight: bold;">المتبقي من هذا المستخلص: ${App.formatNumber(rem)} ر.ي</span> (إجمالي المستخلص: ${App.formatNumber(net)} ر.ي)`;
       hint.style.display = 'block';
     }
   },
@@ -876,7 +876,7 @@ const Accounting = {
     }
     const fa = (this.financialAccounts || []).find(f => String(f.id) === String(faId));
     if (fa) {
-      hint.innerHTML = `💡 الحساب المحاسبي المرتبط: <strong style="color: var(--gold-light);">${fa.coa_code || ''} - ${fa.coa_name || ''}</strong> (حساب فرعي أخير)`;
+      hint.innerHTML = `💡 الحساب المحاسبي المرتبط: <strong style="color: var(--text-gold);">${fa.coa_code || ''} - ${fa.coa_name || ''}</strong> (حساب فرعي أخير)`;
     } else {
       hint.innerHTML = '';
     }
@@ -1080,7 +1080,7 @@ const Accounting = {
     if (tafqeetEl) {
       const curr = document.getElementById('modalRcCurrency')?.value || 'ر.ي';
       if (curr !== 'ر.ي' && local > 0) {
-        tafqeetEl.innerHTML = `المعادل بالعملة المحلية: <strong style="color: var(--gold-light);">${App.formatNumber(local)} ر.ي</strong> (${this.tafqeet(local, 'ر.ي')})`;
+        tafqeetEl.innerHTML = `المعادل بالعملة المحلية: <strong style="color: var(--text-gold);">${App.formatNumber(local)} ر.ي</strong> (${this.tafqeet(local, 'ر.ي')})`;
       } else {
         tafqeetEl.innerHTML = '';
       }
@@ -1674,7 +1674,7 @@ const Accounting = {
     if (tafqeetEl) {
       const curr = document.getElementById('modalExpCurrency')?.value || 'ر.ي';
       if (curr !== 'ر.ي' && local > 0) {
-        tafqeetEl.innerHTML = `المعادل بالعملة المحلية: <strong style="color: var(--gold-light);">${App.formatNumber(local)} ر.ي</strong> (${this.tafqeet(local, 'ر.ي')})`;
+        tafqeetEl.innerHTML = `المعادل بالعملة المحلية: <strong style="color: var(--text-gold);">${App.formatNumber(local)} ر.ي</strong> (${this.tafqeet(local, 'ر.ي')})`;
       } else {
         tafqeetEl.innerHTML = '';
       }
@@ -2749,7 +2749,7 @@ const Accounting = {
       const sizeStr = item.size ? (item.size > 1024 * 1024 ? `${(item.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(item.size / 1024)} KB`) : '';
       
       const iconOrThumb = isPdf
-        ? `<div style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 6px 10px; font-weight: 700; font-size: 0.82rem; display: flex; align-items: center; gap: 4px;">
+        ? `<div style="background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 6px 10px; font-weight: 700; font-size: 0.82rem; display: flex; align-items: center; gap: 4px;">
              <i class="fa fa-file-pdf"></i> PDF
            </div>`
         : `<img src="${item.data}" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #334155;">`;
@@ -2763,7 +2763,7 @@ const Accounting = {
                 ${item.name}
               </div>
               <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
-                <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 0.68rem;">${isPdf ? 'مستند PDF' : 'صورة ممسوحة'}</span>
+                <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: var(--color-info, #38bdf8); font-size: 0.68rem;">${isPdf ? 'مستند PDF' : 'صورة ممسوحة'}</span>
                 ${sizeStr ? `&nbsp;•&nbsp; <span>${sizeStr}</span>` : ''}
                 ${item.date ? `&nbsp;•&nbsp; <span>${item.date}</span>` : ''}
               </div>
@@ -2774,7 +2774,7 @@ const Accounting = {
             <button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.viewSupplierAttachment(${idx})" style="padding: 4px 8px; font-size: 0.78rem;" title="معاينة المستند">
               <i class="fa fa-eye"></i> معاينة
             </button>
-            <button type="button" class="btn btn-danger btn-sm" onclick="Accounting.removeSupplierInvoiceAttachment(${idx})" style="padding: 4px 8px; font-size: 0.78rem; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #ef4444;" title="حذف الفاتورة">
+            <button type="button" class="btn btn-danger btn-sm" onclick="Accounting.removeSupplierInvoiceAttachment(${idx})" style="padding: 4px 8px; font-size: 0.78rem; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: var(--color-danger, #ef4444);" title="حذف الفاتورة">
               <i class="fa fa-trash"></i>
             </button>
           </div>
@@ -3444,7 +3444,7 @@ const Accounting = {
         <td style="min-width: 220px; max-width: 420px; white-space: pre-wrap; overflow-wrap: anywhere;">${this.escapeJournalDescription(je.description || je.entry_description || je.notes || '-')}</td>
         <td><span class="badge ${je.reference_type === 'يدوي' ? 'badge-info' : 'badge-active'}">${je.reference_type || 'يدوي'} ${je.reference_no ? '(' + je.reference_no + ')' : ''}</span></td>
         <td style="color: var(--accent-green);">${renderSide(je.lines, 'debit', je.currency)}</td>
-        <td style="color: #38bdf8;">${renderSide(je.lines, 'credit', je.currency)}</td>
+        <td style="color: var(--color-info, #38bdf8);">${renderSide(je.lines, 'credit', je.currency)}</td>
         <td><span class="badge ${je.status === 'posted' ? 'badge-active' : 'badge-info'}">${je.status === 'draft' ? 'مسودة' : je.status === 'posted' ? 'مرحل' : je.status}</span></td>
         <td style="text-align: center;">
           <div style="display: flex; gap: 6px; justify-content: center;">
@@ -3583,7 +3583,7 @@ const Accounting = {
         <input type="number" class="form-control je-line-debit" value="${data.debit || 0}" min="0" step="any" placeholder="0.00" oninput="Accounting.onJournalDebitInput('${rowId}')" style="font-weight: bold; color: var(--accent-green); text-align: left; direction: ltr;">
       </td>
       <td>
-        <input type="number" class="form-control je-line-credit" value="${data.credit || 0}" min="0" step="any" placeholder="0.00" oninput="Accounting.onJournalCreditInput('${rowId}')" style="font-weight: bold; color: #38bdf8; text-align: left; direction: ltr;">
+        <input type="number" class="form-control je-line-credit" value="${data.credit || 0}" min="0" step="any" placeholder="0.00" oninput="Accounting.onJournalCreditInput('${rowId}')" style="font-weight: bold; color: var(--color-info, #38bdf8); text-align: left; direction: ltr;">
       </td>
       <td>
         <input type="text" class="form-control je-line-desc" value="${data.description || ''}" placeholder="بيان السطر...">
@@ -4046,7 +4046,7 @@ const Accounting = {
           contentEl.innerHTML = `
             <div style="background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 14px;">
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
-                <div><span style="color: var(--text-secondary); font-size: 0.8rem;">رقم القيد:</span> <strong style="color: var(--gold-light);">${je.display_no || je.entry_no}</strong></div>
+                <div><span style="color: var(--text-secondary); font-size: 0.8rem;">رقم القيد:</span> <strong style="color: var(--text-gold);">${je.display_no || je.entry_no}</strong></div>
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">التاريخ:</span> <strong>${je.date}</strong></div>
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">العملة:</span> <strong>${je.currency || 'ر.ي'}</strong></div>
                 <div><span style="color: var(--text-secondary); font-size: 0.8rem;">المرجع:</span> <strong>${je.reference_type || 'يدوي'} ${je.reference_no ? '(' + je.reference_no + ')' : ''}</strong></div>
@@ -4064,7 +4064,7 @@ const Accounting = {
                     <th>اسم الحساب المالي</th>
                     <th>مركز التكلفة</th>
                     <th style="color: var(--accent-green);">مدين (منه)</th>
-                    <th style="color: #38bdf8;">دائن (له)</th>
+                    <th style="color: var(--color-info, #38bdf8);">دائن (له)</th>
                     <th>البيان والملاحظات</th>
                   </tr>
                 </thead>
@@ -4075,7 +4075,7 @@ const Accounting = {
                       <td><strong>${l.account_name || '-'}</strong></td>
                       <td>${l.cost_center_name ? `<span class="badge badge-info">${l.cost_center_code ? l.cost_center_code + ' - ' : ''}${l.cost_center_name}</span>` : '-'}</td>
                       <td style="color: var(--accent-green); font-weight: bold; text-align: left; direction: ltr;">${Number(l.debit) > 0 ? App.formatNumber(l.debit) : '-'}</td>
-                      <td style="color: #38bdf8; font-weight: bold; text-align: left; direction: ltr;">${Number(l.credit) > 0 ? App.formatNumber(l.credit) : '-'}</td>
+                      <td style="color: var(--color-info, #38bdf8); font-weight: bold; text-align: left; direction: ltr;">${Number(l.credit) > 0 ? App.formatNumber(l.credit) : '-'}</td>
                       <td>${l.description || '-'}</td>
                     </tr>
                   `).join('')}
@@ -4084,7 +4084,7 @@ const Accounting = {
                   <tr style="background: #1e293b; font-weight: bold;">
                     <td colspan="3" style="text-align: left;">المجموع الكلي:</td>
                     <td style="color: var(--accent-green); font-size: 1.05rem; text-align: left; direction: ltr;">${App.formatNumber(je.total_debit)}</td>
-                    <td style="color: #38bdf8; font-size: 1.05rem; text-align: left; direction: ltr;">${App.formatNumber(je.total_credit)}</td>
+                    <td style="color: var(--color-info, #38bdf8); font-size: 1.05rem; text-align: left; direction: ltr;">${App.formatNumber(je.total_credit)}</td>
                     <td style="color: var(--accent-green); text-align: center;">متزن 100%</td>
                   </tr>
                 </tfoot>
@@ -4302,10 +4302,10 @@ const Accounting = {
     };
 
     const levelBadges = {
-      1: '<span class="badge" style="background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3);">رتبة 1 (رئيسي)</span>',
-      2: '<span class="badge" style="background: rgba(234,179,8,0.15); color: #facc15; border: 1px solid rgba(234,179,8,0.3);">رتبة 2 (مجموعة)</span>',
-      3: '<span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3);">رتبة 3 (فرعي)</span>',
-      4: '<span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">رتبة 4+ (تحليلي/قيود)</span>'
+      1: '<span class="badge" style="background: rgba(148,163,184,0.15); color: var(--text-secondary, #94a3b8); border: 1px solid rgba(148,163,184,0.3);">رتبة 1 (رئيسي)</span>',
+      2: '<span class="badge" style="background: rgba(234,179,8,0.15); color: var(--color-warning, #facc15); border: 1px solid rgba(234,179,8,0.3);">رتبة 2 (مجموعة)</span>',
+      3: '<span class="badge" style="background: rgba(56,189,248,0.15); color: var(--color-info, #38bdf8); border: 1px solid rgba(56,189,248,0.3);">رتبة 3 (فرعي)</span>',
+      4: '<span class="badge" style="background: rgba(16,185,129,0.15); color: var(--color-success, #34d399); border: 1px solid rgba(16,185,129,0.3);">رتبة 4+ (تحليلي/قيود)</span>'
     };
 
     tbody.innerHTML = accounts.map(a => {
@@ -4316,7 +4316,7 @@ const Accounting = {
 
       return `
       <tr style="${isRestricted ? 'opacity: 0.65; background: rgba(239,68,68,0.03);' : ''}">
-        <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">
+        <td style="font-family: monospace; font-weight: bold; color: var(--text-gold);">
           ${leafIndicator} ${a.code || a.account_code}
         </td>
         <td>
@@ -4328,7 +4328,7 @@ const Accounting = {
         <td>${levelBadge}</td>
         <td style="text-align: center;">
           ${isRestricted 
-            ? '<span class="badge" style="background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4);">🔒 موقوف / مقيد</span>' 
+            ? '<span class="badge" style="background: rgba(239,68,68,0.2); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.4);">🔒 موقوف / مقيد</span>' 
             : '<span class="badge badge-active">نشط</span>'}
         </td>
         <td style="text-align: center; white-space: nowrap;">
@@ -4653,13 +4653,13 @@ const Accounting = {
       const isInactive = c.status === 'inactive';
       return `
       <tr style="${isInactive ? 'opacity: 0.65; background: rgba(239,68,68,0.03);' : ''}">
-        <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${c.code}</td>
+        <td style="font-family: monospace; font-weight: bold; color: var(--text-gold);">${c.code}</td>
         <td><strong>${c.name}</strong></td>
         <td><span class="badge badge-info">${this.financialTypeLabel(c.type || 'project')}</span></td>
         <td>${c.project_name ? `<strong>${c.project_name}</strong>` : '<span style="color: var(--text-secondary);">عام</span>'}</td>
         <td style="text-align: center;">
           ${isInactive 
-            ? '<span class="badge" style="background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4);">موقوف</span>' 
+            ? '<span class="badge" style="background: rgba(239,68,68,0.2); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.4);">موقوف</span>' 
             : '<span class="badge badge-active">نشط</span>'}
         </td>
         <td style="color: var(--text-secondary);">${c.notes || '-'}</td>
@@ -4862,7 +4862,7 @@ const Accounting = {
       const isDefault = Boolean(c.is_default || c.is_base || c.code === 'YER');
       return `
       <tr>
-        <td style="font-family: monospace; font-weight: bold; color: var(--gold-light);">${c.code}</td>
+        <td style="font-family: monospace; font-weight: bold; color: var(--text-gold);">${c.code}</td>
         <td><strong>${c.name}</strong></td>
         <td style="font-weight: bold;">${c.symbol || '-'}</td>
         <td style="font-family: monospace; font-weight: bold; color: var(--accent-green); font-size: 1.05rem; direction: ltr; text-align: left;">
@@ -4993,7 +4993,7 @@ const Accounting = {
 
               <!-- نموذج إضافة فترة جديدة (مخفي افتراضياً) -->
               <div id="newPeriodFormContainer" style="display: none; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 15px;">
-                <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--gold-light);">إضافة فترة محاسبية جديدة</h4>
+                <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--text-gold);">إضافة فترة محاسبية جديدة</h4>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px;">
                   <div>
                     <label class="form-label" style="font-size: 0.8rem;">اسم الفترة</label>
@@ -5251,18 +5251,18 @@ const Accounting = {
 
       tbody.innerHTML = json.data.map(log => {
         let actionBadge = `<span class="badge badge-info">${log.action}</span>`;
-        if (log.action === 'INSERT') actionBadge = `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80;">إضافة +</span>`;
-        else if (log.action === 'DELETE') actionBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171;">حذف ✕</span>`;
-        else if (log.action === 'UPDATE') actionBadge = `<span class="badge" style="background: rgba(234,179,8,0.2); color: #facc15;">تعديل ✏️</span>`;
-        else if (log.action === 'CLOSE_PERIOD') actionBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171;">إغلاق فترة 🔒</span>`;
-        else if (log.action === 'REOPEN_PERIOD') actionBadge = `<span class="badge" style="background: rgba(59,130,246,0.2); color: #60a5fa;">فتح فترة 🔓</span>`;
+        if (log.action === 'INSERT') actionBadge = `<span class="badge" style="background: rgba(34,197,94,0.2); color: var(--color-success, #4ade80);">إضافة +</span>`;
+        else if (log.action === 'DELETE') actionBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: var(--color-danger, #f87171);">حذف ✕</span>`;
+        else if (log.action === 'UPDATE') actionBadge = `<span class="badge" style="background: rgba(234,179,8,0.2); color: var(--color-warning, #facc15);">تعديل ✏️</span>`;
+        else if (log.action === 'CLOSE_PERIOD') actionBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: var(--color-danger, #f87171);">إغلاق فترة 🔒</span>`;
+        else if (log.action === 'REOPEN_PERIOD') actionBadge = `<span class="badge" style="background: rgba(59,130,246,0.2); color: var(--color-info, #60a5fa);">فتح فترة 🔓</span>`;
 
         let detailsDisplay = log.details || '';
         try {
           if (detailsDisplay.startsWith('{') || detailsDisplay.startsWith('[')) {
             const parsed = JSON.parse(detailsDisplay);
             detailsDisplay = Object.entries(parsed)
-              .map(([k, v]) => `<span style="color: var(--gold-light);">${k}:</span> ${typeof v === 'number' ? App.formatNumber(v) : v}`)
+              .map(([k, v]) => `<span style="color: var(--text-gold);">${k}:</span> ${typeof v === 'number' ? App.formatNumber(v) : v}`)
               .join(' | ');
           }
         } catch (e) {}
@@ -5273,7 +5273,7 @@ const Accounting = {
             <td style="font-weight: 600; color: #fff;">${log.username || 'نظام'}</td>
             <td>${actionBadge}</td>
             <td><span class="badge badge-secondary">${log.entity_type}</span></td>
-            <td style="font-family: monospace; color: #38bdf8;">${log.entity_id || '-'}</td>
+            <td style="font-family: monospace; color: var(--color-info, #38bdf8);">${log.entity_id || '-'}</td>
             <td style="font-size: 0.8rem; max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${detailsDisplay}</td>
             <td style="font-size: 0.75rem; color: var(--text-secondary); direction: ltr;">${log.ip_address || '-'}</td>
           </tr>
@@ -5281,7 +5281,7 @@ const Accounting = {
       }).join('');
     } catch (e) {
       console.error(e);
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #f87171;">فشل جلب سجلات التدقيق</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--color-danger, #f87171);">فشل جلب سجلات التدقيق</td></tr>';
     }
   },
 
@@ -5301,14 +5301,14 @@ const Accounting = {
           <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); border-bottom: 2px solid #ef4444;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 1.4rem;">🔒</span>
-              <h3 style="color: #ef4444; margin: 0;">إقفال الفترة المحاسبية نهائياً</h3>
+              <h3 style="color: var(--color-danger, #ef4444); margin: 0;">إقفال الفترة المحاسبية نهائياً</h3>
             </div>
             <button type="button" class="btn-close" data-action="close-modal" data-modal="periodCloseModal" onclick="App.closeModal('periodCloseModal')">&times;</button>
           </div>
           <div class="modal-body" style="padding: 20px;">
             <div style="background: rgba(239,68,68,0.1); border: 1.5px solid #ef4444; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;">
-              <strong style="color: #ef4444; font-size: 0.95rem; display: block; margin-bottom: 4px;">⚠️ تحذير مالي ورقابي صارم:</strong>
-              <div style="font-size: 0.84rem; color: #e2e8f0; line-height: 1.6;">
+              <strong style="color: var(--color-danger, #ef4444); font-size: 0.95rem; display: block; margin-bottom: 4px;">⚠️ تحذير مالي ورقابي صارم:</strong>
+              <div style="font-size: 0.84rem; color: var(--text-primary, #e2e8f0); line-height: 1.6;">
                 إقفال الفترة المحاسبية سيقفل بشكل نهائي كافة القيود والسندات والفواتير وحركات المخزون والمصروفات الواقعة ضمن تواريخ هذه الفترة، وسيمنع أي تعديل أو إضافة أو حذف إلا بتفويض رسمي مبرر.
               </div>
             </div>
@@ -5322,7 +5322,7 @@ const Accounting = {
               <input type="hidden" id="closePeriodId">
               
               <div class="form-group" style="margin-bottom: 14px;">
-                <label style="color: #f3cf65; font-weight: 700;">كلمة مرور المدير المالي / المشرف (إلزامية للتفويض) *</label>
+                <label style="color: var(--text-gold, #f3cf65); font-weight: 700;">كلمة مرور المدير المالي / المشرف (إلزامية للتفويض) *</label>
                 <input type="password" id="closePeriodManagerPassword" class="form-control" required placeholder="أدخل كلمة مرور الإدارة للمصادقة" autocomplete="current-password">
               </div>
 
@@ -5445,17 +5445,17 @@ const Accounting = {
         badge.textContent = '✓ جميع العمليات مرحلة';
         badge.style.background = 'rgba(16, 185, 129, 0.2)';
         badge.style.color = '#10b981';
-        details.innerHTML = '<span style="color: #10b981;">✓ جميع قيود اليومية وسندات الصرف والقبض ضمن نطاق هذه الفترة مرحلة ومعتمدة بالكامل، يمكنك الإقفال بأمان.</span>';
+        details.innerHTML = '<span style="color: var(--color-success, #10b981);">✓ جميع قيود اليومية وسندات الصرف والقبض ضمن نطاق هذه الفترة مرحلة ومعتمدة بالكامل، يمكنك الإقفال بأمان.</span>';
         btn.style.display = 'none';
       } else {
         badge.textContent = `⚠️ يوجد ${total_unposted} عملية غير مرحلة`;
         badge.style.background = 'rgba(239, 68, 68, 0.2)';
         badge.style.color = '#ef4444';
         details.innerHTML = `
-          <div style="margin-bottom: 6px; color: #f87171;">
+          <div style="margin-bottom: 6px; color: var(--color-danger, #f87171);">
             يوجد عمليات لم يتم ترحيلها بعد ضمن تواريخ هذه الفترة:
           </div>
-          <ul style="margin: 0 16px; padding: 0; color: #cbd5e1; list-style-type: square;">
+          <ul style="margin: 0 16px; padding: 0; color: var(--text-secondary, #cbd5e1); list-style-type: square;">
             <li>قيود اليومية غير المرحلة (مسودة): <strong>${counts.unposted_journals}</strong></li>
             <li>سندات الصرف غير المرحلة: <strong>${counts.unposted_expenses}</strong></li>
             <li>سندات القبض غير المرحلة: <strong>${counts.unposted_payments}</strong></li>

@@ -551,7 +551,7 @@ const Auth = {
       } else {
         let msg = data.message || 'بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.';
         if (data.remainingAttempts !== undefined) {
-          msg = `<strong>⚠️ بيانات الدخول غير صحيحة</strong><br>المحاولات المتبقية قبل القفل المؤقت: <span style="font-weight:900;color:#f87171;">(${data.remainingAttempts} من 5)</span>`;
+          msg = `<strong>⚠️ بيانات الدخول غير صحيحة</strong><br>المحاولات المتبقية قبل القفل المؤقت: <span style="font-weight:900;color:var(--color-danger, #f87171);">(${data.remainingAttempts} من 5)</span>`;
         }
         if (errorBox) {
           errorBox.innerHTML = msg;
@@ -1682,21 +1682,21 @@ const Auth = {
     if (bannerTitle) {
       if (isUserMode) {
         const u = this._securityUsersList.find(x => x.id === this._targetSecurityUserId) || this._targetUserInfo;
-        bannerTitle.innerHTML = `<span style="color:#10b981;">🛡️</span> تخصيص أمان وجلسات: <span style="color:#d4af37;">${u?.full_name || u?.username || 'المستخدم'}</span>`;
+        bannerTitle.innerHTML = `<span style="color:var(--color-success, #10b981);">🛡️</span> تخصيص أمان وجلسات: <span style="color:var(--text-gold, #d4af37);">${u?.full_name || u?.username || 'المستخدم'}</span>`;
       } else {
-        bannerTitle.innerHTML = `<span style="color:#10b981;">🛡️</span> إعدادات الأمان وسياسة الجلسات العامة للنظام`;
+        bannerTitle.innerHTML = `<span style="color:var(--color-success, #10b981);">🛡️</span> إعدادات الأمان وسياسة الجلسات العامة للنظام`;
       }
     }
 
     if (badgeCustom) {
       if (isUserMode) {
         if (this._isTargetUserCustom) {
-          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);">⭐ إعدادات مخصصة خاصة بهذا المستخدم</span>`;
+          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #10b981); border: 1px solid rgba(16, 185, 129, 0.4);">⭐ إعدادات مخصصة خاصة بهذا المستخدم</span>`;
         } else {
-          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);">⚙️ يرث حالياً الإعدادات العامة للنظام</span>`;
+          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(148, 163, 184, 0.15); color: var(--text-secondary, #94a3b8); border: 1px solid rgba(148, 163, 184, 0.3);">⚙️ يرث حالياً الإعدادات العامة للنظام</span>`;
         }
       } else {
-        badgeCustom.innerHTML = `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);">🌐 تطبق افتراضياً على كل المستخدمين</span>`;
+        badgeCustom.innerHTML = `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: var(--color-info, #60a5fa); border: 1px solid rgba(59, 130, 246, 0.4);">🌐 تطبق افتراضياً على كل المستخدمين</span>`;
       }
     }
 
@@ -1779,10 +1779,10 @@ const Auth = {
         if (s.authorized_device_id) {
           const devName = s.authorized_device_name || 'جهاز مسجل';
           const devDate = s.authorized_device_at ? new Date(s.authorized_device_at).toLocaleDateString('ar-YE') : '';
-          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#38bdf8;">${devName}</span> ${devDate ? `(تاريخ الربط: ${devDate})` : ''}`;
+          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:var(--color-info, #38bdf8);">${devName}</span> ${devDate ? `(تاريخ الربط: ${devDate})` : ''}`;
           if (resetDevBtn) resetDevBtn.style.display = 'inline-block';
         } else {
-          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#94a3b8;">لم يسجل جهاز بعد (سيتم قفل أول جهاز يسجل منه).</span>`;
+          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:var(--text-secondary, #94a3b8);">لم يسجل جهاز بعد (سيتم قفل أول جهاز يسجل منه).</span>`;
           if (resetDevBtn) resetDevBtn.style.display = 'none';
         }
       } else {
@@ -2062,8 +2062,8 @@ const Auth = {
         <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0f172a;color:#fff;font-family:'Segoe UI',Tahoma,sans-serif;direction:rtl;">
           <div style="text-align:center;padding:40px;background:#1e293b;border-radius:16px;border:1px solid #334155;max-width:480px;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
             <div style="font-size:48px;margin-bottom:16px;">🔒</div>
-            <h2 style="color:#d4af37;margin-bottom:12px;">تم إغلاق نظام رواسي عدن بنجاح</h2>
-            <p style="color:#cbd5e1;line-height:1.7;">تم حفظ أحدث نسخة احتياطية من قاعدة البيانات وإيقاف الخادم بأمان.<br>يمكنك إغلاق هذه النافذة الآن أو الضغط على Alt+F4.</p>
+            <h2 style="color:var(--text-gold, #d4af37);margin-bottom:12px;">تم إغلاق نظام رواسي عدن بنجاح</h2>
+            <p style="color:var(--text-secondary, #cbd5e1);line-height:1.7;">تم حفظ أحدث نسخة احتياطية من قاعدة البيانات وإيقاف الخادم بأمان.<br>يمكنك إغلاق هذه النافذة الآن أو الضغط على Alt+F4.</p>
           </div>
         </div>
       `;

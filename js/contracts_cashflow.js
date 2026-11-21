@@ -136,9 +136,9 @@ const ContractAlertsUI = {
     };
 
     const sevBadges = {
-      critical: '<span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444;">حرج (Critical) 🚨</span>',
-      warning: '<span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b;">تحذير (Warning) ⚠️</span>',
-      info: '<span class="badge" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #0284c7;">معلوماتي (Info) ℹ️</span>'
+      critical: '<span class="badge" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger, #f87171); border: 1px solid #ef4444;">حرج (Critical) 🚨</span>',
+      warning: '<span class="badge" style="background: rgba(245, 158, 11, 0.2); color: var(--color-warning, #fbbf24); border: 1px solid #f59e0b;">تحذير (Warning) ⚠️</span>',
+      info: '<span class="badge" style="background: rgba(56, 189, 248, 0.2); color: var(--color-info, #38bdf8); border: 1px solid #0284c7;">معلوماتي (Info) ℹ️</span>'
     };
 
     tbody.innerHTML = this.alerts.map(a => `
@@ -147,7 +147,7 @@ const ContractAlertsUI = {
         <td><strong>${typeLabels[a.alert_type] || a.alert_type}</strong></td>
         <td>${a.project_name || '-'}</td>
         <td style="font-size: 0.88rem; line-height: 1.4;">${a.description}</td>
-        <td style="font-weight: 700; color: #ef4444;">${App.formatNumber(a.amount_at_risk)} $</td>
+        <td style="font-weight: 700; color: var(--color-danger, #ef4444);">${App.formatNumber(a.amount_at_risk)} $</td>
         <td>
           <span class="badge ${a.status === 'acknowledged' ? 'badge-primary' : 'badge-expense'}">
             ${a.status === 'acknowledged' ? 'تم الإقرار' : 'معلق'}
@@ -225,7 +225,7 @@ const ContractAlertsUI = {
         this.loadContractLifecycle(cJson.data.id);
       } else {
         document.getElementById('lifecycleWizardWrap').innerHTML = `
-          <div style="text-align: center; padding: 20px; color: var(--gold-light);">
+          <div style="text-align: center; padding: 20px; color: var(--text-gold);">
             لم يتم إنشاء وثيقة عقد رسمية لهذا المشروع بعد. يمكنك إنشاء عقد من مركز المشروع.
           </div>`;
       }
@@ -271,8 +271,8 @@ const ContractAlertsUI = {
       <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
           <div>
-            <h4 style="color: var(--gold-light); margin: 0;">عقد رقم [${data.contract.contract_no || data.contract.id}]: ${data.contract.title || ''}</h4>
-            <span style="font-size: 0.85rem; color: #94a3b8;">المرحلة الراهنة: <strong>${data.contract.current_stage_label || currentStage}</strong></span>
+            <h4 style="color: var(--text-gold); margin: 0;">عقد رقم [${data.contract.contract_no || data.contract.id}]: ${data.contract.title || ''}</h4>
+            <span style="font-size: 0.85rem; color: var(--text-secondary, #94a3b8);">المرحلة الراهنة: <strong>${data.contract.current_stage_label || currentStage}</strong></span>
           </div>
           <div style="display: flex; gap: 8px;">
             <select id="selectNextStage" class="form-control" style="width: auto; padding: 4px 8px;">
@@ -416,15 +416,15 @@ const CashFlowUI = {
     tbody.innerHTML = this.data.months.map(m => `
       <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
         <td><strong>${m.period}</strong></td>
-        <td style="color: #4ade80; font-weight: bold;">+${App.formatNumber(m.expected_collections)} ر.ي</td>
-        <td style="color: #f87171; font-weight: bold;">-${App.formatNumber(m.expected_payments)} ر.ي</td>
+        <td style="color: var(--color-success, #4ade80); font-weight: bold;">+${App.formatNumber(m.expected_collections)} ر.ي</td>
+        <td style="color: var(--color-danger, #f87171); font-weight: bold;">-${App.formatNumber(m.expected_payments)} ر.ي</td>
         <td style="font-weight: bold; color: ${m.net_cash_flow >= 0 ? '#4ade80' : '#f87171'};">
           ${m.net_cash_flow >= 0 ? '+' : ''}${App.formatNumber(m.net_cash_flow)} ر.ي
         </td>
-        <td style="font-weight: 800; color: var(--gold-light);">
+        <td style="font-weight: 800; color: var(--text-gold);">
           ${App.formatNumber(m.cumulative_balance)} ر.ي
         </td>
-        <td style="font-size: 0.8rem; color: #94a3b8;">
+        <td style="font-size: 0.8rem; color: var(--text-secondary, #94a3b8);">
           مستخلصات: ${App.formatNumber(m.breakdown.by_type.ipc_collections)} |
           موردين: ${App.formatNumber(m.breakdown.by_type.vendor_payments)} |
           رواتب: ${App.formatNumber(m.breakdown.by_type.salaries)}
@@ -441,25 +441,25 @@ const CashFlowUI = {
     wrap.innerHTML = `
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 14px;">
         <div style="background: rgba(34, 197, 94, 0.1); border: 1.5px solid #22c55e; border-radius: 8px; padding: 14px;">
-          <h4 style="color: #4ade80; margin: 0 0 6px 0;">⚡ ${this.scenarios.optimistic.name}</h4>
-          <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px;">${this.scenarios.optimistic.description}</p>
-          <div style="font-size: 1.25rem; font-weight: 900; color: #4ade80;">
+          <h4 style="color: var(--color-success, #4ade80); margin: 0 0 6px 0;">⚡ ${this.scenarios.optimistic.name}</h4>
+          <p style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1); margin-bottom: 10px;">${this.scenarios.optimistic.description}</p>
+          <div style="font-size: 1.25rem; font-weight: 900; color: var(--color-success, #4ade80);">
             ${App.formatNumber(this.scenarios.optimistic.final_balance)} ر.ي
           </div>
         </div>
 
         <div style="background: rgba(212, 175, 55, 0.1); border: 1.5px solid var(--gold-primary); border-radius: 8px; padding: 14px;">
-          <h4 style="color: var(--gold-light); margin: 0 0 6px 0;">⚖️ ${this.scenarios.realistic.name}</h4>
-          <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px;">${this.scenarios.realistic.description}</p>
-          <div style="font-size: 1.25rem; font-weight: 900; color: var(--gold-light);">
+          <h4 style="color: var(--text-gold); margin: 0 0 6px 0;">⚖️ ${this.scenarios.realistic.name}</h4>
+          <p style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1); margin-bottom: 10px;">${this.scenarios.realistic.description}</p>
+          <div style="font-size: 1.25rem; font-weight: 900; color: var(--text-gold);">
             ${App.formatNumber(this.scenarios.realistic.final_balance)} ر.ي
           </div>
         </div>
 
         <div style="background: rgba(239, 68, 68, 0.1); border: 1.5px solid #ef4444; border-radius: 8px; padding: 14px;">
-          <h4 style="color: #f87171; margin: 0 0 6px 0;">🛡️ ${this.scenarios.pessimistic.name}</h4>
-          <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 10px;">${this.scenarios.pessimistic.description}</p>
-          <div style="font-size: 1.25rem; font-weight: 900; color: #f87171;">
+          <h4 style="color: var(--color-danger, #f87171); margin: 0 0 6px 0;">🛡️ ${this.scenarios.pessimistic.name}</h4>
+          <p style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1); margin-bottom: 10px;">${this.scenarios.pessimistic.description}</p>
+          <div style="font-size: 1.25rem; font-weight: 900; color: var(--color-danger, #f87171);">
             ${App.formatNumber(this.scenarios.pessimistic.final_balance)} ر.ي
           </div>
         </div>

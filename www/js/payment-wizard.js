@@ -394,7 +394,7 @@ const PaymentWizard = {
           <td>${t.instrument_name_ar || t.instrument_code}</td>
           <td>${t.channel_name_ar || t.channel_id}</td>
           <td><strong>${t.amount} ${t.currency}</strong></td>
-          <td><span class="limit-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${t.clearing_status}</span></td>
+          <td><span class="limit-badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #34d399);">${t.clearing_status}</span></td>
           <td><code>${t.journal_entry_no || '-'}</code></td>
           <td>
             <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="PaymentWizard.reverseTx(${t.id})">عكس القيد</button>

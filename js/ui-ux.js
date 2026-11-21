@@ -963,9 +963,9 @@
           container.innerHTML = `
             <div class="pagination-bar">
               <div class="pagination-info">
-                عرض <strong style="color: var(--gold-light);">${totalRecords > 0 ? startIndex + 1 : 0}</strong> إلى 
-                <strong style="color: var(--gold-light);">${endIndex}</strong> من إجمالي 
-                <strong style="color: var(--gold-light);">${totalRecords}</strong> سجل
+                عرض <strong style="color: var(--text-gold);">${totalRecords > 0 ? startIndex + 1 : 0}</strong> إلى 
+                <strong style="color: var(--text-gold);">${endIndex}</strong> من إجمالي 
+                <strong style="color: var(--text-gold);">${totalRecords}</strong> سجل
               </div>
 
               <div class="pagination-controls">
@@ -1230,7 +1230,7 @@
                   <span style="width: 10px; height: 10px; background: ${colors[idx % colors.length]}; border-radius: 3px; display: inline-block;"></span>
                   <span style="color: var(--text-secondary);">${item.type || item.label}</span>
                 </div>
-                <strong style="color: #f8fafc; font-family: monospace;">${pct}%</strong>
+                <strong style="color: var(--text-primary, #f8fafc); font-family: monospace;">${pct}%</strong>
               </div>
             `;
           }).join('');
@@ -1283,9 +1283,9 @@
               e.clientX,
               e.clientY,
               `
-                <div style="font-weight: 700; color: var(--gold-light); margin-bottom: 2px;">${item.type || item.label}</div>
-                <div style="font-size: 0.78rem; color: #e2e8f0;">المبلغ: <strong>${App.formatNumber(val)}</strong></div>
-                <div style="font-size: 0.74rem; color: #94a3b8;">النسبة: <strong>${pct}%</strong></div>
+                <div style="font-weight: 700; color: var(--text-gold); margin-bottom: 2px;">${item.type || item.label}</div>
+                <div style="font-size: 0.78rem; color: var(--text-primary, #e2e8f0);">المبلغ: <strong>${App.formatNumber(val)}</strong></div>
+                <div style="font-size: 0.74rem; color: var(--text-secondary, #94a3b8);">النسبة: <strong>${pct}%</strong></div>
               `
             );
           } else {
@@ -1493,16 +1493,16 @@
               e.clientX,
               e.clientY,
               `
-                <div style="font-weight: 800; color: var(--gold-light); margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 3px;">
+                <div style="font-weight: 800; color: var(--text-gold); margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 3px;">
                   📅 شهر: ${d.month}
                 </div>
                 <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;">
                   <span style="color: var(--accent-green);">● الإيرادات:</span>
-                  <strong style="color: #f8fafc;">${App.formatNumber(d.income || 0)}</strong>
+                  <strong style="color: var(--text-primary, #f8fafc);">${App.formatNumber(d.income || 0)}</strong>
                 </div>
                 <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;">
                   <span style="color: var(--accent-red);">● المصروفات:</span>
-                  <strong style="color: #f8fafc;">${App.formatNumber(d.expense || 0)}</strong>
+                  <strong style="color: var(--text-primary, #f8fafc);">${App.formatNumber(d.expense || 0)}</strong>
                 </div>
                 <div style="display: flex; justify-content: space-between; gap: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 3px; margin-top: 2px;">
                   <span>صافي الشهر:</span>

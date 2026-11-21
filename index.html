@@ -73,10 +73,10 @@
       <div id="loginRateLimitBox" class="login-ratelimit-box" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1.5px solid var(--accent-red); padding: 14px; border-radius: var(--radius-md); margin-bottom: 16px; text-align: center;">
         <div style="font-size: 1.6rem; margin-bottom: 4px;">🛡️ ⛔</div>
         <div style="font-weight: 800; color: var(--accent-red); margin-bottom: 4px; font-size: 1rem;">تم حظر تسجيل الدخول مؤقتاً (Rate Limit)</div>
-        <div style="font-size: 0.84rem; color: #e2e8f0; line-height: 1.5;" id="loginRateLimitMsg">
+        <div style="font-size: 0.84rem; color: var(--text-primary, #e2e8f0); line-height: 1.5;" id="loginRateLimitMsg">
           تم استنفاد الحد الأقصى للمحاولات المسموح بها (5 محاولات). لحماية الحساب من التخمين تم قفل الدخول مؤقتاً.
         </div>
-        <div style="margin-top: 10px; font-size: 1.5rem; font-weight: 900; color: var(--gold-light); font-family: monospace; letter-spacing: 2px;" id="loginCooldownTimer">
+        <div style="margin-top: 10px; font-size: 1.5rem; font-weight: 900; color: var(--text-gold); font-family: monospace; letter-spacing: 2px;" id="loginCooldownTimer">
           00:60
         </div>
       </div>
@@ -137,7 +137,7 @@
       <div style="width: 68px; height: 68px; border-radius: 50%; background: rgba(212,175,55,0.15); border: 2px solid var(--gold-primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 2.2rem;">
         🛡️
       </div>
-      <h3 style="color: var(--gold-light); margin-bottom: 6px; font-weight: 800; font-size: 1.25rem;">التحقق بخطوتين (2FA)</h3>
+      <h3 style="color: var(--text-gold); margin-bottom: 6px; font-weight: 800; font-size: 1.25rem;">التحقق بخطوتين (2FA)</h3>
       <p id="twoFactorSubtitle" style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
         حسابك محمي بطبقة أمان مضاعفة. يرجى إدخال رمز الأمان (PIN) المكون من 6 أرقام للمتابعة والدخول للنظام.
       </p>
@@ -149,7 +149,7 @@
           <label for="twoFactorCodeInput" style="font-weight: 700; margin-bottom: 8px; display: block;">رمز التحقق (PIN)</label>
           <div class="login-input-wrap" style="position: relative;">
             <input type="password" id="twoFactorCodeInput" class="login-input" maxlength="6" placeholder="******" style="text-align: center; font-size: 1.8rem; letter-spacing: 10px; font-family: monospace; font-weight: 900; height: 52px; padding: 0 45px 0 12px;" required autocomplete="one-time-code" oninput="Auth.normalize2FaInput(this)">
-            <button type="button" onclick="Auth.toggle2FaLoginEye()" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #94a3b8; padding: 4px;" title="إظهار / إخفاء الرمز">
+            <button type="button" onclick="Auth.toggle2FaLoginEye()" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-secondary, #94a3b8); padding: 4px;" title="إظهار / إخفاء الرمز">
               <span id="twoFactorLoginEyeIcon">👁️</span>
             </button>
           </div>
@@ -191,7 +191,7 @@
 
       <form id="lockScreenForm" class="login-form" onsubmit="Auth.submitUnlock(event)">
         <div class="form-group">
-          <label for="lockScreenPassword" style="color: var(--gold-light); font-size: 0.88rem; font-weight: 600; margin-bottom: 6px; display: block; text-align: right;">كلمة المرور للمتابعة</label>
+          <label for="lockScreenPassword" style="color: var(--text-gold); font-size: 0.88rem; font-weight: 600; margin-bottom: 6px; display: block; text-align: right;">كلمة المرور للمتابعة</label>
           <div class="login-input-wrap">
             <svg class="icon" width="18" height="18"><use href="#icon-lock"></use></svg>
             <input type="password" id="lockScreenPassword" class="login-input" placeholder="أدخل كلمة المرور لإلغاء القفل" required autocomplete="current-password">
@@ -203,7 +203,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z"/></svg>
         </button>
 
-        <button type="button" class="login-btn-shutdown" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.35); margin-top: 10px;" onclick="Auth.logout()">
+        <button type="button" class="login-btn-shutdown" style="background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #f87171); border-color: rgba(239, 68, 68, 0.35); margin-top: 10px;" onclick="Auth.logout()">
           <svg class="icon" width="18" height="18"><use href="#icon-logout"></use></svg>
           <span>تسجيل خروج (مع نسخة احتياطية)</span>
         </button>
@@ -262,9 +262,9 @@
           <div class="backup-dropdown-header">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 1.25rem;">🛡️</span>
-              <strong style="color: var(--gold-light); font-size: 0.95rem;">النسخ الاحتياطي الآلي المجدول</strong>
+              <strong style="color: var(--text-gold); font-size: 0.95rem;">النسخ الاحتياطي الآلي المجدول</strong>
             </div>
-            <span class="badge" id="headerBackupBadge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4);">مفعل</span>
+            <span class="badge" id="headerBackupBadge" style="background: rgba(34, 197, 94, 0.2); color: var(--color-success, #4ade80); border: 1px solid rgba(34, 197, 94, 0.4);">مفعل</span>
           </div>
 
           <div class="backup-dropdown-body">
@@ -278,7 +278,7 @@
             </div>
             <div class="backup-info-row">
               <span class="backup-info-label">آخر نسخة محفوظة:</span>
-              <span class="backup-info-val" id="dropdownBackupLastTime" style="color: #4ade80;">-</span>
+              <span class="backup-info-val" id="dropdownBackupLastTime" style="color: var(--color-success, #4ade80);">-</span>
             </div>
             <div class="backup-info-row">
               <span class="backup-info-label">حجم الملف:</span>
@@ -520,14 +520,14 @@
           <div class="quick-form-card">
             <div class="panel-header">
               <h4 class="panel-title" style="font-size: 0.88rem;">سند قبض (الإيرادات)</h4>
-              <span id="quickRcReceiptNoBadge" style="font-size: 0.75rem; color: var(--gold-light); font-weight: bold;">RC-2026-XXXX</span>
+              <span id="quickRcReceiptNoBadge" style="font-size: 0.75rem; color: var(--text-gold); font-weight: bold;">RC-2026-XXXX</span>
             </div>
             <form id="quickReceiptForm" onsubmit="Accounting.submitReceiptVoucher(event)">
 <div class="form-group" style="margin: 8px 0;"><label>طريقة الحفظ</label><select id="rcSaveStatus" class="form-control"><option value="draft">مسودة للمراجعة قبل الترحيل</option><option value="posted">ترحيل مباشر</option></select></div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">العميل</label>
-                  <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('rcClientSelect')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ عميل جديد</a>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('rcClientSelect')" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ عميل جديد</a>
                 </div>
                 <select id="rcClientSelect" class="form-control" required onchange="Accounting.onQuickClientChange(this.value)">
                   <option value="">اختر العميل...</option>
@@ -536,7 +536,7 @@
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
-                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('rcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('rcAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ حساب جديد</a>
                 </div>
                 <select id="rcAccountSelect" class="form-control" required>
                   <option value="">اختر الحساب (افتراضي: العملاء 112)...</option>
@@ -551,7 +551,7 @@
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">المشروع</label>
-                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
+                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
                 <select id="rcProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('rc', this.value)">
                   <option value="">اختر المشروع...</option>
@@ -578,7 +578,7 @@
                     </select>
                   </div>
                   <div class="form-group" id="rcCheckNoGroup" style="margin-bottom: 0;">
-                    <label id="rcCheckLabel" style="color: var(--gold-light); font-weight: bold; font-size: 0.78rem;">رقم الشيك / المرجع</label>
+                    <label id="rcCheckLabel" style="color: var(--text-gold); font-weight: bold; font-size: 0.78rem;">رقم الشيك / المرجع</label>
                     <input type="text" id="rcCheckNo" class="form-control" placeholder="رقم الشيك أو الحوالة">
                     <input type="hidden" id="rcBankName" value="">
                   </div>
@@ -632,11 +632,11 @@
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">الحساب المقابل للسند</label>
-                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('expAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ حساب جديد</a>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('expAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ حساب جديد</a>
                 </div>
                 <select id="expAccountSelect" class="form-control" required onchange="Accounting.updateExpenseTransferHint(false)">
                   <option value="">اختر الحساب (تلقائي: تكاليف ومصروفات 5)...</option>
-                </select><small id="expTransferHint" style="display: block; color: var(--gold-light); margin-top: 6px;"></small>
+                </select><small id="expTransferHint" style="display: block; color: var(--text-gold); margin-top: 6px;"></small>
               </div>
               <div class="form-group">
                 <label>استخدام مراكز التكلفة لهذا الحساب</label>
@@ -647,7 +647,7 @@
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">المشروع</label>
-                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
+                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
                 <select id="expProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('exp', this.value)">
                   <option value="">اختر المشروع...</option>
@@ -741,7 +741,7 @@
               </div>
               <!-- حقل اختيار رقم العهدة المراد تصفيتها شرطياً -->
               <div class="form-group" id="quickCustodyRelatedRow" style="display: none; background: rgba(59, 130, 246, 0.08); border: 1px dashed #3b82f6; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
-                <label style="color: #60a5fa; font-weight: bold; font-size: 0.8rem;">العهدة الأصلية المراد تصفيتها <span style="color: var(--accent-red);">*</span></label>
+                <label style="color: var(--color-info, #60a5fa); font-weight: bold; font-size: 0.8rem;">العهدة الأصلية المراد تصفيتها <span style="color: var(--accent-red);">*</span></label>
                 <select id="custodyRelatedSelect" class="form-control" onchange="Accounting.onRelatedCustodySelect('custodyRelatedSelect', 'custodyTotalAmount', 'custodySpentAmount')">
                   <option value="">اختر العهدة المفتوحة للتصفية...</option>
                 </select>
@@ -749,7 +749,7 @@
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">الحساب المالي (العهدة / الصندوق)</label>
-                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('quickCustodyAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب</a>
+                  <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('quickCustodyAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ إضافة حساب</a>
                 </div>
                 <select id="quickCustodyAccountSelect" class="form-control">
                   <option value="">اختر الحساب الفرعي...</option>
@@ -758,7 +758,7 @@
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="margin-bottom: 0;">المشروع المرتبط (اختياري)</label>
-                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
+                  <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ مشروع جديد</a>
                 </div>
                 <select id="custodyProjectSelect" class="form-control" onchange="Accounting.onQuickProjectChange('custody', this.value)">
                   <option value="">عام / بدون مشروع محدد...</option>
@@ -798,7 +798,7 @@
           <div class="quick-form-card">
             <div class="panel-header">
               <h4 class="panel-title" style="font-size: 0.88rem;">الصندوق والبنك</h4>
-              <span style="font-size: 0.75rem; color: var(--gold-light);">حركة الصندوق</span>
+              <span style="font-size: 0.75rem; color: var(--text-gold);">حركة الصندوق</span>
             </div>
             <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.84rem; margin-top: 6px;">
               <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border-light); padding-bottom: 6px;">
@@ -848,7 +848,7 @@
               </div>
               <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-light); padding-top: 6px;">
                 <span>صافي الأرباح:</span>
-                <strong id="plNetProfit" style="color: var(--gold-light); font-size: 0.95rem;">400,000</strong>
+                <strong id="plNetProfit" style="color: var(--text-gold); font-size: 0.95rem;">400,000</strong>
               </div>
             </div>
             <div style="display: flex; gap: 8px;">
@@ -883,7 +883,7 @@
               </div>
               <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-light); padding-top: 6px;">
                 <span>الرصيد الحالي:</span>
-                <strong id="csCurBalance" style="color: var(--gold-light); font-size: 0.95rem;">190,000</strong>
+                <strong id="csCurBalance" style="color: var(--text-gold); font-size: 0.95rem;">190,000</strong>
               </div>
             </div>
             <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="Reports.loadClientStatement()">عرض التفاصيل</button>
@@ -1079,7 +1079,7 @@
               <div class="hub-title-group">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                   <h2 class="page-title" id="hubProjectTitle" style="margin: 0;">مركز إدارة ومستندات المشروع</h2>
-                  <span id="hubProjectCode" style="font-size: 0.85rem; background: rgba(212,175,55,0.15); color: var(--gold-light); padding: 2px 10px; border-radius: 6px; font-weight: bold; border: 1px solid rgba(212,175,55,0.3);">-</span>
+                  <span id="hubProjectCode" style="font-size: 0.85rem; background: rgba(212,175,55,0.15); color: var(--text-gold); padding: 2px 10px; border-radius: 6px; font-weight: bold; border: 1px solid rgba(212,175,55,0.3);">-</span>
                   <span id="hubProjectStatusBadge" class="drawing-badge-status approved">قيد التنفيذ ⚙️</span>
                 </div>
                 <p id="hubProjectClient" style="color: var(--text-secondary); font-size: 0.84rem; margin: 4px 0 0 0;">العميل / المالك: -</p>
@@ -1087,7 +1087,7 @@
 
               <!-- زر تحديد مسار حفظ ملفات_المشاريع يدوي داخل الجهاز (مكان اللون الأحمر) -->
               <div class="hub-base-folder-action">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnConfigureBaseFolder" onclick="ProjectHub.openBaseFolderModal()" title="تحديد وتعيين مسار مجلد حفظ ملفات ومستندات المشاريع يدوياً على جهازك" style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--gold-primary); color: var(--gold-light); background: rgba(212,175,55,0.12); font-weight: 700; padding: 7px 16px; border-radius: var(--radius-md); box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer; transition: all 0.2s ease;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btnConfigureBaseFolder" onclick="ProjectHub.openBaseFolderModal()" title="تحديد وتعيين مسار مجلد حفظ ملفات ومستندات المشاريع يدوياً على جهازك" style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--gold-primary); color: var(--text-gold); background: rgba(212,175,55,0.12); font-weight: 700; padding: 7px 16px; border-radius: var(--radius-md); box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer; transition: all 0.2s ease;">
                   <span style="font-size: 1.15rem;">⚙️📁</span>
                   <span>تحديد مسار ملفات المشاريع</span>
                 </button>
@@ -1095,7 +1095,7 @@
             </div>
 
             <div class="hub-project-selector-wrap">
-              <label for="hubProjectSelect" style="font-size: 0.78rem; color: var(--gold-light); margin-bottom: 2px; display: block; font-weight: 700;">📂 المشروع المحدد:</label>
+              <label for="hubProjectSelect" style="font-size: 0.78rem; color: var(--text-gold); margin-bottom: 2px; display: block; font-weight: 700;">📂 المشروع المحدد:</label>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <select id="hubProjectSelect" class="form-control" style="min-width: 260px; font-weight: 700; border-color: var(--gold-primary);" onchange="ProjectHub.onProjectSelectChange(event)">
                   <option value="">جاري تحميل المشاريع...</option>
@@ -1112,8 +1112,8 @@
             <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 280px;">
               <span style="font-size: 1.4rem;">📁</span>
               <div style="flex: 1;">
-                <div style="font-size: 0.75rem; color: var(--gold-light); font-weight: bold; margin-bottom: 2px;">مجلد المشروع الفعلي على جهازك (Windows):</div>
-                <div id="hubProjectFolderPath" style="font-size: 0.82rem; font-family: monospace; color: #f1f5f9; direction: ltr; text-align: right; word-break: break-all;">
+                <div style="font-size: 0.75rem; color: var(--text-gold); font-weight: bold; margin-bottom: 2px;">مجلد المشروع الفعلي على جهازك (Windows):</div>
+                <div id="hubProjectFolderPath" style="font-size: 0.82rem; font-family: monospace; color: var(--text-primary, #f1f5f9); direction: ltr; text-align: right; word-break: break-all;">
                   جاري جلب وتأكيد مسار المجلد...
                 </div>
               </div>
@@ -1139,7 +1139,7 @@
             </div>
             <div class="hub-kpi-item">
               <span class="hub-kpi-title">أوامر التغيير</span>
-              <span class="hub-kpi-value" id="hubKpiChangeOrders" style="color: var(--gold-light);">+0 <small>ر.ي</small></span>
+              <span class="hub-kpi-value" id="hubKpiChangeOrders" style="color: var(--text-gold);">+0 <small>ر.ي</small></span>
             </div>
             <div class="hub-kpi-item">
               <span class="hub-kpi-title">العقد المعدل النهائي</span>
@@ -1155,7 +1155,7 @@
             </div>
             <div class="hub-kpi-item">
               <span class="hub-kpi-title">نسبة الإنجاز</span>
-              <span class="hub-kpi-value" id="hubKpiProgress" style="color: var(--gold-light);">0%</span>
+              <span class="hub-kpi-value" id="hubKpiProgress" style="color: var(--text-gold);">0%</span>
             </div>
           </div>
         </div>
@@ -1320,7 +1320,7 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px;">
               <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
                 <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">إجمالي قيمة جدول الكميات التعاقدي</span>
-                <strong id="boqKpiContractVal" style="font-size: 1.25rem; color: var(--gold-light);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
+                <strong id="boqKpiContractVal" style="font-size: 1.25rem; color: var(--text-gold);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
               </div>
               <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
                 <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">إجمالي القيمة المنفذة بالموقع</span>
@@ -1329,7 +1329,7 @@
               <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
                 <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">نسبة الإنجاز المالي التراكمية</span>
                 <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                  <strong id="boqKpiProgressPct" style="font-size: 1.25rem; color: #38bdf8;">0%</strong>
+                  <strong id="boqKpiProgressPct" style="font-size: 1.25rem; color: var(--color-info, #38bdf8);">0%</strong>
                   <div class="progress-wrap" style="flex: 1; height: 8px;">
                     <div id="boqKpiProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
                   </div>
@@ -1570,7 +1570,7 @@
               </div>
               <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 12px 14px;">
                 <span style="font-size: 0.74rem; color: var(--text-secondary); display: block;">الرصيد المتبقي من قيمة العقد للصرف</span>
-                <strong id="ipcKpiRemainingVal" style="font-size: 1.25rem; color: var(--gold-light);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
+                <strong id="ipcKpiRemainingVal" style="font-size: 1.25rem; color: var(--text-gold);">0 <small style="font-size:0.75rem;">ر.ي</small></strong>
               </div>
             </div>
 
@@ -1714,7 +1714,7 @@
               </div>
             </div>
             <div style="margin: 14px 0; padding: 14px; border: 1px dashed rgba(212,175,55,.55); border-radius: var(--radius-sm); background: rgba(212,175,55,.04);">
-              <div style="font-weight:700;color:var(--gold-light);margin-bottom:5px;">🖨️ أرشفة تقرير ممسوح ضوئياً</div>
+              <div style="font-weight:700;color:var(--text-gold);margin-bottom:5px;">🖨️ أرشفة تقرير ممسوح ضوئياً</div>
               <div style="font-size:.78rem;color:var(--text-secondary);margin-bottom:10px;">امسح المستند إلى PDF أو صورة، ثم ارفعه هنا ليحفظ داخل مجلد المشروع الحالي: <b>10_أرشيف_التقارير_الممسوحة</b>.</div>
               <div class="form-grid"><div class="form-group"><label>عنوان التقرير</label><input id="scanArchiveTitle" class="form-control" placeholder="مثال: تقرير فحص الخرسانة"></div><div class="form-group"><label>نوع التقرير</label><select id="scanArchiveCategory" class="form-control"><option>تقرير ممسوح</option><option>تقرير فحص</option><option>مستند استلام</option><option>مراسلة رسمية</option><option>مستند مالي</option></select></div><div class="form-group"><label>ملف PDF أو صورة</label><input id="scanArchiveFile" class="form-control" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div><div class="form-group" style="align-self:end;"><button type="button" class="btn btn-primary" onclick="ProjectHub.archiveScannedReport()">رفع وأرشفة التقرير</button></div></div>
             </div>
@@ -1723,8 +1723,8 @@
             <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div>
-                  <span style="color: var(--gold-light); font-weight: bold; font-size: 0.85rem;">المسار الفعلي على القرص:</span>
-                  <div id="hubFilesCurrentPath" style="font-family: monospace; direction: ltr; text-align: right; color: #cbd5e1; font-size: 0.82rem; margin-top: 4px; word-break: break-all;">-</div>
+                  <span style="color: var(--text-gold); font-weight: bold; font-size: 0.85rem;">المسار الفعلي على القرص:</span>
+                  <div id="hubFilesCurrentPath" style="font-family: monospace; direction: ltr; text-align: right; color: var(--text-secondary, #cbd5e1); font-size: 0.82rem; margin-top: 4px; word-break: break-all;">-</div>
                 </div>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.copyProjectFolderPath()">📋 نسخ المسار الكامل</button>
               </div>
@@ -1761,15 +1761,15 @@
             <div class="panel-header" style="flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-light); padding-bottom: 16px;">
               <div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <span style="background: rgba(16, 185, 129, 0.18); color: #10b981; font-weight: 800; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; border: 1px solid rgba(16, 185, 129, 0.4);">
+                  <span style="background: rgba(16, 185, 129, 0.18); color: var(--color-success, #10b981); font-weight: 800; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; border: 1px solid rgba(16, 185, 129, 0.4);">
                     عرض سعر معتمد رسمي رقم: <span id="intQuoBadgeNo">QT-2026-0001</span>
                   </span>
-                  <span id="intQuoBoqLinkBadge" class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); font-size: 0.78rem;">
+                  <span id="intQuoBoqLinkBadge" class="badge" style="background: rgba(59, 130, 246, 0.2); color: var(--color-info, #60a5fa); border: 1px solid rgba(59, 130, 246, 0.4); font-size: 0.78rem;">
                     🔗 مربوط بالمخازن و BOQ والموردين
                   </span>
                   <!-- قائمة اختيار عروض الأسعار (مخفية بناءً على الطلب لربط العرض تلقائياً بالمشروع المحدد) -->
                   <div style="display: none !important; align-items: center; gap: 6px; margin-right: 6px;">
-                    <label style="font-size: 0.78rem; color: var(--gold-light); margin: 0; font-weight: bold;">اختر عرض السعر:</label>
+                    <label style="font-size: 0.78rem; color: var(--text-gold); margin: 0; font-weight: bold;">اختر عرض السعر:</label>
                     <select id="intQuoSelect" class="form-control" style="padding: 4px 8px; font-size: 0.82rem; height: 32px; min-width: 280px; background: #0f172a; border-color: var(--gold-primary); color: #fff;" onchange="ProjectHub.switchIntegratedQuotation(this.value)">
                       <option value="QT-2026-0001" selected>QT-2026-0001</option>
                     </select>
@@ -1808,23 +1808,23 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
               <div>
                 <span style="font-size: 0.76rem; color: var(--text-secondary); display: block;">السادة (العميل):</span>
-                <strong style="color: #f1f5f9; font-size: 0.96rem;" id="intQuoClientName">عوض صالح عوض</strong>
-                <div style="font-size: 0.78rem; color: var(--gold-light); margin-top: 2px;">هاتف: <span id="intQuoClientPhone">772332164</span></div>
+                <strong style="color: var(--text-primary, #f1f5f9); font-size: 0.96rem;" id="intQuoClientName">عوض صالح عوض</strong>
+                <div style="font-size: 0.78rem; color: var(--text-gold); margin-top: 2px;">هاتف: <span id="intQuoClientPhone">772332164</span></div>
               </div>
               <div>
                 <span style="font-size: 0.76rem; color: var(--text-secondary); display: block;">اسم المشروع:</span>
-                <strong style="color: #f1f5f9; font-size: 0.96rem;" id="intQuoProjectName">بنك عدن فرع عبد القوي</strong>
-                <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">كود: <span id="intQuoProjectCode">PRJ-015</span></div>
+                <strong style="color: var(--text-primary, #f1f5f9); font-size: 0.96rem;" id="intQuoProjectName">بنك عدن فرع عبد القوي</strong>
+                <div style="font-size: 0.78rem; color: var(--text-secondary, #94a3b8); margin-top: 2px;">كود: <span id="intQuoProjectCode">PRJ-015</span></div>
               </div>
               <div>
                 <span style="font-size: 0.76rem; color: var(--text-secondary); display: block;">تاريخ العرض والصلاحية:</span>
-                <strong style="color: #f1f5f9; font-size: 0.88rem;" id="intQuoDateRange">12-09-2026 إلى 20-09-2026</strong>
-                <div style="font-size: 0.78rem; color: #10b981; margin-top: 2px;">العملة: <span id="intQuoCurrency">$ (دولار أمريكي)</span></div>
+                <strong style="color: var(--text-primary, #f1f5f9); font-size: 0.88rem;" id="intQuoDateRange">12-09-2026 إلى 20-09-2026</strong>
+                <div style="font-size: 0.78rem; color: var(--color-success, #10b981); margin-top: 2px;">العملة: <span id="intQuoCurrency">$ (دولار أمريكي)</span></div>
               </div>
               <div>
                 <span style="font-size: 0.76rem; color: var(--text-secondary); display: block;">الإجمالي الكلي (32 بند):</span>
-                <strong style="color: #34d399; font-size: 1.25rem; font-family: monospace;" id="intQuoTotalDisplay">6,069.5 $</strong>
-                <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;">صفحة 1 (1-19) | صفحة 2 (20-32)</div>
+                <strong style="color: var(--color-success, #34d399); font-size: 1.25rem; font-family: monospace;" id="intQuoTotalDisplay">6,069.5 $</strong>
+                <div style="font-size: 0.75rem; color: var(--text-secondary, #cbd5e1); margin-top: 2px;">صفحة 1 (1-19) | صفحة 2 (20-32)</div>
               </div>
             </div>
 
@@ -1851,13 +1851,13 @@
                 </tbody>
                 <tfoot style="position: sticky; bottom: 0; background: #1e293b; font-weight: bold; border-top: 2px solid var(--gold-primary);">
                   <tr>
-                    <td colspan="5" style="text-align: left; padding: 12px 16px; font-size: 0.95rem; color: #f8fafc;">
+                    <td colspan="5" style="text-align: left; padding: 12px 16px; font-size: 0.95rem; color: var(--text-primary, #f8fafc);">
                       الإجمالي النهائي لعرض السعر (المجموع الكلي):
                     </td>
-                    <td style="text-align: center; color: #34d399; font-size: 1.15rem; font-family: monospace;" id="intQuoFooterTotal">
+                    <td style="text-align: center; color: var(--color-success, #34d399); font-size: 1.15rem; font-family: monospace;" id="intQuoFooterTotal">
                       6,069.5 $
                     </td>
-                    <td colspan="5" style="text-align: right; color: var(--gold-light); font-size: 0.85rem; padding: 12px 16px;" id="intQuoFooterNotes">
+                    <td colspan="5" style="text-align: right; color: var(--text-gold); font-size: 0.85rem; padding: 12px 16px;" id="intQuoFooterNotes">
                       ملاحظة: الكهرباء حسب الكشف حق حمدي الكهربائي
                     </td>
                   </tr>
@@ -1868,7 +1868,7 @@
             <!-- بطاقة التذييل والشروط الرسمية -->
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-top: 16px; background: rgba(255,255,255,0.02); padding: 14px; border-radius: 8px; border: 1px solid var(--border-light);">
               <div>
-                <div style="font-size: 0.82rem; color: var(--gold-light); font-weight: bold; margin-bottom: 4px;">المبلغ كتابة:</div>
+                <div style="font-size: 0.82rem; color: var(--text-gold); font-weight: bold; margin-bottom: 4px;">المبلغ كتابة:</div>
                 <div style="font-size: 0.92rem; color: #fff; font-weight: 600;" id="intQuoAmountWords">
                   فقط ستة آلاف وتسعة وستون دولاراً وخمسون سنتاً لا غير (6,069.5 $)
                 </div>
@@ -1877,7 +1877,7 @@
                 </div>
               </div>
               <div style="display: flex; flex-direction: column; justify-content: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.08); padding-right: 14px;">
-                <div style="font-size: 0.8rem; color: #94a3b8;">
+                <div style="font-size: 0.8rem; color: var(--text-secondary, #94a3b8);">
                   📄 <b>التوزيع الطباعي:</b> 
                   <div>• الصفحة الأولى: البنود (1 - 19) المجموع الجزئي: 3,117 $</div>
                   <div>• الصفحة الثانية: البنود (20 - 32) الإجمالي النهائي: 6,069.5 $</div>
@@ -2287,30 +2287,30 @@
           <div class="kpi-card" style="border-right: 4px solid #ef4444;">
             <div class="kpi-content">
               <span class="kpi-label">تنبيهات حرجة (Critical)</span>
-              <span class="kpi-value" id="caKpiCritical" style="color: #f87171;">0</span>
+              <span class="kpi-value" id="caKpiCritical" style="color: var(--color-danger, #f87171);">0</span>
             </div>
-            <div class="kpi-icon-wrap" style="color: #ef4444;">🚨</div>
+            <div class="kpi-icon-wrap" style="color: var(--color-danger, #ef4444);">🚨</div>
           </div>
           <div class="kpi-card" style="border-right: 4px solid #f59e0b;">
             <div class="kpi-content">
               <span class="kpi-label">تحذيرات هامة (Warning)</span>
-              <span class="kpi-value" id="caKpiWarning" style="color: #fbbf24;">0</span>
+              <span class="kpi-value" id="caKpiWarning" style="color: var(--color-warning, #fbbf24);">0</span>
             </div>
-            <div class="kpi-icon-wrap" style="color: #f59e0b;">⚠️</div>
+            <div class="kpi-icon-wrap" style="color: var(--color-warning, #f59e0b);">⚠️</div>
           </div>
           <div class="kpi-card" style="border-right: 4px solid #0284c7;">
             <div class="kpi-content">
               <span class="kpi-label">تنبيهات معلوماتية (Info)</span>
-              <span class="kpi-value" id="caKpiInfo" style="color: #38bdf8;">0</span>
+              <span class="kpi-value" id="caKpiInfo" style="color: var(--color-info, #38bdf8);">0</span>
             </div>
             <div class="kpi-icon-wrap" style="color: #0284c7;">ℹ️</div>
           </div>
           <div class="kpi-card" style="border-right: 4px solid var(--gold-primary);">
             <div class="kpi-content">
               <span class="kpi-label">إجمالي المبالغ تحت المخاطرة</span>
-              <span class="kpi-value" id="caKpiRisk" style="color: var(--gold-light);">0 $</span>
+              <span class="kpi-value" id="caKpiRisk" style="color: var(--text-gold);">0 $</span>
             </div>
-            <div class="kpi-icon-wrap" style="color: var(--gold-primary);">🛡️</div>
+            <div class="kpi-icon-wrap" style="color: var(--text-gold);">🛡️</div>
           </div>
         </div>
 
@@ -2319,7 +2319,7 @@
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 1.25rem;">📜</span>
-              <h3 style="margin: 0; color: var(--gold-light); font-size: 1.05rem;">متابعة الدورة المستندية ومراحل العقد الـ 10</h3>
+              <h3 style="margin: 0; color: var(--text-gold); font-size: 1.05rem;">متابعة الدورة المستندية ومراحل العقد الـ 10</h3>
             </div>
             <div style="min-width: 280px;">
               <select id="contractSelectLifecycle" class="form-control" onchange="ContractAlertsUI.onContractSelectChange(this.value)">
@@ -2396,9 +2396,9 @@
           </div>
           <div class="page-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 6px;">
-              <label style="font-size: 0.82rem; color: #94a3b8;">من:</label>
+              <label style="font-size: 0.82rem; color: var(--text-secondary, #94a3b8);">من:</label>
               <input type="month" id="cfMonthFrom" class="form-control" style="width: 140px; padding: 4px 8px;">
-              <label style="font-size: 0.82rem; color: #94a3b8;">إلى:</label>
+              <label style="font-size: 0.82rem; color: var(--text-secondary, #94a3b8);">إلى:</label>
               <input type="month" id="cfMonthTo" class="form-control" style="width: 140px; padding: 4px 8px;">
             </div>
             <button class="btn btn-secondary btn-sm" onclick="CashFlowUI.exportProjection('pdf')">طباعة PDF</button><button class="btn btn-secondary btn-sm" onclick="CashFlowUI.exportProjection('excel')">تصدير Excel</button><button class="btn btn-secondary btn-sm" onclick="CashFlowUI.loadProjections()">تحديث الفلترة</button>
@@ -2419,23 +2419,23 @@
           <div class="kpi-card">
             <div class="kpi-content">
               <span class="kpi-label">إجمالي المقبوضات المتوقعة (Inflows)</span>
-              <span class="kpi-value" id="cfKpiTotalIn" style="color: #4ade80;">0 ر.ي</span>
+              <span class="kpi-value" id="cfKpiTotalIn" style="color: var(--color-success, #4ade80);">0 ر.ي</span>
             </div>
-            <div class="kpi-icon-wrap" style="color: #22c55e;">📈</div>
+            <div class="kpi-icon-wrap" style="color: var(--color-success, #22c55e);">📈</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-content">
               <span class="kpi-label">إجمالي المدفوعات والالتزامات (Outflows)</span>
-              <span class="kpi-value" id="cfKpiTotalOut" style="color: #f87171;">0 ر.ي</span>
+              <span class="kpi-value" id="cfKpiTotalOut" style="color: var(--color-danger, #f87171);">0 ر.ي</span>
             </div>
-            <div class="kpi-icon-wrap" style="color: #ef4444;">📉</div>
+            <div class="kpi-icon-wrap" style="color: var(--color-danger, #ef4444);">📉</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-content">
               <span class="kpi-label">صافي التدفق النقدي للفترة (Net Cash)</span>
-              <span class="kpi-value" id="cfKpiNetCash" style="color: var(--gold-light);">0 ر.ي</span>
+              <span class="kpi-value" id="cfKpiNetCash" style="color: var(--text-gold);">0 ر.ي</span>
             </div>
-            <div class="kpi-icon-wrap" style="color: var(--gold-primary);">⚖️</div>
+            <div class="kpi-icon-wrap" style="color: var(--text-gold);">⚖️</div>
           </div>
         </div>
 
@@ -2516,7 +2516,7 @@
 
         <div id="hrPane_leaveTypes" class="hr-pane" style="display:none;">
           <div class="panel-card" style="margin-bottom:14px;">
-            <h4 style="margin-bottom:12px;color:var(--gold-light);">إضافة نوع إجازة جديد</h4>
+            <h4 style="margin-bottom:12px;color:var(--text-gold);">إضافة نوع إجازة جديد</h4>
             <form onsubmit="HR.submitLeaveType(event)" class="form-grid">
               <div class="form-group"><label>اسم نوع الإجازة</label><input id="hrLtName" class="form-control" placeholder="مثال: سنوية، مرضية..." required></div>
               <div class="form-group"><label>الأيام المستحقة سنوياً</label><input id="hrLtDays" class="form-control" type="number" value="30" required></div>
@@ -2665,8 +2665,8 @@
                     <th style="background:#fef08a;color:#854d0e;font-weight:bold;">بدل طبيعة عمل 30%</th>
                     <th>بدل معيشة</th>
                     <th style="background:#fef08a;color:#854d0e;font-weight:bold;">بدل تأمين صحي</th>
-                    <th style="color:var(--gold-light);font-weight:bold;">الراتب الشامل</th>
-                    <th style="color:#f87171;">التأمينات 6%</th>
+                    <th style="color:var(--text-gold);font-weight:bold;">الراتب الشامل</th>
+                    <th style="color:var(--color-danger, #f87171);">التأمينات 6%</th>
                     <th>خصميات غياب وجزاءات</th>
                     <th>اقساط تمويل</th>
                     <th>اجمالي الخصميات</th>
@@ -2681,7 +2681,7 @@
 
         <div id="hrPane_evaluations" class="hr-pane" style="display:none;">
           <div class="panel-card" style="margin-bottom:14px;">
-            <h4 style="margin-bottom:12px;color:var(--gold-light);">تسجيل تقييم أداء وحوافز/خصومات موظف</h4>
+            <h4 style="margin-bottom:12px;color:var(--text-gold);">تسجيل تقييم أداء وحوافز/خصومات موظف</h4>
             <form onsubmit="HR.submitEvaluation(event)" class="form-grid">
               <div class="form-group"><label>الموظف</label><select id="hrEvalEmployee" class="form-control" required></select></div>
               <div class="form-group"><label>تاريخ التقييم</label><input id="hrEvalDate" class="form-control" type="date"></div>
@@ -2848,11 +2848,11 @@
         </div>
         <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">تكلفة الإيراد المباشرة:</span>
-          <h3 id="isDirectCosts" style="color: #38bdf8; margin-top: 4px;">0 ر.ي</h3>
+          <h3 id="isDirectCosts" style="color: var(--color-info, #38bdf8); margin-top: 4px;">0 ر.ي</h3>
         </div>
         <div style="background: rgba(234,179,8,0.12); border: 1px solid rgba(234,179,8,0.3); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">مجمل الربح (الإيرادات - التكلفة المباشرة):</span>
-          <h3 id="isGrossProfit" style="color: #facc15; margin-top: 4px;">0 ر.ي</h3>
+          <h3 id="isGrossProfit" style="color: var(--color-warning, #facc15); margin-top: 4px;">0 ر.ي</h3>
         </div>
         <div style="background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">المصروفات التشغيلية والإدارية:</span>
@@ -2860,7 +2860,7 @@
         </div>
         <div style="background: rgba(212,175,55,0.15); border: 1px solid rgba(212,175,55,0.4); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">صافي الدخل النهائي:</span>
-          <h3 id="isNetIncome" style="color: var(--gold-light); margin-top: 4px;">0 ر.ي</h3>
+          <h3 id="isNetIncome" style="color: var(--text-gold); margin-top: 4px;">0 ر.ي</h3>
         </div>
       </div>
 
@@ -2945,7 +2945,7 @@
           <input type="date" id="bsAsOfDate" class="form-control">
         </div>
         <button class="btn btn-primary" onclick="Reports.loadBalanceSheet()">تحديث المركز المالي</button>
-        <span id="bsReconcileBadge" class="badge" style="padding: 6px 12px; font-size: 0.85rem; margin-right: auto; background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3);">
+        <span id="bsReconcileBadge" class="badge" style="padding: 6px 12px; font-size: 0.85rem; margin-right: auto; background: rgba(34,197,94,0.15); color: var(--color-success, #4ade80); border: 1px solid rgba(34,197,94,0.3);">
           ⚖️ معادلة الميزانية: متزنة تماماً (الأصول = الالتزامات + حقوق الملكية)
         </span>
       </div>
@@ -3005,7 +3005,7 @@
           <input type="date" id="cfToDate" class="form-control">
         </div>
         <button class="btn btn-primary" onclick="Reports.loadCashFlow()">تحديث التدفقات النقدية</button>
-        <span id="cfReconcileBadge" class="badge" style="padding: 6px 12px; font-size: 0.85rem; margin-right: auto; background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3);">
+        <span id="cfReconcileBadge" class="badge" style="padding: 6px 12px; font-size: 0.85rem; margin-right: auto; background: rgba(56,189,248,0.15); color: var(--color-info, #38bdf8); border: 1px solid rgba(56,189,248,0.3);">
           ✓ مطابق مع أرصدة النقدية والبنوك في الأستاذ العام
         </span>
       </div>
@@ -3014,7 +3014,7 @@
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
         <div style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.3); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">النقدية أول المدة:</span>
-          <h3 id="cfOpeningCash" style="color: #cbd5e1; margin-top: 4px;">0 ر.ي</h3>
+          <h3 id="cfOpeningCash" style="color: var(--text-secondary, #cbd5e1); margin-top: 4px;">0 ر.ي</h3>
         </div>
         <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">صافي التدفقات التشغيلية:</span>
@@ -3026,7 +3026,7 @@
         </div>
         <div style="background: rgba(212,175,55,0.15); border: 1px solid rgba(212,175,55,0.4); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">النقدية في نهاية المدة:</span>
-          <h3 id="cfClosingCash" style="color: var(--gold-light); margin-top: 4px;">0 ر.ي</h3>
+          <h3 id="cfClosingCash" style="color: var(--text-gold); margin-top: 4px;">0 ر.ي</h3>
         </div>
       </div>
 
@@ -3135,11 +3135,11 @@
         </div>
         <div style="background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">صافي الربح / الفائض:</span>
-          <h3 id="ccProfitTotalNet" style="color: var(--gold-light); margin-top: 4px;">0 ر.ي</h3>
+          <h3 id="ccProfitTotalNet" style="color: var(--text-gold); margin-top: 4px;">0 ر.ي</h3>
         </div>
         <div style="background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.25); padding: 14px; border-radius: var(--radius-md);">
           <span style="font-size: 0.8rem; color: var(--text-secondary);">متوسط هامش الربحية:</span>
-          <h3 id="ccProfitTotalMargin" style="color: #38bdf8; margin-top: 4px;">0%</h3>
+          <h3 id="ccProfitTotalMargin" style="color: var(--color-info, #38bdf8); margin-top: 4px;">0%</h3>
         </div>
       </div>
 
@@ -3702,7 +3702,7 @@
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">إدارة بيانات العملاء، العقود، المستحقات والمدفوعات</p>
           </div>
           <div class="page-actions">
-            <a href="/views/client_users.html" target="_blank" class="btn btn-success" style="background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);">
+            <a href="/views/client_users.html" target="_blank" class="btn btn-success" style="background: rgba(16, 185, 129, 0.25); color: var(--color-success, #34d399); border: 1px solid #10b981; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
               <span>📱 حسابات وصلاحيات تطبيق العملاء (Client App) ↗</span>
             </a>
@@ -3721,12 +3721,12 @@
         <div class="kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px;">
           <div class="kpi-card" style="border-right: 4px solid var(--accent-blue);">
             <div class="kpi-label">قيمة العقود النشطة</div>
-            <div class="kpi-value" id="kpiClientsTotalContracts" style="color: #38bdf8;">0 ر.ي</div>
+            <div class="kpi-value" id="kpiClientsTotalContracts" style="color: var(--color-info, #38bdf8);">0 ر.ي</div>
             <div class="kpi-sub" id="kpiClientsContractsCount">0 عقود معتمدة</div>
           </div>
           <div class="kpi-card" style="border-right: 4px solid var(--gold-light);">
             <div class="kpi-label">إجمالي المطالبات المفوترة</div>
-            <div class="kpi-value" id="kpiClientsTotalInvoiced" style="color: var(--gold-light);">0 ر.ي</div>
+            <div class="kpi-value" id="kpiClientsTotalInvoiced" style="color: var(--text-gold);">0 ر.ي</div>
             <div class="kpi-sub" id="kpiClientsBillsCount">0 مستخلص ومطالبة</div>
           </div>
           <div class="kpi-card" style="border-right: 4px solid var(--accent-green);">
@@ -3736,7 +3736,7 @@
           </div>
           <div class="kpi-card" style="border-right: 4px solid #f59e0b;">
             <div class="kpi-label">محتجزات الضمان المعلقة</div>
-            <div class="kpi-value" id="kpiClientsTotalRetention" style="color: #f59e0b;">0 ر.ي</div>
+            <div class="kpi-value" id="kpiClientsTotalRetention" style="color: var(--color-warning, #f59e0b);">0 ر.ي</div>
             <div class="kpi-sub">محتجز لدى العميل</div>
           </div>
           <div class="kpi-card" style="border-right: 4px solid var(--accent-red);">
@@ -3748,9 +3748,9 @@
 
         <div class="panel-card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-            <div style="font-weight: 700; color: var(--gold-light); display: flex; align-items: center; gap: 8px;">
+            <div style="font-weight: 700; color: var(--text-gold); display: flex; align-items: center; gap: 8px;">
               <span>سلسلة دورة حياة العميل المالية:</span>
-              <span class="badge" style="background: rgba(212,175,55,0.12); color: var(--gold-light); font-weight: 600;">
+              <span class="badge" style="background: rgba(212,175,55,0.12); color: var(--text-gold); font-weight: 600;">
                 عميل ➔ عقد ➔ مشاريع ➔ مستخلصات ➔ دفعات ➔ محتجزات ➔ رصيد مستحق
               </span>
             </div>
@@ -3877,13 +3877,13 @@
           <div class="panel-card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); padding: 14px 18px; border-radius: 10px;">
               <div>
-                <h3 style="color: #34d399; font-size: 1.1rem; margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
+                <h3 style="color: var(--color-success, #34d399); font-size: 1.1rem; margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
                   <span>📱 إدارة حسابات وصلاحيات وتطبيقات العملاء (Client App)</span>
                 </h3>
                 <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">التحكم الكامل في وصول العملاء لتطبيق أندرويد والبوابة، وتحديد المشاريع والخصائص المسموحة</p>
               </div>
               <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="color: #34d399; border-color: #10b981;">
+                <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="color: var(--color-success, #34d399); border-color: #10b981;">
                   ↗️ فتح صفحة إدارة العملاء الكاملة
                 </a>
                 <button id="clientAppAddUser" type="button" class="btn btn-sm" style="background: #10b981; color: #000; font-weight: 700; border: none;" onclick="Settings.openClientUserModal()">
@@ -3896,19 +3896,19 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
               <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
                 <div style="font-size: 0.8rem; color: var(--text-muted);">إجمالي حسابات العملاء</div>
-                <div style="font-size: 1.3rem; font-weight: bold; color: #34d399;" id="statClientUsersTotal">0</div>
+                <div style="font-size: 1.3rem; font-weight: bold; color: var(--color-success, #34d399);" id="statClientUsersTotal">0</div>
               </div>
               <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
                 <div style="font-size: 0.8rem; color: var(--text-muted);">الحسابات النشطة</div>
-                <div style="font-size: 1.3rem; font-weight: bold; color: #10b981;" id="statClientUsersActive">0</div>
+                <div style="font-size: 1.3rem; font-weight: bold; color: var(--color-success, #10b981);" id="statClientUsersActive">0</div>
               </div>
               <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
                 <div style="font-size: 0.8rem; color: var(--text-muted);">حالة الأمان وتقييد البيانات</div>
-                <div style="font-size: 0.95rem; font-weight: bold; color: #10b981;"><i class="fas fa-shield-alt"></i> Deny by Default (نشط)</div>
+                <div style="font-size: 0.95rem; font-weight: bold; color: var(--color-success, #10b981);"><i class="fas fa-shield-alt"></i> Deny by Default (نشط)</div>
               </div>
               <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 8px;">
                 <div style="font-size: 0.8rem; color: var(--text-muted);">المصادقة بخطوتين (2FA)</div>
-                <div style="font-size: 0.95rem; font-weight: bold; color: var(--gold-light);">OTP + PIN مفعل</div>
+                <div style="font-size: 0.95rem; font-weight: bold; color: var(--text-gold);">OTP + PIN مفعل</div>
               </div>
             </div>
 
@@ -3969,17 +3969,17 @@
         <div id="pane_settings_users" class="settings-pane">
           <div class="panel-card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap;">
-              <h3 style="color: var(--gold-light); font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+              <h3 style="color: var(--text-gold); font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
                 <span>قائمة المستخدمين وصلاحيات الوصول</span>
               </h3>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnSecuritySessions" onclick="Auth.openSecuritySessionsModal()" title="إعدادات الأمان وسياسة الجلسات والأجهزة وصلاحية التوكن" style="display: none !important; border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.08); font-weight: 700;">
-                  🛡️ الأمان والجلسات <span id="currentSessionModeBadge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; margin-right: 4px;">متعددة (3)</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnSecuritySessions" onclick="Auth.openSecuritySessionsModal()" title="إعدادات الأمان وسياسة الجلسات والأجهزة وصلاحية التوكن" style="display: none !important; border-color: #10b981; color: var(--color-success, #10b981); background: rgba(16, 185, 129, 0.08); font-weight: 700;">
+                  🛡️ الأمان والجلسات <span id="currentSessionModeBadge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #10b981); margin-right: 4px;">متعددة (3)</span>
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnLockTimeoutSettings" onclick="Auth.openLockTimeoutModal()" title="تحديد مهلة فترة القفل التلقائي وقفل الشاشة">
-                  ⏱️ مهلة فترة القفل <span id="currentLockTimeoutBadge" class="badge" style="background: rgba(212, 175, 55, 0.2); color: #d4af37; margin-right: 4px;">15 دقيقة</span>
+                  ⏱️ مهلة فترة القفل <span id="currentLockTimeoutBadge" class="badge" style="background: rgba(212, 175, 55, 0.2); color: var(--text-gold, #d4af37); margin-right: 4px;">15 دقيقة</span>
                 </button>
-                <button type="button" class="btn btn-secondary btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08);" onclick="Auth.logout()" title="تسجيل الخروج مع أخذ نسخة احتياطية فورية لقاعدة البيانات">
+                <button type="button" class="btn btn-secondary btn-sm" style="color: var(--color-danger, #ef4444); border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08);" onclick="Auth.logout()" title="تسجيل الخروج مع أخذ نسخة احتياطية فورية لقاعدة البيانات">
                   🚪 تسجيل خروج (نسخ احتياطي)
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="Settings.openNewUserModal()">+ إضافة مستخدم جديد</button>
@@ -4007,7 +4007,7 @@
         <!-- تبويب 2: بيانات الشركة -->
         <div id="pane_settings_company" class="settings-pane" style="display: none;">
           <div class="panel-card" style="max-width: 800px; margin: 0 auto;">
-            <h3 style="color: var(--gold-light); margin-bottom: 16px; font-size: 1.05rem; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">معلومات وهوية المؤسسة والاتصال</h3>
+            <h3 style="color: var(--text-gold); margin-bottom: 16px; font-size: 1.05rem; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">معلومات وهوية المؤسسة والاتصال</h3>
             <form id="companySettingsForm" onsubmit="Settings.saveCompanySettings(event)">
               <div class="form-group">
                 <label>اسم الشركة بالعربي <span style="color: var(--accent-red);">*</span></label>
@@ -4051,11 +4051,11 @@
             <!-- العمود الأول: نموذج إعدادات وتخصيص الطباعة -->
             <div class="panel-card">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                <h3 style="color: var(--gold-light); font-size: 1.1rem; display: flex; align-items: center; gap: 8px; margin: 0;">
+                <h3 style="color: var(--text-gold); font-size: 1.1rem; display: flex; align-items: center; gap: 8px; margin: 0;">
                   <svg class="icon" width="20" height="20"><use href="#icon-print"></use></svg>
                   <span>تصميم المطبوعات والتقارير</span>
                 </h3>
-                <span style="font-size: 0.76rem; background: rgba(212,175,55,0.12); color: var(--gold-light); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(212,175,55,0.3);">
+                <span style="font-size: 0.76rem; background: rgba(212,175,55,0.12); color: var(--text-gold); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(212,175,55,0.3);">
                   تحكم كامل بجميع أوراق ومستندات النظام 🖨️
                 </span>
               </div>
@@ -4577,7 +4577,7 @@
                   🛡️
                 </div>
                 <div>
-                  <h3 style="color: var(--gold-light); font-size: 1.25rem; margin: 0; font-weight: 700;">
+                  <h3 style="color: var(--text-gold); font-size: 1.25rem; margin: 0; font-weight: 700;">
                     منظومة النسخ الاحتياطي واستعادة البيانات وإدارة الكوارث (Enterprise Disaster Recovery)
                   </h3>
                   <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 3px 0 0 0;">
@@ -4600,7 +4600,7 @@
               <!-- بطاقة 1: آخر نسخة معتمدة -->
               <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm); padding: 14px;">
                 <div style="color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 4px;">🛡️ آخر نسخة معتمدة وسليمة:</div>
-                <div id="drLastBackupDate" style="font-weight: 700; color: #f8fafc; font-size: 0.95rem; margin-bottom: 4px;">جاري التحميل...</div>
+                <div id="drLastBackupDate" style="font-weight: 700; color: var(--text-primary, #f8fafc); font-size: 0.95rem; margin-bottom: 4px;">جاري التحميل...</div>
                 <div id="drLastBackupFile" style="font-size: 0.8rem; margin-bottom: 4px;">-</div>
                 <div id="drLastBackupHash"></div>
               </div>
@@ -4616,17 +4616,17 @@
               <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm); padding: 14px;">
                 <div style="color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 4px;">💾 مسار التخزين وديمومة Railway:</div>
                 <div id="drStoragePersist" style="font-weight: 700; font-size: 0.88rem; margin-bottom: 4px;">جاري الفحص...</div>
-                <div id="drStoragePath" style="font-size: 0.75rem; color: #94a3b8; font-family: monospace; direction: ltr; text-align: right; word-break: break-all;">-</div>
+                <div id="drStoragePath" style="font-size: 0.75rem; color: var(--text-secondary, #94a3b8); font-family: monospace; direction: ltr; text-align: right; word-break: break-all;">-</div>
               </div>
 
               <!-- بطاقة 4: إجمالي النسخ وسياسة الاحتفاظ -->
               <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm); padding: 14px;">
                 <div style="color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 4px;">📊 النسخ وسياسة الاحتفاظ النشطة:</div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <span id="drTotalCount" style="font-weight: 700; color: #38bdf8; font-size: 0.95rem;">-</span>
-                  <span id="drTotalSize" style="font-size: 0.82rem; color: var(--gold-light); font-weight: 600;">-</span>
+                  <span id="drTotalCount" style="font-weight: 700; color: var(--color-info, #38bdf8); font-size: 0.95rem;">-</span>
+                  <span id="drTotalSize" style="font-size: 0.82rem; color: var(--text-gold); font-weight: 600;">-</span>
                 </div>
-                <div style="font-size: 0.74rem; color: #94a3b8; line-height: 1.3;">
+                <div style="font-size: 0.74rem; color: var(--text-secondary, #94a3b8); line-height: 1.3;">
                   14 يوماً للنسخ اليومية | 8 أسابيع للأسبوعية | 12 شهراً للشهرية مع استثناء النسخ المحمية 📌
                 </div>
               </div>
@@ -4635,7 +4635,7 @@
             <!-- جدول سجل النسخ الاحتياطية المعتمدة -->
             <div style="margin-top: 10px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h4 style="color: var(--gold-light); font-size: 0.95rem; margin: 0; display: flex; align-items: center; gap: 6px;">
+                <h4 style="color: var(--text-gold); font-size: 0.95rem; margin: 0; display: flex; align-items: center; gap: 6px;">
                   <span>📋 سجل النسخ الاحتياطية المعتمدة (Live Verified Backups)</span>
                 </h4>
                 <span style="font-size: 0.75rem; color: var(--text-secondary);">يتم فحص B-Tree وبصمة SHA-256 تلقائياً قبل اعتماد أي نسخة</span>
@@ -4665,7 +4665,7 @@
 
           <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-              <h3 style="color: var(--gold-light); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
+              <h3 style="color: var(--text-gold); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
                 <span>إعدادات الربط السحابي والاتصال بقواعد البيانات (Online / Offline)</span>
               </h3>
@@ -4711,7 +4711,7 @@
           <!-- بطاقة مميزة: إدارة وترحيل قاعدة بيانات MySQL (MySQL Enterprise & Migration) -->
           <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold); background: linear-gradient(135deg, rgba(212, 175, 55, 0.04) 0%, rgba(26, 38, 57, 0.3) 100%);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-              <h3 style="color: var(--gold-light); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
+              <h3 style="color: var(--text-gold); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 4.02 2 6.5s4.48 4.5 10 4.5 10-2.02 10-4.5S17.52 2 12 2zm0 6c-3.86 0-7-1.34-7-3s3.14-3 7-3 7 1.34 7 3-3.14 3-7 3zm0 4.5c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5zm0 6c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5z"/></svg>
                 <span>إدارة وترحيل قاعدة بيانات MySQL الاحترافية (Enterprise MySQL Database)</span>
               </h3>
@@ -4767,7 +4767,7 @@
             <!-- قسم ترحيل البيانات من SQLite إلى MySQL -->
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: rgba(255, 255, 255, 0.02); padding: 16px; border-radius: var(--radius-sm); border: 1px solid rgba(212, 175, 55, 0.2);">
               <div style="max-width: 650px;">
-                <h4 style="color: var(--gold-light); margin: 0 0 6px 0; font-size: 0.95rem;">ترحيل شامل للبيانات من SQLite إلى MySQL (Data Migration Tool)</h4>
+                <h4 style="color: var(--text-gold); margin: 0 0 6px 0; font-size: 0.95rem;">ترحيل شامل للبيانات من SQLite إلى MySQL (Data Migration Tool)</h4>
                 <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0; line-height: 1.5;">
                   ينقل هذا الخيار كافة الجداول الـ 31 (المشاريع، المستخلصات، العقود، قيود اليومية، السندات المالية، المخزون، والمستخدمين) من قاعدة SQLite إلى خادم MySQL المنشأ، مع الحفاظ الكامل على المفاتيح الأجنبية وأرصدة الحسابات دون المساس بالبيانات القديمة.
                 </p>
@@ -4788,7 +4788,7 @@
                   🛡️
                 </div>
                 <div>
-                  <h3 style="color: var(--gold-light); font-size: 1.1rem; margin: 0; font-weight: 700;">
+                  <h3 style="color: var(--text-gold); font-size: 1.1rem; margin: 0; font-weight: 700;">
                     الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين (Automatic Backup Schedule)
                   </h3>
                   <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 2px 0 0 0;">
@@ -4807,15 +4807,15 @@
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
                 <div>
                   <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">حالة الجدولة الآلية:</span>
-                  <strong id="liveBackupStatusBadge" style="font-size: 0.95rem; color: #4ade80;">🟢 مفعل ومنتظم</strong>
+                  <strong id="liveBackupStatusBadge" style="font-size: 0.95rem; color: var(--color-success, #4ade80);">🟢 مفعل ومنتظم</strong>
                 </div>
                 <div>
                   <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">التكرار والموعد:</span>
-                  <strong id="liveBackupIntervalText" style="font-size: 0.95rem; color: #f8fafc;">يومياً في تمام 02:00 ص</strong>
+                  <strong id="liveBackupIntervalText" style="font-size: 0.95rem; color: var(--text-primary, #f8fafc);">يومياً في تمام 02:00 ص</strong>
                 </div>
                 <div>
                   <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">آخر نسخة تم حفظها:</span>
-                  <strong id="liveBackupLastRunText" style="font-size: 0.95rem; color: var(--gold-light);">-</strong>
+                  <strong id="liveBackupLastRunText" style="font-size: 0.95rem; color: var(--text-gold);">-</strong>
                 </div>
                 <div>
                   <span style="color: var(--text-secondary); font-size: 0.78rem; display: block;">موعد النسخة القادمة:</span>
@@ -4926,7 +4926,7 @@
           <div class="panel-card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
               <div>
-                <h3 style="color: var(--gold-light); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <h3 style="color: var(--text-gold); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
                   <span>سجل نسخ الخروج التلقائية (حفظ أحدث التعديلات)</span>
                 </h3>
                 <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0;">يتم إنشاء هذه النسخ آلياً عند تسجيل كل خروج للمستخدم لضمان العودة إلى آخر حالة عمل كان عليها المشروع سواءً أونلاين أو أوفلاين.</p>
@@ -4967,7 +4967,7 @@
               <button class="modal-close-btn" onclick="App.closeModal('createBackupModal')">&times;</button>
             </div>
             <form onsubmit="Settings.executeCreateBackup(event)" style="padding: 12px 0;">
-              <div style="background: rgba(212, 175, 55, 0.08); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px; font-size: 0.85rem; line-height: 1.5; color: #f8fafc;">
+              <div style="background: rgba(212, 175, 55, 0.08); border: 1px solid var(--border-gold); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px; font-size: 0.85rem; line-height: 1.5; color: var(--text-primary, #f8fafc);">
                 🛡️ <strong>دورة الاعتماد الصارمة:</strong> سيقوم المحرك بإجراء WAL Checkpoint ذري، فحص B-Tree عميق، التأكد من سلامة الجداول وتوازن الحسابات، وحساب بصمة SHA-256 قبل اعتماد النسخة.
               </div>
 
@@ -4987,12 +4987,12 @@
                     <input type="checkbox" id="newBackupEncrypt" onchange="document.getElementById('newBackupPassphraseGroup').style.display = this.checked ? 'block' : 'none'">
                     <span>🔒 تشفير النسخة عسكرياً (AES-256-GCM + PBKDF2)</span>
                   </label>
-                  <span style="font-size: 0.72rem; color: #4ade80;">معايير البنوك</span>
+                  <span style="font-size: 0.72rem; color: var(--color-success, #4ade80);">معايير البنوك</span>
                 </div>
                 <div id="newBackupPassphraseGroup" style="display: none; margin-top: 10px;">
                   <label for="newBackupPassphrase" style="font-size: 0.82rem;">كلمة مرور التشفير (Passphrase)</label>
                   <input type="password" id="newBackupPassphrase" class="form-control" placeholder="أدخل كلمة مرور قوية (4 خانات على الأقل)">
-                  <small style="color: #f87171; font-size: 0.72rem; display: block; margin-top: 4px;">⚠️ تحذير: احفظ كلمة المرور بأمان، فلن يمكن استعادة النسخة بدونها.</small>
+                  <small style="color: var(--color-danger, #f87171); font-size: 0.72rem; display: block; margin-top: 4px;">⚠️ تحذير: احفظ كلمة المرور بأمان، فلن يمكن استعادة النسخة بدونها.</small>
                 </div>
               </div>
 
@@ -5028,14 +5028,14 @@
               <button class="modal-close-btn" onclick="App.closeModal('sandboxTestProgressModal')">&times;</button>
             </div>
             <div style="padding: 14px 0;">
-              <div style="font-size: 0.88rem; margin-bottom: 12px; color: var(--gold-light);">
+              <div style="font-size: 0.88rem; margin-bottom: 12px; color: var(--text-gold);">
                 النسخة المستهدفة للفحص: <strong id="sandboxTestTargetName" style="direction: ltr; font-family: monospace;">-</strong>
               </div>
 
               <!-- مؤشر الانتظار -->
               <div id="sandboxTestSpinner" style="text-align: center; padding: 25px 15px;">
                 <div style="font-size: 2.2rem; margin-bottom: 10px;">⏳</div>
-                <div style="font-weight: 700; color: #38bdf8; margin-bottom: 6px;">جاري فحص النسخة في بيئة معزولة Sandbox...</div>
+                <div style="font-weight: 700; color: var(--color-info, #38bdf8); margin-bottom: 6px;">جاري فحص النسخة في بيئة معزولة Sandbox...</div>
                 <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
                   يتم التحقق من فك التشفير، فحص صفحات B-Tree، مطابقة الـ 119 جدولا، فحص ميزان المراجعة، ثم حذف البيئة المؤقتة دون لمس الإنتاج.
                 </div>
@@ -5054,7 +5054,7 @@
         <div class="modal-overlay" id="drProductionRestoreModal">
           <div class="modal-box" style="max-width: 600px;">
             <div class="modal-header">
-              <h3 style="color: #f87171; display: flex; align-items: center; gap: 8px;">
+              <h3 style="color: var(--color-danger, #f87171); display: flex; align-items: center; gap: 8px;">
                 <span>🚨 تأكيد الاستعادة الإنتاجية لقاعدة البيانات (Production Restore)</span>
               </h3>
               <button class="modal-close-btn" onclick="App.closeModal('drProductionRestoreModal')">&times;</button>
@@ -5073,7 +5073,7 @@
               </div>
 
               <div style="font-size: 0.88rem; margin-bottom: 14px;">
-                النسخة المراد استعادتها: <strong id="drRestoreFileName" style="color: var(--gold-light); direction: ltr; font-family: monospace;">-</strong>
+                النسخة المراد استعادتها: <strong id="drRestoreFileName" style="color: var(--text-gold); direction: ltr; font-family: monospace;">-</strong>
               </div>
 
               <!-- حقل فك التشفير إذا كانت مشفرة -->
@@ -5090,7 +5090,7 @@
 
               <!-- كلمة التأكيد الإلزامية لمنع الخطأ البشري -->
               <div class="form-group" style="margin-bottom: 16px;">
-                <label for="drRestoreConfirmInput" style="font-weight: 700; color: #f87171;">
+                <label for="drRestoreConfirmInput" style="font-weight: 700; color: var(--color-danger, #f87171);">
                   لتأكيد الاستبدال والاستعادة، اكتب كلمة (استعادة) في الحقل التالي:
                 </label>
                 <input type="text" id="drRestoreConfirmInput" class="form-control" placeholder="اكتب: استعادة" style="border-color: #ef4444; font-weight: bold; text-align: center;" required>
@@ -5151,7 +5151,7 @@
           </div>
           <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px;">
             <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px;">زمن الاستجابة (Latency)</div>
-            <div id="connModalLatency" style="font-size: 0.95rem; font-weight: 700; color: var(--gold-light);">-</div>
+            <div id="connModalLatency" style="font-size: 0.95rem; font-weight: 700; color: var(--text-gold);">-</div>
           </div>
         </div>
 
@@ -5166,7 +5166,7 @@
         </div>
 
         <div style="background: rgba(212, 175, 55, 0.05); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px;">
-          <div style="font-size: 0.8rem; font-weight: 700; color: var(--gold-light); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+          <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-gold); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
             <span>🛡️ آخر نسخة خروج تلقائية (لحفظ التعديلات):</span>
           </div>
           <div id="connModalLastBackup" style="font-size: 0.82rem; line-height: 1.5;">-</div>
@@ -5201,7 +5201,7 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">العميل</label>
-            <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('projClientSelect')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة عميل جديد</a>
+            <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('projClientSelect')" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ إضافة عميل جديد</a>
           </div>
           <select id="projClientSelect" class="form-control">
             <option value="">اختر العميل...</option>
@@ -5326,7 +5326,7 @@
       </div>
       <form id="issueMaterialForm" onsubmit="Inventory.submitIssueMaterial(event)">
         <input type="hidden" id="issueItemId">
-        <p style="color: var(--gold-light); font-weight: bold; margin-bottom: 12px;" id="issueItemName"></p>
+        <p style="color: var(--text-gold); font-weight: bold; margin-bottom: 12px;" id="issueItemName"></p>
         <div class="form-group">
           <label>المشروع المستلم</label>
           <select id="issueProjectSelect" class="form-control" required onchange="Inventory.onIssueProjectChange(this.value)"></select>
@@ -5334,7 +5334,7 @@
         <div class="form-group" id="issueBoqGroup" style="display: none;">
           <label style="display: flex; justify-content: space-between; align-items: center;">
             <span>بند جدول الكميات المرتبط (BOQ Item)</span>
-            <span style="font-size: 0.72rem; color: #38bdf8;">🔗 ربط هندسي ومحاسبي</span>
+            <span style="font-size: 0.72rem; color: var(--color-info, #38bdf8);">🔗 ربط هندسي ومحاسبي</span>
           </label>
           <select id="issueBoqSelect" class="form-control">
             <option value="">صرف عام للمشروع (أو اختر بند BOQ)...</option>
@@ -5433,7 +5433,7 @@
           <div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <h3 id="chainClientName" style="margin: 0; font-size: 1.25rem; color: #fff;">-</h3>
-              <span id="chainClientCompanyBadge" class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">-</span>
+              <span id="chainClientCompanyBadge" class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);">-</span>
             </div>
             <span style="font-size: 0.78rem; color: var(--text-secondary);">سلسلة دورة حياة العميل المالية والربط الآلي: عقد ➔ مشاريع ➔ مستخلصات ➔ دفعات ➔ رصيد</span>
           </div>
@@ -5450,18 +5450,18 @@
       <div style="padding: 18px 20px;">
         <!-- شريط التدفق التفاعلي المرئي لسلسلة دورة حياة العميل -->
         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px;">
-          <div style="font-size: 0.8rem; font-weight: 700; color: var(--gold-light); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-gold); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
             <span>⚡ تسلسل الأثر المالي الآلي في حساب العميل</span>
             <span style="font-size: 0.72rem; color: var(--accent-green); font-weight: normal;">● نظام آلي متكامل بدون انحراف (Zero Drift)</span>
           </div>
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 0.78rem;">
             <div style="background: rgba(212, 175, 55, 0.15); border: 1px solid var(--gold-light); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
-              <div style="font-size: 0.7rem; color: var(--gold-light);">1. العميل</div>
+              <div style="font-size: 0.7rem; color: var(--text-gold);">1. العميل</div>
               <strong id="pipeClientName" style="color: #fff; font-size: 0.78rem;">-</strong>
             </div>
             <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
             <div style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
-              <div style="font-size: 0.7rem; color: #38bdf8;">2. العقود</div>
+              <div style="font-size: 0.7rem; color: var(--color-info, #38bdf8);">2. العقود</div>
               <strong id="pipeContractsCount" style="color: #fff; font-size: 0.78rem;">0 عقد</strong>
             </div>
             <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
@@ -5471,7 +5471,7 @@
             </div>
             <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
             <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
-              <div style="font-size: 0.7rem; color: #facc15;">4. المستخلصات</div>
+              <div style="font-size: 0.7rem; color: var(--color-warning, #facc15);">4. المستخلصات</div>
               <strong id="pipeBillsCount" style="color: #fff; font-size: 0.78rem;">0 مستخلص</strong>
             </div>
             <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
@@ -5481,7 +5481,7 @@
             </div>
             <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
             <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 6px 10px; text-align: center; flex: 1; min-width: 90px;">
-              <div style="font-size: 0.7rem; color: #f59e0b;">6. محتجزات الضمان</div>
+              <div style="font-size: 0.7rem; color: var(--color-warning, #f59e0b);">6. محتجزات الضمان</div>
               <strong id="pipeRetentionActive" style="color: #fff; font-size: 0.78rem;">0</strong>
             </div>
             <span style="color: var(--text-secondary); font-weight: bold;">➔</span>
@@ -5496,17 +5496,17 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px;">
           <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #38bdf8;">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي مبالغ العقود</div>
-            <div id="chainSummaryContracts" style="font-size: 1.1rem; font-weight: 700; color: #38bdf8; margin: 4px 0;">0</div>
+            <div id="chainSummaryContracts" style="font-size: 1.1rem; font-weight: 700; color: var(--color-info, #38bdf8); margin: 4px 0;">0</div>
             <div id="chainSummaryContractsSub" style="font-size: 0.68rem; color: var(--text-secondary);">0 عقود مسجلة</div>
           </div>
           <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--gold-light);">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي الأعمال المنجزة (Gross)</div>
-            <div id="chainSummaryGross" style="font-size: 1.1rem; font-weight: 700; color: var(--gold-light); margin: 4px 0;">0</div>
+            <div id="chainSummaryGross" style="font-size: 1.1rem; font-weight: 700; color: var(--text-gold); margin: 4px 0;">0</div>
             <div id="chainSummaryGrossSub" style="font-size: 0.68rem; color: var(--text-secondary);">قبل الاستقطاعات التعاقدية</div>
           </div>
           <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #eab308;">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">صافي المطالبات المفوترة</div>
-            <div id="chainSummaryInvoiced" style="font-size: 1.1rem; font-weight: 700; color: #facc15; margin: 4px 0;">0</div>
+            <div id="chainSummaryInvoiced" style="font-size: 1.1rem; font-weight: 700; color: var(--color-warning, #facc15); margin: 4px 0;">0</div>
             <div id="chainSummaryInvoicedSub" style="font-size: 0.68rem; color: var(--text-secondary);">المستخلصات المعتمدة</div>
           </div>
           <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--accent-green);">
@@ -5516,7 +5516,7 @@
           </div>
           <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #f59e0b;">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">محتجز الضمان القائم</div>
-            <div id="chainSummaryRetention" style="font-size: 1.1rem; font-weight: 700; color: #f59e0b; margin: 4px 0;">0</div>
+            <div id="chainSummaryRetention" style="font-size: 1.1rem; font-weight: 700; color: var(--color-warning, #f59e0b); margin: 4px 0;">0</div>
             <div id="chainSummaryRetentionSub" style="font-size: 0.68rem; color: var(--text-secondary);">محتجز للصيانة والضمان</div>
           </div>
           <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--accent-red); background: rgba(239, 68, 68, 0.05);">
@@ -5662,7 +5662,7 @@
         <div style="background: rgba(212, 175, 55, 0.08); border: 1px dashed var(--gold-light); border-radius: 8px; padding: 10px; margin-bottom: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم المستخلص المولد:</span>
-            <strong id="newBillAutoNo" style="font-family: monospace; font-size: 1.05rem; color: var(--gold-light);">BILL-XXXX</strong>
+            <strong id="newBillAutoNo" style="font-family: monospace; font-size: 1.05rem; color: var(--text-gold);">BILL-XXXX</strong>
           </div>
         </div>
 
@@ -5696,24 +5696,24 @@
 
         <!-- قسم الحسابات التعاقدية وحاسبة نسبة الإنجاز الآلية -->
         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-          <div style="font-size: 0.82rem; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-gold); margin-bottom: 8px;">
             🧮 الاحتساب التعاقدي للمستخلص وربط نسبة الإنجاز
           </div>
 
           <!-- شريط حاسبة قفزة نسبة الإنجاز والربط المالي التلقائي -->
           <div id="modalBillProgressSection" style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <div style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+              <div style="font-size: 0.8rem; font-weight: 700; color: var(--color-info, #38bdf8); display: flex; align-items: center; gap: 6px;">
                 <span>📈 حاسبة نسبة الإنجاز الفعلي للمشروع:</span>
               </div>
-              <span id="modalBillContractValBadge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">قيمة العقد: 0</span>
+              <span id="modalBillContractValBadge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8); padding: 2px 8px; border-radius: 4px; font-weight: 600;">قيمة العقد: 0</span>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
               <div style="background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 6px; font-size: 0.75rem;">
                 <span style="color: var(--text-secondary);">الإنجاز التراكمي السابق:</span>
                 <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 2px;">
-                  <strong id="modalBillPrevProgressPct" style="color: #94a3b8; font-size: 0.95rem;">0%</strong>
+                  <strong id="modalBillPrevProgressPct" style="color: var(--text-secondary, #94a3b8); font-size: 0.95rem;">0%</strong>
                   <span id="modalBillPrevBilledAmt" style="color: var(--text-secondary); font-size: 0.72rem;">(0)</span>
                 </div>
               </div>
@@ -5732,11 +5732,11 @@
 
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.74rem; background: rgba(255,255,255,0.02); padding: 5px 8px; border-radius: 5px;">
               <span style="color: var(--text-secondary);">قيمة أعمال الفترة الناتجة عن فرق الإنجاز:</span>
-              <strong id="modalBillCalculatedWorkAmt" style="color: var(--gold-light); font-size: 0.88rem;">0</strong>
+              <strong id="modalBillCalculatedWorkAmt" style="color: var(--text-gold); font-size: 0.88rem;">0</strong>
             </div>
             <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;">
               <input type="checkbox" id="modalBillAutoUpdateProjectProgress" checked style="cursor: pointer;">
-              <label for="modalBillAutoUpdateProjectProgress" style="font-size: 0.72rem; color: #94a3b8; cursor: pointer; margin-bottom: 0;">
+              <label for="modalBillAutoUpdateProjectProgress" style="font-size: 0.72rem; color: var(--text-secondary, #94a3b8); cursor: pointer; margin-bottom: 0;">
                 تحديث نسبة إنجاز المشروع في النظام تلقائياً إلى هذه النسبة فور اعتماد المستخلص
               </label>
             </div>
@@ -5764,8 +5764,8 @@
               <input type="number" id="modalBillOtherDeduction" class="form-control" value="0" step="any" oninput="App.calcNewBillValues(true)">
             </div>
             <div class="form-group">
-              <label style="font-size: 0.82rem; color: var(--gold-light); font-weight: 700;">صافي المستخلص والمطالبة (Net Due)</label>
-              <input type="number" id="modalBillNetAmount" class="form-control" value="0" readonly style="font-weight: 800; color: var(--gold-light); background: rgba(212, 175, 55, 0.1);">
+              <label style="font-size: 0.82rem; color: var(--text-gold); font-weight: 700;">صافي المستخلص والمطالبة (Net Due)</label>
+              <input type="number" id="modalBillNetAmount" class="form-control" value="0" readonly style="font-weight: 800; color: var(--text-gold); background: rgba(212, 175, 55, 0.1);">
             </div>
           </div>
         </div>
@@ -5804,7 +5804,7 @@
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; text-align: center;">
           <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 8px; border-radius: 8px;">
             <div style="font-size: 0.7rem; color: var(--text-secondary);">قيمة العقد</div>
-            <strong id="projProgContractVal" style="font-size: 0.9rem; color: #38bdf8;">0</strong>
+            <strong id="projProgContractVal" style="font-size: 0.9rem; color: var(--color-info, #38bdf8);">0</strong>
           </div>
           <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); padding: 8px; border-radius: 8px;">
             <div style="font-size: 0.7rem; color: var(--text-secondary);">القيمة المكتسبة (EV)</div>
@@ -5903,7 +5903,7 @@
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
             <span>قيمة العقد المعدلة بعد الأمر التغييري:</span>
-            <strong id="projVoNewContractVal" style="color: var(--gold-light); font-size: 0.95rem;">0</strong>
+            <strong id="projVoNewContractVal" style="color: var(--text-gold); font-size: 0.95rem;">0</strong>
           </div>
         </div>
 
@@ -5968,7 +5968,7 @@
             <div class="form-group">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <label style="margin: 0;">فئة النشاط والتوريد <span style="color: var(--accent-red, #ef4444);">*</span></label>
-                <a href="javascript:void(0)" onclick="Accounting.toggleCustomCategoryInput(true)" style="font-size: 0.75rem; color: #3b82f6; text-decoration: underline;">+ إدخال نشاط مخصص ✍️</a>
+                <a href="javascript:void(0)" onclick="Accounting.toggleCustomCategoryInput(true)" style="font-size: 0.75rem; color: var(--color-info, #3b82f6); text-decoration: underline;">+ إدخال نشاط مخصص ✍️</a>
               </div>
               <select id="suppCategory" class="form-control" onchange="Accounting.onCategorySelectChange(this)" required>
                 <option value="إلكترونيات وأنظمة أمان">إلكترونيات وأنظمة أمان ⚡</option>
@@ -6012,10 +6012,10 @@
         <!-- القسم 2: الحساب البنكي والعملة ونوع الصرف ومدة التوريد -->
         <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h4 style="margin: 0; font-size: 0.95rem; color: #10b981; display: flex; align-items: center; gap: 6px;">
+            <h4 style="margin: 0; font-size: 0.95rem; color: var(--color-success, #10b981); display: flex; align-items: center; gap: 6px;">
               <i class="fa fa-university"></i> البيانات المصرفية والتعاقدية (Bank & Payment Policy)
             </h4>
-            <span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; font-size: 0.72rem;">تشفير آمن AES-256 🛡️</span>
+            <span class="badge" style="background: rgba(16,185,129,0.15); color: var(--color-success, #10b981); font-size: 0.72rem;">تشفير آمن AES-256 🛡️</span>
           </div>
 
           <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 12px;">
@@ -6034,10 +6034,10 @@
             </div>
 
             <div class="form-group" hidden style="display: none;">
-              <label>رقم المبلغ (الرصيد الافتتاحي) <span id="suppCurrencyBadgeHint" style="color: #3b82f6; font-size: 0.78rem; font-weight: 700;">(ر.ي)</span></label>
+              <label>رقم المبلغ (الرصيد الافتتاحي) <span id="suppCurrencyBadgeHint" style="color: var(--color-info, #3b82f6); font-size: 0.78rem; font-weight: 700;">(ر.ي)</span></label>
               <div style="display: flex; gap: 4px; align-items: center;">
-                <input type="number" id="suppBalance" class="form-control" step="0.01" min="0" placeholder="0.00" value="0.00" style="font-weight: 700; color: #3b82f6;" oninput="Accounting.updateSupplierLiveBalancePreview()">
-                <span id="suppCurrencySymbolBadge" style="background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #3b82f6; padding: 7px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;">ر.ي</span>
+                <input type="number" id="suppBalance" class="form-control" step="0.01" min="0" placeholder="0.00" value="0.00" style="font-weight: 700; color: var(--color-info, #3b82f6);" oninput="Accounting.updateSupplierLiveBalancePreview()">
+                <span id="suppCurrencySymbolBadge" style="background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: var(--color-info, #3b82f6); padding: 7px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;">ر.ي</span>
               </div>
             </div>
           </div>
@@ -6082,25 +6082,25 @@
             <span style="font-weight: 700; font-size: 0.9rem; color: var(--accent-amber, #f59e0b);">
               <i class="fa fa-calculator"></i> التجميعات المالية للمورد (تُحسب تلقائياً من واقع فواتير وسندات النظام):
             </span>
-            <span class="badge" style="background: rgba(59,130,246,0.15); color: #3b82f6; font-size: 0.72rem;">تجميع لحظي 100% (Zero Static Drift)</span>
+            <span class="badge" style="background: rgba(59,130,246,0.15); color: var(--color-info, #3b82f6); font-size: 0.72rem;">تجميع لحظي 100% (Zero Static Drift)</span>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; text-align: center;">
             <div style="background: var(--card-bg, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #334155); border-right: 3px solid #3b82f6;">
               <div style="font-size: 0.75rem; color: var(--text-secondary);">إجمالي المشتريات منه من سابق</div>
-              <div id="dispSuppInvoicesCount" style="font-size: 1.25rem; font-weight: 700; color: #3b82f6; margin-top: 4px;">0 فاتورة</div>
+              <div id="dispSuppInvoicesCount" style="font-size: 1.25rem; font-weight: 700; color: var(--color-info, #3b82f6); margin-top: 4px;">0 فاتورة</div>
               <div id="dispSuppInvoicedAmount" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">إجمالي المفوتر: 0.00 ر.ي</div>
             </div>
 
             <div style="background: var(--card-bg, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #334155); border-right: 3px solid #10b981;">
               <div style="font-size: 0.75rem; color: var(--text-secondary);">المبالغ المسددة من سابق (SUM Paid)</div>
-              <div id="dispSuppTotalPaid" style="font-size: 1.25rem; font-weight: 700; color: #10b981; margin-top: 4px;">0.00 ر.ي</div>
+              <div id="dispSuppTotalPaid" style="font-size: 1.25rem; font-weight: 700; color: var(--color-success, #10b981); margin-top: 4px;">0.00 ر.ي</div>
               <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">سندات صرف ومسواة</div>
             </div>
 
             <div style="background: var(--card-bg, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #334155); border-right: 3px solid #f59e0b;">
               <div style="font-size: 0.75rem; color: var(--text-secondary);">إجمالي الرصيد المستحق (المتبقي)</div>
-              <div id="dispSuppOutstanding" style="font-size: 1.25rem; font-weight: 700; color: #f59e0b; margin-top: 4px;">0.00 ر.ي</div>
+              <div id="dispSuppOutstanding" style="font-size: 1.25rem; font-weight: 700; color: var(--color-warning, #f59e0b); margin-top: 4px;">0.00 ر.ي</div>
               <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">المفوتر - المسدد (تلقائياً)</div>
             </div>
           </div>
@@ -6110,10 +6110,10 @@
         <!-- القسم 4: إرفاق فواتير الشراء ومستندات المورد (PDF أو ماسح ضوئي) -->
         <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h4 style="margin: 0; font-size: 0.95rem; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+            <h4 style="margin: 0; font-size: 0.95rem; color: var(--color-info, #38bdf8); display: flex; align-items: center; gap: 8px;">
               <i class="fa fa-file-invoice"></i> إرفاق فواتير الشراء والمستندات (PDF أو ماسح ضوئي 📄📸)
             </h4>
-            <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; font-size: 0.72rem;">أرشفة فواتير معتمدة</span>
+            <span class="badge" style="background: rgba(56,189,248,0.15); color: var(--color-info, #38bdf8); font-size: 0.72rem;">أرشفة فواتير معتمدة</span>
           </div>
 
           <!-- أزرار الإجراءات: رفع ملف PDF / صورة أو مسح ضوئي بالكاميرا -->
@@ -6121,17 +6121,17 @@
             <input type="file" id="suppInvoiceFileInput" accept="application/pdf,image/jpeg,image/png,image/webp" multiple style="display: none;" onchange="Accounting.handleSupplierInvoiceUpload(event)">
             <input type="file" id="suppInvoiceCameraInput" accept="image/*,application/pdf" capture="environment" style="display: none;" onchange="Accounting.handleSupplierInvoiceUpload(event)">
 
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceFileInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.4); color: #60a5fa; cursor: pointer;">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceFileInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.4); color: var(--color-info, #60a5fa); cursor: pointer;">
               <i class="fa fa-file-pdf"></i>
               <span>📄 إرفاق فاتورة PDF / صورة</span>
             </button>
 
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceCameraInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: #34d399; cursor: pointer;">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceCameraInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: var(--color-success, #34d399); cursor: pointer;">
               <i class="fa fa-camera"></i>
               <span>📷 ماسح ضوئي بالكاميرا (Scanner)</span>
             </button>
 
-            <button type="button" class="btn btn-secondary" onclick="Accounting.openLiveScannerModal()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: #fbbf24; cursor: pointer;" title="فتح نافذة المسح الضوئي المباشر بالفيديو">
+            <button type="button" class="btn btn-secondary" onclick="Accounting.openLiveScannerModal()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: var(--color-warning, #fbbf24); cursor: pointer;" title="فتح نافذة المسح الضوئي المباشر بالفيديو">
               <i class="fa fa-video"></i>
               <span>🎥 مسح ضوئي مباشر (Live Scanner)</span>
             </button>
@@ -6261,7 +6261,7 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">العميل / المستلم منه <span style="color: var(--accent-red);">*</span></label>
-            <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('modalRcClientSelect')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة عميل جديد</a>
+            <a href="javascript:void(0)" onclick="Accounting.openNewClientModal('modalRcClientSelect')" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ إضافة عميل جديد</a>
           </div>
           <input list="modalRcClientDatalist" id="modalRcClientInput" class="form-control" placeholder="اختر العميل أو اكتب اسمه مباشرة..." required oninput="Accounting.onClientInputChange(this.value)" onchange="Accounting.onClientInputChange(this.value)">
           <datalist id="modalRcClientDatalist"></datalist>
@@ -6270,7 +6270,7 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">الحساب المقابل للسند <span style="color: var(--accent-red);">*</span></label>
-            <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalRcAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
+            <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalRcAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
           </div>
           <select id="modalRcAccountSelect" class="form-control">
             <option value="">اختر الحساب الفرعي النشط...</option>
@@ -6285,7 +6285,7 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">المشروع المرتبط (اختياري - غير إلزامي)</label>
-            <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ إضافة مشروع جديد</a>
+            <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ إضافة مشروع جديد</a>
           </div>
           <select id="modalRcProjectSelect" class="form-control" onchange="Accounting.onReceiptProjectChange(this.value)">
             <option value="">عام / بدون مشروع محدد...</option>
@@ -6294,7 +6294,7 @@
 
         <!-- ربط السلسلة الهرمية المالية (عقد ➔ مستخلص ➔ دفعة ➔ رصيد العميل) -->
         <div style="background: rgba(212, 175, 55, 0.06); border: 1px solid rgba(212, 175, 55, 0.25); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-          <div style="font-weight: 700; color: var(--gold-light); font-size: 0.82rem; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-weight: 700; color: var(--text-gold); font-size: 0.82rem; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
             <span>🔗 ربط السلسلة المالية (عقد ➔ مستخلص ➔ دفعة)</span>
             <span style="font-size: 0.72rem; color: var(--text-secondary);">يتأثر رصيد العميل آلياً</span>
           </div>
@@ -6320,7 +6320,7 @@
             <select id="modalRcBillSelect" class="form-control" style="font-size: 0.82rem; font-weight: 600;" onchange="Accounting.onReceiptBillChange(this.value)">
               <option value="">اختر المستخلص لسداده وتحديث رصيد العميل آلياً...</option>
             </select>
-            <div id="modalRcBillRemainingHint" style="font-size: 0.75rem; color: var(--gold-light); margin-top: 4px; display: none;"></div>
+            <div id="modalRcBillRemainingHint" style="font-size: 0.75rem; color: var(--text-gold); margin-top: 4px; display: none;"></div>
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -6340,19 +6340,19 @@
         <div id="modalRcCheckRow" style="background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label id="modalRcFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">حساب الصندوق من دليل الحسابات *</label>
+              <label id="modalRcFaLabel" style="color: var(--color-info, #38bdf8); font-weight: bold; font-size: 0.82rem;">حساب الصندوق من دليل الحسابات *</label>
               <select id="modalRcFinancialAccountSelect" class="form-control">
                 <option value="">اختر الحساب المالي...</option>
               </select>
               <select id="modalRcBankAccountSelect" style="display: none;"></select>
             </div>
             <div class="form-group" id="modalRcCheckNoGroup" style="margin-bottom: 0;">
-              <label id="modalRcRefLabel" style="color: var(--gold-light); font-weight: bold; font-size: 0.82rem;">المرجع / رقم الشيك / المعاملة</label>
+              <label id="modalRcRefLabel" style="color: var(--text-gold); font-weight: bold; font-size: 0.82rem;">المرجع / رقم الشيك / المعاملة</label>
               <input type="text" id="modalRcCheckNo" class="form-control" placeholder="رقم الشيك أو المرجع البنكي">
               <input type="hidden" id="modalRcBankName" value="">
             </div>
           </div>
-          <div id="modalRcFaHint" style="font-size: 0.76rem; color: var(--gold-light); margin-top: 5px; font-weight: 500;"></div>
+          <div id="modalRcFaHint" style="font-size: 0.76rem; color: var(--text-gold); margin-top: 5px; font-weight: 500;"></div>
         </div>
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
@@ -6373,7 +6373,7 @@
         <div id="modalRcCurrencyConversionRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem; color: #38bdf8; font-weight: bold;">سعر الصرف مقابل الريال (YER)</label>
+              <label style="font-size: 0.82rem; color: var(--color-info, #38bdf8); font-weight: bold;">سعر الصرف مقابل الريال (YER)</label>
               <input type="number" id="modalRcExchangeRate" class="form-control" value="1.0" step="any" min="0.0001" oninput="Accounting.calcReceiptLocalAmount()">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
@@ -6381,7 +6381,7 @@
               <input type="number" id="modalRcLocalAmount" class="form-control" value="0" readonly style="font-weight: bold; color: var(--accent-green); direction: ltr; text-align: left;">
             </div>
           </div>
-          <div id="modalRcLocalTafqeet" style="font-size: 0.78rem; color: var(--gold-light); margin-top: 6px; font-weight: 500;"></div>
+          <div id="modalRcLocalTafqeet" style="font-size: 0.78rem; color: var(--text-gold); margin-top: 6px; font-weight: 500;"></div>
         </div>
 
         <div class="form-group">
@@ -6418,11 +6418,11 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">الحساب المقابل للسند (المصروف / المستفيد) <span style="color: var(--accent-red);">*</span></label>
-            <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalExpAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
+            <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalExpAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ إضافة حساب جديد للدليل</a>
           </div>
           <select id="modalExpAccountSelect" class="form-control" onchange="Accounting.updateExpenseTransferHint(true)">
             <option value="">اختر الحساب الفرعي النشط...</option>
-          </select><small id="modalExpTransferHint" style="display: block; color: var(--gold-light); margin-top: 6px;"></small>
+          </select><small id="modalExpTransferHint" style="display: block; color: var(--text-gold); margin-top: 6px;"></small>
         </div>
         <div class="form-group">
           <label>استخدام مراكز التكلفة لهذا الحساب</label>
@@ -6433,7 +6433,7 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="margin-bottom: 0;">المشروع المرتبط (اختياري - غير إلزامي)</label>
-            <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مشروع جديد</a>
+            <a href="javascript:void(0)" onclick="Projects.openNewModal()" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ مشروع جديد</a>
           </div>
           <select id="modalExpProjectSelect" class="form-control">
             <option value="">عام / بدون مشروع محدد...</option>
@@ -6469,19 +6469,19 @@
         <div id="modalExpCheckRow" style="background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label id="modalExpFaLabel" style="color: #38bdf8; font-weight: bold; font-size: 0.82rem;">حساب الصندوق من دليل الحسابات *</label>
+              <label id="modalExpFaLabel" style="color: var(--color-info, #38bdf8); font-weight: bold; font-size: 0.82rem;">حساب الصندوق من دليل الحسابات *</label>
               <select id="modalExpFinancialAccountSelect" class="form-control">
                 <option value="">اختر الحساب المالي...</option>
               </select>
               <select id="modalExpBankAccountSelect" style="display: none;"></select>
             </div>
             <div class="form-group" id="modalExpCheckNoGroup" style="margin-bottom: 0;">
-              <label id="modalExpRefLabel" style="color: var(--gold-light); font-weight: bold; font-size: 0.82rem;">المرجع / رقم الشيك / المعاملة</label>
+              <label id="modalExpRefLabel" style="color: var(--text-gold); font-weight: bold; font-size: 0.82rem;">المرجع / رقم الشيك / المعاملة</label>
               <input type="text" id="modalExpCheckNo" class="form-control" placeholder="رقم الشيك أو المرجع البنكي">
               <input type="hidden" id="modalExpBankName" value="">
             </div>
           </div>
-          <div id="modalExpFaHint" style="font-size: 0.76rem; color: var(--gold-light); margin-top: 5px; font-weight: 500;"></div>
+          <div id="modalExpFaHint" style="font-size: 0.76rem; color: var(--text-gold); margin-top: 5px; font-weight: 500;"></div>
         </div>
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
@@ -6502,7 +6502,7 @@
         <div id="modalExpCurrencyConversionRow" style="display: none; background: rgba(245, 158, 11, 0.08); border: 1px dashed #f59e0b; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.82rem; color: #f59e0b; font-weight: bold;">سعر الصرف مقابل الريال (YER)</label>
+              <label style="font-size: 0.82rem; color: var(--color-warning, #f59e0b); font-weight: bold;">سعر الصرف مقابل الريال (YER)</label>
               <input type="number" id="modalExpExchangeRate" class="form-control" value="1.0" step="any" min="0.0001" oninput="Accounting.calcExpenseLocalAmount()">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
@@ -6510,7 +6510,7 @@
               <input type="number" id="modalExpLocalAmount" class="form-control" value="0" readonly style="font-weight: bold; color: var(--accent-green); direction: ltr; text-align: left;">
             </div>
           </div>
-          <div id="modalExpLocalTafqeet" style="font-size: 0.78rem; color: var(--gold-light); margin-top: 6px; font-weight: 500;"></div>
+          <div id="modalExpLocalTafqeet" style="font-size: 0.78rem; color: var(--text-gold); margin-top: 6px; font-weight: 500;"></div>
         </div>
 
         <div class="form-group">
@@ -6550,7 +6550,7 @@
         </div>
         <!-- حقل اختيار رقم العهدة الأصلية المراد تصفيتها شرطياً -->
         <div class="form-group" id="modalCustodyRelatedRow" style="display: none; background: rgba(59, 130, 246, 0.08); border: 1px dashed #3b82f6; padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;">
-          <label style="color: #60a5fa; font-weight: bold; font-size: 0.82rem;">العهدة الأصلية المراد تصفيتها <span style="color: var(--accent-red);">*</span></label>
+          <label style="color: var(--color-info, #60a5fa); font-weight: bold; font-size: 0.82rem;">العهدة الأصلية المراد تصفيتها <span style="color: var(--accent-red);">*</span></label>
           <select id="modalCustodyRelatedSelect" class="form-control" onchange="Accounting.onRelatedCustodySelect('modalCustodyRelatedSelect', 'modalCustodyTotalAmount', 'modalCustodySpentAmount')">
             <option value="">اختر العهدة المفتوحة للتصفية...</option>
           </select>
@@ -6559,7 +6559,7 @@
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
               <label style="margin-bottom: 0;">الحساب المالي (العهد / الصندوق) <span style="color: var(--accent-red);">*</span></label>
-              <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalCustodyAccountSelect')" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">+ إضافة حساب</a>
+              <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalCustodyAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ إضافة حساب</a>
             </div>
             <select id="modalCustodyAccountSelect" class="form-control">
               <option value="">اختر الحساب الفرعي النشط...</option>
@@ -6645,7 +6645,7 @@
         <!-- شريط رقم قيد اليومية داخل نفس الشاشة -->
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px;">
           <span style="font-size: 0.85rem; color: var(--text-secondary);">رقم قيد اليومية المتسلسل:</span>
-          <strong id="modalJeEntryNoBadge" style="font-family: monospace; font-size: 1.1rem; color: #38bdf8; letter-spacing: 1px;">JV-2026-XXXX</strong>
+          <strong id="modalJeEntryNoBadge" style="font-family: monospace; font-size: 1.1rem; color: var(--color-info, #38bdf8); letter-spacing: 1px;">JV-2026-XXXX</strong>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr 1.25fr 2fr; gap: 12px; margin-bottom: 12px; align-items: end;">
@@ -6676,7 +6676,7 @@
         <div id="modalJeCurrencyRow" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px dashed #38bdf8; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;">
           <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 180px;">
-              <label style="font-size: 0.82rem; color: #38bdf8; font-weight: bold;">سعر الصرف المعتمد مقابل الريال (YER):</label>
+              <label style="font-size: 0.82rem; color: var(--color-info, #38bdf8); font-weight: bold;">سعر الصرف المعتمد مقابل الريال (YER):</label>
               <input type="number" id="modalJeExchangeRate" class="form-control" value="1.0" step="any" min="0.0001" oninput="Accounting.calcJournalBalance()">
             </div>
             <div style="flex: 2; font-size: 0.82rem; color: var(--text-secondary);">
@@ -6688,7 +6688,7 @@
         <!-- جدول أطراف القيد اليومي (ديناميكي) -->
         <div style="margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
           <div style="background: #1e293b; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: bold; font-size: 0.9rem; color: var(--gold-light);">أطراف وسطور القيد (مدين / دائن - الحسابات التحليلية النشطة)</span>
+            <span style="font-weight: bold; font-size: 0.9rem; color: var(--text-gold);">أطراف وسطور القيد (مدين / دائن - الحسابات التحليلية النشطة)</span>
             <div style="display: flex; gap: 8px;">
               <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.openNewAccountModal()">+ حساب جديد للدليل</button>
               <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.addJournalRow()">+ إضافة طرف</button>
@@ -6722,14 +6722,14 @@
               </div>
               <div>
                 <span style="color: var(--text-secondary); font-size: 0.8rem;">إجمالي الدائن:</span>
-                <strong id="modalJeTotalCredit" style="color: #38bdf8; font-size: 1rem; margin-right: 6px;">0.00</strong>
+                <strong id="modalJeTotalCredit" style="color: var(--color-info, #38bdf8); font-size: 1rem; margin-right: 6px;">0.00</strong>
               </div>
               <div>
                 <span style="color: var(--text-secondary); font-size: 0.8rem;">الفارق:</span>
                 <strong id="modalJeDiff" style="color: var(--accent-red); font-size: 1rem; margin-right: 6px;">0.00</strong>
               </div>
             </div>
-            <div id="modalJeBalanceStatus" style="font-weight: bold; font-size: 0.85rem; padding: 4px 12px; border-radius: 20px; background: rgba(239, 68, 68, 0.15); color: #f87171;">
+            <div id="modalJeBalanceStatus" style="font-weight: bold; font-size: 0.85rem; padding: 4px 12px; border-radius: 20px; background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #f87171);">
               ⚠️ القيد غير متزن
             </div>
           </div>
@@ -6769,7 +6769,7 @@
       </div>
       <form onsubmit="Accounting.submitNewAccount(event)">
         <div style="padding: 16px 20px;">
-          <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.82rem; color: #38bdf8;">
+          <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.82rem; color: var(--color-info, #38bdf8);">
             🔢 <strong>الترقيم من الرتبة الثالثة:</strong> الحسابات التشغيلية التي يتم تسجيل القيود عليها تكون من الرتبة الثالثة فما فوق (3 خانات فأكثر).
           </div>
           <div class="form-group" hidden style="display: none;">
@@ -6783,7 +6783,7 @@
               <label style="margin-bottom: 0;">رقم / كود الحساب (الرتبة 3+) <span style="color: var(--accent-red);">*</span></label>
               <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.suggestAccountCode()" style="padding: 2px 8px; font-size: 0.75rem;">🔢 اقتراح كود متسلسل</button>
             </div>
-            <input type="text" id="modalAccCode" oninput="Accounting.inferAccountParent()" class="form-control" placeholder="الرقم التالي بالتسلسل" required pattern="[0-9]+" style="font-family: monospace; font-weight: bold; color: var(--gold-light);">
+            <input type="text" id="modalAccCode" oninput="Accounting.inferAccountParent()" class="form-control" placeholder="الرقم التالي بالتسلسل" required pattern="[0-9]+" style="font-family: monospace; font-weight: bold; color: var(--text-gold);">
             <small style="color: var(--text-secondary);">يُحدد الارتباط الشجري تلقائياً من رقم الحساب؛ استخدم الرقم التالي في التسلسل.</small>
           </div>
           <div class="form-group">
@@ -6834,7 +6834,7 @@
         <div style="padding: 16px 20px;">
           <div class="form-group">
             <label>رقم / كود الحساب <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="editAccCode" oninput="Accounting.inferAccountParent(true)" class="form-control" required style="font-family: monospace; font-weight: bold; color: var(--gold-light);">
+            <input type="text" id="editAccCode" oninput="Accounting.inferAccountParent(true)" class="form-control" required style="font-family: monospace; font-weight: bold; color: var(--text-gold);">
           </div>
           <div class="form-group">
             <label>اسم الحساب <span style="color: var(--accent-red);">*</span></label>
@@ -6889,7 +6889,7 @@
         <div style="padding: 16px 20px;">
           <div class="form-group">
             <label>رمز مركز التكلفة <span style="color: var(--accent-red);">*</span></label>
-            <input type="text" id="editCcCode" class="form-control" required style="font-family: monospace; font-weight: bold; color: var(--gold-light);">
+            <input type="text" id="editCcCode" class="form-control" required style="font-family: monospace; font-weight: bold; color: var(--text-gold);">
           </div>
           <div class="form-group">
             <label>اسم مركز التكلفة <span style="color: var(--accent-red);">*</span></label>
@@ -7069,7 +7069,7 @@
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border-light); flex-wrap: wrap;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="Auth.lockScreen(); App.closeModal('lockTimeoutModal');" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="Auth.lockScreen(); App.closeModal('lockTimeoutModal');" style="color: var(--color-warning, #fbbf24); border-color: rgba(245, 158, 11, 0.4);">
             🔒 قفل الشاشة فوراً الآن
           </button>
           <div style="display: flex; gap: 8px;">
@@ -7085,8 +7085,8 @@
   <div class="modal-overlay" id="securitySessionsModal">
     <div class="modal-box" style="max-width: 860px; padding: 20px;">
       <div class="modal-header" style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light);">
-        <h3 id="securityModalHeaderTitle" style="display: flex; align-items: center; gap: 8px; margin: 0; color: #f1f5f9; font-size: 1.15rem;">
-          <span style="color: #10b981;">🛡️</span>
+        <h3 id="securityModalHeaderTitle" style="display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text-primary, #f1f5f9); font-size: 1.15rem;">
+          <span style="color: var(--color-success, #10b981);">🛡️</span>
           <span>إعدادات الأمان والجلسات وصلاحية التوكن</span>
         </h3>
         <button class="modal-close-btn" onclick="App.closeModal('securitySessionsModal')">&times;</button>
@@ -7095,7 +7095,7 @@
       <!-- شريط اختيار وتخصيص المستخدم المستهدف (للمدير العام) -->
       <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <span style="font-size: 0.88rem; color: #d4af37; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+          <span style="font-size: 0.88rem; color: var(--text-gold, #d4af37); font-weight: bold; display: flex; align-items: center; gap: 5px;">
             <span>👑 تخصيص الأمان للمستخدم:</span>
           </span>
           <select id="selectSecurityTargetUser" onchange="Auth.onSecurityTargetUserChange()" style="background: #0f172a; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; padding: 6px 12px; font-weight: 600; font-size: 0.88rem; min-width: 250px;">
@@ -7128,7 +7128,7 @@
             <div id="multiSessionControlsBox" style="background: rgba(15, 23, 42, 0.5); border: 1px solid #1e293b; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
               <!-- سقف الأجهزة -->
               <div style="display: flex; align-items: center; gap: 8px;" id="boxDeviceLimit">
-                <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">سقف الأجهزة:</span>
+                <span style="font-size: 0.85rem; color: var(--text-secondary, #94a3b8); font-weight: 600;">سقف الأجهزة:</span>
                 <div style="display: flex; gap: 6px;" id="deviceLimitButtons">
                   <button type="button" class="device-limit-btn" data-limit="2" onclick="Auth.setDeviceLimit(2)">2</button>
                   <button type="button" class="device-limit-btn active" data-limit="3" onclick="Auth.setDeviceLimit(3)">3</button>
@@ -7138,7 +7138,7 @@
 
               <!-- عند التجاوز -->
               <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">عند التجاوز:</span>
+                <span style="font-size: 0.85rem; color: var(--text-secondary, #94a3b8); font-weight: 600;">عند التجاوز:</span>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="overflowActionButtons">
                   <button type="button" class="overflow-action-btn active" data-action="kick_oldest" onclick="Auth.setOverflowAction('kick_oldest')">طرد الأقدم</button>
                   <button type="button" class="overflow-action-btn" data-action="block_new" onclick="Auth.setOverflowAction('block_new')">منع الجديد</button>
@@ -7150,7 +7150,7 @@
             <!-- شريط الجهاز المعتمد عند تفعيل منع أي جهاز جديد -->
             <div id="authorizedDeviceBox" style="display: none; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 6px 10px; margin-top: 8px; justify-content: space-between; align-items: center; gap: 8px;">
               <span id="authorizedDeviceText" style="font-size: 0.76rem; color: #6ee7b7;">📱 الجهاز المعتمد: لم يسجل أي جهاز بعد (سيتم اعتماد أول جهاز يسجل منه)</span>
-              <button type="button" class="btn btn-sm" id="btnResetAuthorizedDevice" onclick="Auth.resetAuthorizedDevice()" style="font-size: 0.7rem; padding: 2px 8px; color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); display: none;">🔄 فك قفل الجهاز</button>
+              <button type="button" class="btn btn-sm" id="btnResetAuthorizedDevice" onclick="Auth.resetAuthorizedDevice()" style="font-size: 0.7rem; padding: 2px 8px; color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); display: none;">🔄 فك قفل الجهاز</button>
             </div>
           </div>
 
@@ -7163,7 +7163,7 @@
         <div class="security-card">
           <div>
             <div class="security-card-header">
-              <span id="badgeCurrentTokenExpiry" style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; font-family: monospace; font-size: 0.88rem; padding: 2px 8px; border-radius: 6px; font-weight: 700;">8h</span>
+              <span id="badgeCurrentTokenExpiry" style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: var(--color-success, #10b981); font-family: monospace; font-size: 0.88rem; padding: 2px 8px; border-radius: 6px; font-weight: 700;">8h</span>
               <span class="security-card-title">مدة صلاحية التوكن (JWT)</span>
             </div>
 
@@ -7183,17 +7183,17 @@
                 <span>⏰ مخصص (فترة وساعات العمل)</span>
               </button>
               <div id="customExpiryBox" style="display: none; margin-top: 8px; padding: 10px 12px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px;">
-                <div style="font-size: 0.78rem; font-weight: 700; color: #34d399; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="font-size: 0.78rem; font-weight: 700; color: var(--color-success, #34d399); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
                   <span>⏰ ساعات العمل المسموحة (خلال 24 ساعة):</span>
-                  <span id="customWorkHoursSummary" style="font-size: 0.74rem; color: #10b981; font-weight: bold; background: rgba(16, 185, 129, 0.15); padding: 1px 6px; border-radius: 4px;">8 ساعات عمل</span>
+                  <span id="customWorkHoursSummary" style="font-size: 0.74rem; color: var(--color-success, #10b981); font-weight: bold; background: rgba(16, 185, 129, 0.15); padding: 1px 6px; border-radius: 4px;">8 ساعات عمل</span>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px;">
                   <div style="display: flex; flex-direction: column; gap: 3px;">
-                    <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">من الساعة (وقت البدء):</label>
+                    <label style="font-size: 0.74rem; color: var(--text-secondary, #94a3b8); font-weight: 600;">من الساعة (وقت البدء):</label>
                     <input type="time" id="inputWorkStartTime" value="08:00" class="form-control" style="background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 5px 8px; font-weight: 700; font-size: 0.88rem; text-align: center;" onchange="Auth.onWorkHoursChange()">
                   </div>
                   <div style="display: flex; flex-direction: column; gap: 3px;">
-                    <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">إلى الساعة (وقت الانتهاء):</label>
+                    <label style="font-size: 0.74rem; color: var(--text-secondary, #94a3b8); font-weight: 600;">إلى الساعة (وقت الانتهاء):</label>
                     <input type="time" id="inputWorkEndTime" value="16:00" class="form-control" style="background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 5px 8px; font-weight: 700; font-size: 0.88rem; text-align: center;" onchange="Auth.onWorkHoursChange()">
                   </div>
                 </div>
@@ -7205,10 +7205,10 @@
           </div>
 
           <!-- تذييل البطاقة 2: تاريخ ووقت انتهاء الجلسة الحالية -->
-          <div style="margin-top: 14px; text-align: right; color: #94a3b8; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; justify-content: flex-start; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+          <div style="margin-top: 14px; text-align: right; color: var(--text-secondary, #94a3b8); font-size: 0.82rem; display: flex; align-items: center; gap: 6px; justify-content: flex-start; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
             <span>⏱️</span>
             <span>تنتهي جلستك الحالية في:</span>
-            <span id="currentSessionExpiryFormatted" style="color: #10b981; font-weight: 700;">...</span>
+            <span id="currentSessionExpiryFormatted" style="color: var(--color-success, #10b981); font-weight: 700;">...</span>
           </div>
         </div>
       </div>
@@ -7219,7 +7219,7 @@
           🛡️ تسري هذه الإعدادات على مستخدمي نظام رواسي عدن بحسب صلاحيات المدير العام.
         </div>
         <div style="display: flex; gap: 8px;">
-          <button type="button" class="btn btn-secondary btn-sm" id="btnResetUserSecurity" onclick="Auth.resetTargetUserSecurityToDefault()" style="display: none; color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08);" title="إلغاء التخصيص والرجوع للإعداد العام">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnResetUserSecurity" onclick="Auth.resetTargetUserSecurityToDefault()" style="display: none; color: var(--color-warning, #f59e0b); border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08);" title="إلغاء التخصيص والرجوع للإعداد العام">
             🔄 استعادة الإعداد الافتراضي
           </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="App.closeModal('securitySessionsModal')">إلغاء</button>
@@ -7315,7 +7315,7 @@
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
             <span style="font-size: 1.25rem;">🌐</span>
             <div>
-              <h4 style="margin: 0; font-size: 0.92rem; color: #38bdf8; font-weight: 700;">نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects Scope)</h4>
+              <h4 style="margin: 0; font-size: 0.92rem; color: var(--color-info, #38bdf8); font-weight: 700;">نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects Scope)</h4>
               <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
                 تحديد الفرع، القسم، والمشاريع المصرح للمستخدم بالوصول إليها. منع الوصول افتراضياً Deny by Default لأي مشروع خارج النطاق.
               </div>
@@ -7324,13 +7324,13 @@
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1;">🏢 الفرع الجغرافي المصرح به:</label>
+              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">🏢 الفرع الجغرافي المصرح به:</label>
               <select id="userBranchVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
                 <option value="">كافة الفروع (غير مقيد)</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1;">📑 القسم الإداري:</label>
+              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">📑 القسم الإداري:</label>
               <select id="userDepartmentVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
                 <option value="">كافة الأقسام (غير مقيد)</option>
               </select>
@@ -7339,8 +7339,8 @@
 
           <div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0;">🏗️ نطاق المشاريع المعتمدة (Project Scope):</label>
-              <label style="display: flex; align-items: center; gap: 5px; font-size: 0.74rem; cursor: pointer; color: var(--gold-light);">
+              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 0;">🏗️ نطاق المشاريع المعتمدة (Project Scope):</label>
+              <label style="display: flex; align-items: center; gap: 5px; font-size: 0.74rem; cursor: pointer; color: var(--text-gold);">
                 <input type="checkbox" id="userAllProjectsScopeChk" checked onchange="Settings.onAllProjectsScopeToggle(this.checked)" style="accent-color: var(--gold-primary);">
                 <span>الوصول لكافة المشاريع الحالية والمستقبلية (*)</span>
               </label>
@@ -7359,7 +7359,7 @@
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 1.25rem;">🔐</span>
               <div>
-                <h4 style="margin: 0; font-size: 0.92rem; color: var(--gold-light); font-weight: 700;">التحقق بخطوتين (2FA) - رمز الأمان (PIN)</h4>
+                <h4 style="margin: 0; font-size: 0.92rem; color: var(--text-gold); font-weight: 700;">التحقق بخطوتين (2FA) - رمز الأمان (PIN)</h4>
                 <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
                   رمز PIN خاص من 6 أرقام. عند تعديل مستخدم، اترك الحقل فارغاً للاحتفاظ بالرمز الحالي؛ لا يظهر الرمز المحفوظ.
                 </div>
@@ -7374,16 +7374,16 @@
           <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px;">
             <div style="position: relative; width: 220px;">
               <input type="password" id="user2FaPinVal" class="form-control" placeholder="رمز من 6 أرقام" maxlength="6" pattern="[0-9]{6}" autocomplete="new-password" style="font-family: monospace; font-size: 1.15rem; letter-spacing: 5px; text-align: center; font-weight: bold; padding-left: 38px; border-color: rgba(212, 175, 55, 0.45); background: #070c18; color: #fbbf24;" oninput="this.value=this.value.replace(/[٠-٩]/g, d=>'0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)]).replace(/[۰-۹]/g, d=>'0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)]).replace(/[^0-9]/g,'')">
-              <button type="button" id="btnToggle2FaEye" onclick="Settings.toggle2FaPinVisibility()" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 1rem; padding: 2px;" title="إظهار / إخفاء الرمز">
+              <button type="button" id="btnToggle2FaEye" onclick="Settings.toggle2FaPinVisibility()" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary, #94a3b8); font-size: 1rem; padding: 2px;" title="إظهار / إخفاء الرمز">
                 <span id="user2FaEyeIcon">👁️</span>
               </button>
             </div>
 
-            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.generateRandom2FaPin()" style="border-color: rgba(212, 175, 55, 0.4); color: var(--gold-light); background: rgba(212, 175, 55, 0.1); padding: 6px 12px; font-weight: 600;" title="توليد رمز أمان عشوائي جديد فوري">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.generateRandom2FaPin()" style="border-color: rgba(212, 175, 55, 0.4); color: var(--text-gold); background: rgba(212, 175, 55, 0.1); padding: 6px 12px; font-weight: 600;" title="توليد رمز أمان عشوائي جديد فوري">
               🎲 توليد رمز جديد
             </button>
 
-            <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+            <div style="font-size: 0.72rem; color: var(--text-secondary, #94a3b8); display: flex; align-items: center; gap: 6px;">
               <span>🔒 لا يوجد رمز افتراضي أو رمز طوارئ عام.</span>
             </div>
           </div>
@@ -7716,16 +7716,16 @@
 
             <!-- 12. الأمان والجلسات المخصصة للمستخدم (المكان الأخضر) -->
             <div class="perm-group-card" id="userModalSecurityCard" style="border: 1px solid rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.04); border-radius: var(--radius-sm); padding: 10px 12px; transition: var(--transition);">
-              <div class="perm-group-title" style="color: #34d399; border-bottom: 1px solid rgba(16, 185, 129, 0.2); display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div class="perm-group-title" style="color: var(--color-success, #34d399); border-bottom: 1px solid rgba(16, 185, 129, 0.2); display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="display: flex; align-items: center; gap: 5px; font-size: 0.82rem; font-weight: 700;">
                   <span>🛡️ الأمان وسياسة الجلسات</span>
                 </span>
-                <span id="userSecBadgeType" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(212, 175, 55, 0.15); color: var(--gold-light); font-weight: 600;">افتراضي النظام</span>
+                <span id="userSecBadgeType" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(212, 175, 55, 0.15); color: var(--text-gold); font-weight: 600;">افتراضي النظام</span>
               </div>
 
               <!-- نوع السياسة -->
               <div style="margin-bottom: 8px;">
-                <label style="font-size: 0.74rem; color: #94a3b8; display: block; margin-bottom: 3px; font-weight: 600;">سياسة تسجيل الدخول للجلسة:</label>
+                <label style="font-size: 0.74rem; color: var(--text-secondary, #94a3b8); display: block; margin-bottom: 3px; font-weight: 600;">سياسة تسجيل الدخول للجلسة:</label>
                 <select id="userSecPolicyType" class="form-control" style="font-size: 0.78rem; padding: 4px 8px; height: 32px; background: #0b1329; border-color: rgba(16, 185, 129, 0.35); color: #f8fafc;" onchange="Settings.onUserSecurityPolicyChange()">
                   <option value="inherit">⚙️ افتراضي النظام (وراثة الإعدادات العامة)</option>
                   <option value="strict_single">🔒 جلسة واحدة صارمة (جهاز واحد فقط)</option>
@@ -7737,13 +7737,13 @@
               <!-- شريط الجهاز المعتمد للمستخدم عند تفعيل القفل -->
               <div id="userSecBoundDeviceBox" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 4px 8px; margin-bottom: 8px; justify-content: space-between; align-items: center; gap: 6px;">
                 <span id="userSecBoundDeviceText" style="font-size: 0.72rem; color: #6ee7b7;">📱 الجهاز المعتمد: لم يسجل بعد</span>
-                <button type="button" class="btn btn-sm" id="btnUserSecResetBoundDevice" onclick="Settings.resetUserBoundDevice()" style="font-size: 0.68rem; padding: 1px 6px; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); background: transparent; display: none;">فك الربط</button>
+                <button type="button" class="btn btn-sm" id="btnUserSecResetBoundDevice" onclick="Settings.resetUserBoundDevice()" style="font-size: 0.68rem; padding: 1px 6px; color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3); background: transparent; display: none;">فك الربط</button>
               </div>
 
               <!-- خيارات الجلسات المتعددة -->
               <div id="userSecMultiControls" style="display: none; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px;">
-                  <label style="font-size: 0.74rem; color: #cbd5e1; font-weight: 600;">سقف الأجهزة:</label>
+                  <label style="font-size: 0.74rem; color: var(--text-secondary, #cbd5e1); font-weight: 600;">سقف الأجهزة:</label>
                   <select id="userSecDeviceLimit" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 95px; background: #0f172a; color: #f8fafc;">
                     <option value="2">جهازين (2)</option>
                     <option value="3" selected>3 أجهزة</option>
@@ -7751,7 +7751,7 @@
                   </select>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
-                  <label style="font-size: 0.74rem; color: #cbd5e1; font-weight: 600;">عند التجاوز:</label>
+                  <label style="font-size: 0.74rem; color: var(--text-secondary, #cbd5e1); font-weight: 600;">عند التجاوز:</label>
                   <select id="userSecOverflowAction" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 125px; background: #0f172a; color: #f8fafc;">
                     <option value="kick_oldest" selected>طرد الأقدم</option>
                     <option value="block_new">منع الجديد (أثناء الاتصال)</option>
@@ -7763,7 +7763,7 @@
               <!-- صلاحية التوكن (JWT) -->
               <div id="userSecTokenBox" style="display: none; margin-bottom: 6px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
-                  <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">صلاحية الجلسة:</label>
+                  <label style="font-size: 0.74rem; color: var(--text-secondary, #94a3b8); font-weight: 600;">صلاحية الجلسة:</label>
                   <select id="userSecTokenExpiry" class="form-control" style="font-size: 0.74rem; padding: 2px 6px; height: 26px; width: 145px; background: #0b1329; color: #f8fafc;" onchange="Settings.onWorkHoursChange()">
                     <option value="1h">1 ساعة</option>
                     <option value="4h">4 ساعات</option>
@@ -7779,16 +7779,16 @@
                 <!-- صندوق فترة وساعات العمل المسموحة -->
                 <div id="userSecWorkHoursBox" style="display: none; background: rgba(15, 23, 42, 0.7); border: 1px dashed rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 6px 8px; margin-top: 6px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-size: 0.72rem; color: #34d399; font-weight: 700;">فترة العمل (24 ساعة):</span>
-                    <span id="userSecWorkDurationBadge" style="font-size: 0.7rem; color: #10b981; font-weight: bold;">8 ساعات</span>
+                    <span style="font-size: 0.72rem; color: var(--color-success, #34d399); font-weight: 700;">فترة العمل (24 ساعة):</span>
+                    <span id="userSecWorkDurationBadge" style="font-size: 0.7rem; color: var(--color-success, #10b981); font-weight: bold;">8 ساعات</span>
                   </div>
                   <div style="display: flex; gap: 6px; align-items: center;">
                     <div style="flex: 1;">
-                      <label style="font-size: 0.68rem; color: #94a3b8; display: block; margin-bottom: 1px;">من:</label>
+                      <label style="font-size: 0.68rem; color: var(--text-secondary, #94a3b8); display: block; margin-bottom: 1px;">من:</label>
                       <input type="time" id="userSecStartTime" value="08:00" class="form-control" style="font-size: 0.76rem; padding: 2px 4px; height: 24px; background: #0f172a; color: #fff; text-align: center;" onchange="Settings.onWorkHoursChange()">
                     </div>
                     <div style="flex: 1;">
-                      <label style="font-size: 0.68rem; color: #94a3b8; display: block; margin-bottom: 1px;">إلى:</label>
+                      <label style="font-size: 0.68rem; color: var(--text-secondary, #94a3b8); display: block; margin-bottom: 1px;">إلى:</label>
                       <input type="time" id="userSecEndTime" value="16:00" class="form-control" style="font-size: 0.76rem; padding: 2px 4px; height: 24px; background: #0f172a; color: #fff; text-align: center;" onchange="Settings.onWorkHoursChange()">
                     </div>
                   </div>
@@ -7796,7 +7796,7 @@
               </div>
 
               <!-- ملاحظة إرشادية للمدير العام -->
-              <div id="userSecHelpNote" style="font-size: 0.7rem; color: #94a3b8; line-height: 1.4; margin-top: 4px;">
+              <div id="userSecHelpNote" style="font-size: 0.7rem; color: var(--text-secondary, #94a3b8); line-height: 1.4; margin-top: 4px;">
                 💡 يتبع المستخدم إعدادات النظام العامة الافتراضية.
               </div>
             </div>
@@ -7823,7 +7823,7 @@
       <div style="padding: 10px 0;">
         <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start;">
           <span style="font-size: 1.3rem;">⚠️</span>
-          <div style="font-size: 0.88rem; line-height: 1.4; color: #fca5a5;">
+          <div style="font-size: 0.88rem; line-height: 1.4; color: var(--color-danger, #fca5a5);">
             <strong>تنبيه هام:</strong> استعادة نسخة احتياطية ستقوم باستبدال كافة البيانات الحالية في النظام ببيانات النسخة المحددة. (يتم حفظ نسخة أمان تلقائية للبيانات الحالية قبل الاستعادة).
           </div>
         </div>
@@ -7831,14 +7831,14 @@
         <!-- منطقة اختيار ملف النسخة الاحتياطية -->
         <div class="upload-dropzone" onclick="document.getElementById('backupFileInput').click()" style="border: 2px dashed var(--gold-primary); border-radius: var(--radius-md); padding: 24px 16px; text-align: center; cursor: pointer; background: rgba(212, 175, 55, 0.04); transition: var(--transition);">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="var(--gold-primary)" style="margin-bottom: 8px;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-          <div style="font-weight: 700; color: var(--gold-light); margin-bottom: 4px;">اضغط هنا لاختيار ملف النسخة الاحتياطية (.db / .sqlite)</div>
+          <div style="font-weight: 700; color: var(--text-gold); margin-bottom: 4px;">اضغط هنا لاختيار ملف النسخة الاحتياطية (.db / .sqlite)</div>
           <div style="font-size: 0.8rem; color: var(--text-secondary);" id="selectedBackupFileName">أو اسحب وأفلت ملف قاعدة البيانات هنا</div>
           <input type="file" id="backupFileInput" accept=".db,.sqlite" style="display: none;" onchange="Settings.handleFileSelected(event)">
         </div>
 
         <!-- قائمة النسخ الاحتياطية السابقة على السيرفر -->
         <div id="serverBackupsSection" style="margin-top: 18px; display: none;">
-          <h4 style="font-size: 0.9rem; color: var(--gold-light); margin-bottom: 8px; border-bottom: 1px solid var(--border-light); padding-bottom: 6px;">النسخ الاحتياطية السابقة على الخادم:</h4>
+          <h4 style="font-size: 0.9rem; color: var(--text-gold); margin-bottom: 8px; border-bottom: 1px solid var(--border-light); padding-bottom: 6px;">النسخ الاحتياطية السابقة على الخادم:</h4>
           <div id="serverBackupsList" style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;"></div>
         </div>
       </div>
@@ -7863,7 +7863,7 @@
       <div style="padding: 12px 0;">
         <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid var(--accent-red); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start;">
           <span style="font-size: 1.4rem;">⚠️</span>
-          <div style="font-size: 0.85rem; line-height: 1.4; color: #fca5a5;">
+          <div style="font-size: 0.85rem; line-height: 1.4; color: var(--color-danger, #fca5a5);">
             <strong>تنبيه الأمان والرقابة:</strong> استعادة الأرشيف تقوم بتحديث قاعدة البيانات واسترجاع كافة وثائق المشاريع الموجودة في الحزمة. يقوم النظام بحفظ <strong>نقطة أمان واسترجاع طارئة تلقائياً</strong> قبل البدء.
           </div>
         </div>
@@ -7871,7 +7871,7 @@
         <!-- منطقة اختيار أو رفع الملف -->
         <div class="upload-dropzone" onclick="document.getElementById('vaultRestoreFileInput').click()" style="border: 2px dashed #38bdf8; border-radius: var(--radius-md); padding: 22px 16px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); transition: var(--transition); margin-bottom: 16px;">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="#38bdf8" style="margin-bottom: 8px;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-          <div style="font-weight: 700; color: #38bdf8; margin-bottom: 4px;" id="vaultRestoreFileHeader">اضغط هنا لاختيار ملف الأرشيف (.rawasi.enc / .zip / .db)</div>
+          <div style="font-weight: 700; color: var(--color-info, #38bdf8); margin-bottom: 4px;" id="vaultRestoreFileHeader">اضغط هنا لاختيار ملف الأرشيف (.rawasi.enc / .zip / .db)</div>
           <div style="font-size: 0.8rem; color: var(--text-secondary);" id="vaultRestoreFileName">أو اسحب وأفلت الملف هنا مباشرة</div>
           <input type="file" id="vaultRestoreFileInput" accept=".enc,.zip,.db,.sqlite" style="display: none;" onchange="Settings.handleVaultRestoreFileSelected(event)">
         </div>
@@ -7955,13 +7955,13 @@
           </div>
           <div class="form-group">
             <label>الإجمالي ($)</label>
-            <input type="number" id="quoItemTotal" class="form-control" step="any" value="0" readonly style="background: rgba(255,255,255,0.05); color: #34d399; font-weight: bold;">
+            <input type="number" id="quoItemTotal" class="form-control" step="any" value="0" readonly style="background: rgba(255,255,255,0.05); color: var(--color-success, #34d399); font-weight: bold;">
           </div>
         </div>
 
         <!-- ربط المخزن والمواد -->
         <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px; padding: 10px; margin-bottom: 12px;">
-          <h4 style="color: #10b981; font-size: 0.85rem; margin-bottom: 8px;">📦 ربط المادة بالمخزن والمستودع:</h4>
+          <h4 style="color: var(--color-success, #10b981); font-size: 0.85rem; margin-bottom: 8px;">📦 ربط المادة بالمخزن والمستودع:</h4>
           <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
               <label>المادة بالمخزون</label>
@@ -7978,7 +7978,7 @@
 
         <!-- ربط المورد المعتمد -->
         <div style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 6px; padding: 10px; margin-bottom: 12px;">
-          <h4 style="color: #60a5fa; font-size: 0.85rem; margin-bottom: 8px;">🏢 المورد المقترح وبيانات الاتصال:</h4>
+          <h4 style="color: var(--color-info, #60a5fa); font-size: 0.85rem; margin-bottom: 8px;">🏢 المورد المقترح وبيانات الاتصال:</h4>
           <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
               <label>اسم المورد المعتمد</label>
@@ -8305,7 +8305,7 @@
             <span style="font-size: 1.1rem;">📂</span>
             <span>المشروع المستهدف للترحيل والاستيراد:</span>
           </span>
-          <strong id="boqImportTargetProjectName" style="color: var(--gold-light); font-size: 0.88rem;">-</strong>
+          <strong id="boqImportTargetProjectName" style="color: var(--text-gold); font-size: 0.88rem;">-</strong>
         </div>
 
         <!-- منطقة اختيار وسحب وإفلات ملف الإكسيل -->
@@ -8314,7 +8314,7 @@
           <div style="font-size: 2.5rem; margin-bottom: 8px;">📊</div>
           <h4 style="color: #fff; margin: 0 0 6px 0;">انقر لاختيار ملف Excel أو اسحب الملف وأفلته هنا</h4>
           <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 0 0 10px 0;">يدعم ملفات: Microsoft Excel (.xlsx, .xls) والملفات المجدولة (.csv)</p>
-          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,255,255,0.05); border-radius: 20px; font-size: 0.78rem; color: var(--gold-light);">
+          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,255,255,0.05); border-radius: 20px; font-size: 0.78rem; color: var(--text-gold);">
             <span>📁 اختيار ملف من الجهاز</span>
           </div>
         </div>
@@ -8323,7 +8323,7 @@
         <div id="boqFileInfoBar" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
           <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-weight: 700; color: #fff;" id="boqSelectedFileName">-</span>
-            <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8;" id="boqSelectedFileSize">-</span>
+            <span class="badge" style="background: rgba(56,189,248,0.15); color: var(--color-info, #38bdf8);" id="boqSelectedFileSize">-</span>
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
             <label style="font-size: 0.8rem; color: var(--text-secondary); margin: 0;">ورقة العمل (Sheet):</label>
@@ -8359,11 +8359,11 @@
         <div id="boqPreviewStatsBar" style="display: none; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
           <div style="background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
             <span style="font-size: 0.72rem; color: var(--text-secondary); display: block;">عدد البنود الجاهزة للاستيراد</span>
-            <strong id="boqPreviewRowCount" style="font-size: 1.15rem; color: #38bdf8;">0 بند</strong>
+            <strong id="boqPreviewRowCount" style="font-size: 1.15rem; color: var(--color-info, #38bdf8);">0 بند</strong>
           </div>
           <div style="background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
             <span style="font-size: 0.72rem; color: var(--text-secondary); display: block;">إجمالي قيمة البنود التقديرية</span>
-            <strong id="boqPreviewTotalVal" style="font-size: 1.15rem; color: var(--gold-light);">0 <small>ر.ي</small></strong>
+            <strong id="boqPreviewTotalVal" style="font-size: 1.15rem; color: var(--text-gold);">0 <small>ر.ي</small></strong>
           </div>
           <div style="background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
             <span style="font-size: 0.72rem; color: var(--text-secondary); display: block;">حالة الفحص والمطابقة</span>
@@ -8416,8 +8416,8 @@
         <input type="hidden" id="quickBoqItemId">
         <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-            <strong style="color: var(--gold-light);" id="quickBoqItemNo">-</strong>
-            <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8;" id="quickBoqItemUnit">-</span>
+            <strong style="color: var(--text-gold);" id="quickBoqItemNo">-</strong>
+            <span class="badge" style="background: rgba(56,189,248,0.15); color: var(--color-info, #38bdf8);" id="quickBoqItemUnit">-</span>
           </div>
           <div style="font-size: 0.85rem; color: #fff; line-height: 1.5;" id="quickBoqItemDesc">-</div>
         </div>
@@ -8434,11 +8434,11 @@
         </div>
 
         <div class="form-group" style="margin-bottom: 12px;">
-          <label style="font-weight: 700; color: var(--gold-light);">إجمالي الكمية المنفذة فعلياً حتى اليوم <span style="color: var(--accent-red);">*</span></label>
+          <label style="font-weight: 700; color: var(--text-gold);">إجمالي الكمية المنفذة فعلياً حتى اليوم <span style="color: var(--accent-red);">*</span></label>
           <input type="number" id="quickBoqExecutedQty" class="form-control" step="0.01" required min="0" oninput="ProjectHub.onQuickProgressQtyChange()">
         </div>
 
-        <div id="quickBoqOverbillingNotice" style="display: none; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px; font-size: 0.8rem; color: #fca5a5;">
+        <div id="quickBoqOverbillingNotice" style="display: none; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px; font-size: 0.8rem; color: var(--color-danger, #fca5a5);">
           ⚠️ <strong>تنبيه:</strong> الكمية المدخلة تتجاوز الكمية التعاقدية المعتمدة! سيتم تمييز البند كـ تجاوز كمية مع إمكانية إصدار أمر تغيير (Variation Order).
         </div>
 
@@ -8678,7 +8678,7 @@
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
               <label style="margin-bottom: 0;">المورد / الجهة <span style="color: var(--accent-red);">*</span></label>
-              <a href="javascript:void(0)" onclick="Accounting.openNewSupplierModal('projPurSupplier')" style="font-size: 0.75rem; color: var(--gold-light); text-decoration: underline;">+ مورد جديد</a>
+              <a href="javascript:void(0)" onclick="Accounting.openNewSupplierModal('projPurSupplier')" style="font-size: 0.75rem; color: var(--text-gold); text-decoration: underline;">+ مورد جديد</a>
             </div>
             <select id="projPurSupplier" class="form-control" required>
               <option value="">اختر المورد...</option>
@@ -8855,7 +8855,7 @@
         <div style="display: flex; gap: 12px; font-size: 0.84rem;">
           <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="radio" name="ipcMode" value="boq" checked onchange="ProjectHub.toggleIpcMode()">
-            <span style="color: var(--gold-light); font-weight: 700;">📊 مستخلص تفصيلي مربوط ببنود جدول الكميات BOQ</span>
+            <span style="color: var(--text-gold); font-weight: 700;">📊 مستخلص تفصيلي مربوط ببنود جدول الكميات BOQ</span>
           </label>
           <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="radio" name="ipcMode" value="manual" onchange="ProjectHub.toggleIpcMode()">
@@ -8928,7 +8928,7 @@
                   <th style="width: 50px;">الوحدة</th>
                   <th style="width: 75px;">كمية العقد</th>
                   <th style="width: 75px;">سابق</th>
-                  <th style="width: 95px; background: rgba(212,175,55,0.15); color: var(--gold-light);">حالي (المنفذ)</th>
+                  <th style="width: 95px; background: rgba(212,175,55,0.15); color: var(--text-gold);">حالي (المنفذ)</th>
                   <th style="width: 75px;">تراكمي</th>
                   <th style="width: 80px;">فئة السعر</th>
                   <th style="width: 95px;">قيمة حالي</th>
@@ -8951,8 +8951,8 @@
             <input type="number" id="ipcModalPrevBills" class="form-control" value="0" readonly style="background: rgba(0,0,0,0.25); color: var(--text-secondary);" oninput="ProjectHub.calcIpcNet()">
           </div>
           <div class="form-group">
-            <label style="color: var(--gold-light); font-weight: 700;">قيمة الأعمال الجارية الحالية (Gross Work)</label>
-            <input type="number" id="ipcModalGross" class="form-control" required style="font-weight: 800; font-size: 1.05rem; color: var(--gold-light);" oninput="ProjectHub.calcIpcNet()">
+            <label style="color: var(--text-gold); font-weight: 700;">قيمة الأعمال الجارية الحالية (Gross Work)</label>
+            <input type="number" id="ipcModalGross" class="form-control" required style="font-weight: 800; font-size: 1.05rem; color: var(--text-gold);" oninput="ProjectHub.calcIpcNet()">
           </div>
         </div>
 
@@ -8992,7 +8992,7 @@
               </div>
             </div>
             <div style="flex: 1; max-width: 450px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: var(--radius-sm);">
-              <span style="font-size: 0.7rem; color: var(--gold-light); display: block;">التفقيط المالي الرسمي (كتابةً):</span>
+              <span style="font-size: 0.7rem; color: var(--text-gold); display: block;">التفقيط المالي الرسمي (كتابةً):</span>
               <span id="ipcModalTafqeetDisplay" style="font-size: 0.82rem; font-weight: 700; color: #fff; line-height: 1.4;">فقط صفر ريال لا غير</span>
             </div>
           </div>
@@ -9405,7 +9405,7 @@
           </div>
           <div class="form-group">
             <label>العقد المعدل النهائي</label>
-            <input type="number" id="settleModalRev" class="form-control" readonly style="background: rgba(255,255,255,0.04); color: var(--gold-light); font-weight: 700;">
+            <input type="number" id="settleModalRev" class="form-control" readonly style="background: rgba(255,255,255,0.04); color: var(--text-gold); font-weight: 700;">
           </div>
         </div>
 
@@ -9434,7 +9434,7 @@
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
             <label>صافي المستحق الختامي النهائي <span style="color: var(--accent-red);">*</span></label>
-            <input type="number" id="settleModalDue" class="form-control" required style="font-weight: 800; font-size: 1.15rem; color: var(--gold-light);">
+            <input type="number" id="settleModalDue" class="form-control" required style="font-weight: 800; font-size: 1.15rem; color: var(--text-gold);">
           </div>
           <div class="form-group">
             <label>حالة المخالصة</label>
@@ -9478,10 +9478,10 @@
         <!-- حالة المسار الحالي -->
         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <span style="font-size: 0.8rem; color: var(--gold-light); font-weight: bold;">📍 المسار المعتمد حالياً:</span>
+            <span style="font-size: 0.8rem; color: var(--text-gold); font-weight: bold;">📍 المسار المعتمد حالياً:</span>
             <span id="baseFolderStatusBadge" class="drawing-badge-status approved" style="font-size: 0.72rem;">المسار الافتراضي</span>
           </div>
-          <div id="baseFolderCurrentPathDisplay" style="font-size: 0.84rem; font-family: monospace; color: #38bdf8; direction: ltr; text-align: right; word-break: break-all; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px dashed rgba(56,189,248,0.3);">
+          <div id="baseFolderCurrentPathDisplay" style="font-size: 0.84rem; font-family: monospace; color: var(--color-info, #38bdf8); direction: ltr; text-align: right; word-break: break-all; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px; border: 1px dashed rgba(56,189,248,0.3);">
             جاري التحميل...
           </div>
         </div>
@@ -9552,7 +9552,7 @@
       </div>
       <form onsubmit="ProjectControlUI.submitManualOverride(event)">
         <div style="background: rgba(245, 158, 11, 0.1); border-right: 4px solid var(--accent-amber); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 0.85rem;">
-          ⚠️ <b>نظام منع التلاعب:</b> النسبة المسجلة حالياً: <b id="manualOverrideCurrentVal" style="color:var(--gold-light);">0%</b> | النسبة المحسوبة فيزيائياً: <b id="manualOverrideRecommendedVal" style="color:#10b981;">0%</b>.
+          ⚠️ <b>نظام منع التلاعب:</b> النسبة المسجلة حالياً: <b id="manualOverrideCurrentVal" style="color:var(--text-gold);">0%</b> | النسبة المحسوبة فيزيائياً: <b id="manualOverrideRecommendedVal" style="color:var(--color-success, #10b981);">0%</b>.
           يُحظر حفظ نسب إنجاز تبتعد بأكثر من 15% عن الواقع الفيزيائي بدون تقديم مسوّغ هندسي موثق.
         </div>
         <div class="form-group">
@@ -10073,14 +10073,14 @@
     <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); border-bottom: 2px solid #ef4444;">
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 1.4rem;">🔒</span>
-        <h3 style="color: #ef4444; margin: 0;">إقفال الفترة المحاسبية نهائياً</h3>
+        <h3 style="color: var(--color-danger, #ef4444); margin: 0;">إقفال الفترة المحاسبية نهائياً</h3>
       </div>
       <button type="button" class="btn-close" data-action="close-modal" data-modal="periodCloseModal" onclick="App.closeModal('periodCloseModal')">&times;</button>
     </div>
     <div class="modal-body" style="padding: 20px;">
       <div style="background: rgba(239,68,68,0.1); border: 1.5px solid #ef4444; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;">
-        <strong style="color: #ef4444; font-size: 0.95rem; display: block; margin-bottom: 4px;">⚠️ تحذير مالي ورقابي صارم:</strong>
-        <div style="font-size: 0.84rem; color: #e2e8f0; line-height: 1.6;">
+        <strong style="color: var(--color-danger, #ef4444); font-size: 0.95rem; display: block; margin-bottom: 4px;">⚠️ تحذير مالي ورقابي صارم:</strong>
+        <div style="font-size: 0.84rem; color: var(--text-primary, #e2e8f0); line-height: 1.6;">
           إقفال الفترة المحاسبية سيقفل بشكل نهائي كافة القيود والسندات والفواتير وحركات المخزون والمصروفات الواقعة ضمن تواريخ هذه الفترة، وسيمنع أي تعديل أو إضافة أو حذف إلا بتفويض رسمي مبرر.
         </div>
       </div>
@@ -10093,12 +10093,12 @@
       <!-- فحص وترحيل السندات والقيود المعلقة قبل الإقفال -->
       <div id="closePeriodUnpostedContainer" style="margin-bottom: 14px; background: rgba(56, 189, 248, 0.06); border: 1px dashed #38bdf8; border-radius: 8px; padding: 12px 14px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <strong style="color: #38bdf8; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
+          <strong style="color: var(--color-info, #38bdf8); font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
             <span>📋 السندات والقيود غير المرحلة لهذه الفترة:</span>
           </strong>
-          <span id="closePeriodUnpostedBadge" class="badge" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 0.82rem;">جاري الفحص...</span>
+          <span id="closePeriodUnpostedBadge" class="badge" style="background: rgba(56, 189, 248, 0.2); color: var(--color-info, #38bdf8); font-size: 0.82rem;">جاري الفحص...</span>
         </div>
-        <div id="closePeriodUnpostedDetails" style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 8px;">
+        <div id="closePeriodUnpostedDetails" style="font-size: 0.82rem; color: var(--text-secondary, #cbd5e1); line-height: 1.5; margin-bottom: 8px;">
           فحص القيود وسندات الصرف والقبض غير المعتمدة أو غير المرحلة...
         </div>
         <button type="button" id="btnPostAllInPeriod" class="btn btn-primary btn-sm" style="width: 100%; display: none; background: linear-gradient(135deg, #0284c7, #0369a1); border: none; font-weight: 700; padding: 8px 12px;" onclick="Accounting.postAllUnpostedInCurrentPeriod()">
@@ -10110,7 +10110,7 @@
         <input type="hidden" id="closePeriodId">
 
         <div class="form-group" style="margin-bottom: 14px;">
-          <label style="color: #f3cf65; font-weight: 700;">كلمة مرور المدير المالي / المشرف (إلزامية للتفويض) *</label>
+          <label style="color: var(--text-gold, #f3cf65); font-weight: 700;">كلمة مرور المدير المالي / المشرف (إلزامية للتفويض) *</label>
           <input type="password" id="closePeriodManagerPassword" class="form-control" required placeholder="أدخل كلمة مرور الإدارة للمصادقة" autocomplete="current-password">
         </div>
 
@@ -10136,7 +10136,7 @@
     <div class="modal-header">
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 1.4rem;">🔒</span>
-        <h3 style="color: var(--gold-light); margin: 0;">إدارة الفترات المحاسبية وإقفال الحسابات الرسمية</h3>
+        <h3 style="color: var(--text-gold); margin: 0;">إدارة الفترات المحاسبية وإقفال الحسابات الرسمية</h3>
       </div>
       <button type="button" class="btn-close" data-action="close-modal" data-modal="accountingPeriodsModal" onclick="App.closeModal('accountingPeriodsModal')">&times;</button>
     </div>
@@ -10181,7 +10181,7 @@
     <div class="modal-header">
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 1.4rem;">🛡️</span>
-        <h3 style="color: var(--gold-light); margin: 0;">سجل التدقيق والرقابة المالية (Audit Trail)</h3>
+        <h3 style="color: var(--text-gold); margin: 0;">سجل التدقيق والرقابة المالية (Audit Trail)</h3>
       </div>
       <button type="button" class="btn-close" data-action="close-modal" data-modal="auditLogModal" onclick="App.closeModal('auditLogModal')">&times;</button>
     </div>
@@ -10236,7 +10236,7 @@
       <div style="display: flex; align-items: center; gap: 10px;">
         <span style="font-size: 1.5rem;">🏗️</span>
         <div>
-          <h3 style="color: var(--gold-light); margin: 0; font-size: 1.2rem;">مصفوفة الفصل المالي الشاملة لقطاع المقاولات (IFRS 15 / POC)</h3>
+          <h3 style="color: var(--text-gold); margin: 0; font-size: 1.2rem;">مصفوفة الفصل المالي الشاملة لقطاع المقاولات (IFRS 15 / POC)</h3>
           <span style="font-size: 0.8rem; color: var(--text-secondary);">فصل معتمد: المقبوضات النقدية vs الإيرادات vs المستخلصات vs الدفعات المقدمة vs محتجز الضمان vs الأعمال تحت التنفيذ</span>
         </div>
       </div>
@@ -10275,7 +10275,7 @@
       </div>
     </div>
     <div class="modal-footer" style="display: flex; justify-content: space-between;">
-      <span style="font-size: 0.8rem; color: #94a3b8;">* مطبق وفق المعيار الدولي IFRS 15 وطريقة التكلفة للتكلفة (Cost-to-Cost Method).</span>
+      <span style="font-size: 0.8rem; color: var(--text-secondary, #94a3b8);">* مطبق وفق المعيار الدولي IFRS 15 وطريقة التكلفة للتكلفة (Cost-to-Cost Method).</span>
       <div style="display: flex; gap: 8px;">
         <button type="button" class="btn btn-primary" onclick="Reports.openRevenueRecognitionModal()">+ إثبات إيراد دوري</button>
         <button type="button" class="btn btn-secondary" onclick="App.closeModal('contractingSeparationModal')">إغلاق</button>
@@ -10290,7 +10290,7 @@
     <div class="modal-header">
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 1.3rem;">📊</span>
-        <h3 style="color: var(--gold-light); margin: 0; font-size: 1.15rem;">إثبات إيراد تعاقدي دوري (IFRS 15 POC)</h3>
+        <h3 style="color: var(--text-gold); margin: 0; font-size: 1.15rem;">إثبات إيراد تعاقدي دوري (IFRS 15 POC)</h3>
       </div>
       <button type="button" class="btn-close" onclick="App.closeModal('revenueRecognitionModal')">&times;</button>
     </div>
@@ -10307,25 +10307,25 @@
         <div id="revRecPreviewCard" style="display: none; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.83rem;">
             <div>
-              <span style="color: #94a3b8; display: block;">قيمة العقد المنقحة:</span>
-              <strong id="prevContractVal" style="color: #f8fafc;">0</strong>
+              <span style="color: var(--text-secondary, #94a3b8); display: block;">قيمة العقد المنقحة:</span>
+              <strong id="prevContractVal" style="color: var(--text-primary, #f8fafc);">0</strong>
             </div>
             <div>
-              <span style="color: #94a3b8; display: block;">التكلفة الفعلية المنفذة:</span>
-              <strong id="prevActualCost" style="color: #f8fafc;">0</strong>
+              <span style="color: var(--text-secondary, #94a3b8); display: block;">التكلفة الفعلية المنفذة:</span>
+              <strong id="prevActualCost" style="color: var(--text-primary, #f8fafc);">0</strong>
             </div>
             <div>
-              <span style="color: #94a3b8; display: block;">نسبة الإنجاز المحاسبية (POC):</span>
-              <strong id="prevPocPct" style="color: #38bdf8;">0%</strong>
+              <span style="color: var(--text-secondary, #94a3b8); display: block;">نسبة الإنجاز المحاسبية (POC):</span>
+              <strong id="prevPocPct" style="color: var(--color-info, #38bdf8);">0%</strong>
             </div>
             <div>
-              <span style="color: #94a3b8; display: block;">الإيراد المثبت سابقاً:</span>
-              <strong id="prevPostedRev" style="color: #fbbf24;">0</strong>
+              <span style="color: var(--text-secondary, #94a3b8); display: block;">الإيراد المثبت سابقاً:</span>
+              <strong id="prevPostedRev" style="color: var(--color-warning, #fbbf24);">0</strong>
             </div>
           </div>
           <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.88rem; color: #4ade80; font-weight: 700;">الإيراد المستحق للإثبات الآن:</span>
-            <span id="prevUnpostedRev" style="font-size: 1.15rem; color: #4ade80; font-weight: 800;">0</span>
+            <span style="font-size: 0.88rem; color: var(--color-success, #4ade80); font-weight: 700;">الإيراد المستحق للإثبات الآن:</span>
+            <span id="prevUnpostedRev" style="font-size: 1.15rem; color: var(--color-success, #4ade80); font-weight: 800;">0</span>
           </div>
         </div>
 
@@ -10339,7 +10339,7 @@
           <textarea id="revRecNotes" class="form-control" rows="2" placeholder="إثبات إيراد أعمال الفترة وفق نسبة الإنجاز المعتمدة..."></textarea>
         </div>
 
-        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px; font-size: 0.78rem; color: #38bdf8;">
+        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px; font-size: 0.78rem; color: var(--color-info, #38bdf8);">
           ℹ️ سيقوم النظام آلياً بإنشاء قيد يومية متزن:<br>
           • <strong>مدين:</strong> أصول تعاقدية - إيرادات مستحقة غير مفوترة (1128)<br>
           • <strong>دائن:</strong> إيرادات عقود المقاولات المعترف بها (4101)

@@ -71,7 +71,7 @@ const ProjectControlUI = {
     container.innerHTML = `
       <div class="panel-card" style="padding: 40px 24px; text-align: center; border: 1px dashed var(--gold-primary); background: rgba(15, 23, 42, 0.7); border-radius: 12px; margin: 20px 0;">
         <div style="font-size: 2.8rem; margin-bottom: 12px;">🔒</div>
-        <h4 style="color: var(--gold-light); margin-bottom: 8px; font-size: 1.15rem;">يرجى تسجيل الدخول أولاً</h4>
+        <h4 style="color: var(--text-gold); margin-bottom: 8px; font-size: 1.15rem;">يرجى تسجيل الدخول أولاً</h4>
         <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.6;">
           يتطلب استعراض ${featureTitle} وجود جلسة مصادقة نشطة ومعتمدة في النظام.
         </p>
@@ -118,7 +118,7 @@ const ProjectControlUI = {
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
-        <p style="color: var(--gold-light); font-weight: bold;">جاري تدقيق وحساب مؤشرات الإنجاز الفيزيائي والتعاقدي...</p>
+        <p style="color: var(--text-gold); font-weight: bold;">جاري تدقيق وحساب مؤشرات الإنجاز الفيزيائي والتعاقدي...</p>
       </div>
     `;
 
@@ -180,7 +180,7 @@ const ProjectControlUI = {
                 <span class="badge" style="background: ${statusBg}; color: ${statusColor}; border: 1px solid ${statusBorder}; font-weight: bold; font-size: 0.85rem;">
                   ${statusText}
                 </span>
-                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.3);">
+                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--text-gold); border: 1px solid rgba(212, 175, 55, 0.3);">
                   🔒 نظام منع التلاعب بالبيانات
                 </span>
               </div>
@@ -213,7 +213,7 @@ const ProjectControlUI = {
             <!-- النسبة المسجلة الحالية -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center; position: relative;">
               <span style="font-size: 0.82rem; color: var(--text-secondary); font-weight: bold; display: block; margin-bottom: 8px;">النسبة الحالية المسجلة بالنظام</span>
-              <div style="font-size: 3rem; font-weight: 900; color: var(--gold-light); font-family: monospace; line-height: 1;">
+              <div style="font-size: 3rem; font-weight: 900; color: var(--text-gold); font-family: monospace; line-height: 1;">
                 ${d.current_manual_percentage}%
               </div>
               <span style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-top: 8px;">(مسجلة في بطاقة المشروع العامة)</span>
@@ -221,8 +221,8 @@ const ProjectControlUI = {
 
             <!-- النسبة الموصى بها والمحسوبة عادلاً -->
             <div style="background: rgba(16, 185, 129, 0.08); border: 2px solid ${statusColor}; border-radius: 12px; padding: 20px; text-align: center;">
-              <span style="font-size: 0.82rem; color: #34d399; font-weight: bold; display: block; margin-bottom: 8px;">النسبة المحسوبة الموزونة (الواقع الفعلي)</span>
-              <div style="font-size: 3rem; font-weight: 900; color: #10b981; font-family: monospace; line-height: 1;">
+              <span style="font-size: 0.82rem; color: var(--color-success, #34d399); font-weight: bold; display: block; margin-bottom: 8px;">النسبة المحسوبة الموزونة (الواقع الفعلي)</span>
+              <div style="font-size: 3rem; font-weight: 900; color: var(--color-success, #10b981); font-family: monospace; line-height: 1;">
                 ${d.recommended_percentage}%
               </div>
               <span style="font-size: 0.76rem; color: #a7f3d0; display: block; margin-top: 8px;">مستخلصة من 5 محاور هندسية موثقة</span>
@@ -243,11 +243,11 @@ const ProjectControlUI = {
           <!-- رسالة التشخيص الرقابي والتبرير -->
           <div style="background: ${statusBg}; border-right: 4px solid ${statusColor}; border-radius: 6px; padding: 12px 18px; margin-bottom: 24px;">
             <strong style="color: ${statusColor}; display: block; margin-bottom: 4px;">تقرير التحقق الرقابي:</strong>
-            <span style="color: #f1f5f9; font-size: 0.9rem;">${d.validation_message}</span>
+            <span style="color: var(--text-primary, #f1f5f9); font-size: 0.9rem;">${d.validation_message}</span>
           </div>
 
           <!-- تفكيك المصادر الخمسة لحساب النسبة (The 5 Physical Pillars) -->
-          <h4 style="color: var(--gold-light); margin: 0 0 16px 0; font-size: 1.05rem;">
+          <h4 style="color: var(--text-gold); margin: 0 0 16px 0; font-size: 1.05rem;">
             📊 تفكيك مصادر احتساب نسبة الإنجاز (الأوزان النسبية والمستندات الداعمة)
           </h4>
 
@@ -256,8 +256,8 @@ const ProjectControlUI = {
             <!-- 1. كميات BOQ المنفذة -->
             <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-weight: 700; color: #38bdf8;">1. كميات BOQ المنفذة</span>
-                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">الوزن: 35%</span>
+                <span style="font-weight: 700; color: var(--color-info, #38bdf8);">1. كميات BOQ المنفذة</span>
+                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);">الوزن: 35%</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
                 <span style="font-size: 1.4rem; font-weight: 800; color: #fff;">${s.boq.percentage}%</span>
@@ -275,8 +275,8 @@ const ProjectControlUI = {
             <!-- 2. المستخلصات المعتمدة -->
             <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-weight: 700; color: #10b981;">2. المستخلصات المعتمدة من المالك</span>
-                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">الوزن: 25%</span>
+                <span style="font-weight: 700; color: var(--color-success, #10b981);">2. المستخلصات المعتمدة من المالك</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981);">الوزن: 25%</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
                 <span style="font-size: 1.4rem; font-weight: 800; color: #fff;">${s.invoices.percentage}%</span>
@@ -294,8 +294,8 @@ const ProjectControlUI = {
             <!-- 3. تقارير الموقع الميدانية -->
             <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-weight: 700; color: #f59e0b;">3. تقارير الموقع اليومية</span>
-                <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">الوزن: 15%</span>
+                <span style="font-weight: 700; color: var(--color-warning, #f59e0b);">3. تقارير الموقع اليومية</span>
+                <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--color-warning, #f59e0b);">الوزن: 15%</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
                 <span style="font-size: 1.4rem; font-weight: 800; color: #fff;">${s.daily_reports.percentage}%</span>
@@ -331,8 +331,8 @@ const ProjectControlUI = {
             <!-- 5. اعتماد المهندس أو الاستشاري -->
             <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-weight: 700; color: var(--gold-light);">5. شهادات الاستشاري / المهندس</span>
-                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light);">الوزن: 10%</span>
+                <span style="font-weight: 700; color: var(--text-gold);">5. شهادات الاستشاري / المهندس</span>
+                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--text-gold);">الوزن: 10%</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
                 <span style="font-size: 1.4rem; font-weight: 800; color: #fff;">${s.engineer_cert.percentage}%</span>
@@ -407,9 +407,9 @@ const ProjectControlUI = {
       tbody.innerHTML = json.data.map(c => `
         <tr>
           <td><span style="font-family: monospace;">${c.inspection_date || c.created_at?.split(' ')[0] || '-'}</span></td>
-          <td><strong style="color: var(--gold-light);">${c.certifier_name || 'مهندس استشاري'}</strong></td>
+          <td><strong style="color: var(--text-gold);">${c.certifier_name || 'مهندس استشاري'}</strong></td>
           <td><span class="badge" style="background: rgba(255,255,255,0.06);">${c.certifier_role || 'استشاري المشروع'}</span></td>
-          <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: bold; font-size: 0.9rem;">${c.pct}%</span></td>
+          <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #10b981); font-weight: bold; font-size: 0.9rem;">${c.pct}%</span></td>
           <td><span style="color: var(--text-secondary);">${c.notes || 'معاينة مطابقة للمواصفات'}</span></td>
           <td><span style="font-size: 0.78rem; color: var(--text-muted);">${c.created_at || '-'}</span></td>
         </tr>
@@ -551,7 +551,7 @@ const ProjectControlUI = {
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
-        <p style="color: var(--gold-light); font-weight: bold;">جاري تحميل هيكل WBS والجدول الزمني وحساب المسار الحرج...</p>
+        <p style="color: var(--text-gold); font-weight: bold;">جاري تحميل هيكل WBS والجدول الزمني وحساب المسار الحرج...</p>
       </div>
     `;
 
@@ -606,7 +606,7 @@ const ProjectControlUI = {
               <button class="btn btn-primary" onclick="ProjectControlUI.openAddWbsActivityModal()" style="background: linear-gradient(135deg, #4f46e5, #6366f1); border: none; font-weight: bold;">
                 <span>+ إضافة نشاط / حزمة عمل WBS</span>
               </button>
-              <button class="btn btn-secondary" onclick="ProjectControlUI.runCPMEngine()" style="border-color: #ef4444; color: #f87171;">
+              <button class="btn btn-secondary" onclick="ProjectControlUI.runCPMEngine()" style="border-color: #ef4444; color: var(--color-danger, #f87171);">
                 <span>⚡ تشغيل محرك المسار الحرج (CPM)</span>
               </button>
               <button class="btn btn-secondary" onclick="ProjectControlUI.openSaveBaselineModal()">
@@ -622,11 +622,11 @@ const ProjectControlUI = {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 18px 0;">
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">إجمالي أنشطة WBS</span>
-              <span class="hub-kpi-value" style="color: #38bdf8; font-size: 1.6rem;">${stats.total_activities || activities.length} <small>نشاط</small></span>
+              <span class="hub-kpi-value" style="color: var(--color-info, #38bdf8); font-size: 1.6rem;">${stats.total_activities || activities.length} <small>نشاط</small></span>
             </div>
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">أنشطة المسار الحرج (Critical)</span>
-              <span class="hub-kpi-value" style="color: #ef4444; font-size: 1.6rem;">${stats.critical_activities || 0} <small>حرج 🔴</small></span>
+              <span class="hub-kpi-value" style="color: var(--color-danger, #ef4444); font-size: 1.6rem;">${stats.critical_activities || 0} <small>حرج 🔴</small></span>
             </div>
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">أنشطة متأخرة عن الخطة</span>
@@ -636,7 +636,7 @@ const ProjectControlUI = {
             </div>
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">مدة المشروع الإجمالية المخططة</span>
-              <span class="hub-kpi-value" style="color: var(--gold-light); font-size: 1.6rem;">${stats.project_duration_days || '-'} <small>يوم</small></span>
+              <span class="hub-kpi-value" style="color: var(--text-gold); font-size: 1.6rem;">${stats.project_duration_days || '-'} <small>يوم</small></span>
             </div>
           </div>
 
@@ -644,8 +644,8 @@ const ProjectControlUI = {
           ${comp.delayed_tasks_count > 0 ? `
             <div style="background: rgba(245, 158, 11, 0.12); border-right: 4px solid #f59e0b; border-radius: 6px; padding: 12px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
               <div>
-                <strong style="color: #f59e0b; display: block;">⚠️ تنبيه انحراف الجدول الزمني (Schedule Delay Alert):</strong>
-                <span style="font-size: 0.88rem; color: #f1f5f9;">
+                <strong style="color: var(--color-warning, #f59e0b); display: block;">⚠️ تنبيه انحراف الجدول الزمني (Schedule Delay Alert):</strong>
+                <span style="font-size: 0.88rem; color: var(--text-primary, #f1f5f9);">
                   يوجد ${comp.delayed_tasks_count} أنشطة متأخرة عن خط الأساس التعاقدي، وأقصى تأخير مسجل يصل إلى ${comp.max_delay_days || 0} يوم في الأنشطة التنفيذية.
                 </span>
               </div>
@@ -686,7 +686,7 @@ const ProjectControlUI = {
                   return `
                     <tr class="wbs-row ${isCrit ? 'wbs-critical-row' : ''} ${isDelayed ? 'wbs-delayed-row' : ''}" style="${isCrit ? 'background: rgba(239, 68, 68, 0.05);' : ''}">
                       <td>
-                        <strong style="color: var(--gold-light); font-family: monospace;">${a.wbs_code || '-'}</strong>
+                        <strong style="color: var(--text-gold); font-family: monospace;">${a.wbs_code || '-'}</strong>
                       </td>
                       <td>
                         <div style="padding-right: ${(Math.max(0, (a.level || 1) - 1)) * 18}px; font-weight: ${a.level === 1 ? '800' : '500'}; color: #f1f5f9;">
@@ -701,21 +701,21 @@ const ProjectControlUI = {
                           <div style="flex: 1; background: rgba(255,255,255,0.08); height: 6px; border-radius: 3px; overflow: hidden;">
                             <div style="width: ${a.progress_pct || 0}%; height: 100%; background: ${isCrit ? '#ef4444' : '#10b981'};"></div>
                           </div>
-                          <span style="font-family: monospace; font-size: 0.75rem; color: #cbd5e1;">${a.progress_pct || 0}%</span>
+                          <span style="font-family: monospace; font-size: 0.75rem; color: var(--text-secondary, #cbd5e1);">${a.progress_pct || 0}%</span>
                         </div>
                       </td>
                       <td>
-                        <span style="font-size: 0.76rem; color: #94a3b8; font-family: monospace;">
+                        <span style="font-size: 0.76rem; color: var(--text-secondary, #94a3b8); font-family: monospace;">
                           ${a.predecessors || '-'}
                         </span>
                       </td>
                       <td>
                         ${isCrit ? `
-                          <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); font-weight: bold;">
+                          <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.4); font-weight: bold;">
                             مسار حرج 🔴 (TF: 0)
                           </span>
                         ` : `
-                          <span class="badge" style="background: rgba(255, 255, 255, 0.05); color: #94a3b8;">
+                          <span class="badge" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary, #94a3b8);">
                             فائض: ${a.total_float || 0} يوم
                           </span>
                         `}
@@ -724,10 +724,10 @@ const ProjectControlUI = {
                         <span style="font-size: 0.76rem; color: var(--text-secondary); display: block;">
                           ${a.assigned_resources ? '👷 ' + a.assigned_resources : '-'}
                         </span>
-                        ${a.estimated_cost ? `<span style="font-size: 0.72rem; color: var(--gold-light); font-family: monospace;">${App.formatNumber(a.estimated_cost)}</span>` : ''}
+                        ${a.estimated_cost ? `<span style="font-size: 0.72rem; color: var(--text-gold); font-family: monospace;">${App.formatNumber(a.estimated_cost)}</span>` : ''}
                       </td>
                       <td style="text-align: center;">
-                        <button class="btn btn-secondary btn-sm" onclick="ProjectControlUI.deleteWBSActivity(${a.id})" title="حذف النشاط" style="padding: 3px 7px; color: #f87171;">
+                        <button class="btn btn-secondary btn-sm" onclick="ProjectControlUI.deleteWBSActivity(${a.id})" title="حذف النشاط" style="padding: 3px 7px; color: var(--color-danger, #f87171);">
                           🗑️
                         </button>
                       </td>
@@ -887,7 +887,7 @@ const ProjectControlUI = {
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
-        <p style="color: var(--gold-light); font-weight: bold;">جاري حساب مؤشرات القيمة المكتسبة EVM والتنبؤات المالية...</p>
+        <p style="color: var(--text-gold); font-weight: bold;">جاري حساب مؤشرات القيمة المكتسبة EVM والتنبؤات المالية...</p>
       </div>
     `;
 
@@ -974,7 +974,7 @@ const ProjectControlUI = {
                 <strong style="color: ${isCpiHealthy && isSpiHealthy ? '#34d399' : '#f87171'}; font-size: 1.05rem; display: block; margin-bottom: 4px;">
                   ${isCpiHealthy && isSpiHealthy ? 'الأداء المالي والهندسي سليم ومنضبط' : 'إنذار رقابي مبكر للإدارة التنفيذية:'}
                 </strong>
-                <p style="color: #f1f5f9; font-size: 0.9rem; margin: 0; line-height: 1.5;">
+                <p style="color: var(--text-primary, #f1f5f9); font-size: 0.9rem; margin: 0; line-height: 1.5;">
                   ${d.executive_summary || 'تظهر المؤشرات أن التكلفة الفعلية ومعدل الإنجاز المكتسب يسيران وفق التقديرات المعتمدة.'}
                 </p>
               </div>
@@ -987,11 +987,11 @@ const ProjectControlUI = {
             <!-- PV: القيمة المخططة -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: #38bdf8; font-weight: bold;">PV: القيمة المخططة</span>
-                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Planned Value</span>
+                <span style="font-size: 0.8rem; color: var(--color-info, #38bdf8); font-weight: bold;">PV: القيمة المخططة</span>
+                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);">Planned Value</span>
               </div>
               <div style="font-size: 1.8rem; font-weight: 800; color: #fff; font-family: monospace;">
-                ${App.formatNumber(m.PV)} <small style="font-size: 0.85rem; color: var(--gold-light);">${d.currency}</small>
+                ${App.formatNumber(m.PV)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
                 قيمة الأعمال المفترض إنجازها تعاقدياً حتى اليوم
@@ -1001,11 +1001,11 @@ const ProjectControlUI = {
             <!-- EV: القيمة المكتسبة -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: #10b981; font-weight: bold;">EV: القيمة المكتسبة</span>
-                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">Earned Value</span>
+                <span style="font-size: 0.8rem; color: var(--color-success, #10b981); font-weight: bold;">EV: القيمة المكتسبة</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981);">Earned Value</span>
               </div>
-              <div style="font-size: 1.8rem; font-weight: 800; color: #10b981; font-family: monospace;">
-                ${App.formatNumber(m.EV)} <small style="font-size: 0.85rem; color: var(--gold-light);">${d.currency}</small>
+              <div style="font-size: 1.8rem; font-weight: 800; color: var(--color-success, #10b981); font-family: monospace;">
+                ${App.formatNumber(m.EV)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
                 القيمة التعاقدية الحقيقية للأعمال المنجزة فعلياً (${m.progress_percentage}%)
@@ -1015,11 +1015,11 @@ const ProjectControlUI = {
             <!-- AC: التكلفة الفعلية -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: #f87171; font-weight: bold;">AC: التكلفة الفعلية</span>
-                <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">Actual Cost</span>
+                <span style="font-size: 0.8rem; color: var(--color-danger, #f87171); font-weight: bold;">AC: التكلفة الفعلية</span>
+                <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #f87171);">Actual Cost</span>
               </div>
-              <div style="font-size: 1.8rem; font-weight: 800; color: #f87171; font-family: monospace;">
-                ${App.formatNumber(m.AC)} <small style="font-size: 0.85rem; color: var(--gold-light);">${d.currency}</small>
+              <div style="font-size: 1.8rem; font-weight: 800; color: var(--color-danger, #f87171); font-family: monospace;">
+                ${App.formatNumber(m.AC)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
                 المبالغ المصروفة حقيقة (المشتريات + العمالة والمصروفات)
@@ -1029,11 +1029,11 @@ const ProjectControlUI = {
             <!-- BAC: إجمالي الميزانية -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: var(--gold-light); font-weight: bold;">BAC: ميزانية الإكمال</span>
-                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light);">Budget at Completion</span>
+                <span style="font-size: 0.8rem; color: var(--text-gold); font-weight: bold;">BAC: ميزانية الإكمال</span>
+                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--text-gold);">Budget at Completion</span>
               </div>
-              <div style="font-size: 1.8rem; font-weight: 800; color: var(--gold-light); font-family: monospace;">
-                ${App.formatNumber(m.BAC)} <small style="font-size: 0.85rem; color: var(--gold-light);">${d.currency}</small>
+              <div style="font-size: 1.8rem; font-weight: 800; color: var(--text-gold); font-family: monospace;">
+                ${App.formatNumber(m.BAC)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
                 الميزانية التعاقدية الإجمالية المعتمدة للمشروع
@@ -1075,11 +1075,11 @@ const ProjectControlUI = {
             <!-- EAC: التكلفة المتوقعة عند الإكمال -->
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 0.8rem; color: #e2e8f0; font-weight: bold;">EAC: التكلفة النهائية المتوقعة</span>
-                <span class="badge" style="background: rgba(255, 255, 255, 0.08); color: #cbd5e1;">Forecast at Completion</span>
+                <span style="font-size: 0.8rem; color: var(--text-primary, #e2e8f0); font-weight: bold;">EAC: التكلفة النهائية المتوقعة</span>
+                <span class="badge" style="background: rgba(255, 255, 255, 0.08); color: var(--text-secondary, #cbd5e1);">Forecast at Completion</span>
               </div>
               <div style="font-size: 1.8rem; font-weight: 800; color: ${m.EAC > m.BAC ? '#f87171' : '#10b981'}; font-family: monospace;">
-                ${App.formatNumber(m.EAC)} <small style="font-size: 0.85rem; color: var(--gold-light);">${d.currency}</small>
+                ${App.formatNumber(m.EAC)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
                 التكلفة الإجمالية التي سينتهي عندها المشروع بالمعدل الحالي
@@ -1095,7 +1095,7 @@ const ProjectControlUI = {
                 </span>
               </div>
               <div style="font-size: 1.8rem; font-weight: 800; color: ${m.VAC >= 0 ? '#10b981' : '#f87171'}; font-family: monospace;">
-                ${m.VAC > 0 ? '+' : ''}${App.formatNumber(m.VAC)} <small style="font-size: 0.85rem; color: var(--gold-light);">${d.currency}</small>
+                ${m.VAC > 0 ? '+' : ''}${App.formatNumber(m.VAC)} <small style="font-size: 0.85rem; color: var(--text-gold);">${d.currency}</small>
               </div>
               <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">
                 ${m.VAC >= 0 ? 'وفر مالي محقق لصالح الشركة عند الإغلاق' : 'خسارة أو عجز مالي محتمل إذا استمر الأداء الحالي'}
@@ -1106,7 +1106,7 @@ const ProjectControlUI = {
 
           <!-- تفاصيل المؤشرات الإضافية: ETC و TCPI و CV و SV -->
           <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-light); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-            <h5 style="color: var(--gold-light); margin: 0 0 12px 0; font-size: 0.95rem;">🔍 مؤشرات الكفاءة التشغيلية التكميلية</h5>
+            <h5 style="color: var(--text-gold); margin: 0 0 12px 0; font-size: 0.95rem;">🔍 مؤشرات الكفاءة التشغيلية التكميلية</h5>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
               <div>
                 <span style="font-size: 0.75rem; color: var(--text-secondary); display: block;">ETC (التكلفة المتبقية للإكمال):</span>
@@ -1155,8 +1155,8 @@ const ProjectControlUI = {
                       <td><span style="font-family: monospace;">${h.status_date || h.snapshot_date || '-'}</span></td>
                       <td><strong>${h.percent_complete ?? h.completion_pct ?? 0}%</strong></td>
                       <td><span style="font-family: monospace;">${App.formatNumber(h.pv || 0)}</span></td>
-                      <td><span style="font-family: monospace; color: #10b981;">${App.formatNumber(h.ev || 0)}</span></td>
-                      <td><span style="font-family: monospace; color: #f87171;">${App.formatNumber(h.ac || 0)}</span></td>
+                      <td><span style="font-family: monospace; color: var(--color-success, #10b981);">${App.formatNumber(h.ev || 0)}</span></td>
+                      <td><span style="font-family: monospace; color: var(--color-danger, #f87171);">${App.formatNumber(h.ac || 0)}</span></td>
                       <td><strong style="color: ${h.cpi >= 1 ? '#10b981' : '#f87171'};">${h.cpi || '-'}</strong></td>
                       <td><strong style="color: ${h.spi >= 1 ? '#10b981' : '#f59e0b'};">${h.spi || '-'}</strong></td>
                       <td><span style="font-family: monospace;">${App.formatNumber(h.eac || 0)}</span></td>
@@ -1224,7 +1224,7 @@ const ProjectControlUI = {
     container.innerHTML = `
       <div style="text-align: center; padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>
-        <p style="color: var(--gold-light); font-weight: bold;">جاري تحميل سجلات المخاطر والمطالبات وتقارير NCR وRFI...</p>
+        <p style="color: var(--text-gold); font-weight: bold;">جاري تحميل سجلات المخاطر والمطالبات وتقارير NCR وRFI...</p>
       </div>
     `;
 
@@ -1257,10 +1257,10 @@ const ProjectControlUI = {
           <div class="panel-header" style="flex-wrap: wrap; gap: 14px; border-bottom: 1px solid var(--border-light); padding-bottom: 16px;">
             <div>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
-                <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: bold;">
+                <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.3); font-weight: bold;">
                   🛡️ حوكمة المخاطر والنزاعات التعاقدية
                 </span>
-                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light);">
+                <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--text-gold);">
                   المعايير الدولية لإدارة العقود (FIDIC)
                 </span>
               </div>
@@ -1296,13 +1296,13 @@ const ProjectControlUI = {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 18px 0;">
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">المخاطر المفتوحة والحرجة</span>
-              <span class="hub-kpi-value" style="color: #f87171; font-size: 1.6rem;">
+              <span class="hub-kpi-value" style="color: var(--color-danger, #f87171); font-size: 1.6rem;">
                 ${s.risk_summary?.critical || 0} <small>حرج</small> / ${s.risk_summary?.total || d.risks?.length || 0}
               </span>
             </div>
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">المطالبات المالية وتمديد الوقت</span>
-              <span class="hub-kpi-value" style="color: var(--gold-light); font-size: 1.6rem;">
+              <span class="hub-kpi-value" style="color: var(--text-gold); font-size: 1.6rem;">
                 ${d.claims?.length || 0} <small>مطالبة</small>
               </span>
             </div>
@@ -1432,9 +1432,9 @@ const ProjectControlUI = {
 
                 return `
                   <tr>
-                    <td><span style="font-family: monospace; color: var(--gold-light);">${r.id}</span></td>
+                    <td><span style="font-family: monospace; color: var(--text-gold);">${r.id}</span></td>
                     <td>
-                      <strong style="color: #f1f5f9; display: block;">${r.title}</strong>
+                      <strong style="color: var(--text-primary, #f1f5f9); display: block;">${r.title}</strong>
                       <span style="font-size: 0.75rem; color: var(--text-muted);">${r.category || 'عام'} - ${r.description || ''}</span>
                     </td>
                     <td><span style="font-family: monospace;">${r.probability}/5</span></td>
@@ -1442,10 +1442,10 @@ const ProjectControlUI = {
                     <td><strong style="font-family: monospace; font-size: 1rem; color: #fff;">${r.risk_score}</strong></td>
                     <td><span class="badge" style="background: ${badgeBg}; color: ${badgeColor}; font-weight: bold;">${ratingLabel}</span></td>
                     <td>
-                      <div style="font-size: 0.76rem; color: var(--gold-light); font-family: monospace;">${r.financial_impact ? App.formatNumber(r.financial_impact) + ' ر.ي' : '-'}</div>
+                      <div style="font-size: 0.76rem; color: var(--text-gold); font-family: monospace;">${r.financial_impact ? App.formatNumber(r.financial_impact) + ' ر.ي' : '-'}</div>
                       <div style="font-size: 0.72rem; color: var(--text-muted);">${r.schedule_impact_days ? r.schedule_impact_days + ' يوم تأخير' : ''}</div>
                     </td>
-                    <td><span style="font-size: 0.78rem; color: #cbd5e1;">${r.treatment_plan || 'خطة مراقبة دورية'}</span></td>
+                    <td><span style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1);">${r.treatment_plan || 'خطة مراقبة دورية'}</span></td>
                     <td><span style="font-size: 0.78rem; color: var(--text-secondary);">${r.owner_name || r.owner_id || '-'}</span></td>
                     <td><span class="badge" style="background: rgba(255,255,255,0.06); font-size: 0.75rem;">${r.status === 'open' ? 'نشط ⚠️' : 'معالج ✅'}</span></td>
                   </tr>
@@ -1486,19 +1486,19 @@ const ProjectControlUI = {
                 <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">لا توجد مطالبات أو نزاعات مسجلة. انقر على "+ إضافة مطالبة / نزاع" لتوثيق أي تمديد زمني أو تكاليف إضافية.</td></tr>
               ` : claims.map(c => `
                 <tr>
-                  <td><strong style="color: var(--gold-light); font-family: monospace;">${c.claim_no || `CLM-${c.id}`}</strong></td>
+                  <td><strong style="color: var(--text-gold); font-family: monospace;">${c.claim_no || `CLM-${c.id}`}</strong></td>
                   <td>
-                    <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">
+                    <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);">
                       ${c.claim_type === 'extension_of_time' ? 'تمديد زمني (EOT)' : (c.claim_type === 'additional_cost' ? 'تكلفة إضافية' : 'نزاع تعاقدي')}
                     </span>
                   </td>
                   <td>
-                    <strong style="color: #f1f5f9; display: block;">${c.title}</strong>
+                    <strong style="color: var(--text-primary, #f1f5f9); display: block;">${c.title}</strong>
                     <span style="font-size: 0.75rem; color: var(--text-muted);">${c.justification || ''}</span>
                   </td>
                   <td><span style="font-family: monospace; font-weight: bold; color: ${c.days_requested > 0 ? '#f59e0b' : 'inherit'};">${c.days_requested ? c.days_requested + ' يوم' : '-'}</span></td>
                   <td><span style="font-family: monospace; font-weight: bold; color: ${c.amount_claimed > 0 ? '#10b981' : 'inherit'};">${c.amount_claimed ? App.formatNumber(c.amount_claimed) : '-'}</span></td>
-                  <td><span style="font-size: 0.78rem; color: #cbd5e1;">${c.contractual_reference || 'شروط العقد العامة'}</span></td>
+                  <td><span style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1);">${c.contractual_reference || 'شروط العقد العامة'}</span></td>
                   <td>
                     <span class="badge" style="background: ${c.status === 'approved' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'}; color: ${c.status === 'approved' ? '#10b981' : '#f59e0b'};">
                       ${c.status === 'approved' ? 'معتمدة ✅' : (c.status === 'rejected' ? 'مرفوضة ❌' : 'قيد التفاوض ⏳')}
@@ -1541,9 +1541,9 @@ const ProjectControlUI = {
                 <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">لا توجد تقارير عدم مطابقة مفتوحة. الجودة مطابقة للمواصفات ✅</td></tr>
               ` : ncrs.map(n => `
                 <tr>
-                  <td><strong style="color: #f87171; font-family: monospace;">${n.ncr_no || `NCR-${n.id}`}</strong></td>
+                  <td><strong style="color: var(--color-danger, #f87171); font-family: monospace;">${n.ncr_no || `NCR-${n.id}`}</strong></td>
                   <td>
-                    <strong style="color: #f1f5f9; display: block;">${n.title || n.description}</strong>
+                    <strong style="color: var(--text-primary, #f1f5f9); display: block;">${n.title || n.description}</strong>
                     <span style="font-size: 0.75rem; color: var(--text-muted);">${n.description || ''}</span>
                   </td>
                   <td><span style="font-size: 0.78rem; color: var(--text-secondary);">${n.location_details || 'الموقع العام'}</span></td>
@@ -1552,7 +1552,7 @@ const ProjectControlUI = {
                       ${n.severity === 'critical' ? 'جسيم 🔴' : (n.severity === 'moderate' ? 'متوسط 🟡' : 'بسيط 🟢')}
                     </span>
                   </td>
-                  <td><span style="font-size: 0.78rem; color: #cbd5e1;">${n.corrective_action || 'إعادة الفحص والإصلاح'}</span></td>
+                  <td><span style="font-size: 0.78rem; color: var(--text-secondary, #cbd5e1);">${n.corrective_action || 'إعادة الفحص والإصلاح'}</span></td>
                   <td><span style="font-size: 0.78rem; color: var(--text-muted); font-family: monospace;">${n.inspection_date || '-'}</span></td>
                   <td>
                     <span class="badge" style="background: ${n.status === 'closed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${n.status === 'closed' ? '#10b981' : '#f87171'};">
@@ -1598,12 +1598,12 @@ const ProjectControlUI = {
                 const isOverdue = r.is_overdue;
                 return `
                   <tr>
-                    <td><strong style="color: #38bdf8; font-family: monospace;">${r.rfi_no || `RFI-${r.id}`}</strong></td>
+                    <td><strong style="color: var(--color-info, #38bdf8); font-family: monospace;">${r.rfi_no || `RFI-${r.id}`}</strong></td>
                     <td>
-                      <strong style="color: #f1f5f9; display: block;">${r.subject}</strong>
+                      <strong style="color: var(--text-primary, #f1f5f9); display: block;">${r.subject}</strong>
                       <span style="font-size: 0.75rem; color: var(--text-muted);">${r.question || ''}</span>
                     </td>
-                    <td><span style="font-size: 0.78rem; color: var(--gold-light);">${r.to_party || 'استشاري المشروع'}</span></td>
+                    <td><span style="font-size: 0.78rem; color: var(--text-gold);">${r.to_party || 'استشاري المشروع'}</span></td>
                     <td>
                       <span class="badge" style="background: ${r.urgency === 'critical' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; color: ${r.urgency === 'critical' ? '#f87171' : '#38bdf8'};">
                         ${r.urgency === 'critical' ? 'حرج وعاجل ⚡' : 'عادي'}

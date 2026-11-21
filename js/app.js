@@ -626,16 +626,16 @@ const App = {
               const accStr = p.account_code ? `${p.account_code} - ${p.account_name}` : (p.account_name || '-');
               const ccStr = p.cost_center_code ? `${p.cost_center_code} - ${p.cost_center_name}` : (p.cost_center_name || '-');
               const paymentStr = p.payment_method === 'شيك' 
-                ? `<span class="badge badge-active" style="background: rgba(212, 175, 55, 0.2); color: var(--gold-light); border: 1px solid var(--gold-light);">شيك: ${p.check_no || 'غير محدد'}</span>`
+                ? `<span class="badge badge-active" style="background: rgba(212, 175, 55, 0.2); color: var(--text-gold); border: 1px solid var(--gold-light);">شيك: ${p.check_no || 'غير محدد'}</span>`
                 : `<span class="badge badge-active">${p.payment_method}</span>`;
 
               return `
                 <tr>
-                  <td><strong style="color: var(--gold-light); font-family: monospace;">${p.receipt_no}</strong><br><small>${p.status === 'draft' ? 'مسودة' : p.status === 'posted' ? 'مرحل' : p.status}</small></td>
+                  <td><strong style="color: var(--text-gold); font-family: monospace;">${p.receipt_no}</strong><br><small>${p.status === 'draft' ? 'مسودة' : p.status === 'posted' ? 'مرحل' : p.status}</small></td>
                   <td>${p.date}</td>
                   <td><strong>${p.client_name || '-'}</strong></td>
-                  <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
-                  <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
+                  <td><span style="font-size: 0.82rem; color: var(--text-secondary, #94a3b8);">${accStr}</span></td>
+                  <td><span style="font-size: 0.82rem; color: var(--color-info, #38bdf8);">${ccStr}</span></td>
                   <td>${p.project_name || '-'}</td>
                   <td style="color: var(--accent-green); font-weight: bold;">${this.formatNumber(p.amount)} ${p.currency || 'ر.ي'}</td>
                   <td>${paymentStr}</td>
@@ -724,7 +724,7 @@ const App = {
               const accStr = e.account_code ? `${e.account_code} - ${e.account_name}` : (e.account_name || '-');
               const ccStr = e.cost_center_code ? `${e.cost_center_code} - ${e.cost_center_name}` : (e.cost_center_name || '-');
               const paymentStr = e.payment_method === 'شيك' 
-                ? `<span class="badge badge-active" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">شيك: ${e.check_no || 'غير محدد'}</span>`
+                ? `<span class="badge badge-active" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.4);">شيك: ${e.check_no || 'غير محدد'}</span>`
                 : `<span class="badge badge-active">${e.payment_method}</span>`;
 
               return `
@@ -732,8 +732,8 @@ const App = {
                   <td><strong style="color: var(--accent-red); font-family: monospace;">${e.receipt_no}</strong>${e.reference_no ? `<br><small>مرجع: ${e.reference_no}</small>` : ''}<br><small>${e.status === 'draft' ? 'مسودة' : e.status === 'posted' ? 'مرحل' : e.status}</small></td>
                   <td>${e.date}</td>
                   <td><span class="badge badge-expense">${e.expense_type}</span></td>
-                  <td><span style="font-size: 0.82rem; color: #94a3b8;">${accStr}</span></td>
-                  <td><span style="font-size: 0.82rem; color: #38bdf8;">${ccStr}</span></td>
+                  <td><span style="font-size: 0.82rem; color: var(--text-secondary, #94a3b8);">${accStr}</span></td>
+                  <td><span style="font-size: 0.82rem; color: var(--color-info, #38bdf8);">${ccStr}</span></td>
                   <td>${e.project_name || '-'}</td>
                   <td><strong>${e.supplier_name || '-'}</strong></td>
                   <td style="color: var(--accent-red); font-weight: bold;">${this.formatNumber(e.amount)} ${e.currency || 'ر.ي'}</td>
@@ -827,12 +827,12 @@ const App = {
           } else {
             const renderRows = (pageList) => {
               tbody.innerHTML = pageList.map(c => {
-                const empDisplay = `<strong>${c.employee_name}</strong>${c.employee_no ? `<br><small style="color: var(--gold-light); font-family: monospace; font-weight: bold;">(الرقم: ${c.employee_no})</small>` : ''}`;
+                const empDisplay = `<strong>${c.employee_name}</strong>${c.employee_no ? `<br><small style="color: var(--text-gold); font-family: monospace; font-weight: bold;">(الرقم: ${c.employee_no})</small>` : ''}`;
                 const accDisplay = c.account_name 
-                  ? `<strong>${c.account_name}</strong>${c.account_code ? `<br><small style="font-family: monospace; color: #38bdf8; font-weight: bold;">(${c.account_code})</small>` : ''}`
+                  ? `<strong>${c.account_name}</strong>${c.account_code ? `<br><small style="font-family: monospace; color: var(--color-info, #38bdf8); font-weight: bold;">(${c.account_code})</small>` : ''}`
                   : `<span style="color: var(--text-secondary); font-size: 0.82rem;">-</span>`;
                 const origCustodyDisplay = c.related_custody_no 
-                  ? `<span style="color: #38bdf8; font-weight: bold; font-family: monospace;">تصفية لـ: ${c.related_custody_no}</span>`
+                  ? `<span style="color: var(--color-info, #38bdf8); font-weight: bold; font-family: monospace;">تصفية لـ: ${c.related_custody_no}</span>`
                   : `<span style="color: var(--text-secondary);">-</span>`;
 
                 return `
@@ -842,7 +842,7 @@ const App = {
                     <td>${accDisplay}</td>
                     <td>
                       <span class="badge ${c.operation_type === 'تصفية عهدة' ? 'badge-income' : 'badge-active'}">${c.operation_type}</span>
-                      ${c.custody_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">${c.custody_no}</small>` : ''}
+                      ${c.custody_no ? `<br><small style="font-family: monospace; color: var(--text-gold); font-weight: bold;">${c.custody_no}</small>` : ''}
                     </td>
                     <td>${origCustodyDisplay}</td>
                     <td>${this.formatNumber(c.total_amount)} ${c.currency || 'ر.ي'}</td>
@@ -968,7 +968,7 @@ const App = {
                     <div style="font-size: 0.75rem; color: var(--text-secondary);">${c.company || 'عميل فردي'}</div>
                     <small>${c.party_no || ''} · ${Accounting.partyStatusLabel(c.status)}</small>
                   </td>
-                  <td dir="ltr" style="font-family: monospace; font-weight: 700; color: #38bdf8;">
+                  <td dir="ltr" style="font-family: monospace; font-weight: 700; color: var(--color-info, #38bdf8);">
                     ${c.account_code || '12301001'}
                   </td>
                   <td>
@@ -977,13 +977,13 @@ const App = {
                   </td>
                   <td style="text-align: center;">
                     <div style="display: flex; justify-content: center; gap: 4px; flex-wrap: wrap;">
-                      <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;" title="عدد العقود المعتمدة">${contractCount} عقود</span>
+                      <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8);" title="عدد العقود المعتمدة">${contractCount} عقود</span>
                       <span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa;" title="المشاريع المرتبطة">${projectCount} مشاريع</span>
-                      <span class="badge" style="background: rgba(234, 179, 8, 0.15); color: #facc15;" title="المستخلصات والمطالبات">${billsCount} مستخلص</span>
+                      <span class="badge" style="background: rgba(234, 179, 8, 0.15); color: var(--color-warning, #facc15);" title="المستخلصات والمطالبات">${billsCount} مستخلص</span>
                     </div>
                   </td>
                   <td>
-                    <div style="font-weight: 600; color: var(--gold-light);">${this.formatNumber(invoicedAmt)} ${curr}</div>
+                    <div style="font-weight: 600; color: var(--text-gold);">${this.formatNumber(invoicedAmt)} ${curr}</div>
                     ${c.gross_work_completed ? `<div style="font-size: 0.7rem; color: var(--text-secondary);">إجمالي الإنجاز: ${this.formatNumber(c.gross_work_completed)}</div>` : ''}
                   </td>
                   <td>
@@ -991,7 +991,7 @@ const App = {
                     ${c.total_advance_received ? `<div style="font-size: 0.7rem; color: var(--text-secondary);">مقدم مقبوض: ${this.formatNumber(c.total_advance_received)}</div>` : ''}
                   </td>
                   <td>
-                    <div style="font-weight: 600; color: #f59e0b;">${this.formatNumber(retentionAmt)} ${curr}</div>
+                    <div style="font-weight: 600; color: var(--color-warning, #f59e0b);">${this.formatNumber(retentionAmt)} ${curr}</div>
                     ${c.total_retention_held ? `<div style="font-size: 0.7rem; color: var(--text-secondary);">إجمالي المحتجز: ${this.formatNumber(c.total_retention_held)}</div>` : ''}
                   </td>
                   <td>
@@ -1121,7 +1121,7 @@ const App = {
                   <div><small>${s.party_no || ''} · ${Accounting.partyStatusLabel(s.status)}</small></div>
                   ${contact}
                 </td>
-                <td dir="ltr" style="font-family: monospace; font-weight: 700; color: #38bdf8;">
+                <td dir="ltr" style="font-family: monospace; font-weight: 700; color: var(--color-info, #38bdf8);">
                   ${s.account_code || '22101001'}
                 </td>
                 <td>
@@ -1130,7 +1130,7 @@ const App = {
                 </td>
                 <td dir="ltr" style="text-align: right; font-family: monospace;">${phone}</td>
                 <td style="text-align: center;">
-                  <span class="badge" style="background: rgba(59,130,246,0.12); color: #3b82f6; font-weight: bold; padding: 4px 8px;">
+                  <span class="badge" style="background: rgba(59,130,246,0.12); color: var(--color-info, #3b82f6); font-weight: bold; padding: 4px 8px;">
                     ${invBadgeText}
                   </span>
                 </td>
@@ -1217,7 +1217,7 @@ const App = {
             <div>
               <div style="display: flex; align-items: center; gap: 10px;">
                 <h2 style="margin: 0; font-size: 1.35rem; color: var(--text-primary); font-weight: 700;">${v.company_name}</h2>
-                <span class="badge" style="background: rgba(59,130,246,0.15); color: #3b82f6; font-size: 0.85rem; padding: 4px 10px;">${v.industry_category}</span>
+                <span class="badge" style="background: rgba(59,130,246,0.15); color: var(--color-info, #3b82f6); font-size: 0.85rem; padding: 4px 10px;">${v.industry_category}</span>
                 <span class="badge" style="background: ${statusBg}; color: ${statusColor}; font-size: 0.85rem; padding: 4px 10px;">${fin.settlement_status_label || 'نشط'}</span>
               </div>
               <div style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 6px;">
@@ -1236,13 +1236,13 @@ const App = {
             
             <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; border-right: 4px solid #3b82f6;">
               <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">إجمالي المشتريات من سابق (عدد الفواتير)</div>
-              <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;">${fin.total_purchase_invoices_count} <span style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted);">فاتورة شراء (تلقائي)</span></div>
+              <div style="font-size: 1.5rem; font-weight: 700; color: var(--color-info, #3b82f6);">${fin.total_purchase_invoices_count} <span style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted);">فاتورة شراء (تلقائي)</span></div>
               <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">إجمالي المفوتر: <strong>${this.formatNumber(fin.total_invoiced_amount)} ${currency}</strong></div>
             </div>
 
             <div style="background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 16px; border-right: 4px solid #10b981;">
               <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">المبالغ المسددة من سابق (SUM Paid)</div>
-              <div style="font-size: 1.4rem; font-weight: 700; color: #10b981;">${this.formatNumber(fin.total_amount_paid)} <span style="font-size: 0.8rem; font-weight: normal;">${currency}</span></div>
+              <div style="font-size: 1.4rem; font-weight: 700; color: var(--color-success, #10b981);">${this.formatNumber(fin.total_amount_paid)} <span style="font-size: 0.8rem; font-weight: normal;">${currency}</span></div>
               <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">معاملات الصرف المسواة (${fin.payment_coverage_ratio_pct}% سداد)</div>
             </div>
 
@@ -1262,7 +1262,7 @@ const App = {
             <!-- البيانات الأساسية والتشغيلية -->
             <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px;">
               <h4 style="margin-top: 0; margin-bottom: 16px; font-size: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border-color, #334155); padding-bottom: 8px;">
-                <i class="fa fa-info-circle" style="color: #3b82f6;"></i> البيانات الأساسية والتعاقدية (Master Data)
+                <i class="fa fa-info-circle" style="color: var(--color-info, #3b82f6);"></i> البيانات الأساسية والتعاقدية (Master Data)
               </h4>
               <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem;">
                 <div style="display: flex; justify-content: space-between;">
@@ -1271,7 +1271,7 @@ const App = {
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                   <span style="color: var(--text-secondary);">رقم الهاتف المعتمد:</span>
-                  <strong dir="ltr"><a href="tel:${v.phone_number}" style="color: #3b82f6; text-decoration: none;">${v.phone_number || '-'}</a></strong>
+                  <strong dir="ltr"><a href="tel:${v.phone_number}" style="color: var(--color-info, #3b82f6); text-decoration: none;">${v.phone_number || '-'}</a></strong>
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                   <span style="color: var(--text-secondary);">مدة توريد المواد:</span>
@@ -1295,7 +1295,7 @@ const App = {
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                   <span style="color: var(--text-secondary);">رقم المبلغ (الرصيد الافتتاحي):</span>
-                  <strong style="color: #3b82f6;">${this.formatNumber(v.balance || 0)} ${currency}</strong>
+                  <strong style="color: var(--color-info, #3b82f6);">${this.formatNumber(v.balance || 0)} ${currency}</strong>
                 </div>
               </div>
             </div>
@@ -1304,9 +1304,9 @@ const App = {
             <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px;">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color, #334155); padding-bottom: 8px; margin-bottom: 16px;">
                 <h4 style="margin: 0; font-size: 1rem; color: var(--text-primary);">
-                  <i class="fa fa-lock" style="color: #10b981;"></i> الحساب المصرفي والتحويلات (Vault)
+                  <i class="fa fa-lock" style="color: var(--color-success, #10b981);"></i> الحساب المصرفي والتحويلات (Vault)
                 </h4>
-                <span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; font-size: 0.75rem;">مشفر AES-256-GCM 🛡️</span>
+                <span class="badge" style="background: rgba(16,185,129,0.15); color: var(--color-success, #10b981); font-size: 0.75rem;">مشفر AES-256-GCM 🛡️</span>
               </div>
               <div id="vendorBankVaultCard_${v.id}">
                 <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem;">
@@ -1316,15 +1316,15 @@ const App = {
                   </div>
                   <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">رقم الحساب (مقنّع):</span>
-                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: #38bdf8;">${bank.account_number_masked}</code>
+                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: var(--color-info, #38bdf8);">${bank.account_number_masked}</code>
                   </div>
                   <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">رقم الآيبان IBAN (مقنّع):</span>
-                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: #38bdf8;">${bank.iban_masked}</code>
+                    <code dir="ltr" style="background: rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px; color: var(--color-info, #38bdf8);">${bank.iban_masked}</code>
                   </div>
                 </div>
                 <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border-color, #334155); text-align: center;">
-                  <button class="btn btn-secondary btn-sm" onclick="App.showFullVendorBankDetails(${v.id})" style="border: 1px solid #10b981; color: #10b981;">
+                  <button class="btn btn-secondary btn-sm" onclick="App.showFullVendorBankDetails(${v.id})" style="border: 1px solid #10b981; color: var(--color-success, #10b981);">
                     <i class="fa fa-key"></i> فك التشفير وعرض الحساب البنكي الكامل
                   </button>
                   <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">متاح للصلاحيات المالية المعتمدة فقط مع تسجيل عملية تدقيق</div>
@@ -1338,7 +1338,7 @@ const App = {
           <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
               <h4 style="margin: 0; font-size: 1rem; color: var(--text-primary);">
-                <i class="fa fa-history" style="color: #f59e0b;"></i> أحدث فواتير المشتريات التاريخية (Eager-Loaded)
+                <i class="fa fa-history" style="color: var(--color-warning, #f59e0b);"></i> أحدث فواتير المشتريات التاريخية (Eager-Loaded)
               </h4>
               <span style="font-size: 0.8rem; color: var(--text-muted);">تم تحميلها في مسار استعلام متوازي دون تباطؤ</span>
             </div>
@@ -1361,7 +1361,7 @@ const App = {
                           <td><strong>${inv.invoice_no}</strong></td>
                           <td>${inv.date || '-'}</td>
                           <td style="font-weight: bold;">${this.formatNumber(inv.total_amount)} ${currency}</td>
-                          <td style="color: #10b981;">${this.formatNumber(inv.paid_amount || 0)} ${currency}</td>
+                          <td style="color: var(--color-success, #10b981);">${this.formatNumber(inv.paid_amount || 0)} ${currency}</td>
                           <td><span class="badge badge-active">${inv.status || 'معتمد'}</span></td>
                         </tr>
                       `).join('')
@@ -1374,7 +1374,7 @@ const App = {
             ${(v.recent_payments && v.recent_payments.length > 0) ? `
               <div style="margin-top: 20px;">
                 <h5 style="margin-bottom: 10px; font-size: 0.95rem; color: var(--text-primary);">
-                  <i class="fa fa-money" style="color: #10b981;"></i> سندات ومعاملات الصرف المنفذة (Cleared Payments)
+                  <i class="fa fa-money" style="color: var(--color-success, #10b981);"></i> سندات ومعاملات الصرف المنفذة (Cleared Payments)
                 </h5>
                 <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
                   <table class="custom-table" style="font-size: 0.85rem; width: 100%;">
@@ -1392,9 +1392,9 @@ const App = {
                         <tr>
                           <td><strong>${pay.receipt_no || pay.id}</strong></td>
                           <td>${pay.date || '-'}</td>
-                          <td style="font-weight: bold; color: #10b981;">${this.formatNumber(pay.amount)} ${currency}</td>
+                          <td style="font-weight: bold; color: var(--color-success, #10b981);">${this.formatNumber(pay.amount)} ${currency}</td>
                           <td>${pay.payment_method || 'تحويل بنكي / نقدي'}</td>
-                          <td><span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981;">${pay.status || 'مسوى (cleared)'}</span></td>
+                          <td><span class="badge" style="background: rgba(16,185,129,0.15); color: var(--color-success, #10b981);">${pay.status || 'مسوى (cleared)'}</span></td>
                         </tr>
                       `).join('')}
                     </tbody>
@@ -1425,10 +1425,10 @@ const App = {
             return `
               <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px; margin-top: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <h4 style="margin: 0; font-size: 1rem; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                  <h4 style="margin: 0; font-size: 1rem; color: var(--color-info, #38bdf8); display: flex; align-items: center; gap: 8px;">
                     <i class="fa fa-paperclip"></i> المستندات والفواتير المرفقة (PDF / ماسح ضوئي 📄📸)
                   </h4>
-                  <span class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; font-size: 0.75rem;">${atts.length} مستندات</span>
+                  <span class="badge" style="background: rgba(56,189,248,0.15); color: var(--color-info, #38bdf8); font-size: 0.75rem;">${atts.length} مستندات</span>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
                   ${atts.map((att, i) => {
@@ -1441,7 +1441,7 @@ const App = {
                           <div>
                             <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary);">${att.name || 'مستند فاتورة'}</div>
                             <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
-                              <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 0.68rem;">${isPdf ? 'مستند PDF' : 'صورة ممسوحة'}</span>
+                              <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: var(--color-info, #38bdf8); font-size: 0.68rem;">${isPdf ? 'مستند PDF' : 'صورة ممسوحة'}</span>
                               ${sizeStr ? `&nbsp;•&nbsp; <span>${sizeStr}</span>` : ''}
                             </div>
                           </div>
@@ -1474,7 +1474,7 @@ const App = {
 
       const titleEl = document.getElementById('dynamicAppModalTitle');
       const bodyEl = document.getElementById('dynamicAppModalBody');
-      if (titleEl) titleEl.innerHTML = `<i class="fa fa-id-card-o" style="color: #3b82f6;"></i> ملف المورد: ${v.company_name}`;
+      if (titleEl) titleEl.innerHTML = `<i class="fa fa-id-card-o" style="color: var(--color-info, #3b82f6);"></i> ملف المورد: ${v.company_name}`;
       if (bodyEl) bodyEl.innerHTML = content;
 
     } catch (err) {
@@ -1516,14 +1516,14 @@ const App = {
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-secondary);">رقم الحساب الكامل:</span>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: #10b981; font-weight: bold;">${d.account_number}</code>
+              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.account_number}</code>
               <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.account_number}'); App.showToast('تم نسخ رقم الحساب بنجاح', 'success');" title="نسخ">📋</button>
             </div>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-secondary);">رقم الآيبان الكامل (IBAN):</span>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: #10b981; font-weight: bold;">${d.iban}</code>
+              <code dir="ltr" style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.iban}</code>
               <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.iban}'); App.showToast('تم نسخ رقم الآيبان بنجاح', 'success');" title="نسخ">📋</button>
             </div>
           </div>
@@ -1572,8 +1572,8 @@ const App = {
             tbody.innerHTML = pageList.map(m => {
               const isBank = String(m.account_code || '').startsWith('11102') || (!m.account_code && (['بنك', 'شيك', 'تحويل بنكي'].includes(m.movement_type) || ['تحويل بنكي', 'BANK_TRANSFER'].includes(m.payment_method)));
               const typeBadge = isBank
-                ? `<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: bold;">🏦 بنك</span>`
-                : `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: bold;">💵 نقدي</span>`;
+                ? `<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8); font-weight: bold;">🏦 بنك</span>`
+                : `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981); font-weight: bold;">💵 نقدي</span>`;
 
               return `
                 <tr>
@@ -1583,12 +1583,12 @@ const App = {
                   <td style="color: var(--accent-green); font-weight: bold;">${m.cash_in ? '+' + this.formatNumber(m.cash_in) : '-'}</td>
                   <td style="color: var(--accent-red); font-weight: bold;">${m.cash_out ? '-' + this.formatNumber(m.cash_out) : '-'}</td>
                   <td>${m.withdrawals ? this.formatNumber(m.withdrawals) : '-'}</td>
-                  <td style="color: var(--gold-light); font-weight: bold;">${this.formatNumber(m.current_balance)}${m.is_posted === false ? '<br><small>يشمل الأثر المتوقع</small>' : ''}</td>
+                  <td style="color: var(--text-gold); font-weight: bold;">${this.formatNumber(m.current_balance)}${m.is_posted === false ? '<br><small>يشمل الأثر المتوقع</small>' : ''}</td>
                   <td>
                     <span class="badge ${m.is_posted === false ? 'badge-warning' : 'badge-active'}">${m.status_label || 'مرحل'}</span><br>
                     ${m.payment_method ? `<small>طريقة دفع السند: ${m.payment_method}</small><br>` : ''}
                     ${m.notes || '-'}
-                    ${m.reference_no ? `<br><small style="font-family: monospace; color: var(--gold-light); font-weight: bold;">المرجع: ${m.reference_no}</small>` : ''}
+                    ${m.reference_no ? `<br><small style="font-family: monospace; color: var(--text-gold); font-weight: bold;">المرجع: ${m.reference_no}</small>` : ''}
                   </td>
                 </tr>
               `;
@@ -1932,7 +1932,7 @@ const App = {
     if (lastBackupEl) {
       if (s.lastLogoutBackup) {
         lastBackupEl.innerHTML = `
-          <strong style="color: var(--gold-light);">${s.lastLogoutBackup.fileName}</strong><br>
+          <strong style="color: var(--text-gold);">${s.lastLogoutBackup.fileName}</strong><br>
           <small style="color: var(--text-secondary);">المستخدم: ${s.lastLogoutBackup.username} | التاريخ: ${s.lastLogoutBackup.displayTime} | الحجم: ${(s.lastLogoutBackup.size / 1024).toFixed(1)} KB</small>
         `;
       } else {
@@ -2060,7 +2060,7 @@ const App = {
     if (nextTimeEl) {
       if (d.nextRun && d.enabled) {
         const nrDate = new Date(d.nextRun);
-        nextTimeEl.innerHTML = `${nrDate.toLocaleDateString('ar-YE')} ${nrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })} <span style="font-size:0.75rem; color:#94a3b8;">(${d.countdownText || ''})</span>`;
+        nextTimeEl.innerHTML = `${nrDate.toLocaleDateString('ar-YE')} ${nrDate.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })} <span style="font-size:0.75rem; color:var(--text-secondary, #94a3b8);">(${d.countdownText || ''})</span>`;
       } else {
         nextTimeEl.textContent = d.enabled ? 'جاري الحساب...' : 'الجدولة متوقفة';
       }
@@ -2283,12 +2283,12 @@ const App = {
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.85rem; padding: 4px 10px;">
+                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--color-info, #38bdf8); font-size: 0.85rem; padding: 4px 10px;">
                   قيمة العقد/الأعمال: ${this.formatNumber(contract.contract_value || gSummary.contract_value || 0)} ${curr}
                 </span>
                 ${isOfficial ? `
-                  <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); font-size: 0.8rem;">دفعة مقدمة: ${contract.advance_payment_pct || 10}%</span>
-                  <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-size: 0.8rem;">محتجز ضمان: ${contract.retention_pct || 10}%</span>
+                  <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--text-gold); font-size: 0.8rem;">دفعة مقدمة: ${contract.advance_payment_pct || 10}%</span>
+                  <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--color-warning, #f59e0b); font-size: 0.8rem;">محتجز ضمان: ${contract.retention_pct || 10}%</span>
                 ` : ''}
               </div>
             </div>
@@ -2307,7 +2307,7 @@ const App = {
                       <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 1.1rem; color: #a78bfa;">🏗️</span>
                         <strong style="color: #fff; font-size: 0.95rem;">${p.name}</strong>
-                        <span class="badge" style="background: rgba(255,255,255,0.06); color: #94a3b8; font-size: 0.72rem;">${p.code || ('PRJ-' + p.id)}</span>
+                        <span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-secondary, #94a3b8); font-size: 0.72rem;">${p.code || ('PRJ-' + p.id)}</span>
                         <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green); font-size: 0.72rem;">${p.status || 'نشط'}</span>
                       </div>
                       <div style="display: flex; gap: 6px;">
@@ -2324,7 +2324,7 @@ const App = {
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin-bottom: 10px; font-size: 0.72rem; text-align: center;">
                       <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">قيمة المشروع:</span>
-                        <div style="font-weight: 700; color: #38bdf8;">${this.formatNumber(fin.contract_value || p.contract_value || 0)}</div>
+                        <div style="font-weight: 700; color: var(--color-info, #38bdf8);">${this.formatNumber(fin.contract_value || p.contract_value || 0)}</div>
                       </div>
                       <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">المنجز (Gross):</span>
@@ -2332,7 +2332,7 @@ const App = {
                       </div>
                       <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">صافي المطالبات:</span>
-                        <div style="font-weight: 700; color: var(--gold-light);">${this.formatNumber(fin.net_billed || 0)}</div>
+                        <div style="font-weight: 700; color: var(--text-gold);">${this.formatNumber(fin.net_billed || 0)}</div>
                       </div>
                       <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">المحصل:</span>
@@ -2340,7 +2340,7 @@ const App = {
                       </div>
                       <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">محتجز الضمان:</span>
-                        <div style="font-weight: 700; color: #f59e0b;">${this.formatNumber(fin.active_retention || 0)}</div>
+                        <div style="font-weight: 700; color: var(--color-warning, #f59e0b);">${this.formatNumber(fin.active_retention || 0)}</div>
                       </div>
                       <div style="background: rgba(0,0,0,0.25); padding: 5px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
                         <span style="color: var(--accent-red); font-weight: 700;">المتبقي المستحق:</span>
@@ -2351,7 +2351,7 @@ const App = {
                     <!-- مستخلصات المشروع -->
                     ${pBills.length > 0 ? `
                       <div style="margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 8px;">
-                        <div style="font-size: 0.75rem; font-weight: 700; color: #facc15; margin-bottom: 6px;">📑 المستخلصات المعتمدة للمشروع (${pBills.length}):</div>
+                        <div style="font-size: 0.75rem; font-weight: 700; color: var(--color-warning, #facc15); margin-bottom: 6px;">📑 المستخلصات المعتمدة للمشروع (${pBills.length}):</div>
                         <div class="table-responsive">
                           <table class="custom-table" style="font-size: 0.74rem;">
                             <thead>
@@ -2381,9 +2381,9 @@ const App = {
                                     <td><strong>${b.bill_no}</strong></td>
                                     <td>${b.date || '-'}</td>
                                     <td>${this.formatNumber(b.gross_amount || net)} ${curr}</td>
-                                    <td style="color: #38bdf8;">-${this.formatNumber(b.advance_deduction || 0)}</td>
-                                    <td style="color: #f59e0b;">-${this.formatNumber(b.retention_deduction || 0)}</td>
-                                    <td style="font-weight: 700; color: var(--gold-light);">${this.formatNumber(net)} ${curr}</td>
+                                    <td style="color: var(--color-info, #38bdf8);">-${this.formatNumber(b.advance_deduction || 0)}</td>
+                                    <td style="color: var(--color-warning, #f59e0b);">-${this.formatNumber(b.retention_deduction || 0)}</td>
+                                    <td style="font-weight: 700; color: var(--text-gold);">${this.formatNumber(net)} ${curr}</td>
                                     <td style="color: var(--accent-green);">${this.formatNumber(paid)}</td>
                                     <td style="font-weight: 700; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${this.formatNumber(rem)}</td>
                                     <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor}; font-size: 0.7rem;">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
@@ -2459,9 +2459,9 @@ const App = {
           <td>${b.project_name || '-'}</td>
           <td>${b.date || '-'}</td>
           <td>${this.formatNumber(b.gross_amount || net)} ${curr}</td>
-          <td style="color: #38bdf8;">-${this.formatNumber(b.advance_deduction || 0)}</td>
-          <td style="color: #f59e0b;">-${this.formatNumber(b.retention_deduction || 0)}</td>
-          <td style="font-weight: 700; color: var(--gold-light);">${this.formatNumber(net)} ${curr}</td>
+          <td style="color: var(--color-info, #38bdf8);">-${this.formatNumber(b.advance_deduction || 0)}</td>
+          <td style="color: var(--color-warning, #f59e0b);">-${this.formatNumber(b.retention_deduction || 0)}</td>
+          <td style="font-weight: 700; color: var(--text-gold);">${this.formatNumber(net)} ${curr}</td>
           <td style="color: var(--accent-green);">${this.formatNumber(paid)}</td>
           <td style="font-weight: 800; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${this.formatNumber(rem)}</td>
           <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor};">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
@@ -2506,7 +2506,7 @@ const App = {
           <td>${p.date || '-'}</td>
           <td><span class="badge" style="background: rgba(255,255,255,0.05); color: ${catColor}; border: 1px solid ${catColor};">${catText}</span></td>
           <td>${p.project_name || '-'}</td>
-          <td>${p.bill_no ? `<span class="badge" style="background: rgba(234, 179, 8, 0.15); color: #facc15;">${p.bill_no}</span>` : '-'}</td>
+          <td>${p.bill_no ? `<span class="badge" style="background: rgba(234, 179, 8, 0.15); color: var(--color-warning, #facc15);">${p.bill_no}</span>` : '-'}</td>
           <td style="font-weight: 700; color: var(--accent-green);">+${this.formatNumber(p.amount)} ${curr}</td>
           <td>${p.payment_method || 'نقدي'}</td>
           <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 200px;">${p.notes || '-'}</td>
@@ -2536,10 +2536,10 @@ const App = {
           <td><strong>مستخلص ${b.bill_no}</strong></td>
           <td>${b.project_name || '-'}</td>
           <td>${b.date || '-'}</td>
-          <td style="color: #f59e0b; font-weight: 700;">${this.formatNumber(held)} ${curr}</td>
+          <td style="color: var(--color-warning, #f59e0b); font-weight: 700;">${this.formatNumber(held)} ${curr}</td>
           <td style="color: var(--accent-green);">${this.formatNumber(0)} ${curr}</td>
-          <td style="font-weight: 800; color: #f59e0b;">${this.formatNumber(held)} ${curr}</td>
-          <td><span class="badge" style="background: rgba(245,158,11,0.15); color: #f59e0b;">قيد الاحتجاز والضمان</span></td>
+          <td style="font-weight: 800; color: var(--color-warning, #f59e0b);">${this.formatNumber(held)} ${curr}</td>
+          <td><span class="badge" style="background: rgba(245,158,11,0.15); color: var(--color-warning, #f59e0b);">قيد الاحتجاز والضمان</span></td>
         </tr>
       `;
     }).join('');

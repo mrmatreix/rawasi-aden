@@ -259,28 +259,28 @@ const HR = {
             <td><strong>${idx + 1}</strong></td>
             <td style="text-align:right;"><strong>${this.esc(p.full_name)}</strong></td>
             <td>${this.esc(p.job_title || '-')}</td>
-            <td style="font-family:monospace;color:#38bdf8;">${this.esc(p.employee_no || '-')}</td>
+            <td style="font-family:monospace;color:var(--color-info, #38bdf8);">${this.esc(p.employee_no || '-')}</td>
             <td>${p.month_days || 31}</td>
             <td style="font-family:monospace;">${this.esc(p.bank_account || '-')}</td>
             <td style="font-size:0.75rem;">${this.esc(p.cost_center || 'الإدارة العامة')}</td>
             <td>${p.working_days || 31}</td>
-            <td style="color:#38bdf8;font-weight:600;">${this.money(basic)}</td>
+            <td style="color:var(--color-info, #38bdf8);font-weight:600;">${this.money(basic)}</td>
             <td>${this.money(earned)}</td>
             <td>${this.money(transport)}</td>
             <td>${this.money(appearance)}</td>
             <td style="background:#fef08a;color:#854d0e;font-weight:bold;">${this.money(nature)}</td>
             <td>${this.money(living)}</td>
             <td style="background:#fef08a;color:#854d0e;font-weight:bold;">${this.money(health)}</td>
-            <td style="color:var(--gold-light);font-weight:bold;">${this.money(gross)}</td>
-            <td style="color:#f87171;font-weight:600;">${this.money(insEmp)}</td>
+            <td style="color:var(--text-gold);font-weight:bold;">${this.money(gross)}</td>
+            <td style="color:var(--color-danger, #f87171);font-weight:600;">${this.money(insEmp)}</td>
             <td>${this.money(dedAbsence)}</td>
             <td>${this.money(dedLoan)}</td>
-            <td style="color:#ef4444;">${this.money(dedTotal)}</td>
+            <td style="color:var(--color-danger, #ef4444);">${this.money(dedTotal)}</td>
             <td>${this.money(taxBase)}</td>
             <td style="color:#fb923c;font-weight:600;">${this.money(tax)}</td>
             <td style="color:var(--accent-green);font-weight:bold;">${this.money(net)}</td>
             <td style="color:#c084fc;">${this.money(insOrg)}</td>
-            <td style="color:#60a5fa;">${this.money(skills)}</td>
+            <td style="color:var(--color-info, #60a5fa);">${this.money(skills)}</td>
             <td>${this.money(unpaidLeave)}</td>
             <td style="color:var(--accent-green);font-weight:bold;font-size:0.88rem;background:rgba(16,185,129,0.08);">${this.money(grandNet)}</td>
             <td>
@@ -295,24 +295,24 @@ const HR = {
       if (tfoot) {
         tfoot.innerHTML = `
           <tr style="background:#0f172a;border-top:2px solid var(--accent-green);">
-            <td colspan="8" style="text-align:center;color:var(--gold-light);font-size:0.95rem;letter-spacing:1px;">** الإجمـــــالـــــي **</td>
-            <td style="color:#38bdf8;">${this.money(totBasic)}</td>
+            <td colspan="8" style="text-align:center;color:var(--text-gold);font-size:0.95rem;letter-spacing:1px;">** الإجمـــــالـــــي **</td>
+            <td style="color:var(--color-info, #38bdf8);">${this.money(totBasic)}</td>
             <td>${this.money(totEarned)}</td>
             <td>${this.money(totTransport)}</td>
             <td>${this.money(totAppearance)}</td>
             <td style="background:#fef08a;color:#854d0e;">${this.money(totNature)}</td>
             <td>${this.money(totLiving)}</td>
             <td style="background:#fef08a;color:#854d0e;">${this.money(totHealth)}</td>
-            <td style="color:var(--gold-light);">${this.money(totGross)}</td>
-            <td style="color:#f87171;">${this.money(totInsEmp)}</td>
+            <td style="color:var(--text-gold);">${this.money(totGross)}</td>
+            <td style="color:var(--color-danger, #f87171);">${this.money(totInsEmp)}</td>
             <td>${this.money(totAbsence)}</td>
             <td>${this.money(totLoan)}</td>
-            <td style="color:#ef4444;">${this.money(totDeductions)}</td>
+            <td style="color:var(--color-danger, #ef4444);">${this.money(totDeductions)}</td>
             <td>${this.money(totTaxBase)}</td>
             <td style="color:#fb923c;">${this.money(totTax)}</td>
             <td style="color:var(--accent-green);">${this.money(totNet)}</td>
             <td style="color:#c084fc;">${this.money(totInsOrg)}</td>
-            <td style="color:#60a5fa;">${this.money(totSkills)}</td>
+            <td style="color:var(--color-info, #60a5fa);">${this.money(totSkills)}</td>
             <td>${this.money(totUnpaidLeave)}</td>
             <td style="color:var(--accent-green);font-size:0.95rem;background:rgba(16,185,129,0.15);">${this.money(totGrandNet)}</td>
             <td>—</td>
@@ -397,7 +397,7 @@ const HR = {
               ⚖️
             </div>
             <div>
-              <h3 style="color:var(--gold-light); margin:0; font-size:1.2rem; font-weight:700;">
+              <h3 style="color:var(--text-gold); margin:0; font-size:1.2rem; font-weight:700;">
                 دليل القواعد النظامية والمحاسبية لكشف الراتب الشامل
               </h3>
               <p style="margin:2px 0 0 0; font-size:0.8rem; color:var(--text-secondary);">
@@ -416,15 +416,15 @@ const HR = {
             <div style="background:rgba(59,130,246,0.07); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:16px;">
               <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; border-bottom:1px solid rgba(56,189,248,0.2); padding-bottom:8px;">
                 <span style="font-size:1.1rem;">💰</span>
-                <h4 style="color:#38bdf8; margin:0; font-size:0.98rem; font-weight:700;">1. الراتب الأساسي والبدلات المعيارية الخمسة</h4>
+                <h4 style="color:var(--color-info, #38bdf8); margin:0; font-size:0.98rem; font-weight:700;">1. الراتب الأساسي والبدلات المعيارية الخمسة</h4>
               </div>
               <ul style="margin:0; padding-right:18px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
                 <li><strong>الراتب الأساسي الفعلي:</strong> يحتسب وفق أيام الدوام الفعلية (الأساسي التعاقدي × أيام العمل ÷ أيام الشهر).</li>
                 <li><strong>بدل انتقال (20%):</strong> نسبة نظامية تعادل 20% من الراتب الأساسي المستحق.</li>
                 <li><strong>بدل مظهر (25%):</strong> نسبة معتمدة تعادل 25% من الراتب الأساسي المستحق.</li>
-                <li><strong style="color:var(--gold-light);">بدل طبيعة عمل (30% - مميز بالأصفر):</strong> نسبة وظيفية تعادل 30% من الأساسي.</li>
+                <li><strong style="color:var(--text-gold);">بدل طبيعة عمل (30% - مميز بالأصفر):</strong> نسبة وظيفية تعادل 30% من الأساسي.</li>
                 <li><strong>بدل غلاء معيشة:</strong> مبلغ مقطوع (100,000 ر.ي للإدارة العليا / 90,000 ر.ي لباقي الكادر).</li>
-                <li><strong style="color:var(--gold-light);">بدل تأمين صحي (مميز بالأصفر):</strong> مبلغ مقطوع (50,000 ر.ي للإدارة العليا / 30,000 ر.ي للموظفين).</li>
+                <li><strong style="color:var(--text-gold);">بدل تأمين صحي (مميز بالأصفر):</strong> مبلغ مقطوع (50,000 ر.ي للإدارة العليا / 30,000 ر.ي للموظفين).</li>
                 <li style="margin-top:4px; padding-top:6px; border-top:1px dashed rgba(56,189,248,0.25); color:#7dd3fc;">
                   <strong>إجمالي الاستحقاق (Gross):</strong> مجموع الأساسي وكافة البدلات المنتظمة الخمسة.
                 </li>
@@ -452,14 +452,14 @@ const HR = {
             <div style="background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.25); border-radius:10px; padding:16px;">
               <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; border-bottom:1px solid rgba(239,68,68,0.2); padding-bottom:8px;">
                 <span style="font-size:1.1rem;">📊</span>
-                <h4 style="color:#f87171; margin:0; font-size:0.98rem; font-weight:700;">3. ضريبة كسب العمل والوعاء القانوني المعفى</h4>
+                <h4 style="color:var(--color-danger, #f87171); margin:0; font-size:0.98rem; font-weight:700;">3. ضريبة كسب العمل والوعاء القانوني المعفى</h4>
               </div>
               <ul style="margin:0; padding-right:18px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
                 <li><strong>حد الإعفاء القانوني:</strong> معفى تماماً لأول <strong>65,000 ر.ي شهرياً</strong> (780,000 ر.ي سنوياً) وفق قانون ضرائب الدخل.</li>
                 <li><strong>الوعاء الضريبي الشهري:</strong> الراتب الشامل - تأمينات 6% - حد الإعفاء (65,000) - الخصميات.</li>
                 <li><strong>الشريحة الأولى (10%):</strong> تطبق على أول 40,000 ر.ي من الوعاء الضريبي (الحد الأقصى للضريبة = 4,000 ر.ي).</li>
                 <li><strong>الشريحة الثانية (15%):</strong> تطبق على ما زاد عن 40,000 ر.ي (المعادلة: الوعاء × 15% - 2,000).</li>
-                <li style="margin-top:4px; padding-top:6px; border-top:1px dashed rgba(239,68,68,0.25); color:#fca5a5;">
+                <li style="margin-top:4px; padding-top:6px; border-top:1px dashed rgba(239,68,68,0.25); color:var(--color-danger, #fca5a5);">
                   <strong>صافي الراتب المستحق (Net):</strong> إجمالي الاستحقاق - تأمينات 6% - ضريبة كسب العمل - الخصميات.
                 </li>
               </ul>
@@ -469,20 +469,20 @@ const HR = {
             <div style="background:rgba(16,185,129,0.07); border:1px solid rgba(16,185,129,0.25); border-radius:10px; padding:16px;">
               <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; border-bottom:1px solid rgba(16,185,129,0.2); padding-bottom:8px;">
                 <span style="font-size:1.1rem;">⚡</span>
-                <h4 style="color:#4ade80; margin:0; font-size:0.98rem; font-weight:700;">4. التوجيه والقيد المحاسبي المركب المتزن 100%</h4>
+                <h4 style="color:var(--color-success, #4ade80); margin:0; font-size:0.98rem; font-weight:700;">4. التوجيه والقيد المحاسبي المركب المتزن 100%</h4>
               </div>
               <div style="font-family:monospace; font-size:0.82rem; background:#0b1120; border:1px solid rgba(16,185,129,0.2); padding:10px 14px; border-radius:8px; line-height:1.6;">
-                <div style="color:#4ade80; font-weight:bold;">من مذكورين (جانب مدين):</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ مصروف الرواتب والأجور الشاملة والبدلات (511) [إجمالي الاستحقاق]</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ مصروف مساهمة المنشأة في التأمينات 9% (512)</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ مصروف مساهمة صندوق تنمية المهارات 1% (513)</div>
-                <div style="color:#38bdf8; font-weight:bold; margin-top:6px;">إلى مذكورين (جانب دائن):</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ الصندوق الرئيسي أو البنك (111) [صافي الصرف الفعلي]</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ أمانات مصلحة الضرائب - كسب العمل (213)</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ الهيئة العامة للتأمينات والمعاشات 15% (214)</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ أمانات صندوق تنمية المهارات 1% (215)</div>
-                <div style="padding-right:12px; color:#e2e8f0;">• حـ/ سلف وعهد الموظفين (114) [أقساط السلف المستردة]</div>
-                <div style="margin-top:6px; color:#22c55e; font-weight:bold; text-align:left; direction:ltr;">Total Debit = Total Credit (Diff: 0.00 YER)</div>
+                <div style="color:var(--color-success, #4ade80); font-weight:bold;">من مذكورين (جانب مدين):</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ مصروف الرواتب والأجور الشاملة والبدلات (511) [إجمالي الاستحقاق]</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ مصروف مساهمة المنشأة في التأمينات 9% (512)</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ مصروف مساهمة صندوق تنمية المهارات 1% (513)</div>
+                <div style="color:var(--color-info, #38bdf8); font-weight:bold; margin-top:6px;">إلى مذكورين (جانب دائن):</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ الصندوق الرئيسي أو البنك (111) [صافي الصرف الفعلي]</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ أمانات مصلحة الضرائب - كسب العمل (213)</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ الهيئة العامة للتأمينات والمعاشات 15% (214)</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ أمانات صندوق تنمية المهارات 1% (215)</div>
+                <div style="padding-right:12px; color:var(--text-primary, #e2e8f0);">• حـ/ سلف وعهد الموظفين (114) [أقساط السلف المستردة]</div>
+                <div style="margin-top:6px; color:var(--color-success, #22c55e); font-weight:bold; text-align:left; direction:ltr;">Total Debit = Total Credit (Diff: 0.00 YER)</div>
               </div>
             </div>
 
@@ -493,7 +493,7 @@ const HR = {
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
               <div style="display:flex; align-items:center; gap:8px;">
                 <span style="font-size:1.2rem;">🧮</span>
-                <h4 style="color:var(--gold-light); margin:0; font-size:0.95rem; font-weight:700;">
+                <h4 style="color:var(--text-gold); margin:0; font-size:0.95rem; font-weight:700;">
                   محاكي الاحتساب السريع (حاسبة تجريبية فورية للرواتب والاستقطاعات)
                 </h4>
               </div>
@@ -503,7 +503,7 @@ const HR = {
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; align-items:end; margin-bottom:14px;">
               <div>
                 <label style="display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:4px;">الراتب الأساسي التعاقدي (ر.ي):</label>
-                <input id="simBasicSalary" type="number" class="form-control" value="500000" step="10000" oninput="HR.calculateSimulatedSalary()" style="height:36px; font-weight:bold; color:var(--gold-light);">
+                <input id="simBasicSalary" type="number" class="form-control" value="500000" step="10000" oninput="HR.calculateSimulatedSalary()" style="height:36px; font-weight:bold; color:var(--text-gold);">
               </div>
               <div>
                 <label style="display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:4px;">المستوى الوظيفي (فئة البدلات):</label>
@@ -589,15 +589,15 @@ const HR = {
     container.innerHTML = `
       <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:8px; border-radius:6px; text-align:center;">
         <div style="font-size:0.72rem; color:var(--text-secondary);">إجمالي البدلات:</div>
-        <div style="font-size:0.95rem; font-weight:bold; color:#38bdf8;">${this.money(transport + appearance + nature + living + health)}</div>
+        <div style="font-size:0.95rem; font-weight:bold; color:var(--color-info, #38bdf8);">${this.money(transport + appearance + nature + living + health)}</div>
       </div>
       <div style="background:rgba(212,175,55,0.1); border:1px solid rgba(212,175,55,0.3); padding:8px; border-radius:6px; text-align:center;">
         <div style="font-size:0.72rem; color:var(--text-secondary);">الراتب الشامل (Gross):</div>
-        <div style="font-size:1rem; font-weight:bold; color:var(--gold-light);">${this.money(gross)}</div>
+        <div style="font-size:1rem; font-weight:bold; color:var(--text-gold);">${this.money(gross)}</div>
       </div>
       <div style="background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); padding:8px; border-radius:6px; text-align:center;">
         <div style="font-size:0.72rem; color:var(--text-secondary);">تأمين الموظف (6%):</div>
-        <div style="font-size:0.95rem; font-weight:bold; color:#f87171;">-${this.money(insEmp)}</div>
+        <div style="font-size:0.95rem; font-weight:bold; color:var(--color-danger, #f87171);">-${this.money(insEmp)}</div>
       </div>
       <div style="background:rgba(251,146,60,0.1); border:1px solid rgba(251,146,60,0.3); padding:8px; border-radius:6px; text-align:center;">
         <div style="font-size:0.72rem; color:var(--text-secondary);">ضريبة كسب العمل:</div>
@@ -613,7 +613,7 @@ const HR = {
       </div>
       <div style="background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.35); padding:8px; border-radius:6px; text-align:center;">
         <div style="font-size:0.72rem; color:var(--text-secondary);">إجمالي تكلفة الموظف:</div>
-        <div style="font-size:0.95rem; font-weight:bold; color:#60a5fa;">${this.money(totalCost)}</div>
+        <div style="font-size:0.95rem; font-weight:bold; color:var(--color-info, #60a5fa);">${this.money(totalCost)}</div>
       </div>
     `;
   },
@@ -658,11 +658,11 @@ const HR = {
     const linesHtml = data.lines.map(l => `
       <tr>
         <td><span class="badge ${l.side.includes('مدين') ? 'badge-income' : 'badge-expense'}">${l.side}</span></td>
-        <td style="font-family:monospace;color:#38bdf8;">${l.account_code}</td>
+        <td style="font-family:monospace;color:var(--color-info, #38bdf8);">${l.account_code}</td>
         <td><strong>${l.account_name}</strong></td>
         <td><span class="badge badge-secondary">${l.cost_center}</span></td>
         <td style="color:var(--accent-green);font-weight:bold;text-align:left;direction:ltr;">${l.debit > 0 ? this.money(l.debit) : '-'}</td>
-        <td style="color:#38bdf8;font-weight:bold;text-align:left;direction:ltr;">${l.credit > 0 ? this.money(l.credit) : '-'}</td>
+        <td style="color:var(--color-info, #38bdf8);font-weight:bold;text-align:left;direction:ltr;">${l.credit > 0 ? this.money(l.credit) : '-'}</td>
         <td style="font-size:0.8rem;color:var(--text-secondary);">${l.notes}</td>
       </tr>
     `).join('');
@@ -670,7 +670,7 @@ const HR = {
     modal.innerHTML = `
       <div class="modal-box" style="max-width: 1050px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 24px; border: 1px solid var(--gold-primary); background: var(--bg-surface); border-radius: 14px; box-shadow: 0 20px 45px rgba(0,0,0,0.6);">
         <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:14px; margin-bottom:18px;">
-          <h3 class="modal-title" style="display:flex;align-items:center;gap:10px;margin:0;color:var(--gold-light);">
+          <h3 class="modal-title" style="display:flex;align-items:center;gap:10px;margin:0;color:var(--text-gold);">
             <span>⚡ معاينة قيد استحقاق الرواتب المركب لشهر (${month})</span>
           </h3>
           <button type="button" class="modal-close-btn" onclick="App.closeModal('hrPayrollJournalPreviewModal')">&times;</button>
@@ -680,7 +680,7 @@ const HR = {
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;">
             <div style="background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.3);padding:10px;border-radius:6px;">
               <div style="font-size:0.75rem;color:var(--text-secondary);">إجمالي الاستحقاق (Gross):</div>
-              <div style="font-size:1.05rem;font-weight:bold;color:var(--gold-light);">${this.money(s.total_gross)} ر.ي</div>
+              <div style="font-size:1.05rem;font-weight:bold;color:var(--text-gold);">${this.money(s.total_gross)} ر.ي</div>
             </div>
             <div style="background:rgba(192,132,252,0.1);border:1px solid rgba(192,132,252,0.3);padding:10px;border-radius:6px;">
               <div style="font-size:0.75rem;color:var(--text-secondary);">مساهمة التأمينات (9%):</div>
@@ -688,11 +688,11 @@ const HR = {
             </div>
             <div style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);padding:10px;border-radius:6px;">
               <div style="font-size:0.75rem;color:var(--text-secondary);">صندوق المهارات (1%):</div>
-              <div style="font-size:1.05rem;font-weight:bold;color:#60a5fa;">+${this.money(s.total_skills_fund_1pct)} ر.ي</div>
+              <div style="font-size:1.05rem;font-weight:bold;color:var(--color-info, #60a5fa);">+${this.money(s.total_skills_fund_1pct)} ر.ي</div>
             </div>
             <div style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);padding:10px;border-radius:6px;">
               <div style="font-size:0.75rem;color:var(--text-secondary);">تأمينات الموظفين (6%):</div>
-              <div style="font-size:1.05rem;font-weight:bold;color:#f87171;">-${this.money(s.insurance_employee_6pct)} ر.ي</div>
+              <div style="font-size:1.05rem;font-weight:bold;color:var(--color-danger, #f87171);">-${this.money(s.insurance_employee_6pct)} ر.ي</div>
             </div>
             <div style="background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);padding:10px;border-radius:6px;">
               <div style="font-size:0.75rem;color:var(--text-secondary);">ضريبة كسب العمل:</div>
@@ -708,11 +708,11 @@ const HR = {
           <div style="background:#0f172a;padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border:1px solid var(--border-color);flex-wrap:wrap;gap:10px;">
             <div style="display:flex;gap:20px;">
               <div><span style="font-size:0.8rem;color:var(--text-secondary);">إجمالي المدين:</span> <strong style="color:var(--accent-green);">${this.money(s.total_debit)} ر.ي</strong></div>
-              <div><span style="font-size:0.8rem;color:var(--text-secondary);">إجمالي الدائن:</span> <strong style="color:#38bdf8;">${this.money(s.total_credit)} ر.ي</strong></div>
+              <div><span style="font-size:0.8rem;color:var(--text-secondary);">إجمالي الدائن:</span> <strong style="color:var(--color-info, #38bdf8);">${this.money(s.total_credit)} ر.ي</strong></div>
               <div><span style="font-size:0.8rem;color:var(--text-secondary);">الفارق المحاسبي:</span> <strong style="color:${s.diff === 0 ? 'var(--accent-green)' : 'var(--accent-red)'};">${s.diff}</strong></div>
             </div>
             <div>
-              <span class="badge" style="background:rgba(34,197,94,0.2);color:#4ade80;font-size:0.85rem;padding:4px 10px;">✅ القيد متزن 100% ومستوفٍ للمعايير المحاسبية</span>
+              <span class="badge" style="background:rgba(34,197,94,0.2);color:var(--color-success, #4ade80);font-size:0.85rem;padding:4px 10px;">✅ القيد متزن 100% ومستوفٍ للمعايير المحاسبية</span>
             </div>
           </div>
 

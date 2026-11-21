@@ -276,8 +276,8 @@ const Projects = {
 
     const getStatusBadge = (s) => {
       if (s === 'under_study') return '<span class="badge badge-info">تحت الدراسة والتسعير</span>';
-      if (s === 'completed') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);">مكتمل ومستلم</span>';
-      if (s === 'paused') return '<span class="badge" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">متوقف مؤقتاً</span>';
+      if (s === 'completed') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: var(--color-success, #10b981); border: 1px solid rgba(16,185,129,0.3);">مكتمل ومستلم</span>';
+      if (s === 'paused') return '<span class="badge" style="background: rgba(239,68,68,0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3);">متوقف مؤقتاً</span>';
       return '<span class="badge badge-active">جاري التنفيذ</span>';
     };
 
@@ -292,7 +292,7 @@ const Projects = {
               <div style="font-size: 0.72rem; color: var(--text-secondary);">${p.code || ''}</div>
             </td>
             <td>${p.client_name || 'عميل مباشر'}</td>
-            <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: var(--text-gold); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>${App.formatNumber(p.estimated_cost)} <small style="font-size:0.75rem">${curr}</small></td>
             <td style="color: ${p.actual_cost > p.estimated_cost ? 'var(--accent-red)' : 'var(--text-primary)'}; font-weight: 600;">
               ${App.formatNumber(p.actual_cost)} <small style="font-size:0.75rem">${curr}</small>
@@ -309,16 +309,16 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: #38bdf8; border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
                   📈 إنجاز
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--gold-light); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
                   📋 VO
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
+                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--text-gold); border-color: var(--gold-primary); font-weight: 700;">
                   📁 16 قسم
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--text-gold); border-color: var(--gold-primary);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
@@ -353,7 +353,7 @@ const Projects = {
             </td>
             <td>${p.client_name || 'عميل مباشر'}</td>
             <td>${getStatusBadge(p.status)}</td>
-            <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: var(--text-gold); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>${App.formatNumber(p.estimated_cost)} <small style="font-size:0.75rem">${curr}</small></td>
             <td style="color: ${p.actual_cost > p.estimated_cost ? 'var(--accent-red)' : 'var(--text-primary)'}; font-weight: 600;">
               ${App.formatNumber(p.actual_cost)} <small style="font-size:0.75rem">${curr}</small>
@@ -370,16 +370,16 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: #38bdf8; border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
                   📈 إنجاز
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--gold-light); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
                   📋 VO
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
+                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--text-gold); border-color: var(--gold-primary); font-weight: 700;">
                   📁 16 قسم
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--text-gold); border-color: var(--gold-primary);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
@@ -505,8 +505,8 @@ const Projects = {
           body.innerHTML = `
             <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; border: 1px solid var(--border-light);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <h4 style="color: var(--gold-light); margin: 0;">${p.name} (${p.code})</h4>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.printCurrentProjectDetails()" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                <h4 style="color: var(--text-gold); margin: 0;">${p.name} (${p.code})</h4>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printCurrentProjectDetails()" style="color: var(--text-gold); border-color: var(--gold-primary);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                   <span>طباعة التقرير</span>
                 </button>
@@ -516,10 +516,10 @@ const Projects = {
                   العميل: <strong style="color: #fff;">${p.client_name || 'غير محدد'}</strong> ${p.client_phone ? `| هاتف: ${p.client_phone}` : ''}
                 </p>
                   <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                    <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: #38bdf8; border-color: #38bdf8;">
+                    <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: var(--color-info, #38bdf8); border-color: #38bdf8;">
                       <span>📈 تحديث الإنجاز</span>
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: var(--gold-light); border-color: var(--gold-light);">
+                    <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: var(--text-gold); border-color: var(--gold-light);">
                       <span>📋 أمر تغييري (VO)</span>
                     </button>
                     ${p.client_id ? `
@@ -529,14 +529,14 @@ const Projects = {
                       <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${p.client_id}; Reports.fetchFullClientStatement();" style="font-size: 0.72rem; padding: 2px 8px;">
                         <span>كشف الحساب</span>
                       </button>
-                      <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px; border-color: var(--gold-light); color: var(--gold-light);">
+                      <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px; border-color: var(--gold-light); color: var(--text-gold);">
                         <span>+ مستخلص</span>
                       </button>
                     ` : ''}
                   </div>
               </div>
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px;">
-                <div><span style="font-size:0.75rem; color:var(--text-secondary)">قيمة العقد:</span> <strong style="color:var(--gold-light)">${App.formatNumber(p.contract_value)} ${p.currency || 'ر.ي'}</strong></div>
+                <div><span style="font-size:0.75rem; color:var(--text-secondary)">قيمة العقد:</span> <strong style="color:var(--text-gold)">${App.formatNumber(p.contract_value)} ${p.currency || 'ر.ي'}</strong></div>
                 <div><span style="font-size:0.75rem; color:var(--text-secondary)">التكلفة الفعلية:</span> <strong>${App.formatNumber(p.actual_cost)} ${p.currency || 'ر.ي'}</strong></div>
                 <div><span style="font-size:0.75rem; color:var(--text-secondary)">نسبة الإنجاز:</span> <strong style="color:var(--accent-green)">${p.progress_percentage}%</strong></div>
               </div>
