@@ -2771,10 +2771,10 @@ const Accounting = {
           </div>
 
           <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="Accounting.viewSupplierAttachment(${idx})" style="padding: 4px 8px; font-size: 0.78rem;" title="معاينة المستند">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="Accounting.viewSupplierAttachment(${idx})" title="معاينة المستند">
               <i class="fa fa-eye"></i> معاينة
             </button>
-            <button type="button" class="btn btn-danger btn-sm" onclick="Accounting.removeSupplierInvoiceAttachment(${idx})" style="padding: 4px 8px; font-size: 0.78rem; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: var(--color-danger, #ef4444);" title="حذف الفاتورة">
+            <button type="button" class="btn btn-xs btn-soft-danger" onclick="Accounting.removeSupplierInvoiceAttachment(${idx})" title="حذف الفاتورة">
               <i class="fa fa-trash"></i>
             </button>
           </div>
@@ -3589,7 +3589,7 @@ const Accounting = {
         <input type="text" class="form-control je-line-desc" value="${data.description || ''}" placeholder="بيان السطر...">
       </td>
       <td style="text-align: center;">
-        <button type="button" class="btn btn-sm btn-danger" onclick="Accounting.removeJournalRow('${rowId}')" title="حذف السطر" style="padding: 2px 8px;">✕</button>
+        <button type="button" class="btn btn-danger btn-xs" onclick="Accounting.removeJournalRow('${rowId}')" title="حذف السطر">✕</button>
       </td>
     `;
 
@@ -4333,13 +4333,13 @@ const Accounting = {
         </td>
         <td style="text-align: center; white-space: nowrap;">
           <div style="display: flex; gap: 4px; justify-content: center;">
-            <button class="btn btn-sm btn-secondary" onclick="Accounting.openEditAccountModal(${a.id})" title="تعديل بيانات الحساب" style="padding: 2px 7px; font-size: 0.78rem;">
+            <button class="btn btn-secondary btn-xs" onclick="Accounting.openEditAccountModal(${a.id})" title="تعديل بيانات الحساب">
               ✏️ تعديل
             </button>
             <button class="btn btn-sm" onclick="Accounting.toggleAccountStatus(${a.id})" title="${isRestricted ? 'فك التقييد وتنشيط الحساب' : 'تقييد وتوقيف الحساب'}" style="padding: 2px 7px; font-size: 0.78rem; ${isRestricted ? 'background: rgba(34,197,94,0.15); color: var(--color-success, #22c55e); border: 1px solid rgba(34,197,94,0.3);' : 'background: rgba(239,68,68,0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3);'}">
               ${isRestricted ? '🔓 تنشيط' : '🔒 تقييد'}
             </button>
-            <button class="btn btn-sm btn-danger" onclick="Accounting.deleteAccount(${a.id}, '${(a.code || '').replace(/'/g, "\\'")}', '${(a.name || '').replace(/'/g, "\\'")}')" title="حذف الحساب من الدليل" style="padding: 2px 7px; font-size: 0.78rem;">
+            <button class="btn btn-danger btn-xs" onclick="Accounting.deleteAccount(${a.id}, '${(a.code || '').replace(/'/g, "\\'")}', '${(a.name || '').replace(/'/g, "\\'")}')" title="حذف الحساب من الدليل">
               🗑️
             </button>
           </div>
@@ -4665,10 +4665,10 @@ const Accounting = {
         <td style="color: var(--text-secondary);">${c.notes || '-'}</td>
         <td style="text-align: center; white-space: nowrap;">
           <div style="display: flex; gap: 4px; justify-content: center;">
-            <button class="btn btn-sm btn-secondary" onclick="Accounting.openEditCostCenterModal(${c.id})" title="تعديل مركز التكلفة" style="padding: 2px 7px; font-size: 0.78rem;">
+            <button class="btn btn-secondary btn-xs" onclick="Accounting.openEditCostCenterModal(${c.id})" title="تعديل مركز التكلفة">
               ✏️ تعديل
             </button>
-            <button class="btn btn-sm btn-danger" onclick="Accounting.deleteCostCenter(${c.id}, '${(c.code || '').replace(/'/g, "\\'")}', '${(c.name || '').replace(/'/g, "\\'")}')" title="حذف مركز التكلفة" style="padding: 2px 7px; font-size: 0.78rem;">
+            <button class="btn btn-danger btn-xs" onclick="Accounting.deleteCostCenter(${c.id}, '${(c.code || '').replace(/'/g, "\\'")}', '${(c.name || '').replace(/'/g, "\\'")}')" title="حذف مركز التكلفة">
               🗑️
             </button>
           </div>

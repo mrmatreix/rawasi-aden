@@ -309,13 +309,13 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8;">
                   📈 إنجاز
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light);">
                   📋 VO
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--text-gold); border-color: var(--gold-primary); font-weight: 700;">
+                <button class="btn btn-sm btn-soft-gold" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="font-weight: 700;">
                   📁 16 قسم
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--text-gold); border-color: var(--gold-primary);">
@@ -370,13 +370,13 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8; font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8;">
                   📈 إنجاز
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light); font-size: 0.72rem; padding: 2px 6px;">
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light);">
                   📋 VO
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--text-gold); border-color: var(--gold-primary); font-weight: 700;">
+                <button class="btn btn-sm btn-soft-gold" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="font-weight: 700;">
                   📁 16 قسم
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--text-gold); border-color: var(--gold-primary);">
@@ -385,7 +385,7 @@ const Projects = {
                 <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                 </button>
-                <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 3px;">
+                <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 3px;">
                   <span>📦</span><span>تصدير</span>
                 </button>
                 <button class="btn btn-danger btn-sm" onclick="Projects.deleteProject(${p.id})" title="حذف المشروع">
@@ -516,20 +516,20 @@ const Projects = {
                   العميل: <strong style="color: #fff;">${p.client_name || 'غير محدد'}</strong> ${p.client_phone ? `| هاتف: ${p.client_phone}` : ''}
                 </p>
                   <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                    <button class="btn btn-secondary btn-sm" onclick="Projects.openProgressModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: var(--color-info, #38bdf8); border-color: #38bdf8;">
+                    <button class="btn btn-secondary btn-xs" onclick="Projects.openProgressModal(${p.id})" style="color: var(--color-info, #38bdf8); border-color: #38bdf8;">
                       <span>📈 تحديث الإنجاز</span>
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="Projects.openVariationModal(${p.id})" style="font-size: 0.72rem; padding: 2px 8px; color: var(--text-gold); border-color: var(--gold-light);">
+                    <button class="btn btn-secondary btn-xs" onclick="Projects.openVariationModal(${p.id})" style="color: var(--text-gold); border-color: var(--gold-light);">
                       <span>📋 أمر تغييري (VO)</span>
                     </button>
                     ${p.client_id ? `
-                      <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${p.client_id})" style="font-size: 0.72rem; padding: 2px 8px;">
+                      <button class="btn btn-primary btn-xs" onclick="App.openClientChainModal(${p.client_id})">
                         <span>🔗 سلسلة العميل المالية</span>
                       </button>
-                      <button class="btn btn-secondary btn-sm" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${p.client_id}; Reports.fetchFullClientStatement();" style="font-size: 0.72rem; padding: 2px 8px;">
+                      <button class="btn btn-secondary btn-xs" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${p.client_id}; Reports.fetchFullClientStatement();">
                         <span>كشف الحساب</span>
                       </button>
-                      <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="font-size: 0.72rem; padding: 2px 8px; border-color: var(--gold-light); color: var(--text-gold);">
+                      <button class="btn btn-secondary btn-xs" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="border-color: var(--gold-light); color: var(--text-gold);">
                         <span>+ مستخلص</span>
                       </button>
                     ` : ''}

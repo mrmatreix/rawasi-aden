@@ -193,7 +193,7 @@ const ProjectControlUI = {
             </div>
             <!-- أزرار الإجراءات -->
             <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-              <button class="btn btn-primary" onclick="ProjectControlUI.adoptCalculatedCompletion(${d.recommended_percentage})" style="background: linear-gradient(135deg, #059669, #10b981); border: none; font-weight: bold;">
+              <button class="btn btn-success" onclick="ProjectControlUI.adoptCalculatedCompletion(${d.recommended_percentage})" style="font-weight: bold;">
                 <span>✅ اعتماد وتطبيق النسبة المحسوبة (${d.recommended_percentage}%)</span>
               </button>
               <button class="btn btn-secondary" onclick="ProjectControlUI.openManualOverrideModal(${d.current_manual_percentage}, ${d.recommended_percentage})">
@@ -727,7 +727,7 @@ const ProjectControlUI = {
                         ${a.estimated_cost ? `<span style="font-size: 0.72rem; color: var(--text-gold); font-family: monospace;">${App.formatNumber(a.estimated_cost)}</span>` : ''}
                       </td>
                       <td style="text-align: center;">
-                        <button class="btn btn-secondary btn-sm" onclick="ProjectControlUI.deleteWBSActivity(${a.id})" title="حذف النشاط" style="padding: 3px 7px; color: var(--color-danger, #f87171);">
+                        <button class="btn btn-secondary btn-xs" onclick="ProjectControlUI.deleteWBSActivity(${a.id})" title="حذف النشاط" style="color: var(--color-danger, #f87171);">
                           🗑️
                         </button>
                       </td>
@@ -957,7 +957,7 @@ const ProjectControlUI = {
 
             <!-- أزرار الإجراءات -->
             <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-              <button class="btn btn-primary" onclick="ProjectControlUI.captureEVMSnapshot()" style="background: linear-gradient(135deg, #059669, #10b981); border: none; font-weight: bold;">
+              <button class="btn btn-success" onclick="ProjectControlUI.captureEVMSnapshot()" style="font-weight: bold;">
                 <span>📸 حفظ لقطة أداء دورية (Take Snapshot)</span>
               </button>
               <button class="btn btn-secondary btn-sm" onclick="ProjectControlUI.renderEVM()" title="تحديث">
@@ -1274,7 +1274,7 @@ const ProjectControlUI = {
 
             <!-- أزرار الإجراءات السريعة -->
             <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-              <button class="btn btn-primary" onclick="ProjectControlUI.openAddRiskModal()" style="background: linear-gradient(135deg, #b91c1c, #ef4444); border: none; font-weight: bold;">
+              <button class="btn btn-danger" onclick="ProjectControlUI.openAddRiskModal()" style="font-weight: bold;">
                 <span>+ تسجيل خطر جديد</span>
               </button>
               <button class="btn btn-secondary" onclick="ProjectControlUI.openAddClaimModal()">
@@ -1627,7 +1627,7 @@ const ProjectControlUI = {
                     </td>
                     <td style="text-align: center;">
                       ${r.status !== 'answered' ? `
-                        <button class="btn btn-secondary btn-sm" onclick="ProjectControlUI.openReplyRFIModal(${r.id}, '${encodeURIComponent(r.subject)}')" style="padding: 2px 8px; font-size: 0.75rem;">
+                        <button class="btn btn-secondary btn-xs" onclick="ProjectControlUI.openReplyRFIModal(${r.id}, '${encodeURIComponent(r.subject)}')">
                           تسجيل الرد
                         </button>
                       ` : '✓'}

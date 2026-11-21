@@ -1087,7 +1087,7 @@
 
               <!-- زر تحديد مسار حفظ ملفات_المشاريع يدوي داخل الجهاز (مكان اللون الأحمر) -->
               <div class="hub-base-folder-action">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnConfigureBaseFolder" onclick="ProjectHub.openBaseFolderModal()" title="تحديد وتعيين مسار مجلد حفظ ملفات ومستندات المشاريع يدوياً على جهازك" style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--gold-primary); color: var(--text-gold); background: rgba(212,175,55,0.12); font-weight: 700; padding: 7px 16px; border-radius: var(--radius-md); box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer; transition: all 0.2s ease;">
+                <button type="button" class="btn btn-sm btn-soft-gold" id="btnConfigureBaseFolder" onclick="ProjectHub.openBaseFolderModal()" title="تحديد وتعيين مسار مجلد حفظ ملفات ومستندات المشاريع يدوياً على جهازك" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 7px 16px; border-radius: var(--radius-md); box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer; transition: all 0.2s ease;">
                   <span style="font-size: 1.15rem;">⚙️📁</span>
                   <span>تحديد مسار ملفات المشاريع</span>
                 </button>
@@ -1122,10 +1122,10 @@
               <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.copyProjectFolderPath()" title="نسخ المسار الكامل للحافظة" style="display: flex; align-items: center; gap: 4px;">
                 📋 نسخ المسار
               </button>
-              <button type="button" class="btn btn-primary btn-sm" onclick="ProjectHub.openProjectFolderInExplorer()" title="فتح المجلد مباشرة في مستكشف ويندوز" style="display: flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border-color: #3b82f6;">
+              <button type="button" class="btn btn-sm btn-info" onclick="ProjectHub.openProjectFolderInExplorer()" title="فتح المجلد مباشرة في مستكشف ويندوز" style="display: flex; align-items: center; gap: 4px;">
                 📂 فتح المجلد في ويندوز
               </button>
-              <button type="button" class="btn btn-success btn-sm" onclick="ProjectHub.exportAndSaveProjectSummary()" title="حفظ نسخة كاملة من تقرير المشروع في مجلده" style="display: flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #059669, #10b981); border-color: #10b981;">
+              <button type="button" class="btn btn-success btn-sm" onclick="ProjectHub.exportAndSaveProjectSummary()" title="حفظ نسخة كاملة من تقرير المشروع في مجلده" style="display: flex; align-items: center; gap: 4px;">
                 💾 حفظ التقرير الشامل في المجلد
               </button>
             </div>
@@ -1785,7 +1785,7 @@
 
               <!-- أزرار الإجراءات السريعة -->
               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                <button type="button" class="btn btn-primary" onclick="ProjectHub.printIntegratedQuotationOfficialDoc()" style="background: linear-gradient(135deg, #059669, #10b981); border: none; font-weight: 700; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);">
+                <button type="button" class="btn btn-success" onclick="ProjectHub.printIntegratedQuotationOfficialDoc()" style="font-weight: 700;">
                   <svg class="icon" width="15" height="15"><use href="#icon-print"></use></svg>
                   <span>🖨️ طباعة عرض السعر الرسمي طبق الأصل</span>
                 </button>
@@ -2124,7 +2124,7 @@
 
             <!-- أزرار الإجراءات -->
             <button class="btn btn-secondary btn-sm" onclick="ProjectCloseout.loadProjectCloseoutData(ProjectCloseout.selectedProjectId)">🔄 تحديث</button>
-            <button id="btnDoCloseProject" class="btn btn-primary btn-sm" onclick="ProjectCloseout.openCloseProjectModal()" style="background: #c0392b; border-color: #a93226;">🔒 إغلاق المشروع النهائي</button>
+            <button id="btnDoCloseProject" class="btn btn-sm btn-danger" onclick="ProjectCloseout.openCloseProjectModal()">🔒 إغلاق المشروع النهائي</button>
             <button id="btnDoReopenProject" class="btn btn-warning btn-sm" onclick="ProjectCloseout.openReopenProjectModal()" style="display: none;">🔓 إعادة فتح المشروع</button>
             <button class="btn btn-secondary btn-sm" onclick="ProjectCloseout.printCurrentView()">🖨️ طباعة المستخلص</button>
           </div>
@@ -2609,7 +2609,7 @@
               <button class="btn btn-primary" onclick="HR.generatePayroll()" style="height:38px;display:inline-flex;align-items:center;gap:6px;">
                 <span>1. إعداد مسير الرواتب</span>
               </button>
-              <button class="btn btn-success" style="height:38px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;display:inline-flex;align-items:center;gap:6px;" onclick="HR.postPayrollToJournal()">
+              <button class="btn btn-success" style="height: 38px; display: inline-flex; align-items: center; gap: 6px;" onclick="HR.postPayrollToJournal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
                 <span>2. ترحيل إلى قيد يومية متزن ⚡</span>
               </button>
@@ -3886,7 +3886,7 @@
                 <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="color: var(--color-success, #34d399); border-color: #10b981;">
                   ↗️ فتح صفحة إدارة العملاء الكاملة
                 </a>
-                <button id="clientAppAddUser" type="button" class="btn btn-sm" style="background: #10b981; color: #000; font-weight: 700; border: none;" onclick="Settings.openClientUserModal()">
+                <button id="clientAppAddUser" type="button" class="btn btn-sm btn-success" style="font-weight: 700;" onclick="Settings.openClientUserModal()">
                   + إضافة حساب عميل جديد للتطبيق
                 </button>
               </div>
@@ -3973,13 +3973,13 @@
                 <span>قائمة المستخدمين وصلاحيات الوصول</span>
               </h3>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnSecuritySessions" onclick="Auth.openSecuritySessionsModal()" title="إعدادات الأمان وسياسة الجلسات والأجهزة وصلاحية التوكن" style="display: none !important; border-color: #10b981; color: var(--color-success, #10b981); background: rgba(16, 185, 129, 0.08); font-weight: 700;">
+                <button type="button" class="btn btn-sm btn-soft-success" id="btnSecuritySessions" onclick="Auth.openSecuritySessionsModal()" title="إعدادات الأمان وسياسة الجلسات والأجهزة وصلاحية التوكن" style="display: none !important; font-weight: 700;">
                   🛡️ الأمان والجلسات <span id="currentSessionModeBadge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #10b981); margin-right: 4px;">متعددة (3)</span>
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnLockTimeoutSettings" onclick="Auth.openLockTimeoutModal()" title="تحديد مهلة فترة القفل التلقائي وقفل الشاشة">
                   ⏱️ مهلة فترة القفل <span id="currentLockTimeoutBadge" class="badge" style="background: rgba(212, 175, 55, 0.2); color: var(--text-gold, #d4af37); margin-right: 4px;">15 دقيقة</span>
                 </button>
-                <button type="button" class="btn btn-secondary btn-sm" style="color: var(--color-danger, #ef4444); border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08);" onclick="Auth.logout()" title="تسجيل الخروج مع أخذ نسخة احتياطية فورية لقاعدة البيانات">
+                <button type="button" class="btn btn-sm btn-soft-danger" onclick="Auth.logout()" title="تسجيل الخروج مع أخذ نسخة احتياطية فورية لقاعدة البيانات">
                   🚪 تسجيل خروج (نسخ احتياطي)
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="Settings.openNewUserModal()">+ إضافة مستخدم جديد</button>
@@ -4798,7 +4798,7 @@
               </div>
               <div style="display: flex; gap: 8px;">
                 <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadAutoBackupSchedule()">🔄 تحديث الحالة</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="Settings.runAutoBackupNow()" id="btnSettingsRunBackupNow" style="background: #10b981; border-color: #10b981;">⚡ نسخ احتياطي فوري الآن</button>
+                <button type="button" class="btn btn-sm btn-success" onclick="Settings.runAutoBackupNow()" id="btnSettingsRunBackupNow">⚡ نسخ احتياطي فوري الآن</button>
               </div>
             </div>
 
@@ -6121,17 +6121,17 @@
             <input type="file" id="suppInvoiceFileInput" accept="application/pdf,image/jpeg,image/png,image/webp" multiple style="display: none;" onchange="Accounting.handleSupplierInvoiceUpload(event)">
             <input type="file" id="suppInvoiceCameraInput" accept="image/*,application/pdf" capture="environment" style="display: none;" onchange="Accounting.handleSupplierInvoiceUpload(event)">
 
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceFileInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.4); color: var(--color-info, #60a5fa); cursor: pointer;">
+            <button type="button" class="btn btn-soft-info" onclick="document.getElementById('suppInvoiceFileInput').click()" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
               <i class="fa fa-file-pdf"></i>
               <span>📄 إرفاق فاتورة PDF / صورة</span>
             </button>
 
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('suppInvoiceCameraInput').click()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: var(--color-success, #34d399); cursor: pointer;">
+            <button type="button" class="btn btn-soft-success" onclick="document.getElementById('suppInvoiceCameraInput').click()" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
               <i class="fa fa-camera"></i>
               <span>📷 ماسح ضوئي بالكاميرا (Scanner)</span>
             </button>
 
-            <button type="button" class="btn btn-secondary" onclick="Accounting.openLiveScannerModal()" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: var(--color-warning, #fbbf24); cursor: pointer;" title="فتح نافذة المسح الضوئي المباشر بالفيديو">
+            <button type="button" class="btn btn-soft-warning" onclick="Accounting.openLiveScannerModal()" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" title="فتح نافذة المسح الضوئي المباشر بالفيديو">
               <i class="fa fa-video"></i>
               <span>🎥 مسح ضوئي مباشر (Live Scanner)</span>
             </button>
@@ -6211,7 +6211,7 @@
 
           <div style="display: flex; gap: 8px; margin-right: auto;">
             <button type="button" class="btn btn-secondary" onclick="Accounting.closeLiveScannerModal()">إلغاء</button>
-            <button type="button" class="btn btn-primary" id="btnCaptureScan" onclick="Accounting.captureLiveScan()" style="background: #10b981; border-color: #10b981;">
+            <button type="button" class="btn btn-success" id="btnCaptureScan" onclick="Accounting.captureLiveScan()">
               <i class="fa fa-camera"></i> 📸 التقاط الفاتورة
             </button>
             <button type="button" class="btn btn-warning" id="btnRetakeScan" onclick="Accounting.retakeLiveScan()" style="display: none;">
@@ -6781,7 +6781,7 @@
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
               <label style="margin-bottom: 0;">رقم / كود الحساب (الرتبة 3+) <span style="color: var(--accent-red);">*</span></label>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="Accounting.suggestAccountCode()" style="padding: 2px 8px; font-size: 0.75rem;">🔢 اقتراح كود متسلسل</button>
+              <button type="button" class="btn btn-secondary btn-xs" onclick="Accounting.suggestAccountCode()">🔢 اقتراح كود متسلسل</button>
             </div>
             <input type="text" id="modalAccCode" oninput="Accounting.inferAccountParent()" class="form-control" placeholder="الرقم التالي بالتسلسل" required pattern="[0-9]+" style="font-family: monospace; font-weight: bold; color: var(--text-gold);">
             <small style="color: var(--text-secondary);">يُحدد الارتباط الشجري تلقائياً من رقم الحساب؛ استخدم الرقم التالي في التسلسل.</small>
@@ -7150,7 +7150,7 @@
             <!-- شريط الجهاز المعتمد عند تفعيل منع أي جهاز جديد -->
             <div id="authorizedDeviceBox" style="display: none; background: var(--bg-sunken, rgba(15, 23, 42, 0.6)); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 6px 10px; margin-top: 8px; justify-content: space-between; align-items: center; gap: 8px;">
               <span id="authorizedDeviceText" style="font-size: 0.76rem; color: var(--color-success, #6ee7b7);">📱 الجهاز المعتمد: لم يسجل أي جهاز بعد (سيتم اعتماد أول جهاز يسجل منه)</span>
-              <button type="button" class="btn btn-sm" id="btnResetAuthorizedDevice" onclick="Auth.resetAuthorizedDevice()" style="font-size: 0.7rem; padding: 2px 8px; color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); display: none;">🔄 فك قفل الجهاز</button>
+              <button type="button" class="btn btn-xs btn-soft-danger" id="btnResetAuthorizedDevice" onclick="Auth.resetAuthorizedDevice()" style="display: none;">🔄 فك قفل الجهاز</button>
             </div>
           </div>
 
@@ -7219,11 +7219,11 @@
           🛡️ تسري هذه الإعدادات على مستخدمي نظام رواسي عدن بحسب صلاحيات المدير العام.
         </div>
         <div style="display: flex; gap: 8px;">
-          <button type="button" class="btn btn-secondary btn-sm" id="btnResetUserSecurity" onclick="Auth.resetTargetUserSecurityToDefault()" style="display: none; color: var(--color-warning, #f59e0b); border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08);" title="إلغاء التخصيص والرجوع للإعداد العام">
+          <button type="button" class="btn btn-sm btn-soft-warning" id="btnResetUserSecurity" onclick="Auth.resetTargetUserSecurityToDefault()" style="display: none;" title="إلغاء التخصيص والرجوع للإعداد العام">
             🔄 استعادة الإعداد الافتراضي
           </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="App.closeModal('securitySessionsModal')">إلغاء</button>
-          <button type="button" class="btn btn-primary btn-sm" id="btnSaveSecuritySettings" onclick="Auth.saveSecuritySessionsSettings()" style="background: #10b981; border-color: #059669; color: #ffffff; font-weight: 700; padding: 6px 18px;">
+          <button type="button" class="btn btn-sm btn-success" id="btnSaveSecuritySettings" onclick="Auth.saveSecuritySessionsSettings()" style="font-weight: 700; padding: 6px 18px;">
             💾 حفظ وتطبيق الإعدادات
           </button>
         </div>
@@ -7379,7 +7379,7 @@
               </button>
             </div>
 
-            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.generateRandom2FaPin()" style="border-color: rgba(212, 175, 55, 0.4); color: var(--text-gold); background: rgba(212, 175, 55, 0.1); padding: 6px 12px; font-weight: 600;" title="توليد رمز أمان عشوائي جديد فوري">
+            <button type="button" class="btn btn-sm btn-soft-gold" onclick="Settings.generateRandom2FaPin()" style="padding: 6px 12px; font-weight: 600;" title="توليد رمز أمان عشوائي جديد فوري">
               🎲 توليد رمز جديد
             </button>
 
@@ -7737,7 +7737,7 @@
               <!-- شريط الجهاز المعتمد للمستخدم عند تفعيل القفل -->
               <div id="userSecBoundDeviceBox" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 4px 8px; margin-bottom: 8px; justify-content: space-between; align-items: center; gap: 6px;">
                 <span id="userSecBoundDeviceText" style="font-size: 0.72rem; color: var(--color-success, #6ee7b7);">📱 الجهاز المعتمد: لم يسجل بعد</span>
-                <button type="button" class="btn btn-sm" id="btnUserSecResetBoundDevice" onclick="Settings.resetUserBoundDevice()" style="font-size: 0.68rem; padding: 1px 6px; color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3); background: transparent; display: none;">فك الربط</button>
+                <button type="button" class="btn btn-xs" id="btnUserSecResetBoundDevice" onclick="Settings.resetUserBoundDevice()" style="color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3); background: transparent; display: none;">فك الربط</button>
               </div>
 
               <!-- خيارات الجلسات المتعددة -->
@@ -7902,7 +7902,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" id="btnConfirmEncryptedRestore" onclick="Settings.executeEncryptedRestore()" disabled style="background: linear-gradient(135deg, #10b981, #059669); border-color: #10b981;">
+        <button type="button" class="btn btn-success" id="btnConfirmEncryptedRestore" onclick="Settings.executeEncryptedRestore()" disabled>
           <span>🛡️ تأكيد وتنفيذ الاستعادة الشاملة</span>
         </button>
         <button type="button" class="btn btn-secondary" onclick="App.closeModal('encryptedRestoreModal')">إلغاء</button>
@@ -9504,13 +9504,13 @@
         <div>
           <div style="font-size: 0.76rem; color: var(--text-secondary); margin-bottom: 6px;">💡 اقتراحات سريعة (انقر للتطبيق في الحقل):</div>
           <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-            <button type="button" class="btn btn-secondary btn-xs" onclick="ProjectHub.setQuickPath('D:\\ملفات_المشاريع')" style="font-size: 0.74rem; direction: ltr; font-family: monospace; padding: 3px 8px;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="ProjectHub.setQuickPath('D:\\ملفات_المشاريع')" style="direction: ltr; font-family: monospace;">
               D:\ملفات_المشاريع
             </button>
-            <button type="button" class="btn btn-secondary btn-xs" onclick="ProjectHub.setQuickPath('E:\\ملفات_المشاريع')" style="font-size: 0.74rem; direction: ltr; font-family: monospace; padding: 3px 8px;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="ProjectHub.setQuickPath('E:\\ملفات_المشاريع')" style="direction: ltr; font-family: monospace;">
               E:\ملفات_المشاريع
             </button>
-            <button type="button" class="btn btn-secondary btn-xs" onclick="ProjectHub.setQuickPath(ProjectHub.defaultBaseFolder || '')" style="font-size: 0.74rem; direction: ltr; font-family: monospace; padding: 3px 8px;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="ProjectHub.setQuickPath(ProjectHub.defaultBaseFolder || '')" style="direction: ltr; font-family: monospace;">
               المسار الافتراضي للنظام
             </button>
           </div>
@@ -9778,7 +9778,7 @@
         </div>
         <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('riskModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #b91c1c, #ef4444);">تسجيل الخطر بالمصفوفة</button>
+          <button type="submit" class="btn btn-danger">تسجيل الخطر بالمصفوفة</button>
         </div>
       </form>
     </div>
@@ -9875,7 +9875,7 @@
         </div>
         <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('ncrModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #b91c1c, #ef4444);">إصدار تقرير NCR</button>
+          <button type="submit" class="btn btn-danger">إصدار تقرير NCR</button>
         </div>
       </form>
     </div>
@@ -9941,7 +9941,7 @@
         </div>
         <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('rfiReplyModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #059669, #10b981);">اعتماد وإغلاق الاستفسار</button>
+          <button type="submit" class="btn btn-success">اعتماد وإغلاق الاستفسار</button>
         </div>
       </form>
     </div>

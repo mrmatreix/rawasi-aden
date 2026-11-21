@@ -1130,12 +1130,14 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 9px 18px;
-  font-size: 0.86rem;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: 0 var(--space-4);
+  font-size: var(--font-sm);
   font-weight: 700;
+  line-height: 1.2;
   font-family: inherit;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1149,6 +1151,23 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 
 .btn:active {
   transform: scale(0.97);
+}
+
+/* حلقة تركيز واضحة لمستخدمي لوحة المفاتيح فقط */
+.btn:focus-visible {
+  outline: 2px solid var(--gold-primary);
+  outline-offset: 2px;
+}
+
+/* حالة التعطيل موحّدة لكل الأنواع */
+.btn:disabled,
+.btn[disabled],
+.btn.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+  pointer-events: none;
 }
 
 .btn svg {
@@ -1257,26 +1276,64 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
   transform: translateY(-2px);
 }
 
-/* مقاسات الأزرار */
+/* زر بإطار ذهبي (Outline Primary) */
+.btn-outline-primary {
+  background: transparent;
+  border: 1px solid var(--gold-primary);
+  color: var(--text-gold);
+  box-shadow: none;
+}
+.btn-outline-primary:hover {
+  background: rgba(212, 175, 55, 0.12);
+  transform: translateY(-2px);
+}
+
+/* أزرار ناعمة (خلفية فاتحة ونص ملوّن) تتبع الوضعين الليلي والنهاري */
+.btn-soft-success, .btn-soft-danger, .btn-soft-info, .btn-soft-warning, .btn-soft-gold {
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.btn-soft-success { background: var(--color-success-bg); border-color: var(--color-success-border); color: var(--color-success); }
+.btn-soft-danger  { background: var(--color-danger-bg);  border-color: var(--color-danger-border);  color: var(--color-danger); }
+.btn-soft-info    { background: var(--color-info-bg);    border-color: var(--color-info-border);    color: var(--color-info); }
+.btn-soft-warning { background: var(--color-warning-bg); border-color: var(--color-warning-border); color: var(--color-warning); }
+.btn-soft-gold    { background: rgba(212, 175, 55, 0.12); border-color: var(--gold-primary); color: var(--text-gold); }
+.btn-soft-success:hover, .btn-soft-danger:hover, .btn-soft-info:hover, .btn-soft-warning:hover, .btn-soft-gold:hover {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+}
+
+/* مقاسات الأزرار: xs للجداول والقوائم المزدحمة، sm للإجراءات الثانوية، الافتراضي، lg */
+.btn-xs {
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  font-size: var(--font-xs);
+  border-radius: var(--radius-sm);
+  gap: var(--space-1);
+  box-shadow: none;
+}
+
 .btn-sm {
-  padding: 6px 12px;
-  font-size: 0.79rem;
-  border-radius: 6px;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
   gap: 6px;
 }
 
 .btn-lg {
-  padding: 12px 24px;
-  font-size: 0.98rem;
-  border-radius: 10px;
+  min-height: 46px;
+  padding: 0 var(--space-5);
+  font-size: var(--font-md);
+  border-radius: var(--radius-md);
   gap: 10px;
 }
 
 .btn-icon-only {
-  padding: 8px;
-  border-radius: 8px;
+  padding: 0;
+  border-radius: var(--radius-sm);
   min-width: 36px;
-  height: 36px;
+  min-height: 36px;
 }
 
 /* شبكة المؤشرات العلوية (Top 8 KPI Cards) */

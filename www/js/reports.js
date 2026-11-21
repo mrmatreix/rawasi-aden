@@ -1443,7 +1443,7 @@ await this.loadIncomeStatement();
               <td style="color: ${profit >= 0 ? 'var(--color-success, #4ade80)' : 'var(--color-danger, #f87171)'}; font-weight: bold;">${Reports.formatNumber(profit)}</td>
               <td style="color: ${netCash >= 0 ? 'var(--color-success, #4ade80)' : 'var(--color-danger, #f87171)'}; font-weight: bold;">${Reports.formatNumber(netCash)}</td>
               <td style="text-align: center;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="Reports.openRevenueRecognitionModal(${p.project_id})" title="إثبات إيراد دوري" style="padding: 3px 8px; font-size: 0.75rem; white-space: nowrap;">
+                <button type="button" class="btn btn-secondary btn-xs" onclick="Reports.openRevenueRecognitionModal(${p.project_id})" title="إثبات إيراد دوري" style="white-space: nowrap;">
                   إثبات POC
                 </button>
               </td>

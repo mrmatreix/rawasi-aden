@@ -1000,11 +1000,11 @@ const App = {
                   </td>
                   <td style="text-align: center;">
                     <div style="display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;">
-                      <button class="btn btn-primary btn-sm" onclick="App.openClientChainModal(${c.id})" title="استعراض دورة حياة وسلسلة العميل المالية التفاعلية" style="padding: 4px 8px; font-size: 0.75rem;">
+                      <button class="btn btn-primary btn-xs" onclick="App.openClientChainModal(${c.id})" title="استعراض دورة حياة وسلسلة العميل المالية التفاعلية">
                         <span>ملف العميل</span>
                       </button>
                       <button class="btn btn-secondary btn-sm" onclick="Accounting.openEditClientModal(${c.id})" title="تعديل بيانات العميل">تعديل</button>
-                      <button class="btn btn-secondary btn-sm" onclick="App.syncClientBalance(${c.id})" title="مزامنة وتدقيق رصيد العميل لحظياً" style="padding: 4px 6px;">
+                      <button class="btn btn-secondary btn-xs" onclick="App.syncClientBalance(${c.id})" title="مزامنة وتدقيق رصيد العميل لحظياً">
                         <span>🔄</span>
                       </button>
                     </div>
@@ -1517,14 +1517,14 @@ const App = {
             <span style="color: var(--text-secondary);">رقم الحساب الكامل:</span>
             <div style="display: flex; align-items: center; gap: 6px;">
               <code dir="ltr" style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.account_number}</code>
-              <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.account_number}'); App.showToast('تم نسخ رقم الحساب بنجاح', 'success');" title="نسخ">📋</button>
+              <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${d.account_number}'); App.showToast('تم نسخ رقم الحساب بنجاح', 'success');" title="نسخ">📋</button>
             </div>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-secondary);">رقم الآيبان الكامل (IBAN):</span>
             <div style="display: flex; align-items: center; gap: 6px;">
               <code dir="ltr" style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 4px 8px; border-radius: 4px; color: var(--color-success, #10b981); font-weight: bold;">${d.iban}</code>
-              <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="navigator.clipboard.writeText('${d.iban}'); App.showToast('تم نسخ رقم الآيبان بنجاح', 'success');" title="نسخ">📋</button>
+              <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${d.iban}'); App.showToast('تم نسخ رقم الآيبان بنجاح', 'success');" title="نسخ">📋</button>
             </div>
           </div>
           <div style="display: flex; justify-content: space-between;">
@@ -2311,10 +2311,10 @@ const App = {
                         <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green); font-size: 0.72rem;">${p.status || 'نشط'}</span>
                       </div>
                       <div style="display: flex; gap: 6px;">
-                        <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${clientId}, ${isOfficial ? contract.id : 'null'}, ${p.id})" style="font-size: 0.72rem; padding: 3px 8px;">
+                        <button class="btn btn-secondary btn-xs" onclick="App.openNewClientBillModal(${clientId}, ${isOfficial ? contract.id : 'null'}, ${p.id})">
                           + مستخلص للمشروع
                         </button>
-                        <button class="btn btn-primary btn-sm" onclick="Accounting.openNewReceiptModal({ client_id: ${clientId}, project_id: ${p.id}, contract_id: ${isOfficial ? contract.id : 'null'} })" style="font-size: 0.72rem; padding: 3px 8px; background: var(--accent-green); border-color: var(--accent-green);">
+                        <button class="btn btn-primary btn-xs" onclick="Accounting.openNewReceiptModal({ client_id: ${clientId}, project_id: ${p.id}, contract_id: ${isOfficial ? contract.id : 'null'} })" style="background: var(--accent-green); border-color: var(--accent-green);">
                           💵 قبض دفعة
                         </button>
                       </div>
@@ -2389,7 +2389,7 @@ const App = {
                                     <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor}; font-size: 0.7rem;">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
                                     <td style="text-align: center;">
                                       ${!isFullyPaid ? `
-                                        <button class="btn btn-primary btn-sm" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${p.id}, ${rem}, '${b.bill_no}')" style="padding: 2px 7px; font-size: 0.7rem; background: var(--accent-green); border-color: var(--accent-green);">
+                                        <button class="btn btn-primary btn-xs" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${p.id}, ${rem}, '${b.bill_no}')" style="background: var(--accent-green); border-color: var(--accent-green);">
                                           قبض دفعة
                                         </button>
                                       ` : '<span style="color: var(--accent-green); font-size: 0.72rem;">✓ تم السداد</span>'}
@@ -2424,8 +2424,8 @@ const App = {
                   </div>
                 </div>
                 <div style="display: flex; gap: 6px;">
-                  <button class="btn btn-secondary btn-sm" onclick="App.openNewClientBillModal(${clientId}, null, ${p.id})" style="font-size: 0.72rem; padding: 3px 8px;">+ مستخلص</button>
-                  <button class="btn btn-primary btn-sm" onclick="Accounting.openNewReceiptModal({ client_id: ${clientId}, project_id: ${p.id} })" style="font-size: 0.72rem; padding: 3px 8px; background: var(--accent-green); border-color: var(--accent-green);">💵 قبض دفعة</button>
+                  <button class="btn btn-secondary btn-xs" onclick="App.openNewClientBillModal(${clientId}, null, ${p.id})">+ مستخلص</button>
+                  <button class="btn btn-primary btn-xs" onclick="Accounting.openNewReceiptModal({ client_id: ${clientId}, project_id: ${p.id} })" style="background: var(--accent-green); border-color: var(--accent-green);">💵 قبض دفعة</button>
                 </div>
               </div>
             `).join('')}
@@ -2467,7 +2467,7 @@ const App = {
           <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor};">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
           <td style="text-align: center;">
             ${!isFullyPaid ? `
-              <button class="btn btn-primary btn-sm" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${b.project_id}, ${rem}, '${b.bill_no}')" style="padding: 3px 8px; font-size: 0.75rem;">
+              <button class="btn btn-primary btn-xs" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${b.project_id}, ${rem}, '${b.bill_no}')">
                 قبض دفعة
               </button>
             ` : '<span style="color: var(--accent-green); font-size: 0.78rem;">✓ تم التحصيل</span>'}

@@ -285,7 +285,7 @@ const HR = {
             <td style="color:var(--accent-green);font-weight:bold;font-size:0.88rem;background:rgba(16,185,129,0.08);">${this.money(grandNet)}</td>
             <td>
               <span class="badge ${p.status === 'paid' ? 'badge-active' : 'badge-expense'}">${p.status === 'paid' ? 'مصروف' : 'مسودة'}</span>
-              ${p.status !== 'paid' ? `<button class="btn btn-primary btn-sm" style="padding:2px 6px;font-size:0.75rem;" onclick="HR.payPayroll(${p.id})">اعتماد</button>` : ''}
+              ${p.status !== 'paid' ? `<button class="btn btn-primary btn-xs" onclick="HR.payPayroll(${p.id})">اعتماد</button>` : ''}
             </td>
           </tr>
         `;
@@ -739,7 +739,7 @@ const HR = {
           </div>
           <div style="display:flex;gap:8px;">
             <button type="button" class="btn btn-secondary" onclick="App.closeModal('hrPayrollJournalPreviewModal')">إلغاء</button>
-            <button type="button" id="btnExecutePayrollPost" class="btn btn-success" style="background:linear-gradient(135deg,#059669,#10b981);" onclick="HR.executePayrollPost('${month}')">
+            <button type="button" id="btnExecutePayrollPost" class="btn btn-success" onclick="HR.executePayrollPost('${month}')">
               تأكيد وترحيل القيد اليومي الآن ⚡
             </button>
           </div>

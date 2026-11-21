@@ -99,8 +99,8 @@ const Settings = {
           <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #34d399);">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
           <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? 'var(--color-success, #34d399)' : 'var(--color-danger, #f87171)'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
           <td>
-            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: var(--color-success, #34d399); border-color: #10b981;">إدارة التفاصيل ↗</a>
-            ${Auth.hasPermission('client_app:delete') ? `<button type="button" class="btn btn-secondary btn-sm client-app-delete" style="padding:3px 8px;color:var(--color-danger, #f87171);margin-right:4px" title="حذف حساب العميل">🗑️ حذف</button>` : ''}
+            <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-xs" style="color: var(--color-success, #34d399); border-color: #10b981;">إدارة التفاصيل ↗</a>
+            ${Auth.hasPermission('client_app:delete') ? `<button type="button" class="btn btn-secondary client-app-delete btn-xs" style="color: var(--color-danger, #f87171); margin-right: 4px;" title="حذف حساب العميل">🗑️ حذف</button>` : ''}
           </td>
         `;
         const deleteButton=tr.querySelector('.client-app-delete');
@@ -2433,7 +2433,7 @@ const Settings = {
                     ✏️ تعديل
                   </button>
                   ${isCurrentUserAdmin ? `
-                    <button type="button" class="btn btn-secondary btn-sm" style="color: var(--color-success, #10b981); border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); font-weight: 600;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="تخصيص سياسة الأمان والجلسات لهذا المستخدم">
+                    <button type="button" class="btn btn-sm btn-soft-success" style="font-weight: 600;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="تخصيص سياسة الأمان والجلسات لهذا المستخدم">
                       🛡️ أمان وجلسات
                     </button>
                   ` : ''}
@@ -3811,7 +3811,7 @@ const Settings = {
                 ↩️ استعادة
               </button>
               ${rec.is_protected ? '' : `
-                <button type="button" class="btn btn-danger btn-sm" onclick="Settings.deleteBackupRecord('${rec.id}', '${safeFileName}')" title="حذف النسخة" style="padding: 4px 8px;">
+                <button type="button" class="btn btn-danger btn-xs" onclick="Settings.deleteBackupRecord('${rec.id}', '${safeFileName}')" title="حذف النسخة">
                   🗑️
                 </button>
               `}
@@ -5027,15 +5027,15 @@ const Settings = {
           <td style="font-size: 0.8rem; color: var(--text-secondary);">${dateStr}</td>
           <td style="text-align: center;">
             <div style="display: inline-flex; gap: 6px;">
-              <a href="javascript:void(0)" onclick="Settings.downloadCloudArchive('${item.fileName}')" class="btn btn-secondary btn-sm" title="تنزيل الأرشيف إلى جهازك" style="padding: 4px 8px;">
+              <a href="javascript:void(0)" onclick="Settings.downloadCloudArchive('${item.fileName}')" class="btn btn-secondary btn-xs" title="تنزيل الأرشيف إلى جهازك">
                 📥 تنزيل
               </a>
               ${!item.cloudSynced ? `
-                <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.syncToCloudNow('${item.fileName}')" title="رفع إلى السحابة" style="padding: 4px 8px; color: var(--color-info, #38bdf8);">
+                <button type="button" class="btn btn-secondary btn-xs" onclick="Settings.syncToCloudNow('${item.fileName}')" title="رفع إلى السحابة" style="color: var(--color-info, #38bdf8);">
                   ☁️ رفع
                 </button>
               ` : ''}
-              <button type="button" class="btn btn-primary btn-sm" onclick="Settings.openEncryptedRestoreModal('${item.fileName}')" title="فحص واستعادة هذه النسخة" style="padding: 4px 8px; background: #059669; border-color: #059669;">
+              <button type="button" class="btn btn-xs btn-success" onclick="Settings.openEncryptedRestoreModal('${item.fileName}')" title="فحص واستعادة هذه النسخة">
                 ↩️ استعادة
               </button>
             </div>

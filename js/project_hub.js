@@ -750,7 +750,7 @@ const ProjectHub = {
           <td>
             <div style="display: flex; align-items: center; gap: 6px;">
               <strong style="color: var(--accent-green);">${App.formatNumber(eQty)}</strong>
-              <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; font-size: 0.7rem; border-radius: 4px;" onclick="ProjectHub.openQuickProgressModal(${b.id})" title="تحديث كمية الإنجاز المنفذة بالموقع">⚡</button>
+              <button class="btn btn-secondary btn-xs" style="border-radius: 4px;" onclick="ProjectHub.openQuickProgressModal(${b.id})" title="تحديث كمية الإنجاز المنفذة بالموقع">⚡</button>
             </div>
           </td>
           <td>${remainingHtml}</td>
@@ -1962,7 +1962,7 @@ const ProjectHub = {
 
       let itemsBadge = `<span style="font-size: 0.74rem; color: var(--text-secondary);">إجمالي عام</span>`;
       if (itemsCount > 0) {
-        itemsBadge = `<button class="btn btn-outline-primary btn-sm" style="padding: 2px 8px; font-size: 0.72rem; border-radius: 12px;" onclick="ProjectHub.viewIpcDetails(${i.id})" title="عرض كشف بنود الكميات المفصلة">${itemsCount} بند مفصل 📊</button>`;
+        itemsBadge = `<button class="btn btn-outline-primary btn-xs" style="border-radius: 12px;" onclick="ProjectHub.viewIpcDetails(${i.id})" title="عرض كشف بنود الكميات المفصلة">${itemsCount} بند مفصل 📊</button>`;
       }
 
       const periodStr = (i.period_from && i.period_to) ? `${i.period_from} ➔ ${i.period_to}` : (i.period_to || '-');
@@ -4416,10 +4416,10 @@ const ProjectHub = {
           </td>
           <td style="text-align: center;">
             <div style="display: flex; gap: 4px; justify-content: center;">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="ProjectHub.openEditQuotationItemModal(${idx})" title="تعديل هذا البند" style="padding: 3px 7px;">
+              <button type="button" class="btn btn-secondary btn-xs" onclick="ProjectHub.openEditQuotationItemModal(${idx})" title="تعديل هذا البند">
                 ✏️
               </button>
-              <button type="button" class="btn btn-danger btn-sm" onclick="ProjectHub.deleteQuotationItem(${idx})" title="حذف البند" style="padding: 3px 7px;">
+              <button type="button" class="btn btn-danger btn-xs" onclick="ProjectHub.deleteQuotationItem(${idx})" title="حذف البند">
                 🗑️
               </button>
             </div>

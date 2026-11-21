@@ -747,7 +747,7 @@ const Inventory = {
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 8px;">
           <button type="button" class="btn btn-secondary" onclick="App.closeModal('dynamicAppModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary" style="background: #c0392b; border-color: #a93226;">عزل المادة وإثبات الخسارة</button>
+          <button type="submit" class="btn btn-danger">عزل المادة وإثبات الخسارة</button>
         </div>
       </form>
     `;
