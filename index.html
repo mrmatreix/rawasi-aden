@@ -2136,27 +2136,27 @@
 
         <!-- بطاقات المؤشرات التنفيذية (KPI Cards) -->
         <div class="kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
-          <div class="kpi-card panel-card" style="padding: 12px;">
+          <div class="kpi-card panel-card card-compact">
             <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">قيمة العقد الإجمالية</span>
             <div id="kpiCloseoutContractVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; margin-top: 4px;">-</div>
           </div>
-          <div class="kpi-card panel-card" style="padding: 12px;">
+          <div class="kpi-card panel-card card-compact">
             <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">القيمة المنفذة للفوترة</span>
             <div id="kpiCloseoutBilledVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; color: var(--accent-blue, #2980b9); margin-top: 4px;">-</div>
           </div>
-          <div class="kpi-card panel-card" style="padding: 12px;">
+          <div class="kpi-card panel-card card-compact">
             <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">إجمالي التكلفة الفعلية</span>
             <div id="kpiCloseoutActualCost" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; margin-top: 4px;">-</div>
           </div>
-          <div class="kpi-card panel-card" style="padding: 12px;">
+          <div class="kpi-card panel-card card-compact">
             <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">مجمل الربح وهامش %</span>
             <div id="kpiCloseoutGrossProfit" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; margin-top: 4px;">-</div>
           </div>
-          <div class="kpi-card panel-card" style="padding: 12px;">
+          <div class="kpi-card panel-card card-compact">
             <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">رصيد مواد الموقع (فائض)</span>
             <div id="kpiCloseoutSiteStockVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; color: #2980b9; margin-top: 4px;">-</div>
           </div>
-          <div class="kpi-card panel-card" style="padding: 12px;">
+          <div class="kpi-card panel-card card-compact">
             <span class="kpi-title" style="font-size: 0.8rem; color: var(--text-secondary);">تكلفة الهدر والفاقد</span>
             <div id="kpiCloseoutWastageVal" class="kpi-value" style="font-size: 1.2rem; font-weight: 800; color: var(--accent-red, #c0392b); margin-top: 4px;">-</div>
           </div>
@@ -2630,7 +2630,7 @@
               </button>
             </div>
           </div>
-          <div class="panel-card" style="padding:0;overflow:hidden;border:1px solid var(--border-color);border-radius:10px;">
+          <div class="panel-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color);">
             <div id="payrollSheetHeaderBanner" style="background:#059669;color:#ffffff;text-align:center;padding:12px 16px;font-size:1.25rem;font-weight:bold;letter-spacing:0.5px;">
               كشف الراتب الشامل لشهر اغسطس ٢٠٢٦م
             </div>
@@ -2951,7 +2951,7 @@
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-        <div class="panel-card" style="margin: 0; background: var(--bg-sunken, rgba(15,23,42,0.6));">
+        <div class="panel-card card-sunken" style="margin: 0;">
           <h4 style="color: var(--accent-blue); margin-bottom: 12px; display: flex; justify-content: space-between;">
             <span>الأصول والموجودات (1)</span>
             <span style="font-size: 0.8rem; color: var(--text-secondary);">أرصدة مدينة</span>
@@ -2970,7 +2970,7 @@
           </div>
         </div>
 
-        <div class="panel-card" style="margin: 0; background: var(--bg-sunken, rgba(15,23,42,0.6));">
+        <div class="panel-card card-sunken" style="margin: 0;">
           <h4 style="color: var(--accent-amber); margin-bottom: 12px; display: flex; justify-content: space-between;">
             <span>الالتزامات وحقوق الملكية (2)</span>
             <span style="font-size: 0.8rem; color: var(--text-secondary);">أرصدة دائنة</span>
@@ -4570,7 +4570,7 @@
         <div id="pane_settings_backup" class="settings-pane" style="display: none;">
 
           <!-- لوحة منظومة إدارة الكوارث والنسخ الاحتياطي المركزية (Enterprise Disaster Recovery Engine) -->
-          <div class="panel-card" style="margin-bottom: 24px; border: 2px solid var(--border-gold); background: linear-gradient(135deg, rgba(212, 175, 55, 0.06) 0%, rgba(15, 23, 42, 0.85) 100%);">
+          <div class="panel-card card-accent-gold" style="margin-bottom: 24px; border: 2px solid var(--border-gold);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid rgba(212, 175, 55, 0.25); padding-bottom: 14px;">
               <div style="display: flex; align-items: center; gap: 12px;">
                 <div style="background: rgba(212, 175, 55, 0.15); border: 1px solid var(--border-gold); border-radius: 12px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem;">
@@ -4709,7 +4709,7 @@
           </div>
 
           <!-- بطاقة مميزة: إدارة وترحيل قاعدة بيانات MySQL (MySQL Enterprise & Migration) -->
-          <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold); background: linear-gradient(135deg, rgba(212, 175, 55, 0.04) 0%, rgba(26, 38, 57, 0.3) 100%);">
+          <div class="panel-card card-accent-gold" style="margin-bottom: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
               <h3 style="color: var(--text-gold); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 4.02 2 6.5s4.48 4.5 10 4.5 10-2.02 10-4.5S17.52 2 12 2zm0 6c-3.86 0-7-1.34-7-3s3.14-3 7-3 7 1.34 7 3-3.14 3-7 3zm0 4.5c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5zm0 6c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5z"/></svg>
@@ -4781,7 +4781,7 @@
           </div>
 
           <!-- بطاقة: الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين المعتمد -->
-          <div class="panel-card" style="margin-bottom: 24px; border: 1px solid var(--border-gold); background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <div class="panel-card card-accent-success" style="margin-bottom: 24px; border: 1px solid var(--border-gold);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
               <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
@@ -5494,32 +5494,32 @@
 
         <!-- بطاقات المؤشرات المالية التفصيلية -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px;">
-          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #38bdf8;">
+          <div class="panel-card card-compact" style="margin: 0; border-top: 3px solid #38bdf8;">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي مبالغ العقود</div>
             <div id="chainSummaryContracts" style="font-size: 1.1rem; font-weight: 700; color: var(--color-info, #38bdf8); margin: 4px 0;">0</div>
             <div id="chainSummaryContractsSub" style="font-size: 0.68rem; color: var(--text-secondary);">0 عقود مسجلة</div>
           </div>
-          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--gold-light);">
+          <div class="panel-card card-compact" style="margin: 0; border-top: 3px solid var(--gold-light);">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي الأعمال المنجزة (Gross)</div>
             <div id="chainSummaryGross" style="font-size: 1.1rem; font-weight: 700; color: var(--text-gold); margin: 4px 0;">0</div>
             <div id="chainSummaryGrossSub" style="font-size: 0.68rem; color: var(--text-secondary);">قبل الاستقطاعات التعاقدية</div>
           </div>
-          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #eab308;">
+          <div class="panel-card card-compact" style="margin: 0; border-top: 3px solid #eab308;">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">صافي المطالبات المفوترة</div>
             <div id="chainSummaryInvoiced" style="font-size: 1.1rem; font-weight: 700; color: var(--color-warning, #facc15); margin: 4px 0;">0</div>
             <div id="chainSummaryInvoicedSub" style="font-size: 0.68rem; color: var(--text-secondary);">المستخلصات المعتمدة</div>
           </div>
-          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--accent-green);">
+          <div class="panel-card card-compact" style="margin: 0; border-top: 3px solid var(--accent-green);">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">إجمالي المبالغ المحصلة</div>
             <div id="chainSummaryCollected" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-green); margin: 4px 0;">0</div>
             <div id="chainSummaryCollectedSub" style="font-size: 0.68rem; color: var(--text-secondary);">دفعات مقدمة + تحصيلات</div>
           </div>
-          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid #f59e0b;">
+          <div class="panel-card card-compact" style="margin: 0; border-top: 3px solid #f59e0b;">
             <div style="font-size: 0.72rem; color: var(--text-secondary);">محتجز الضمان القائم</div>
             <div id="chainSummaryRetention" style="font-size: 1.1rem; font-weight: 700; color: var(--color-warning, #f59e0b); margin: 4px 0;">0</div>
             <div id="chainSummaryRetentionSub" style="font-size: 0.68rem; color: var(--text-secondary);">محتجز للصيانة والضمان</div>
           </div>
-          <div class="panel-card" style="margin: 0; padding: 12px; border-top: 3px solid var(--accent-red); background: rgba(239, 68, 68, 0.05);">
+          <div class="panel-card card-compact" style="margin: 0; border-top: 3px solid var(--accent-red); background: rgba(239, 68, 68, 0.05);">
             <div style="font-size: 0.72rem; color: var(--accent-red); font-weight: 700;">الرصيد المستحق الفعلي</div>
             <div id="chainSummaryDue" style="font-size: 1.15rem; font-weight: 800; color: var(--accent-red); margin: 4px 0;">0</div>
             <div id="chainSummaryDueSub" style="font-size: 0.68rem; color: var(--accent-red);">صافي المطالبة اللحظية</div>

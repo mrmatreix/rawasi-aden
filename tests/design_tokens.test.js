@@ -26,6 +26,19 @@ test('every btn-* class used in the UI is defined by the unified button system',
  for(const size of ['btn-xs','btn-sm','btn-lg']) assert.ok(used.has(size)||css.includes('.'+size),size);
 });
 
+test('cards share the card tokens and carry no fixed dark backgrounds',()=>{
+ const css=fs.readFileSync(path.join(root,'css','style.css'),'utf8');
+ for(const sel of ['.panel-card','.kpi-card','.quick-form-card','.security-card']){
+  const rule=css.match(new RegExp('\\n\\'+sel+' \\{([^}]*)\\}'));
+  assert.ok(rule,sel+' rule');
+  assert.match(rule[1],/background:\s*var\(--card-bg\)/,sel+' background');
+  assert.match(rule[1],/border-radius:\s*var\(--card-radius\)/,sel+' radius');
+ }
+ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+ const dark=[...html.matchAll(/<div\b[^<>]*class="[^"]*\bpanel-card\b[^"]*"[^<>]*style="[^"]*rgba\(\s*(?:15\s*,\s*23\s*,\s*42|26\s*,\s*38\s*,\s*57)/g)];
+ assert.equal(dark.length,0,'panel-card with a fixed dark background; use card-sunken / card-accent-*');
+});
+
 test('buttons do not repaint themselves with inline gradients instead of a variant class',()=>{
  const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
  const painted=[...html.matchAll(/<button\b[^<>]*class="[^"]*\bbtn\b[^"]*"[^<>]*style="[^"]*background:\s*linear-gradient\(135deg,\s*#(?:059669|10b981|b91c1c|ef4444|2563eb)/g)];

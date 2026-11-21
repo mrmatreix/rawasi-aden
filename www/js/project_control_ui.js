@@ -69,7 +69,7 @@ const ProjectControlUI = {
   renderAuthRequired(container, featureTitle) {
     if (!container) return;
     container.innerHTML = `
-      <div class="panel-card" style="padding: 40px 24px; text-align: center; border: 1px dashed var(--gold-primary); background: var(--bg-sunken, rgba(15, 23, 42, 0.7)); border-radius: 12px; margin: 20px 0;">
+      <div class="panel-card card-empty" style="border-color: var(--gold-primary);">
         <div style="font-size: 2.8rem; margin-bottom: 12px;">🔒</div>
         <h4 style="color: var(--text-gold); margin-bottom: 8px; font-size: 1.15rem;">يرجى تسجيل الدخول أولاً</h4>
         <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.6;">
@@ -86,7 +86,7 @@ const ProjectControlUI = {
   renderNoProjectSelected(container, featureTitle) {
     if (!container) return;
     container.innerHTML = `
-      <div class="panel-card" style="padding: 36px 20px; text-align: center; border: 1px dashed var(--border-color); background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border-radius: 12px; margin: 20px 0;">
+      <div class="panel-card card-empty">
         <div style="font-size: 2.5rem; margin-bottom: 12px;">📁</div>
         <h4 style="color: var(--text-primary); margin-bottom: 8px;">يرجى تحديد المشروع أولاً</h4>
         <p style="color: var(--text-secondary); margin-bottom: 18px; font-size: 0.9rem;">

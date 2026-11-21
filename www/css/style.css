@@ -57,6 +57,17 @@
   --font-xs: 0.75rem; --font-sm: 0.85rem; --font-md: 0.95rem; --font-lg: 1.1rem; --font-xl: 1.35rem;
   --radius-pill: 999px;
 
+  /* البطاقات: رئيسية (panel/kpi/hub) ومتداخلة داخلها (مجموعات الصلاحيات، أقسام الإعدادات) */
+  --card-bg: var(--bg-surface);
+  --card-border: var(--border-color);
+  --card-radius: var(--radius-md);
+  --card-pad: var(--space-4);
+  --card-shadow: var(--shadow-sm);
+  --card-shadow-hover: var(--shadow-md);
+  --card-nested-bg: rgba(255, 255, 255, 0.03);
+  --card-nested-radius: var(--radius-sm);
+  --card-nested-pad: var(--space-3);
+
   /* الظلال والانتقالات */
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
@@ -113,6 +124,10 @@ body.light-mode {
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.18);
   --shadow-gold: 0 4px 15px rgba(212, 175, 55, 0.25);
+  --card-border: #d1d9e0;
+  --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+  --card-shadow-hover: 0 8px 22px rgba(0, 0, 0, 0.12);
+  --card-nested-bg: #f8fafc;
 }
 
 /* Light mode: overrides for fixed-colored elements */
@@ -143,10 +158,6 @@ body.light-mode .custom-table tr:nth-child(even) td {
   background: rgba(30, 58, 95, 0.04);
 }
 
-body.light-mode .panel-card {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  border: 1px solid #d1d9e0;
-}
 
 body.light-mode .modal-box {
   background: #ffffff !important;
@@ -154,11 +165,6 @@ body.light-mode .modal-box {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
 
-body.light-mode .kpi-card {
-  background: #ffffff;
-  border-color: #d1d9e0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
 
 body.light-mode .form-control,
 body.light-mode .form-group select,
@@ -824,8 +830,7 @@ body.system-theme .theme-icon-system { display: inline; }
 
 /* تسلسل بصري موحّد: الذهب للإجراء الأساسي، والألوان الأخرى للحالة فقط. */
 .btn-primary { box-shadow: 0 4px 12px rgba(214, 173, 53, 0.18); }
-.panel-card, .kpi-card { border-color: var(--border-color); }
-.kpi-card:hover, .panel-card:hover { border-color: color-mix(in srgb, var(--gold-primary) 42%, var(--border-color)); }
+.kpi-card:hover, .panel-card:hover { border-color: color-mix(in srgb, var(--gold-primary) 42%, var(--card-border)); }
 body.light-mode .sidebar-navigation-heading,
 body.light-mode .sidebar-nav .nav-group-header,
 body.light-mode .sidebar-nav .nav-sub-item { color: var(--text-primary); }
@@ -1356,15 +1361,15 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 }
 
 .kpi-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 16px 18px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-pad);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  box-shadow: var(--shadow-sm);
+  gap: var(--space-3);
+  box-shadow: var(--card-shadow);
   transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
@@ -1374,7 +1379,7 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 .kpi-card:hover {
   transform: translateY(-3px);
   border-color: var(--gold-primary);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--card-shadow-hover);
 }
 
 .kpi-content {
@@ -1463,12 +1468,19 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 }
 
 .panel-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-pad);
+  box-shadow: var(--card-shadow);
 }
+
+/* أشكال مساعدة بدل الأنماط المكتوبة يدوياً */
+.panel-card.card-compact { padding: var(--space-3); }
+.panel-card.card-sunken { background: var(--bg-sunken); box-shadow: none; }
+.panel-card.card-accent-gold { border: 1px solid var(--border-gold); background: linear-gradient(135deg, rgba(212, 175, 55, 0.06) 0%, var(--card-bg) 100%); }
+.panel-card.card-accent-success { border: 1px solid var(--color-success-border); background: linear-gradient(135deg, var(--color-success-bg) 0%, var(--card-bg) 100%); }
+.panel-card.card-empty { padding: var(--space-6) var(--space-5); text-align: center; border-style: dashed; background: var(--bg-sunken); box-shadow: none; margin: 20px 0; }
 
 .panel-header {
   display: flex;
@@ -1622,10 +1634,11 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 }
 
 .quick-form-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-pad);
+  box-shadow: var(--card-shadow);
 }
 
 .quick-form-card .form-group {
@@ -2183,10 +2196,10 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 }
 
 .perm-group-card {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--card-nested-bg);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  border-radius: var(--card-nested-radius);
+  padding: 10px var(--card-nested-pad);
   transition: var(--transition);
 }
 
@@ -3827,11 +3840,11 @@ body.light-mode .bottom-nav-item.active span {
 }
 
 .print-settings-section-card {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--card-nested-bg);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
+  border-radius: var(--card-nested-radius);
   padding: 14px;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   transition: border-color 0.2s ease;
 }
 
@@ -4080,7 +4093,7 @@ body.light-mode .bottom-nav-item.active span {
 /* بطاقة ومحتوى التبويب النشط */
 .hub-pane-card {
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   padding: 22px;
   box-shadow: var(--shadow-md);
@@ -4213,10 +4226,10 @@ body.light-mode .bottom-nav-item.active span {
 
 /* بطاقة المخالصة والحساب الختامي */
 .settlement-summary-card {
-  background: linear-gradient(135deg, rgba(14, 28, 50, 0.8) 0%, rgba(21, 39, 68, 0.9) 100%);
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.06) 0%, var(--card-bg) 100%);
   border: 1px solid var(--gold-primary);
   border-radius: var(--radius-lg);
-  padding: 24px;
+  padding: var(--space-5);
   margin-top: 16px;
   box-shadow: var(--shadow-gold);
 }
@@ -4430,14 +4443,14 @@ body.light-mode .bottom-nav-item.active span {
 }
 
 .security-card {
-  background: #111927;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-pad);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--card-shadow);
 }
 
 .security-card-header {
@@ -4461,28 +4474,28 @@ body.light-mode .bottom-nav-item.active span {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-color);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--text-secondary, #94a3b8);
   font-weight: bold;
   transition: all 0.2s ease;
 }
 
 .session-help-btn:hover {
-  background: #334155;
-  color: #ffffff;
-  border-color: #475569;
+  background: var(--bg-card-hover);
+  color: var(--text-primary, #ffffff);
+  border-color: var(--gold-primary);
 }
 
 .session-mode-toggle-btn {
   padding: 12px 14px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid #334155;
+  border: 1px solid var(--border-color);
   color: var(--text-secondary, #94a3b8);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -4497,14 +4510,14 @@ body.light-mode .bottom-nav-item.active span {
 
 .session-mode-toggle-btn:hover {
   background: rgba(255, 255, 255, 0.05);
-  border-color: #475569;
+  border-color: var(--gold-primary);
   color: var(--text-primary, #f1f5f9);
 }
 
 .session-mode-toggle-btn.active {
   background: rgba(16, 185, 129, 0.12) !important;
   border: 1.5px solid #10b981 !important;
-  color: #ffffff !important;
+  color: var(--color-success, #10b981) !important;
   box-shadow: 0 0 14px rgba(16, 185, 129, 0.22);
 }
 
@@ -4513,7 +4526,7 @@ body.light-mode .bottom-nav-item.active span {
   height: 32px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid #334155;
+  border: 1px solid var(--border-color);
   color: var(--text-secondary, #94a3b8);
   font-weight: 700;
   font-size: 0.88rem;
@@ -4526,8 +4539,8 @@ body.light-mode .bottom-nav-item.active span {
 }
 
 .device-limit-btn:hover {
-  border-color: #475569;
-  color: #ffffff;
+  border-color: var(--gold-primary);
+  color: var(--text-primary, #ffffff);
 }
 
 .device-limit-btn.active {
@@ -4541,7 +4554,7 @@ body.light-mode .bottom-nav-item.active span {
   padding: 5px 12px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid #334155;
+  border: 1px solid var(--border-color);
   color: var(--text-secondary, #94a3b8);
   font-size: 0.82rem;
   font-weight: 600;
@@ -4551,8 +4564,8 @@ body.light-mode .bottom-nav-item.active span {
 }
 
 .overflow-action-btn:hover {
-  border-color: #475569;
-  color: #ffffff;
+  border-color: var(--gold-primary);
+  color: var(--text-primary, #ffffff);
 }
 
 .overflow-action-btn.active {
@@ -4566,7 +4579,7 @@ body.light-mode .bottom-nav-item.active span {
   padding: 10px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid #334155;
+  border: 1px solid var(--border-color);
   color: var(--text-secondary, #cbd5e1);
   font-size: 0.86rem;
   font-weight: 600;
@@ -4578,14 +4591,14 @@ body.light-mode .bottom-nav-item.active span {
 
 .token-expiry-btn:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: #475569;
-  color: #ffffff;
+  border-color: var(--gold-primary);
+  color: var(--text-primary, #ffffff);
 }
 
 .token-expiry-btn.active {
   background: rgba(16, 185, 129, 0.12) !important;
   border: 1.5px solid #10b981 !important;
-  color: #ffffff !important;
+  color: var(--color-success, #10b981) !important;
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
 }
 
