@@ -324,7 +324,7 @@ const ProjectHub = {
         <div style="text-align: center; padding: 40px 20px; background: rgba(255,255,255,0.02); border-radius: var(--radius-md); border: 1px dashed var(--border-light);">
           <div style="font-size: 2.5rem; margin-bottom: 12px;">📑</div>
           <h4 style="color: #fff; margin-bottom: 8px;">لم يتم توثيق عقد رسمي لهذا المشروع بعد</h4>
-          <p style="color: var(--text-secondary); font-size: 0.86rem; margin-bottom: 18px;">يمكنك إنشاء وتوثيق عقد المشروع وشروط السداد ونطاق العمل وطباعته رسمياً.</p>
+          <p style="color: var(--text-secondary); font-size: 0.86rem; margin-bottom: 16px;">يمكنك إنشاء وتوثيق عقد المشروع وشروط السداد ونطاق العمل وطباعته رسمياً.</p>
           <button class="btn btn-primary" onclick="ProjectHub.openEditContractModal()">+ إنشاء وتوثيق عقد المشروع</button>
         </div>
       `;
@@ -332,8 +332,8 @@ const ProjectHub = {
     }
 
     container.innerHTML = `
-      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 18px; margin-bottom: 20px;">
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 18px;">
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px;">
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
             <div>
               <span style="font-size: 0.74rem; color: var(--text-gold); font-weight: 700;">رقم العقد: ${contract.contract_no || 'CNT'}</span>
@@ -500,7 +500,7 @@ const ProjectHub = {
 
     const drawings = this.data.drawings || [];
     if (drawings.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد مخططات هندسية مسجلة لهذا المشروع بعد.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد مخططات هندسية مسجلة لهذا المشروع بعد.</td></tr>`;
       return;
     }
 
@@ -711,7 +711,7 @@ const ProjectHub = {
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 35px; color: var(--text-secondary);">لا توجد بنود مطابقة لمعايير البحث في جدول الكميات.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد بنود مطابقة لمعايير البحث في جدول الكميات.</td></tr>`;
       return;
     }
 
@@ -1413,7 +1413,7 @@ const ProjectHub = {
     const curr = this.data.project.currency || 'ر.ي';
 
     if (quotations.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد عروض أسعار مسجلة لهذا المشروع.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد عروض أسعار مسجلة لهذا المشروع.</td></tr>`;
       return;
     }
 
@@ -1505,7 +1505,7 @@ const ProjectHub = {
     const curr = this.data.project.currency || 'ر.ي';
 
     if (budgets.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد مراكز ميزانية مسجلة.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد مراكز ميزانية مسجلة.</td></tr>`;
       return;
     }
 
@@ -1633,7 +1633,7 @@ const ProjectHub = {
     const curr = this.data.project.currency || 'ر.ي';
 
     if (changeOrders.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد أوامر تغيير مسجلة لهذا المشروع.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد أوامر تغيير مسجلة لهذا المشروع.</td></tr>`;
       return;
     }
 
@@ -1726,7 +1726,7 @@ const ProjectHub = {
     const curr = this.data.project.currency || 'ر.ي';
 
     if (purchases.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد فواتير مشتريات مسجلة للمشروع.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد فواتير مشتريات مسجلة للمشروع.</td></tr>`;
       return;
     }
 
@@ -1830,7 +1830,7 @@ const ProjectHub = {
     const curr = this.data.project.currency || 'ر.ي';
 
     if (labor.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد مصاريف عمالة مسجلة للمشروع.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد مصاريف عمالة مسجلة للمشروع.</td></tr>`;
       return;
     }
 
@@ -1949,7 +1949,7 @@ const ProjectHub = {
     if (kpiRem) kpiRem.innerHTML = `${App.formatNumber(remainingContract)} <small style="font-size:0.75rem;">${curr}</small>`;
 
     if (invoices.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 35px; color: var(--text-secondary);">لا توجد مستخلصات مسجلة لهذا المشروع بعد. اضغط على "إصدار مستخلص ذكي من جدول الكميات" للبدء.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد مستخلصات مسجلة لهذا المشروع بعد. اضغط على "إصدار مستخلص ذكي من جدول الكميات" للبدء.</td></tr>`;
       return;
     }
 
@@ -2077,7 +2077,7 @@ const ProjectHub = {
     if (!tbody) return;
 
     if (!this.ipcDraftItems || this.ipcDraftItems.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد بنود في جدول الكميات BOQ مسجلة لهذا المشروع.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد بنود في جدول الكميات BOQ مسجلة لهذا المشروع.</td></tr>`;
       if (summary) summary.innerText = '0 بند';
       return;
     }
@@ -2296,7 +2296,7 @@ const ProjectHub = {
       let itemsHtml = '';
       if (items.length > 0) {
         itemsHtml = `
-          <div style="margin-top: 18px;">
+          <div style="margin-top: 16px;">
             <h5 style="color: var(--text-gold); margin-bottom: 8px;">كشف تفريغ وحصر بنود جدول الكميات للمستخلص:</h5>
             <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
               <table class="custom-table" style="font-size: 0.76rem;">
@@ -2427,7 +2427,7 @@ const ProjectHub = {
     }
 
     container.innerHTML = reports.map(r => `
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 18px; margin-bottom: 14px;">
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 16px; margin-bottom: 14px;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-light); padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
           <div>
             <span style="font-weight: 800; color: var(--text-gold); font-size: 1.02rem;">${r.report_no}</span>
@@ -2521,7 +2521,7 @@ const ProjectHub = {
     }
 
     container.innerHTML = reports.map(w => `
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 18px; margin-bottom: 14px;">
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 16px; margin-bottom: 14px;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-light); padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
           <div>
             <span style="font-weight: 800; color: var(--text-gold); font-size: 1.05rem;">${w.report_no} (الأسبوع ${w.week_no || '1'})</span>
@@ -2615,7 +2615,7 @@ const ProjectHub = {
 
     const handovers = this.data.handovers || [];
     if (handovers.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد محاضر استلام مسجلة.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد محاضر استلام مسجلة.</td></tr>`;
       return;
     }
 
@@ -2700,7 +2700,7 @@ const ProjectHub = {
 
     const corr = this.data.correspondence || [];
     if (corr.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-secondary);">لا توجد مراسلات أو خطابات مسجلة.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 32px; color: var(--text-secondary);">لا توجد مراسلات أو خطابات مسجلة.</td></tr>`;
       return;
     }
 
@@ -2847,7 +2847,7 @@ const ProjectHub = {
           </div>
         </div>
 
-        <div style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 14px; border-radius: var(--radius-sm); font-size: 0.86rem; color: var(--text-secondary, #cbd5e1); line-height: 1.6; margin-bottom: 18px;">
+        <div style="background: var(--bg-sunken, rgba(0,0,0,0.3)); padding: 14px; border-radius: var(--radius-sm); font-size: 0.86rem; color: var(--text-secondary, #cbd5e1); line-height: 1.6; margin-bottom: 16px;">
           <strong>إقرار ومخالصة:</strong> بموجب هذه الشهادة الختامية، يقر الطرفان بانتهاء كافة الأعمال المنفذة ومطابقتها للمواصفات الهندسية المعتمدة، وتصفية كافة الالتزامات المالية والتعاقدية المتبادلة دون أي مطالبات لاحقة.
         </div>
 
@@ -2951,15 +2951,15 @@ const ProjectHub = {
           { label: 'تاريخ ووقت الطباعة', val: `${todayDate} - ${timeStr}` },
           { label: 'المستخدم المسجل بالمشروع', val: userName }
         ], cfg)
-      : `<div style="text-align:center; margin-bottom:15px;"><h2 style="color:#0f2744">${cfg.header_title}</h2><h4>${title} - ${docRef}</h4><div>تاريخ ووقت الطباعة: ${todayDate} - ${timeStr} | المستخدم المسجل: ${userName}</div></div>`;
+      : `<div style="text-align:center; margin-bottom:16px;"><h2 style="color:#0f2744">${cfg.header_title}</h2><h4>${title} - ${docRef}</h4><div>تاريخ ووقت الطباعة: ${todayDate} - ${timeStr} | المستخدم المسجل: ${userName}</div></div>`;
 
     const sigHtml = (typeof Settings !== 'undefined' && Settings.renderReportSignatures)
       ? Settings.renderReportSignatures(cfg)
-      : `<div style="display:flex; justify-content:space-between; margin-top:25px;"><div>مهندس المشروع</div><div>المحاسب المالي</div><div>المدير العام</div></div>`;
+      : `<div style="display:flex; justify-content:space-between; margin-top:24px;"><div>مهندس المشروع</div><div>المحاسب المالي</div><div>المدير العام</div></div>`;
 
     const footerHtml = (typeof Settings !== 'undefined' && Settings.renderReportFooter)
       ? Settings.renderReportFooter(cfg)
-      : `<div style="text-align:center; font-size:0.75rem; color:#64748b; margin-top:15px;">${cfg.footer_notes} | المستخدم: ${userName}</div>`;
+      : `<div style="text-align:center; font-size:0.75rem; color:#64748b; margin-top:16px;">${cfg.footer_notes} | المستخدم: ${userName}</div>`;
 
     return { cfg, headerHtml, sigHtml, footerHtml, todayDate };
   },
@@ -3049,7 +3049,7 @@ const ProjectHub = {
     let itemsBreakdownHtml = '';
     if (items.length > 0) {
       itemsBreakdownHtml = `
-        <div style="page-break-before: always; margin-top: 25px;">
+        <div style="page-break-before: always; margin-top: 24px;">
           <div style="border-bottom: 2px solid #0f2744; padding-bottom: 6px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: baseline;">
             <h4 style="margin: 0; color: #0f2744;">كشف حصر وتفريغ كميات بنود الأعمال للمستخلص رقم (${inv.invoice_no})</h4>
             <span style="font-size: 8pt; color: #64748b;">مشروع: ${project.name}</span>
@@ -3103,21 +3103,21 @@ const ProjectHub = {
 
     // جدول التوقيعات الرباعي المعتمد
     const officialQuadrupleSignatures = `
-      <div style="margin-top: 30px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; border-top: 1.5px solid #0f2744; padding-top: 14px;">
+      <div style="margin-top: 32px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; border-top: 1.5px solid #0f2744; padding-top: 14px;">
         <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px;">
-          <div style="font-size: 8pt; font-weight: bold; color: #475569; margin-bottom: 28px;">مهندس الموقع والمكتب الفني (المقاول)</div>
+          <div style="font-size: 8pt; font-weight: bold; color: #475569; margin-bottom: 32px;">مهندس الموقع والمكتب الفني (المقاول)</div>
           <div style="font-size: 8pt; color: #0f2744; border-top: 1px dashed #94a3b8; padding-top: 4px;">الاسم والتوقيع: .....................</div>
         </div>
         <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px;">
-          <div style="font-size: 8pt; font-weight: bold; color: #475569; margin-bottom: 28px;">مدير المشروع (المقاول)</div>
+          <div style="font-size: 8pt; font-weight: bold; color: #475569; margin-bottom: 32px;">مدير المشروع (المقاول)</div>
           <div style="font-size: 8pt; color: #0f2744; border-top: 1px dashed #94a3b8; padding-top: 4px;">الاسم والتوقيع: .....................</div>
         </div>
         <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; background: #f8fafc;">
-          <div style="font-size: 8pt; font-weight: bold; color: #1e3a8a; margin-bottom: 28px;">المهندس الاستشاري المشرف المعتمد</div>
+          <div style="font-size: 8pt; font-weight: bold; color: #1e3a8a; margin-bottom: 32px;">المهندس الاستشاري المشرف المعتمد</div>
           <div style="font-size: 8pt; color: #1e3a8a; border-top: 1px dashed #94a3b8; padding-top: 4px;">الختم والاعتماد: .....................</div>
         </div>
         <div style="text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px;">
-          <div style="font-size: 8pt; font-weight: bold; color: #047857; margin-bottom: 28px;">المصادقة والصرف (المالك / صاحب العمل)</div>
+          <div style="font-size: 8pt; font-weight: bold; color: #047857; margin-bottom: 32px;">المصادقة والصرف (المالك / صاحب العمل)</div>
           <div style="font-size: 8pt; color: #047857; border-top: 1px dashed #94a3b8; padding-top: 4px;">التوجيه بالصرف: .....................</div>
         </div>
       </div>
@@ -3663,7 +3663,7 @@ const ProjectHub = {
             </tr>
           </table>
 
-          <div style="font-size: 0.9rem; line-height: 1.8; color: #334155; background: #f8fafc; padding: 18px; border-radius: 6px; margin-bottom: 14px; min-height: 140px;">
+          <div style="font-size: 0.9rem; line-height: 1.8; color: #334155; background: #f8fafc; padding: 16px; border-radius: 6px; margin-bottom: 14px; min-height: 140px;">
             ${c.summary_body}
           </div>
 
@@ -3838,7 +3838,7 @@ const ProjectHub = {
             <div style="font-size: 2.2rem; margin-bottom: 8px;">📂</div>
             <div style="font-weight: bold; color: #fff; margin-bottom: 4px; font-size: 1.05rem;">مجلد المشروع جاهز على جهازك ولكنه فارغ حالياً</div>
             <div style="font-size: 0.85rem; color: var(--text-secondary);">كافة التقارير والعقود والمستخلصات التي تطبعها أو تصدرها يتم حفظها وتوثيقها تلقائياً هنا!</div>
-            <div style="margin-top: 15px;">
+            <div style="margin-top: 16px;">
               <button type="button" class="btn btn-primary btn-sm" onclick="ProjectHub.exportAndSaveProjectSummary()">
                 💾 حفظ التقرير الشامل للمشروع الآن في مجلده
               </button>
@@ -4285,7 +4285,7 @@ const ProjectHub = {
     if (!data || !data.items || data.items.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="11" style="text-align:center; padding: 30px; color: var(--text-secondary);">
+          <td colspan="11" style="text-align:center; padding: 32px; color: var(--text-secondary);">
             لا توجد بنود مسجلة في عرض السعر الحالي. اضغط على "+ إضافة بند" أو "استيراد من BOQ".
           </td>
         </tr>
@@ -5159,7 +5159,7 @@ const ProjectHub = {
         .quo-meta-item {
           display: flex;
           align-items: center;
-          gap: 5px;
+          gap: 4px;
         }
 
         .quo-meta-label {
@@ -5192,7 +5192,7 @@ const ProjectHub = {
           background: #0f2744 !important;
           color: #fff !important;
           border: 1px solid #0f2744;
-          padding: 5px 4px;
+          padding: 4px 4px;
           text-align: center;
           font-weight: 800;
           font-size: 0.78rem;
@@ -5202,7 +5202,7 @@ const ProjectHub = {
 
         .quo-official-table td {
           border: 1px solid #94a3b8;
-          padding: 4.5px 5px;
+          padding: 4.5px 4px;
           color: #0f172a;
           vertical-align: middle;
         }

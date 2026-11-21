@@ -1225,7 +1225,7 @@
             const val = Number(item.total || item.amount || item.percentage) || 0;
             const pct = item.percentage !== undefined ? item.percentage : Math.round((val / total) * 100);
             return `
-              <div class="chart-legend-row" data-index="${idx}" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.76rem; margin-bottom: 5px; cursor: pointer;">
+              <div class="chart-legend-row" data-index="${idx}" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.76rem; margin-bottom: 4px; cursor: pointer;">
                 <div style="display: flex; align-items: center; gap: 6px;">
                   <span style="width: 10px; height: 10px; background: ${colors[idx % colors.length]}; border-radius: 3px; display: inline-block;"></span>
                   <span style="color: var(--text-secondary);">${item.type || item.label}</span>
@@ -1493,7 +1493,7 @@
               e.clientX,
               e.clientY,
               `
-                <div style="font-weight: 800; color: var(--text-gold); margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 3px;">
+                <div style="font-weight: 800; color: var(--text-gold); margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px;">
                   📅 شهر: ${d.month}
                 </div>
                 <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;">
@@ -1504,7 +1504,7 @@
                   <span style="color: var(--accent-red);">● المصروفات:</span>
                   <strong style="color: var(--text-primary, #f8fafc);">${App.formatNumber(d.expense || 0)}</strong>
                 </div>
-                <div style="display: flex; justify-content: space-between; gap: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 3px; margin-top: 2px;">
+                <div style="display: flex; justify-content: space-between; gap: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 2px; margin-top: 2px;">
                   <span>صافي الشهر:</span>
                   <strong style="color: ${netColor};">${App.formatNumber(net)}</strong>
                 </div>

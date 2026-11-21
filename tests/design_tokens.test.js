@@ -26,6 +26,11 @@ test('every btn-* class used in the UI is defined by the unified button system',
  for(const size of ['btn-xs','btn-sm','btn-lg']) assert.ok(used.has(size)||css.includes('.'+size),size);
 });
 
+test('spacing stays on the unified scale (2 4 6 8 10 12 14 16 20 24 32 40)',()=>{
+ const run=spawnSync(process.execPath,[path.join(root,'scripts','snap_spacing.js'),'--check'],{encoding:'utf8'});
+ assert.equal(run.status,0,'off-scale spacing found; run: node scripts/snap_spacing.js\n'+run.stdout);
+});
+
 test('cards share the card tokens and carry no fixed dark backgrounds',()=>{
  const css=fs.readFileSync(path.join(root,'css','style.css'),'utf8');
  for(const sel of ['.panel-card','.kpi-card','.quick-form-card','.security-card']){

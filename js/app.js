@@ -944,7 +944,7 @@ const App = {
         setTxt('kpiClientsOutstandingDue', `${this.formatNumber(totalDue)} ر.ي`);
 
         if (list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا يوجد عملاء مسجلين حتى الآن</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا يوجد عملاء مسجلين حتى الآن</td></tr>`;
           const pag = document.getElementById('clientsPagination');
           if (pag) pag.innerHTML = '';
         } else {
@@ -1109,7 +1109,7 @@ const App = {
               const catBadge = s.industry_category || s.category || 'عام';
               const phone = s.phone_number || s.phone || '-';
               const currency = s.default_currency || s.currency || 'ر.ي';
-              const contact = s.contact_person ? `<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;"><i class="fa fa-user" style="font-size: 0.7rem; margin-left: 3px;"></i>${s.contact_person}</div>` : '';
+              const contact = s.contact_person ? `<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;"><i class="fa fa-user" style="font-size: 0.7rem; margin-left: 2px;"></i>${s.contact_person}</div>` : '';
               const leadTime = s.supply_lead_time_days ? `<div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;"><i class="fa fa-clock" style="font-size: 0.7rem;"></i> توريد: ${s.supply_lead_time_days} أيام</div>` : '';
 
               const invBadgeText = invCount === 1 ? '1 فاتورة' : `${invCount} فواتير`;
@@ -1213,7 +1213,7 @@ const App = {
         <div class="srm-profile-container" style="direction: rtl; font-family: inherit;">
           
           <!-- بطاقة الترويسة الرئيسية -->
-          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; background: var(--bg-secondary, #1e293b); padding: 18px 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--border-color, #334155);">
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; background: var(--bg-secondary, #1e293b); padding: 16px 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--border-color, #334155);">
             <div>
               <div style="display: flex; align-items: center; gap: 10px;">
                 <h2 style="margin: 0; font-size: 1.35rem; color: var(--text-primary); font-weight: 700;">${v.company_name}</h2>
@@ -1257,7 +1257,7 @@ const App = {
           </div>
 
           <!-- تفاصيل البيانات الأساسية + البيانات المصرفية الآمنة -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-bottom: 24px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px;">
             
             <!-- البيانات الأساسية والتشغيلية -->
             <div style="background: var(--bg-secondary, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px;">
@@ -1323,7 +1323,7 @@ const App = {
                     <code dir="ltr" style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 2px 8px; border-radius: 4px; color: var(--color-info, #38bdf8);">${bank.iban_masked}</code>
                   </div>
                 </div>
-                <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border-color, #334155); text-align: center;">
+                <div style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border-color, #334155); text-align: center;">
                   <button class="btn btn-secondary btn-sm" onclick="App.showFullVendorBankDetails(${v.id})" style="border: 1px solid #10b981; color: var(--color-success, #10b981);">
                     <i class="fa fa-key"></i> فك التشفير وعرض الحساب البنكي الكامل
                   </button>
@@ -1497,7 +1497,7 @@ const App = {
     const card = document.getElementById(`vendorBankVaultCard_${vendorId}`);
     if (!card) return;
 
-    card.innerHTML = `<div style="text-align: center; padding: 15px;"><i class="fa fa-spinner fa-spin"></i> جاري فك التشفير الآمن...</div>`;
+    card.innerHTML = `<div style="text-align: center; padding: 16px;"><i class="fa fa-spinner fa-spin"></i> جاري فك التشفير الآمن...</div>`;
 
     try {
       const res = await fetch(`/api/suppliers/${vendorId}/bank-details`);
@@ -2146,7 +2146,7 @@ const App = {
 
     const treeContainer = document.getElementById('chainHierarchyTreeContainer');
     if (treeContainer) {
-      treeContainer.innerHTML = '<div style="text-align: center; padding: 30px; color: var(--text-secondary);">جاري استدعاء شجرة دورة حياة العميل والتدقيق المالي... ⏳</div>';
+      treeContainer.innerHTML = '<div style="text-align: center; padding: 32px; color: var(--text-secondary);">جاري استدعاء شجرة دورة حياة العميل والتدقيق المالي... ⏳</div>';
     }
 
     try {
@@ -2243,7 +2243,7 @@ const App = {
 
     if (rawContracts.length === 0 && allProjects.length === 0 && allBills.length === 0) {
       container.innerHTML = `
-        <div style="background: var(--bg-sunken, rgba(15,23,42,0.4)); border: 1px dashed var(--border-color); border-radius: 8px; padding: 25px; text-align: center; color: var(--text-secondary);">
+        <div style="background: var(--bg-sunken, rgba(15,23,42,0.4)); border: 1px dashed var(--border-color); border-radius: 8px; padding: 24px; text-align: center; color: var(--text-secondary);">
           <div style="font-size: 1.8rem; margin-bottom: 8px;">📂</div>
           <p>لا توجد عقود أو مشاريع مرتبطة بهذا العميل حتى الآن.</p>
           <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
@@ -2322,27 +2322,27 @@ const App = {
 
                     <!-- شبكة المؤشرات المالية المصغرة للمشروع -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin-bottom: 10px; font-size: 0.72rem; text-align: center;">
-                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">قيمة المشروع:</span>
                         <div style="font-weight: 700; color: var(--color-info, #38bdf8);">${this.formatNumber(fin.contract_value || p.contract_value || 0)}</div>
                       </div>
-                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">المنجز (Gross):</span>
                         <div style="font-weight: 700; color: #fff;">${this.formatNumber(fin.gross_billed || 0)}</div>
                       </div>
-                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">صافي المطالبات:</span>
                         <div style="font-weight: 700; color: var(--text-gold);">${this.formatNumber(fin.net_billed || 0)}</div>
                       </div>
-                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">المحصل:</span>
                         <div style="font-weight: 700; color: var(--accent-green);">${this.formatNumber(fin.total_collected || 0)}</div>
                       </div>
-                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                         <span style="color: var(--text-secondary);">محتجز الضمان:</span>
                         <div style="font-weight: 700; color: var(--color-warning, #f59e0b);">${this.formatNumber(fin.active_retention || 0)}</div>
                       </div>
-                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 5px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                      <div style="background: var(--bg-sunken, rgba(0,0,0,0.25)); padding: 4px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
                         <span style="color: var(--accent-red); font-weight: 700;">المتبقي المستحق:</span>
                         <div style="font-weight: 800; color: var(--accent-red);">${this.formatNumber(fin.outstanding_due || 0)}</div>
                       </div>
@@ -2442,7 +2442,7 @@ const App = {
     if (!tbody) return;
 
     if (bills.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مستخلصات مسجلة لهذا العميل حتى الآن</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد مستخلصات مسجلة لهذا العميل حتى الآن</td></tr>`;
       return;
     }
 
@@ -2482,7 +2482,7 @@ const App = {
     if (!tbody) return;
 
     if (payments.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد سندات قبض مسجلة لهذا العميل حتى الآن</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد سندات قبض مسجلة لهذا العميل حتى الآن</td></tr>`;
       return;
     }
 
@@ -2522,7 +2522,7 @@ const App = {
     const billsWithRetention = (chain.bills || []).filter(b => Number(b.retention_deduction) > 0);
 
     if (billsWithRetention.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد محتجزات ضمان مستقطعة مسجلة لهذا العميل</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد محتجزات ضمان مستقطعة مسجلة لهذا العميل</td></tr>`;
       return;
     }
 

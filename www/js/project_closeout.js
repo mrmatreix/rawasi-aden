@@ -419,7 +419,7 @@ const ProjectCloseout = {
       : `
         <div style="text-align: center; margin-bottom: 16px; border-bottom: 2px solid #0f2744; padding-bottom: 12px;">
           <h2 style="margin: 0; color: #0f2744; font-size: 1.3rem;">${cfg.header_title}</h2>
-          <div style="font-size: 0.85rem; color: #64748b; margin-top: 3px;">${cfg.header_subtitle}</div>
+          <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">${cfg.header_subtitle}</div>
           <h3 style="margin: 10px 0 4px 0; color: #b8911c; font-size: 1.1rem;">${title}</h3>
           <div style="font-size: 0.8rem; color: #334155;">رقم المستند: ${docRef} | تاريخ الطباعة: ${todayDate} ${timeStr} | المستخدم: ${userName}</div>
         </div>
@@ -427,7 +427,7 @@ const ProjectCloseout = {
 
     const footerHtml = (typeof Settings !== 'undefined' && Settings.renderReportFooter)
       ? Settings.renderReportFooter(cfg)
-      : `<div style="text-align: center; font-size: 0.75rem; color: #64748b; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 6px;">${cfg.footer_notes} | نظام رواسي عدن المتكامل</div>`;
+      : `<div style="text-align: center; font-size: 0.75rem; color: #64748b; margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 6px;">${cfg.footer_notes} | نظام رواسي عدن المتكامل</div>`;
 
     return { headerHtml, footerHtml, cfg, userName, todayDate, timeStr };
   },
@@ -506,7 +506,7 @@ const ProjectCloseout = {
       : '';
 
     const itemsRows = items.length === 0 
-      ? `<tr><td colspan="9" style="text-align: center; padding: 15px;">لا توجد بنود مسجلة في كشف الكميات</td></tr>`
+      ? `<tr><td colspan="9" style="text-align: center; padding: 16px;">لا توجد بنود مسجلة في كشف الكميات</td></tr>`
       : items.map((it, idx) => `
         <tr>
           <td style="text-align: center; font-weight: 700;">${it.item_no || (idx + 1)}</td>
@@ -601,21 +601,21 @@ const ProjectCloseout = {
           </div>
 
           <!-- توقيعات الاعتماد الرسمي -->
-          <div class="letterhead-signatures-row" style="margin-top: 24px; padding-top: 15px; border-top: 1px solid #cbd5e1;">
+          <div class="letterhead-signatures-row" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #cbd5e1;">
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 35px;">مهندس الموقع / المشروع</div>
+              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 32px;">مهندس الموقع / المشروع</div>
               <div style="font-size: 0.78rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">التوقيع: .....................</div>
             </div>
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 35px;">المهندس الاستشاري المشرف</div>
+              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 32px;">المهندس الاستشاري المشرف</div>
               <div style="font-size: 0.78rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">التوقيع: .....................</div>
             </div>
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 35px;">الجهة المالكة / العميل</div>
+              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 32px;">الجهة المالكة / العميل</div>
               <div style="font-size: 0.78rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">الاعتماد: .....................</div>
             </div>
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 35px;">المدير العام لشركة رواسي عدن</div>
+              <div style="font-weight: 700; font-size: 0.8rem; color: #0f2744; margin-bottom: 32px;">المدير العام لشركة رواسي عدن</div>
               <div style="font-size: 0.78rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">الختم والتوقيع: .....................</div>
             </div>
           </div>
@@ -658,7 +658,7 @@ const ProjectCloseout = {
     const curr = project.currency || 'ر.ي';
 
     const itemsRows = items.length === 0
-      ? `<tr><td colspan="14" style="text-align: center; padding: 15px;">لا توجد بنود مسجلة</td></tr>`
+      ? `<tr><td colspan="14" style="text-align: center; padding: 16px;">لا توجد بنود مسجلة</td></tr>`
       : items.map((it, idx) => `
         <tr>
           <td style="text-align: center; font-weight: 700;">${it.item_no || (idx + 1)}</td>
@@ -701,27 +701,27 @@ const ProjectCloseout = {
 
           <!-- مؤشرات التدقيق والتحليلات المالية -->
           <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 10px; font-size: 0.78rem;">
-            <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px; text-align: center; background: #f8fafc;">
+            <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; text-align: center; background: #f8fafc;">
               <div style="color: #64748b; font-size: 0.68rem;">قيمة العقد</div>
               <div style="font-weight: 800; color: #0f2744;">${App.formatNumber(totals.baseline_value)} ${curr}</div>
             </div>
-            <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px; text-align: center; background: #f8fafc;">
+            <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; text-align: center; background: #f8fafc;">
               <div style="color: #64748b; font-size: 0.68rem;">إجمالي الإيراد المنفذ</div>
               <div style="font-weight: 800; color: #0f2744;">${App.formatNumber(totals.total_billed_amount)} ${curr}</div>
             </div>
-            <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px; text-align: center; background: #f8fafc;">
+            <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; text-align: center; background: #f8fafc;">
               <div style="color: #64748b; font-size: 0.68rem;">التكلفة الفعلية</div>
               <div style="font-weight: 800; color: #b91c1c;">${App.formatNumber(totals.total_actual_cost)} ${curr}</div>
             </div>
-            <div style="border: 1px solid #86efac; border-radius: 4px; padding: 5px; text-align: center; background: #f0fdf4;">
+            <div style="border: 1px solid #86efac; border-radius: 4px; padding: 4px; text-align: center; background: #f0fdf4;">
               <div style="color: #15803d; font-size: 0.68rem;">مجمل الربح (%الهامش)</div>
               <div style="font-weight: 800; color: #15803d;">${App.formatNumber(totals.gross_profit)} (${totals.profit_margin_pct}%)</div>
             </div>
-            <div style="border: 1px solid #fca5a5; border-radius: 4px; padding: 5px; text-align: center; background: #fef2f2;">
+            <div style="border: 1px solid #fca5a5; border-radius: 4px; padding: 4px; text-align: center; background: #fef2f2;">
               <div style="color: #b91c1c; font-size: 0.68rem;">تكلفة الهدر والفاقد</div>
               <div style="font-weight: 800; color: #b91c1c;">${App.formatNumber(totals.total_wastage_cost)} ${curr}</div>
             </div>
-            <div style="border: 1px solid #93c5fd; border-radius: 4px; padding: 5px; text-align: center; background: #eff6ff;">
+            <div style="border: 1px solid #93c5fd; border-radius: 4px; padding: 4px; text-align: center; background: #eff6ff;">
               <div style="color: #1d4ed8; font-size: 0.68rem;">رصيد مواد الموقع (فائض)</div>
               <div style="font-weight: 800; color: #1d4ed8;">${App.formatNumber(totals.total_site_stock_cost)} ${curr}</div>
             </div>
@@ -766,19 +766,19 @@ const ProjectCloseout = {
           <!-- توقيعات لجنة الرقابة والتدقيق -->
           <div class="letterhead-signatures-row" style="margin-top: 20px; padding-top: 12px; border-top: 1px solid #cbd5e1;">
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 30px;">مدقق المواد والمستودعات</div>
+              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 32px;">مدقق المواد والمستودعات</div>
               <div style="font-size: 0.75rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">التوقيع: .....................</div>
             </div>
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 30px;">مهندس تكاليف المشاريع</div>
+              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 32px;">مهندس تكاليف المشاريع</div>
               <div style="font-size: 0.75rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">التوقيع: .....................</div>
             </div>
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 30px;">مدير الرقابة والتدقيق الداخلي</div>
+              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 32px;">مدير الرقابة والتدقيق الداخلي</div>
               <div style="font-size: 0.75rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">المصادقة: .....................</div>
             </div>
             <div style="text-align: center; width: 23%;">
-              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 30px;">المدير المالي التنفيذي</div>
+              <div style="font-weight: 700; font-size: 0.78rem; color: #0f2744; margin-bottom: 32px;">المدير المالي التنفيذي</div>
               <div style="font-size: 0.75rem; border-top: 1px dashed #94a3b8; padding-top: 4px;">الاعتماد: .....................</div>
             </div>
           </div>

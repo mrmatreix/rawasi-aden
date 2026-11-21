@@ -1345,37 +1345,37 @@ const Settings = {
 
           <table class="voucher-grid-table" style="margin-bottom: 10px; font-size: 0.78rem;">
             <tr>
-              <td class="label-cell" style="width: 28%; padding: 5px 8px; border-right-color: ${accentColor};">استلمنا من الأخ/السادة:</td>
-              <td class="val-cell" style="padding: 5px 8px;">علوي محمد باعبيد</td>
+              <td class="label-cell" style="width: 28%; padding: 4px 8px; border-right-color: ${accentColor};">استلمنا من الأخ/السادة:</td>
+              <td class="val-cell" style="padding: 4px 8px;">علوي محمد باعبيد</td>
             </tr>
             ${voucherShowProject ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: ${accentColor};">المشروع التابع له:</td>
-              <td class="val-cell" style="padding: 5px 8px;">مشروع برج الأمل السكني</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: ${accentColor};">المشروع التابع له:</td>
+              <td class="val-cell" style="padding: 4px 8px;">مشروع برج الأمل السكني</td>
             </tr>` : ''}
             ${voucherShowAccount ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: ${accentColor};">رقم الحساب بالأستاذ:</td>
-              <td class="val-cell" style="padding: 5px 8px;"><code style="color: #0f2744; font-weight: bold;">12101 - العملاء التجاريين</code></td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: ${accentColor};">رقم الحساب بالأستاذ:</td>
+              <td class="val-cell" style="padding: 4px 8px;"><code style="color: #0f2744; font-weight: bold;">12101 - العملاء التجاريين</code></td>
             </tr>` : ''}
             ${voucherShowCostCenter ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: ${accentColor};">مركز التكلفة:</td>
-              <td class="val-cell" style="padding: 5px 8px;">CC-101 (الإنشاءات والخرسانات)</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: ${accentColor};">مركز التكلفة:</td>
+              <td class="val-cell" style="padding: 4px 8px;">CC-101 (الإنشاءات والخرسانات)</td>
             </tr>` : ''}
             ${voucherShowPaymentMethod ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: ${accentColor};">طريقة الدفع:</td>
-              <td class="val-cell" style="padding: 5px 8px;">نقداً بالصندوق الرئيسي</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: ${accentColor};">طريقة الدفع:</td>
+              <td class="val-cell" style="padding: 4px 8px;">نقداً بالصندوق الرئيسي</td>
             </tr>` : ''}
             ${voucherShowChequeRef ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: ${accentColor};">رقم المرجع / الحوالة:</td>
-              <td class="val-cell" style="padding: 5px 8px;">REF-99201</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: ${accentColor};">رقم المرجع / الحوالة:</td>
+              <td class="val-cell" style="padding: 4px 8px;">REF-99201</td>
             </tr>` : ''}
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: ${accentColor};">وذلك عن (البيان):</td>
-              <td class="val-cell" style="padding: 5px 8px;">دفعة أعمال مقاولات وهندسة للمرحلة الأولى</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: ${accentColor};">وذلك عن (البيان):</td>
+              <td class="val-cell" style="padding: 4px 8px;">دفعة أعمال مقاولات وهندسة للمرحلة الأولى</td>
             </tr>
           </table>
 
@@ -1408,41 +1408,41 @@ const Settings = {
 
           <table class="voucher-grid-table" style="margin-bottom: 10px; font-size: 0.78rem;">
             <tr>
-              <td class="label-cell" style="width: 28%; padding: 5px 8px; border-right-color: #dc2626;">صرفنا إلى الأخ/السادة:</td>
-              <td class="val-cell" style="padding: 5px 8px;">شركة الحديد والصلب للتجارة</td>
+              <td class="label-cell" style="width: 28%; padding: 4px 8px; border-right-color: #dc2626;">صرفنا إلى الأخ/السادة:</td>
+              <td class="val-cell" style="padding: 4px 8px;">شركة الحديد والصلب للتجارة</td>
             </tr>
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: #dc2626;">نوع المصروف / البند:</td>
-              <td class="val-cell" style="padding: 5px 8px;">توريد مواد بناء وتسليح</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: #dc2626;">نوع المصروف / البند:</td>
+              <td class="val-cell" style="padding: 4px 8px;">توريد مواد بناء وتسليح</td>
             </tr>
             ${voucherShowProject ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: #dc2626;">المشروع التابع له:</td>
-              <td class="val-cell" style="padding: 5px 8px;">مشروع برج الأمل السكني</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: #dc2626;">المشروع التابع له:</td>
+              <td class="val-cell" style="padding: 4px 8px;">مشروع برج الأمل السكني</td>
             </tr>` : ''}
             ${voucherShowAccount ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: #dc2626;">الحساب المدين:</td>
-              <td class="val-cell" style="padding: 5px 8px;"><code style="color: #b91c1c; font-weight: bold;">5101 - مواد بناء وإنشاءات</code></td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: #dc2626;">الحساب المدين:</td>
+              <td class="val-cell" style="padding: 4px 8px;"><code style="color: #b91c1c; font-weight: bold;">5101 - مواد بناء وإنشاءات</code></td>
             </tr>` : ''}
             ${voucherShowCostCenter ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: #dc2626;">مركز التكلفة:</td>
-              <td class="val-cell" style="padding: 5px 8px;">CC-101 (الإنشاءات والخرسانات)</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: #dc2626;">مركز التكلفة:</td>
+              <td class="val-cell" style="padding: 4px 8px;">CC-101 (الإنشاءات والخرسانات)</td>
             </tr>` : ''}
             ${voucherShowPaymentMethod ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: #dc2626;">طريقة الدفع:</td>
-              <td class="val-cell" style="padding: 5px 8px;">شيك بنكي (بنك القطيبي الإسلامي)</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: #dc2626;">طريقة الدفع:</td>
+              <td class="val-cell" style="padding: 4px 8px;">شيك بنكي (بنك القطيبي الإسلامي)</td>
             </tr>` : ''}
             ${voucherShowChequeRef ? `
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: #dc2626;">رقم الشيك:</td>
-              <td class="val-cell" style="padding: 5px 8px;">CHQ-88203</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: #dc2626;">رقم الشيك:</td>
+              <td class="val-cell" style="padding: 4px 8px;">CHQ-88203</td>
             </tr>` : ''}
             <tr>
-              <td class="label-cell" style="padding: 5px 8px; border-right-color: #dc2626;">وذلك عن (البيان):</td>
-              <td class="val-cell" style="padding: 5px 8px;">شراء حديد تسليح مقاس 16 ملم للمبنى</td>
+              <td class="label-cell" style="padding: 4px 8px; border-right-color: #dc2626;">وذلك عن (البيان):</td>
+              <td class="val-cell" style="padding: 4px 8px;">شراء حديد تسليح مقاس 16 ملم للمبنى</td>
             </tr>
           </table>
 
@@ -2348,7 +2348,7 @@ const Settings = {
             scopeParts.push(`🏗️ مشاريع محددة`);
           }
           if (scopeParts.length > 0) {
-            scopeHtml = `<div style="font-size: 0.72rem; color: var(--color-info, #38bdf8); margin-top: 3px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
+            scopeHtml = `<div style="font-size: 0.72rem; color: var(--color-info, #38bdf8); margin-top: 2px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
           }
 
           // User security & session badge
@@ -2361,14 +2361,14 @@ const Settings = {
             const exp = uSec.jwt_token_expiry || '8h';
             const label = isLock ? `جهاز معتمد واحد (${exp})` : (isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`);
             const icon = isLock ? '🔒' : '🛡️';
-            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="إعدادات أمان مخصصة لهذا المستخدم - انقر للتعديل">${icon} ${label} ⭐</span></div>`;
+            secBadgeHtml = `<div style="margin-top: 4px;"><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success, #10b981); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="إعدادات أمان مخصصة لهذا المستخدم - انقر للتعديل">${icon} ${label} ⭐</span></div>`;
           } else {
             const isLock = Auth.securitySettings?.session_overflow_action === 'lock_device';
             const isSingle = Auth.securitySettings?.session_mode === 'single' || isLock;
             const devLimit = Auth.securitySettings?.session_device_limit || 3;
             const exp = Auth.securitySettings?.jwt_token_expiry || '8h';
             const label = isLock ? `جهاز معتمد واحد (${exp})` : (isSingle ? `جلسة واحدة (${exp})` : `متعددة (${devLimit}) (${exp})`);
-            secBadgeHtml = `<div style="margin-top: 5px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: var(--text-secondary, #94a3b8); border: 1px solid rgba(148, 163, 184, 0.2); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="يرث الإعدادات العامة للنظام - انقر لتخصيص هذا المستخدم">⚙️ عام: ${label}</span></div>`;
+            secBadgeHtml = `<div style="margin-top: 4px;"><span class="badge" style="background: rgba(148, 163, 184, 0.08); color: var(--text-secondary, #94a3b8); border: 1px solid rgba(148, 163, 184, 0.2); font-size: 0.72rem; cursor: pointer;" onclick="Auth.openSecuritySessionsModal(${u.id})" title="يرث الإعدادات العامة للنظام - انقر لتخصيص هذا المستخدم">⚙️ عام: ${label}</span></div>`;
           }
 
           // 2FA PIN Badge
@@ -2377,14 +2377,14 @@ const Settings = {
           if (u.role === 'admin' || u.username === 'admin' || has2Fa) {
             // الرمز لا يُعرض أبداً؛ الخادم يرسل فقط هل هو مُعيَّن أم لا.
             const pinSet = Boolean(u.two_factor_configured);
-            tfaBadgeHtml = `<div style="margin-top: 5px;">
+            tfaBadgeHtml = `<div style="margin-top: 4px;">
               <span class="badge" style="background: ${pinSet ? 'rgba(212, 175, 55, 0.15)' : 'var(--color-danger-bg)'}; color: ${pinSet ? 'var(--text-gold)' : 'var(--color-danger)'}; border: 1px solid ${pinSet ? 'rgba(212, 175, 55, 0.4)' : 'var(--color-danger-border)'}; font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="${pinSet ? 'رمز التحقق بخطوتين مُعيَّن ومخفي - انقر لتغييره' : 'لم يُعيَّن رمز PIN لهذا الحساب - انقر لتعيينه'}">
                 ${pinSet ? '🔐 PIN مُعيَّن <strong style="font-family: monospace; letter-spacing: 2px;">••••••</strong>' : '⚠️ لا يوجد PIN — انقر لتعيينه'}
               </span>
             </div>`;
           }
           if (u.login_locked) {
-            tfaBadgeHtml += `<div style="margin-top: 5px;">
+            tfaBadgeHtml += `<div style="margin-top: 4px;">
               <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--color-danger, #f87171); border: 1px solid rgba(239, 68, 68, 0.45); font-size: 0.72rem; cursor: pointer;" onclick="Settings.unlockUserLogin(${u.id})" title="الحساب مقفل مؤقتاً بسبب محاولات دخول خاطئة - انقر لفك القفل">
                 ⛔ مقفل مؤقتاً — فك القفل
               </span>
@@ -3745,7 +3745,7 @@ const Settings = {
       const json = await res.json();
 
       if (!json.success || !json.data || json.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد نسخ احتياطية مسجلة حتى الآن. اضغط على (إنشاء نسخة احتياطية فورية) لبدء النسخ المعتمد.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد نسخ احتياطية مسجلة حتى الآن. اضغط على (إنشاء نسخة احتياطية فورية) لبدء النسخ المعتمد.</td></tr>';
         return;
       }
 
@@ -4274,7 +4274,7 @@ const Settings = {
       } else {
         tbody.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center; padding: 25px; color: var(--text-secondary);">
+            <td colspan="6" style="text-align: center; padding: 24px; color: var(--text-secondary);">
               لم يتم تسجيل أي نسخ خروج تلقائية بعد. سيقوم النظام بإنشاء نسخة فورية عند كل تسجيل خروج للمستخدم لحفظ آخر التعديلات.
             </td>
           </tr>

@@ -2237,7 +2237,7 @@ const Accounting = {
               <div class="letterhead-sig-dots">الاعتماد: ........................</div>
             </div>
           </div>
-          ${cfg.footer_notes ? `<div style="margin-top: 15px; padding-top: 6px; border-top: 1px dashed #cbd5e1; font-size: 0.75rem; color: #64748b; text-align: center;">${cfg.footer_notes}</div>` : ''}
+          ${cfg.footer_notes ? `<div style="margin-top: 16px; padding-top: 6px; border-top: 1px dashed #cbd5e1; font-size: 0.75rem; color: #64748b; text-align: center;">${cfg.footer_notes}</div>` : ''}
         </div>
       </div>
     `;
@@ -3427,7 +3427,7 @@ const Accounting = {
     if (!tbody) return;
 
     if (!entries || entries.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد قيود يومية مسجلة حتى الآن</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد قيود يومية مسجلة حتى الآن</td></tr>`;
       return;
     }
 
@@ -4336,7 +4336,7 @@ const Accounting = {
             <button class="btn btn-secondary btn-xs" onclick="Accounting.openEditAccountModal(${a.id})" title="تعديل بيانات الحساب">
               ✏️ تعديل
             </button>
-            <button class="btn btn-sm" onclick="Accounting.toggleAccountStatus(${a.id})" title="${isRestricted ? 'فك التقييد وتنشيط الحساب' : 'تقييد وتوقيف الحساب'}" style="padding: 2px 7px; font-size: 0.78rem; ${isRestricted ? 'background: rgba(34,197,94,0.15); color: var(--color-success, #22c55e); border: 1px solid rgba(34,197,94,0.3);' : 'background: rgba(239,68,68,0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3);'}">
+            <button class="btn btn-sm" onclick="Accounting.toggleAccountStatus(${a.id})" title="${isRestricted ? 'فك التقييد وتنشيط الحساب' : 'تقييد وتوقيف الحساب'}" style="padding: 2px 6px; font-size: 0.78rem; ${isRestricted ? 'background: rgba(34,197,94,0.15); color: var(--color-success, #22c55e); border: 1px solid rgba(34,197,94,0.3);' : 'background: rgba(239,68,68,0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3);'}">
               ${isRestricted ? '🔓 تنشيط' : '🔒 تقييد'}
             </button>
             <button class="btn btn-danger btn-xs" onclick="Accounting.deleteAccount(${a.id}, '${(a.code || '').replace(/'/g, "\\'")}', '${(a.name || '').replace(/'/g, "\\'")}')" title="حذف الحساب من الدليل">
@@ -4984,7 +4984,7 @@ const Accounting = {
             <button type="button" class="modal-close-btn" onclick="App.closeModal('accountingPeriodsModal')">&times;</button>
           </div>
             <div class="modal-body">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
                 <p style="color: var(--text-secondary); margin: 0; font-size: 0.88rem;">
                   إغلاق الفترات يمنع تسجيل أو تعديل أي قيد أو سند مالي بتاريخ مغلق لحماية الحسابات من التلاعب.
                 </p>
@@ -4992,7 +4992,7 @@ const Accounting = {
               </div>
 
               <!-- نموذج إضافة فترة جديدة (مخفي افتراضياً) -->
-              <div id="newPeriodFormContainer" style="display: none; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 15px;">
+              <div id="newPeriodFormContainer" style="display: none; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 16px;">
                 <h4 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--text-gold);">إضافة فترة محاسبية جديدة</h4>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px;">
                   <div>
@@ -5183,7 +5183,7 @@ const Accounting = {
             <button type="button" class="modal-close-btn" onclick="App.closeModal('auditLogModal')">&times;</button>
           </div>
             <div class="modal-body">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
                 <p style="color: var(--text-secondary); margin: 0; font-size: 0.88rem;">
                   توثيق دقيق لكل العمليات المالية والإدارية (من أنشأ، من عدّل، متى، والتفاصيل المحاسبية).
                 </p>

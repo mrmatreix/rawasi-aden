@@ -75,7 +75,7 @@ const HR = {
           <td><span class="status-badge ${e.status === 'active' ? 'status-active' : 'status-inactive'}">${e.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
           <td><button class="btn btn-secondary btn-sm" onclick="HR.openEmployeeModal(${e.id})">تعديل</button></td>
         </tr>
-      `).join('') : '<tr><td colspan="8" style="text-align:center;padding:25px;">لا يوجد موظفون مسجلون بعد.</td></tr>';
+      `).join('') : '<tr><td colspan="8" style="text-align:center;padding:24px;">لا يوجد موظفون مسجلون بعد.</td></tr>';
       this.populateEmployeeSelects();
     } catch (e) {
       console.error(e);
@@ -108,7 +108,7 @@ const HR = {
           <td>${a.overtime_hours || 0}</td>
           <td>${this.esc(a.notes || '-')}</td>
         </tr>
-      `).join('') : '<tr><td colspan="7" style="text-align:center;padding:25px;">لا توجد سجلات لهذا التاريخ.</td></tr>';
+      `).join('') : '<tr><td colspan="7" style="text-align:center;padding:24px;">لا توجد سجلات لهذا التاريخ.</td></tr>';
     } catch (e) {
       console.error(e);
     }
@@ -132,7 +132,7 @@ const HR = {
           <td>${this.esc(l.status === 'pending' ? 'بانتظار الاعتماد' : l.status === 'approved' ? 'معتمدة' : 'مرفوضة')}</td>
           <td>${l.status === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="HR.setLeaveStatus(${l.id},'approved')">اعتماد</button>` : '-'}</td>
         </tr>
-      `).join('') : '<tr><td colspan="6" style="text-align:center;padding:25px;">لا توجد طلبات إجازة.</td></tr>';
+      `).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;">لا توجد طلبات إجازة.</td></tr>';
     } catch (e) {
       console.error(e);
     }
@@ -153,7 +153,7 @@ const HR = {
           <td>${this.money(a.installment_amount)}</td>
           <td>${a.status === 'active' ? 'نشطة' : 'مغلقة'}</td>
         </tr>
-      `).join('') : '<tr><td colspan="7" style="text-align:center;padding:25px;">لا توجد سلف مسجلة.</td></tr>';
+      `).join('') : '<tr><td colspan="7" style="text-align:center;padding:24px;">لا توجد سلف مسجلة.</td></tr>';
     } catch (e) {
       console.error(e);
     }
@@ -188,7 +188,7 @@ const HR = {
       this._currentPayrollMonth = month;
 
       if (!records.length) {
-        tbody.innerHTML = '<tr><td colspan="28" style="text-align:center;padding:25px;color:var(--text-secondary);">لا توجد مسيرات رواتب مسجلة لشهر ' + (month || '') + '. اضغط زر "1. إعداد مسير الرواتب" لتوليد المسير الشامل آلياً.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="28" style="text-align:center;padding:24px;color:var(--text-secondary);">لا توجد مسيرات رواتب مسجلة لشهر ' + (month || '') + '. اضغط زر "1. إعداد مسير الرواتب" لتوليد المسير الشامل آلياً.</td></tr>';
         if (tfoot) tfoot.innerHTML = '';
         return;
       }
@@ -391,7 +391,7 @@ const HR = {
 
     modal.innerHTML = `
       <div class="modal-box" style="max-width: 960px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 24px; border: 1px solid var(--gold-primary); background: var(--bg-surface); border-radius: 14px; box-shadow: 0 20px 45px rgba(0,0,0,0.6);">
-        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:14px; margin-bottom:18px;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:14px; margin-bottom:16px;">
           <div style="display:flex; align-items:center; gap:12px;">
             <div style="width:42px; height:42px; border-radius:10px; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
               ⚖️
@@ -418,7 +418,7 @@ const HR = {
                 <span style="font-size:1.1rem;">💰</span>
                 <h4 style="color:var(--color-info, #38bdf8); margin:0; font-size:0.98rem; font-weight:700;">1. الراتب الأساسي والبدلات المعيارية الخمسة</h4>
               </div>
-              <ul style="margin:0; padding-right:18px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
+              <ul style="margin:0; padding-right:16px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
                 <li><strong>الراتب الأساسي الفعلي:</strong> يحتسب وفق أيام الدوام الفعلية (الأساسي التعاقدي × أيام العمل ÷ أيام الشهر).</li>
                 <li><strong>بدل انتقال (20%):</strong> نسبة نظامية تعادل 20% من الراتب الأساسي المستحق.</li>
                 <li><strong>بدل مظهر (25%):</strong> نسبة معتمدة تعادل 25% من الراتب الأساسي المستحق.</li>
@@ -437,7 +437,7 @@ const HR = {
                 <span style="font-size:1.1rem;">🏢</span>
                 <h4 style="color:#c084fc; margin:0; font-size:0.98rem; font-weight:700;">2. التأمينات الاجتماعية وصندوق تنمية المهارات</h4>
               </div>
-              <ul style="margin:0; padding-right:18px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
+              <ul style="margin:0; padding-right:16px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
                 <li><strong>حصة الموظف في التأمينات (6%):</strong> تستقطع مباشرة من الراتب الشامل وتخفض من صافي مستحقات العامل.</li>
                 <li><strong>مساهمة المنشأة في التأمينات (9%):</strong> تتحملها شركة رواسي عدن كمصروف تشغيلي إضافي ولا تخصم من العامل.</li>
                 <li><strong>إجمالي التأمينات المحولة (15%):</strong> تورد شهرياً بموجب إشعار للهيئة العامة للتأمينات والمعاشات (6% + 9%).</li>
@@ -454,7 +454,7 @@ const HR = {
                 <span style="font-size:1.1rem;">📊</span>
                 <h4 style="color:var(--color-danger, #f87171); margin:0; font-size:0.98rem; font-weight:700;">3. ضريبة كسب العمل والوعاء القانوني المعفى</h4>
               </div>
-              <ul style="margin:0; padding-right:18px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
+              <ul style="margin:0; padding-right:16px; color:var(--text-primary); font-size:0.86rem; display:flex; flex-direction:column; gap:6px;">
                 <li><strong>حد الإعفاء القانوني:</strong> معفى تماماً لأول <strong>65,000 ر.ي شهرياً</strong> (780,000 ر.ي سنوياً) وفق قانون ضرائب الدخل.</li>
                 <li><strong>الوعاء الضريبي الشهري:</strong> الراتب الشامل - تأمينات 6% - حد الإعفاء (65,000) - الخصميات.</li>
                 <li><strong>الشريحة الأولى (10%):</strong> تطبق على أول 40,000 ر.ي من الوعاء الضريبي (الحد الأقصى للضريبة = 4,000 ر.ي).</li>
@@ -526,7 +526,7 @@ const HR = {
 
         </div>
 
-        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(212,175,55,0.25); padding-top:14px; margin-top:18px;">
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(212,175,55,0.25); padding-top:14px; margin-top:16px;">
           <div style="font-size:0.82rem; color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
             <span>🛡️ نظام رواسي عدن يضمن التطابق الحسابي التام مع الدفاتر المحاسبية دون فوارق مليمية.</span>
           </div>
@@ -669,7 +669,7 @@ const HR = {
 
     modal.innerHTML = `
       <div class="modal-box" style="max-width: 1050px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 24px; border: 1px solid var(--gold-primary); background: var(--bg-surface); border-radius: 14px; box-shadow: 0 20px 45px rgba(0,0,0,0.6);">
-        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:14px; margin-bottom:18px;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:14px; margin-bottom:16px;">
           <h3 class="modal-title" style="display:flex;align-items:center;gap:10px;margin:0;color:var(--text-gold);">
             <span>⚡ معاينة قيد استحقاق الرواتب المركب لشهر (${month})</span>
           </h3>
@@ -875,7 +875,7 @@ const HR = {
               <td>${this.esc(ev.evaluator_name || '-')}</td>
               <td style="color: var(--text-secondary);">${this.esc(ev.comments || '-')}</td>
             </tr>
-          `).join('') : '<tr><td colspan="8" style="text-align:center;padding:25px;">لا توجد تقييمات مسجلة بعد</td></tr>';
+          `).join('') : '<tr><td colspan="8" style="text-align:center;padding:24px;">لا توجد تقييمات مسجلة بعد</td></tr>';
         }
       }
     } catch (e) {

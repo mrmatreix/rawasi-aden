@@ -851,7 +851,7 @@ await this.loadIncomeStatement();
         const tbody = document.getElementById('projProfitTableBody');
         if (tbody) {
           if (projects.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 18px;">لا توجد بيانات مشاريع</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 16px;">لا توجد بيانات مشاريع</td></tr>`;
           } else {
             tbody.innerHTML = projects.map(p => {
               const isProfit = (p.calculated_actual_profit || 0) >= 0;
@@ -929,7 +929,7 @@ await this.loadIncomeStatement();
         const tbody = document.getElementById('ccProfitTableBody');
         if (tbody) {
           if (!d.centers || d.centers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 18px;">لا توجد مراكز تكلفة مسجلة</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 16px;">لا توجد مراكز تكلفة مسجلة</td></tr>';
           } else {
             tbody.innerHTML = d.centers.map(cc => {
               const isProfit = (cc.net_profit || 0) >= 0;
@@ -1023,7 +1023,7 @@ await this.loadIncomeStatement();
         const tbody = document.getElementById('repClientStatementTable');
         if (tbody) {
           if (!statement || statement.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا العميل في هذه الفترة</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا العميل في هذه الفترة</td></tr>`;
           } else {
             tbody.innerHTML = statement.map(s => {
               const runBal = Number(s.running_balance || 0);
@@ -1135,7 +1135,7 @@ await this.loadIncomeStatement();
 
         if (tbody) {
           if (!statement || statement.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا المورد في هذه الفترة</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد حركات مسجلة لهذا المورد في هذه الفترة</td></tr>`;
             if (tfoot) tfoot.innerHTML = '';
           } else {
             tbody.innerHTML = statement.map(s => {
@@ -1409,7 +1409,7 @@ await this.loadIncomeStatement();
       }
 
       if (json.projects.length === 0) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">لا توجد مشاريع مسجلة في مصفوفة المقاولات</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 24px;">لا توجد مشاريع مسجلة في مصفوفة المقاولات</td></tr>';
         return;
       }
 

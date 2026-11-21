@@ -254,7 +254,7 @@ const Projects = {
 
     const data = projectsToRender !== null ? projectsToRender : (this.filteredList || this.list);
     if (data.length === 0) {
-      const emptyDashboard = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
+      const emptyDashboard = `<tr><td colspan="9" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
       const emptyFull = `
         <tr>
           <td colspan="10" style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
@@ -385,7 +385,7 @@ const Projects = {
                 <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                 </button>
-                <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 3px;">
+                <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 2px;">
                   <span>📦</span><span>تصدير</span>
                 </button>
                 <button class="btn btn-danger btn-sm" onclick="Projects.deleteProject(${p.id})" title="حذف المشروع">

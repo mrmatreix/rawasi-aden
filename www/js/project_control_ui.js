@@ -75,7 +75,7 @@ const ProjectControlUI = {
         <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.6;">
           يتطلب استعراض ${featureTitle} وجود جلسة مصادقة نشطة ومعتمدة في النظام.
         </p>
-        <button class="btn btn-primary" onclick="if (window.Auth && typeof Auth.showLogin === 'function') Auth.showLogin(); else location.reload();" style="padding: 9px 26px; font-weight: bold;">
+        <button class="btn btn-primary" onclick="if (window.Auth && typeof Auth.showLogin === 'function') Auth.showLogin(); else location.reload();" style="padding: 8px 24px; font-weight: bold;">
           <span>🔑 تسجيل الدخول الآن</span>
         </button>
       </div>
@@ -89,7 +89,7 @@ const ProjectControlUI = {
       <div class="panel-card card-empty">
         <div style="font-size: 2.5rem; margin-bottom: 12px;">📁</div>
         <h4 style="color: var(--text-primary); margin-bottom: 8px;">يرجى تحديد المشروع أولاً</h4>
-        <p style="color: var(--text-secondary); margin-bottom: 18px; font-size: 0.9rem;">
+        <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.9rem;">
           يرجى اختيار مشروع من القائمة المنسدلة في أعلى مساحة العمل لعرض مؤشرات ${featureTitle}.
         </p>
       </div>
@@ -241,7 +241,7 @@ const ProjectControlUI = {
           </div>
 
           <!-- رسالة التشخيص الرقابي والتبرير -->
-          <div style="background: ${statusBg}; border-right: 4px solid ${statusColor}; border-radius: 6px; padding: 12px 18px; margin-bottom: 24px;">
+          <div style="background: ${statusBg}; border-right: 4px solid ${statusColor}; border-radius: 6px; padding: 12px 16px; margin-bottom: 24px;">
             <strong style="color: ${statusColor}; display: block; margin-bottom: 4px;">تقرير التحقق الرقابي:</strong>
             <span style="color: var(--text-primary, #f1f5f9); font-size: 0.9rem;">${d.validation_message}</span>
           </div>
@@ -349,7 +349,7 @@ const ProjectControlUI = {
           </div>
 
           <!-- جدول شهادات الاستشاري المسجلة -->
-          <div style="margin-top: 28px;">
+          <div style="margin-top: 32px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <h5 style="color: #fff; margin: 0; font-size: 0.95rem;">📜 سجل شهادات فحص واعتماد المهندس المشرف / الاستشاري</h5>
               <button class="btn btn-secondary btn-sm" onclick="ProjectControlUI.openEngineerCertModal()">+ إضافة شهادة معاينة</button>
@@ -384,7 +384,7 @@ const ProjectControlUI = {
       }
       console.warn('Notice loading smart completion:', err);
       container.innerHTML = `
-        <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
+        <div class="panel-card" style="padding: 32px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
           <h4 style="color: var(--accent-red); margin-bottom: 8px;">تعذر تحميل مؤشرات الرقابة على نسبة الإنجاز</h4>
           <p style="color: var(--text-secondary); margin-bottom: 16px;">${err.message}</p>
@@ -619,7 +619,7 @@ const ProjectControlUI = {
           </div>
 
           <!-- شريط الإحصائيات الأربعة للجدول الزمني -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 18px 0;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 16px 0;">
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">إجمالي أنشطة WBS</span>
               <span class="hub-kpi-value" style="color: var(--color-info, #38bdf8); font-size: 1.6rem;">${stats.total_activities || activities.length} <small>نشاط</small></span>
@@ -642,7 +642,7 @@ const ProjectControlUI = {
 
           <!-- شريط تنبيه المقارنة مع خط الأساس إن وُجد تأخير -->
           ${comp.delayed_tasks_count > 0 ? `
-            <div style="background: rgba(245, 158, 11, 0.12); border-right: 4px solid #f59e0b; border-radius: 6px; padding: 12px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <div style="background: rgba(245, 158, 11, 0.12); border-right: 4px solid #f59e0b; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
               <div>
                 <strong style="color: var(--color-warning, #f59e0b); display: block;">⚠️ تنبيه انحراف الجدول الزمني (Schedule Delay Alert):</strong>
                 <span style="font-size: 0.88rem; color: var(--text-primary, #f1f5f9);">
@@ -747,7 +747,7 @@ const ProjectControlUI = {
       }
       console.warn('Notice loading WBS Schedule:', err);
       container.innerHTML = `
-        <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
+        <div class="panel-card" style="padding: 32px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
           <h4 style="color: var(--accent-red); margin-bottom: 8px;">تعذر تحميل هيكل WBS والجدول الزمني</h4>
           <p style="color: var(--text-secondary); margin-bottom: 16px;">${err.message}</p>
@@ -1149,7 +1149,7 @@ const ProjectControlUI = {
                 </thead>
                 <tbody>
                   ${(d.history || []).length === 0 ? `
-                    <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 18px;">لا توجد لقطات تاريخية محفوظة بعد. انقر على "+ أخذ لقطة جديدة" لبدء بناء منحنى الأداء.</td></tr>
+                    <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 16px;">لا توجد لقطات تاريخية محفوظة بعد. انقر على "+ أخذ لقطة جديدة" لبدء بناء منحنى الأداء.</td></tr>
                   ` : (d.history || []).map(h => `
                     <tr>
                       <td><span style="font-family: monospace;">${h.status_date || h.snapshot_date || '-'}</span></td>
@@ -1176,7 +1176,7 @@ const ProjectControlUI = {
       }
       console.warn('Notice loading EVM:', err);
       container.innerHTML = `
-        <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
+        <div class="panel-card" style="padding: 32px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
           <h4 style="color: var(--accent-red); margin-bottom: 8px;">تعذر تحميل مؤشرات القيمة المكتسبة EVM</h4>
           <p style="color: var(--text-secondary); margin-bottom: 16px;">${err.message}</p>
@@ -1293,7 +1293,7 @@ const ProjectControlUI = {
           </div>
 
           <!-- شريط الـ 4 مؤشرات الرقمية للسجلات -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 18px 0;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 16px 0;">
             <div class="hub-kpi-item" style="border-radius: 8px; padding: 14px; background: var(--bg-sunken, rgba(15, 23, 42, 0.5)); border: 1px solid var(--border-color);">
               <span class="hub-kpi-title">المخاطر المفتوحة والحرجة</span>
               <span class="hub-kpi-value" style="color: var(--color-danger, #f87171); font-size: 1.6rem;">
@@ -1363,7 +1363,7 @@ const ProjectControlUI = {
       }
       console.warn('Notice loading Risks and Claims:', err);
       container.innerHTML = `
-        <div class="panel-card" style="padding: 30px; text-align: center; border: 1px dashed var(--accent-red);">
+        <div class="panel-card" style="padding: 32px; text-align: center; border: 1px dashed var(--accent-red);">
           <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
           <h4 style="color: var(--accent-red); margin-bottom: 8px;">تعذر تحميل سجلات المخاطر والمطالبات</h4>
           <p style="color: var(--text-secondary); margin-bottom: 16px;">${err.message}</p>
@@ -1411,7 +1411,7 @@ const ProjectControlUI = {
             </thead>
             <tbody>
               ${risks.length === 0 ? `
-                <tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 30px;">لم يتم تسجيل أي مخاطر بعد لهذا المشروع. انقر على "+ إضافة خطر جديد" للتوثيق.</td></tr>
+                <tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 32px;">لم يتم تسجيل أي مخاطر بعد لهذا المشروع. انقر على "+ إضافة خطر جديد" للتوثيق.</td></tr>
               ` : risks.map(r => {
                 let badgeBg = 'rgba(16, 185, 129, 0.2)';
                 let badgeColor = '#10b981';
@@ -1483,7 +1483,7 @@ const ProjectControlUI = {
             </thead>
             <tbody>
               ${claims.length === 0 ? `
-                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">لا توجد مطالبات أو نزاعات مسجلة. انقر على "+ إضافة مطالبة / نزاع" لتوثيق أي تمديد زمني أو تكاليف إضافية.</td></tr>
+                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">لا توجد مطالبات أو نزاعات مسجلة. انقر على "+ إضافة مطالبة / نزاع" لتوثيق أي تمديد زمني أو تكاليف إضافية.</td></tr>
               ` : claims.map(c => `
                 <tr>
                   <td><strong style="color: var(--text-gold); font-family: monospace;">${c.claim_no || `CLM-${c.id}`}</strong></td>
@@ -1538,7 +1538,7 @@ const ProjectControlUI = {
             </thead>
             <tbody>
               ${ncrs.length === 0 ? `
-                <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">لا توجد تقارير عدم مطابقة مفتوحة. الجودة مطابقة للمواصفات ✅</td></tr>
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">لا توجد تقارير عدم مطابقة مفتوحة. الجودة مطابقة للمواصفات ✅</td></tr>
               ` : ncrs.map(n => `
                 <tr>
                   <td><strong style="color: var(--color-danger, #f87171); font-family: monospace;">${n.ncr_no || `NCR-${n.id}`}</strong></td>
@@ -1593,7 +1593,7 @@ const ProjectControlUI = {
             </thead>
             <tbody>
               ${rfis.length === 0 ? `
-                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">لا توجد طلبات استفسارات فنية RFI مسجلة. انقر على "+ إرسال طلب استفسار فني RFI" لتوثيق أي استيضاح.</td></tr>
+                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">لا توجد طلبات استفسارات فنية RFI مسجلة. انقر على "+ إرسال طلب استفسار فني RFI" لتوثيق أي استيضاح.</td></tr>
               ` : rfis.map(r => {
                 const isOverdue = r.is_overdue;
                 return `
