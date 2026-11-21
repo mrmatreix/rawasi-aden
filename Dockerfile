@@ -20,7 +20,7 @@ COPY --from=build /app/www ./
 COPY --from=build /app/views ./views
 COPY --from=build /app/client-app/www ./client-app/www
 COPY server ./server
-COPY scripts/restore_bundle.js scripts/rotate_bank_key.js scripts/init_staging_database.js scripts/sync_staging_chart_of_accounts.js scripts/production_import_server.js ./scripts/
+COPY scripts/restore_bundle.js scripts/rotate_bank_key.js scripts/init_staging_database.js scripts/sync_staging_chart_of_accounts.js scripts/production_import_server.js scripts/reset_staff_password.js ./scripts/
 RUN mkdir -p /data && chown node:node /data /app
 # Railway mounts persistent volumes after the image build. The isolated staging
 # bootstrap must therefore be able to create its first database on that mount.
