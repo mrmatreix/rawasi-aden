@@ -881,12 +881,14 @@ const ProjectHub = {
     App.openModal('boqExcelImportModal');
   },
 
-  handleBoqFileSelected(e) {
+  async handleBoqFileSelected(e) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (typeof XLSX === 'undefined') {
-      App.showToast('مكتبة معالجة Excel قيد التحميل، يرجى إعادة المحاولة', 'warning');
+    try {
+      await window.loadXlsx();
+    } catch (err) {
+      App.showToast(err.message || 'تعذر تحميل مكتبة Excel', 'error');
       return;
     }
 
@@ -1088,9 +1090,10 @@ const ProjectHub = {
   },
 
   // 1. تنزيل نموذج وقالب Excel فارغ ومجهز لجدول الكميات
-  downloadBoqSampleTemplate() {
+  async downloadBoqSampleTemplate() {
     try {
       App.showToast('جاري إعداد وتنزيل قالب Excel النموذجي لجدول الكميات...', 'info');
+      try { await window.loadXlsx(); } catch (_) { /* يُستخدم قالب الخادم بديلاً */ }
 
       // الطريقة الأولى: التوليد المباشر في المتصفح عبر SheetJS لضمان الفورية وعدم الاعتماد على الشبكة
       if (typeof XLSX !== 'undefined') {
@@ -1146,8 +1149,9 @@ const ProjectHub = {
   },
 
   // 2. تصدير جدول الكميات الحالي إلى ملف Excel رسمي
-  exportBoqToExcel() {
+  async exportBoqToExcel() {
     try {
+      try { await window.loadXlsx(); } catch (_) { /* يُستخدم تصدير الخادم بديلاً */ }
       if (!this.currentProjectId) {
         const select = document.getElementById('hubProjectSelect');
         if (select && select.value) {

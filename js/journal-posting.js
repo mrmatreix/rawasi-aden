@@ -148,6 +148,7 @@ Object.assign(Accounting, {
       const title=typeof Settings!=='undefined'&&Settings.getOperationTitle?Settings.getOperationTitle(kind==='expense'?'expense_register':'receipt_register',register.title):register.title;
       if (!rows.length) return App.showToast('لا توجد سندات للتصدير', 'warning');
       if (format === 'excel') {
+        const XLSX = globalThis.XLSX || await window.loadXlsx();
         const book = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), 'السندات');
         XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet([...totals].map(([currency, amount]) => ({ 'العملة': currency, 'إجمالي مبالغ السجل': amount }))), 'الإجماليات');

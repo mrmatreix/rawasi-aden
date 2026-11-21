@@ -2383,6 +2383,10 @@ function initSqlite() {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (request_id) REFERENCES service_requests(id) ON DELETE CASCADE
         );
+        -- سجل الطلب وصندوق الرسائل والتنبيهات تقرأ الأحداث حسب الطلب والوقت ونوع الحدث
+        CREATE INDEX IF NOT EXISTS idx_sre_request_created ON service_request_events(request_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_sre_type_created ON service_request_events(event_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_sr_assigned_status ON service_requests(assigned_to, status);
       `);
 
       // إضافة أعمدة اعتماد المستخلصات في جدول bills إذا لم تكن موجودة

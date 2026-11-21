@@ -10006,7 +10006,8 @@
   <div id="toastContainer" aria-live="polite"></div>
 
   <!-- استدعاء ملفات الـ JavaScript الموحدة مع مانع التخزين المؤقت (Cache Buster) -->
-  <script src="js/xlsx.full.min.js"></script>
+  <!-- مكتبة Excel (~930KB) تُحمَّل عند أول تصدير أو استيراد فقط، وليس مع كل فتح للنظام -->
+  <script>window.loadXlsx=function(){if(window.XLSX)return Promise.resolve(window.XLSX);return window.__xlsxLoading||(window.__xlsxLoading=new Promise(function(resolve,reject){var s=document.createElement('script');s.src='js/xlsx.full.min.js';s.onload=function(){resolve(window.XLSX);};s.onerror=function(){window.__xlsxLoading=null;s.remove();reject(new Error('تعذر تحميل مكتبة Excel، تحقق من الاتصال'));};document.head.appendChild(s);}));};</script>
   <script src="js/ui-ux.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/tafqeet.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/financial-labels.js"></script>

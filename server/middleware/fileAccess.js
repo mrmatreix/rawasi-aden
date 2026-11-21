@@ -14,9 +14,15 @@ function publicFiles(app){
   const express=require('express');const root=config.rootDir;
   const publicExtension=/\.(?:html|css|js|png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|webmanifest|map)$/i;
   function guard(req,res,next){if(!publicExtension.test(req.path)||req.path.split('/').some(p=>p.startsWith('.')))return res.sendStatus(404);next();}
-  for(const dir of ['css','js','images','assets','views'])app.use('/'+dir,guard,express.static(path.join(root,dir),{dotfiles:'deny',index:false,fallthrough:false}));
+  // الملفات ذات بصمة الإصدار (?v=) تتغير مع كل نشر، فتُحفظ في المتصفح سنة كاملة دون إعادة سؤال الخادم.
+  // الصور والخطوط بلا بصمة تُحفظ يوماً، وباقي الملفات يتحقق المتصفح منها (ETag) قبل استخدامها.
+  const staticCache=(res,filePath)=>{const req=res.req;
+   if(req&&/(?:^|&)v=[^&]+/.test(String(req.url).split('?')[1]||''))res.setHeader('Cache-Control','public, max-age=31536000, immutable');
+   else if(/\.(?:png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i.test(filePath))res.setHeader('Cache-Control','public, max-age=86400');
+   else res.setHeader('Cache-Control','no-cache');};
+  for(const dir of ['css','js','images','assets','views'])app.use('/'+dir,guard,express.static(path.join(root,dir),{dotfiles:'deny',index:false,fallthrough:false,setHeaders:staticCache}));
   for(const file of ['index.html','manifest.json','sw.js','offline.html','favicon.ico'])app.get('/'+file,(req,res)=>{const target=path.join(root,file);if(!fs.existsSync(target))return res.sendStatus(404);if(file==='sw.js')res.set('Cache-Control','no-cache');res.sendFile(target);});
   app.get('/',(_req,res)=>res.sendFile(path.join(root,'index.html')));
-  app.use('/client-app',express.static(path.join(root,'client-app/www'),{dotfiles:'deny',fallthrough:false}));
+  app.use('/client-app',express.static(path.join(root,'client-app/www'),{dotfiles:'deny',fallthrough:false,setHeaders:staticCache}));
 }
 module.exports={safePath,publicFiles};
