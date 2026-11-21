@@ -723,7 +723,9 @@
           this.modalEl.classList.add('active');
           if (this.inputEl) {
             this.inputEl.value = '';
-            setTimeout(() => this.inputEl.focus(), 80);
+            // تركيز فوري حتى لا تضيع الحروف المكتوبة مباشرة بعد Ctrl+K، ثم مرة أخرى بعد ظهور النافذة
+            this.inputEl.focus();
+            setTimeout(() => { if (document.activeElement !== this.inputEl) this.inputEl.focus(); }, 80);
           }
           this.search('');
         }
