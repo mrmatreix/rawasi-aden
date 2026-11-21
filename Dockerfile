@@ -20,7 +20,7 @@ COPY --from=build /app/www ./
 COPY --from=build /app/views ./views
 COPY --from=build /app/client-app/www ./client-app/www
 COPY server ./server
-COPY scripts/restore_bundle.js scripts/rotate_bank_key.js scripts/init_staging_database.js scripts/sync_staging_chart_of_accounts.js ./scripts/
+COPY scripts/restore_bundle.js scripts/rotate_bank_key.js scripts/init_staging_database.js scripts/sync_staging_chart_of_accounts.js scripts/production_import_server.js ./scripts/
 RUN mkdir -p /data && chown node:node /data /app
 # Railway mounts persistent volumes after the image build. The isolated staging
 # bootstrap must therefore be able to create its first database on that mount.
@@ -28,4 +28,6 @@ RUN mkdir -p /data && chown node:node /data /app
 USER root
 # Node receives SIGTERM as PID 1. The guarded bootstrap runs only for the
 # explicitly configured isolated staging database after Railway mounts /data.
-CMD ["sh", "-c", "if [ \"$NODE_ENV\" = \"staging\" ] && [ \"$ALLOW_STAGING_DB_INIT\" = \"true\" ]; then node scripts/init_staging_database.js && node scripts/sync_staging_chart_of_accounts.js; fi; exec node server/server.js"]
+# Production: a one-time import mode (scripts/production_import_server.js) accepts the
+# first database upload only when PRODUCTION_IMPORT_TOKEN is set and no database exists yet.
+CMD ["sh", "-c", "if [ \"$NODE_ENV\" = \"staging\" ] && [ \"$ALLOW_STAGING_DB_INIT\" = \"true\" ]; then node scripts/init_staging_database.js && node scripts/sync_staging_chart_of_accounts.js; fi; if [ \"$NODE_ENV\" = \"production\" ] && [ -n \"$PRODUCTION_IMPORT_TOKEN\" ]; then node scripts/production_import_server.js || exit 1; fi; exec node server/server.js"]
