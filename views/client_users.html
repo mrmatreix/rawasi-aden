@@ -95,6 +95,83 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #d4af37;
     }
+
+    /* ===== سجل المراسلات والإجراءات لطلب الخدمة ===== */
+    .rq-log { border: 1px solid #22335e; border-radius: 16px; background: #0b1328; overflow: hidden; }
+    .rq-log__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: #101b36; border-bottom: 1px solid #22335e; }
+    .rq-log__title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: .92rem; font-weight: 800; color: #f8fafc; min-width: 0; }
+    .rq-log__title i { color: #d4af37; }
+    .rq-log__pending { font-size: .7rem; font-weight: 700; color: #fbbf24; background: rgba(245,158,11,.14); border: 1px solid rgba(245,158,11,.4); border-radius: 999px; padding: 2px 10px; }
+    .rq-log__filters { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 4px; padding: 3px; background: #0b1328; border: 1px solid #22335e; border-radius: 999px; }
+    .rq-log__filters button { font: inherit; font-size: .72rem; font-weight: 700; color: #94a3b8; background: transparent; border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .rq-log__filters button:hover { color: #e2e8f0; }
+    .rq-log__filters button.is-active { background: #d4af37; color: #0b1328; }
+    .rq-log__filters button:focus-visible { outline: 2px solid #d4af37; outline-offset: 2px; }
+    .rq-log__count { font-variant-numeric: tabular-nums; opacity: .8; }
+    .rq-log__body { max-height: 430px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
+    .rq-log__body[data-filter="messages"] .rq-ev--action { display: none; }
+    .rq-log__body[data-filter="actions"] .rq-ev--message { display: none; }
+    .rq-log__body[data-filter="messages"] .rq-day:not(.rq-day--msg),
+    .rq-log__body[data-filter="actions"] .rq-day:not(.rq-day--act) { display: none; }
+    .rq-empty { text-align: center; color: #64748b; font-size: .8rem; padding: 26px 8px; }
+    .rq-empty i { display: block; font-size: 1.6rem; margin-bottom: 8px; color: #334155; }
+    .rq-day { align-self: center; font-size: .68rem; font-weight: 700; color: #94a3b8; background: #131f3d; border: 1px solid #22335e; border-radius: 999px; padding: 3px 12px; margin: 4px 0; }
+
+    /* رسائل */
+    .rq-ev--message { display: flex; gap: 8px; align-items: flex-end; max-width: 86%; }
+    .rq-ev--in  { align-self: flex-start; }                         /* الزائر/العميل: يمين الشاشة في RTL */
+    .rq-ev--out { align-self: flex-end; flex-direction: row-reverse; } /* فريق العمل: يسار الشاشة في RTL */
+    .rq-avatar { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: .8rem; }
+    .rq-ev--in .rq-avatar { background: #1e3a5f; color: #7dd3fc; }
+    .rq-ev--out .rq-avatar { background: #3b2f0b; color: #fbbf24; }
+    .rq-ev--internal .rq-avatar { background: #2e1f4d; color: #c4b5fd; }
+    .rq-bubble { min-width: 0; padding: 9px 12px 7px; border-radius: 14px; border: 1px solid transparent; line-height: 1.75; }
+    .rq-ev--in .rq-bubble { background: #15284a; border-color: #1f3b66; border-bottom-right-radius: 4px; }
+    .rq-ev--out .rq-bubble { background: #2a2410; border-color: #4a3c12; border-bottom-left-radius: 4px; }
+    .rq-ev--internal .rq-bubble { background: #221a3d; border-color: #3b2d66; }
+    .rq-ev--pending .rq-bubble { border-style: dashed; border-color: #f59e0b; }
+    .rq-ev--declined .rq-bubble { border-color: #b91c1c; background: #2a1215; }
+    .rq-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .68rem; color: #94a3b8; margin-bottom: 3px; }
+    .rq-meta b { color: #e2e8f0; font-weight: 700; }
+    .rq-text { font-size: .82rem; color: #f1f5f9; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+    .rq-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; font-size: .66rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
+    .rq-tag { display: inline-flex; align-items: center; gap: 4px; font-size: .64rem; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+    .rq-tag--sent { color: #34d399; background: rgba(16,185,129,.12); }
+    .rq-tag--pending { color: #fbbf24; background: rgba(245,158,11,.14); }
+    .rq-tag--declined { color: #f87171; background: rgba(239,68,68,.14); }
+    .rq-tag--internal { color: #c4b5fd; background: rgba(139,92,246,.16); }
+
+    /* إجراءات النظام */
+    .rq-ev--action { display: flex; align-items: flex-start; gap: 10px; padding: 7px 10px; border-radius: 12px; background: #0f1a33; border: 1px solid #1a2a50; font-size: .76rem; color: #cbd5e1; }
+    .rq-ev--action .rq-dot { flex: 0 0 24px; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; font-size: .7rem; background: #1a2a50; color: #93c5fd; }
+    .rq-ev--action.rq-tone-gold .rq-dot { background: rgba(212,175,55,.16); color: #fbbf24; }
+    .rq-ev--action.rq-tone-green .rq-dot { background: rgba(16,185,129,.16); color: #34d399; }
+    .rq-ev--action.rq-tone-red .rq-dot { background: rgba(239,68,68,.16); color: #f87171; }
+    .rq-action-main { flex: 1; min-width: 0; }
+    .rq-action-title { font-weight: 700; color: #f1f5f9; }
+    .rq-action-by { color: #94a3b8; }
+    .rq-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .rq-chip { font-size: .68rem; border-radius: 8px; padding: 2px 8px; background: #16244a; color: #cbd5e1; overflow-wrap: anywhere; }
+    .rq-chip b { color: #f8fafc; }
+    .rq-action-time { flex: 0 0 auto; font-size: .66rem; color: #64748b; font-variant-numeric: tabular-nums; padding-top: 3px; }
+    /* بطاقة رد بانتظار موافقة المدير */
+    .rq-approve { border: 1px dashed #f59e0b; background: #1d1a0c; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .rq-approve__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .74rem; font-weight: 800; color: #fbbf24; }
+    .rq-approve__head span { color: #94a3b8; font-weight: 600; }
+    .rq-approve__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .rq-btn { font: inherit; font-size: .74rem; font-weight: 800; border: 0; border-radius: 10px; padding: 7px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .rq-btn--approve { background: #059669; color: #fff; } .rq-btn--approve:hover { background: #047857; }
+    .rq-btn--reject { background: transparent; color: #f87171; border: 1px solid rgba(239,68,68,.5); } .rq-btn--reject:hover { background: rgba(239,68,68,.12); }
+    .rq-btn:focus-visible { outline: 2px solid #d4af37; outline-offset: 2px; }
+    @media (max-width: 560px) {
+      .rq-ev--message { max-width: 100%; }
+      .rq-log__head { flex-direction: column; align-items: stretch; padding: 10px; }
+      .rq-log__filters { display: flex; justify-content: space-between; border-radius: 12px; }
+      .rq-log__filters button { flex: 1 1 auto; justify-content: center; padding: 5px 8px; }
+      .rq-log__filters button i { display: none; }
+      .rq-log__body { padding: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .rq-log__body { scroll-behavior: auto; } }
   </style>
 </head>
 <body class="min-h-screen pb-12">
@@ -931,7 +1008,17 @@
           <p id="workflowAccessHint" role="status" class="text-xs text-emerald-300">جاري التحقق من صلاحياتك...</p>
           <p id="srvQuoteWorkflowHint" role="status" class="text-xs text-amber-300"></p>
           <p class="text-xs text-slate-300">عيّن المسؤول وسجّل مراجعة المتطلبات والكميات في ملاحظات الإدارة، ثم احفظ الحالة «جاري التسعير» قبل إرسال العرض.</p>
-          <div id="srvQuoteHistory" class="text-xs text-slate-200"></div>
+          <section class="rq-log" aria-labelledby="rqLogTitle">
+            <header class="rq-log__head">
+              <h4 id="rqLogTitle" class="rq-log__title"><i class="fa-solid fa-comments"></i> سجل المراسلات والإجراءات <span id="rqLogPending" class="rq-log__pending" hidden>بانتظار الرد</span></h4>
+              <div class="rq-log__filters" role="group" aria-label="تصفية السجل">
+                <button type="button" class="is-active" data-rq-filter="all" onclick="setRequestLogFilter('all')">الكل <span class="rq-log__count" id="rqCountAll">0</span></button>
+                <button type="button" data-rq-filter="messages" onclick="setRequestLogFilter('messages')"><i class="fa-regular fa-message"></i> المراسلات <span class="rq-log__count" id="rqCountMessages">0</span></button>
+                <button type="button" data-rq-filter="actions" onclick="setRequestLogFilter('actions')"><i class="fa-solid fa-list-check"></i> الإجراءات <span class="rq-log__count" id="rqCountActions">0</span></button>
+              </div>
+            </header>
+            <div id="srvQuoteHistory" class="rq-log__body" role="log" aria-live="polite" data-filter="all"></div>
+          </section>
           <div id="pendingRequestMessages" class="space-y-2"></div>
           <label for="srvMessageRecipient" class="block text-xs font-bold text-slate-300">إرسال رسالة إلى</label>
           <select id="srvMessageRecipient" class="w-full custom-input rounded-xl p-2 text-xs"><option value="visitor">الزائر / العميل</option></select>
@@ -2384,13 +2471,12 @@
         const hint=document.getElementById('srvQuoteWorkflowHint');
         hint.textContent=pendingQuote?(manager?'عرض السعر جاهز لموافقة المدير. اعتمد العرض لإرساله للزائر.':'العرض بانتظار موافقة المدير العام.'):r.status==='quoted'?'تم اعتماد عرض السعر وإرساله للعميل.':"لا يوجد عرض بانتظار موافقة المدير. عيّن المسؤول، واحفظ مراجعة الطلب بحالة «جاري التسعير»، وأدخل التفاصيل والمدة والمبلغ، ثم اضغط «إرسال العرض لموافقة المدير العام». إذا أردت اعتماد رسالة نصية فاستخدم زر «اعتماد الرد وإرساله» الظاهر بجانب الرسالة.";
         for(const button of [document.getElementById('btnApproveRequestQuote'),document.getElementById('btnReturnRequestQuote')]){button.style.opacity=pendingQuote?'1':'0.45';button.title=pendingQuote?'':'لا يوجد عرض سعر بانتظار الموافقة';}
-        document.getElementById('pendingRequestMessages').innerHTML=(r.events||[]).filter(e=>e.event_type==='message_pending_approval').map(e=>`<div class="p-2 bg-slate-800 rounded-lg"><p>رد بانتظار موافقة المدير: ${escapeHtml(e.message||'')}</p>${manager ? `<button type="button" onclick="managerMessageDecision(${Number(e.id)},'approve')" class="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold">اعتماد الرد وإرساله</button> <button type="button" onclick="managerMessageDecision(${Number(e.id)},'reject')" class="px-3 py-2 bg-rose-700 text-white rounded-lg text-xs font-bold">رفض الرد</button>` : '<span>بانتظار قرار المدير العام</span>'}</div>`).join('');
+        renderPendingReplies(r, manager, contactsData?.contacts || []);
         document.getElementById('srvQuoteDetails').value = window.currentServiceQuote?.details || '';
         document.getElementById('srvQuoteDuration').value = window.currentServiceQuote?.duration || '';
         document.getElementById('srvManagerNote').value = '';
         const eventLabels={request_received:'استلام الطلب',request_assigned:'إحالة الطلب للمشرف',supervisor_assigned:'تعيين مشرف الاستقبال',request_updated:'تحديث الطلب',message_from_client:'رسالة الزائر',message_pending_approval:'رد بانتظار موافقة المدير',message_approved:'اعتماد الرد',message_rejected:'رفض الرد',message_declined:'ملاحظات المدير على الرد',message_to_client:'رد معتمد للزائر',quote_submitted:'عرض بانتظار موافقة المدير',quote_approved:'اعتماد عرض السعر',quote_returned:'إعادة العرض للمشرف للتعديل'};
-        document.getElementById('srvQuoteHistory').textContent = (r.events || []).map(e => {const internal=/^internal_(?:read_)?to_(\d+)$/.exec(e.event_type||'');const contact=internal&&(contactsData?.contacts||[]).find(u=>Number(u.id)===Number(internal[1]));const label=internal?`رسالة داخلية إلى ${contact?.name||contact?.username||'مستخدم'}`:(eventLabels[e.event_type]||'إجراء على الطلب');return `${e.created_at}: ${label} — ${e.message || ''}`;}).join('\n') || 'لم تُسجل إجراءات بعد';
-        document.getElementById('srvQuoteHistory').style.whiteSpace = 'pre-wrap';
+        renderRequestLog(r, eventLabels, contactsData?.contacts || []);
 
         // Header info
         document.getElementById('srvReqNoBadge').innerText = r.request_no;
@@ -2603,6 +2689,154 @@
         const close=document.createElement('button');close.type='button';close.textContent='إغلاق المعاينة';close.style.cssText='display:block;margin:1rem auto 0;padding:.5rem 1rem;background:#334155;border-radius:8px';close.onclick=()=>dialog.close();
         dialog.append(image,close);document.body.append(dialog);dialog.addEventListener('close',()=>{URL.revokeObjectURL(imageUrl);dialog.remove();},{once:true});dialog.showModal();
       } catch {showToast('تعذرت معاينة الصورة أو لا توجد صلاحية','error');}
+    }
+
+    /* ===== سجل المراسلات والإجراءات: فقاعات للمراسلات وخط زمني للإجراءات ===== */
+    const REQUEST_STATUS_LABELS = { new:'طلب جديد', under_review:'قيد المراجعة', pricing:'جاري التسعير', pending_manager:'بانتظار موافقة المدير', manager_changes:'أعيد من المدير للتعديل', client_changes:'أعيد بملاحظات العميل', client_accepted:'موافق عليه من العميل', quoted:'تم عرض السعر', converted:'محول لمشروع', rejected:'ملغي / معتذر' };
+
+    function setRequestLogFilter(filter) {
+      const body = document.getElementById('srvQuoteHistory');
+      if (!body) return;
+      body.dataset.filter = filter;
+      document.querySelectorAll('[data-rq-filter]').forEach(b => b.classList.toggle('is-active', b.dataset.rqFilter === filter));
+      body.scrollTop = body.scrollHeight;
+    }
+
+    // التاريخ في قاعدة البيانات بتوقيت UTC بالصيغة "YYYY-MM-DD HH:MM:SS"
+    function parseEventDate(value) {
+      if (!value) return null;
+      const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value) ? value.replace(' ', 'T') + 'Z' : value;
+      const d = new Date(iso);
+      return isNaN(d) ? null : d;
+    }
+    const rqTime = d => d ? d.toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) : '';
+    function rqDayLabel(d) {
+      if (!d) return 'تاريخ غير معروف';
+      const startOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+      const diff = Math.round((startOf(new Date()) - startOf(d)) / 86400000);
+      if (diff === 0) return 'اليوم';
+      if (diff === 1) return 'أمس';
+      return d.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    // أسماء الموظفين بدل الأرقام: جهات التواصل + قائمة الإسناد + المسؤول الحالي
+    function requestStaffNamer(request, contacts) {
+      const names = new Map();
+      for (const u of [...(contacts || []), ...((typeof systemEngineers !== 'undefined' && systemEngineers) || [])]) names.set(Number(u.id), u.name || u.username);
+      if (request.assigned_to && (request.assigned_name || request.assigned_username)) names.set(Number(request.assigned_to), request.assigned_name || request.assigned_username);
+      return id => (id && names.get(Number(id))) || (id ? `موظف #${Number(id)}` : 'فريق العمل');
+    }
+
+    // ردود بانتظار موافقة المدير: بطاقة واضحة مع اسم الموظف والوقت وأزرار القرار للمدير
+    function renderPendingReplies(request, manager, contacts) {
+      const box = document.getElementById('pendingRequestMessages');
+      if (!box) return;
+      const staffName = requestStaffNamer(request, contacts);
+      const pending = (request.events || []).filter(e => e.event_type === 'message_pending_approval').sort((a, b) => Number(a.id) - Number(b.id));
+      box.innerHTML = pending.map(e => {
+        const when = parseEventDate(e.created_at);
+        return `<div class="rq-approve" role="group" aria-label="رد بانتظار موافقة المدير">
+          <div class="rq-approve__head"><i class="fa-regular fa-clock"></i> رد بانتظار موافقة المدير العام <span>· ${escapeHtml(staffName(e.actor_id))} · ${escapeHtml(rqTime(when))}</span></div>
+          <p class="rq-text">${escapeHtml(e.message || '')}</p>
+          <div class="rq-approve__actions">${manager
+            ? `<button type="button" class="rq-btn rq-btn--approve" onclick="managerMessageDecision(${Number(e.id)},'approve')"><i class="fa-solid fa-check"></i> اعتماد الرد وإرساله</button><button type="button" class="rq-btn rq-btn--reject" onclick="managerMessageDecision(${Number(e.id)},'reject')"><i class="fa-solid fa-xmark"></i> رفض الرد</button>`
+            : '<span class="rq-tag rq-tag--pending"><i class="fa-regular fa-hourglass-half"></i> بانتظار قرار المدير العام</span>'}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderRequestLog(request, eventLabels, contacts) {
+      const body = document.getElementById('srvQuoteHistory');
+      if (!body) return;
+      const staffName = requestStaffNamer(request, contacts);
+      const actorName = e => e.actor_type === 'guest' ? 'الزائر' : e.actor_type === 'client' ? 'العميل' : e.actor_type === 'system' ? 'النظام' : e.actor_type === 'manager' ? (staffName(e.actor_id) + ' · المدير') : staffName(e.actor_id);
+
+      const events = [...(request.events || [])].sort((a, b) => Number(a.id) - Number(b.id)); // الأقدم أولاً كالمحادثة
+      const countMsg = { n: 0 }, countAct = { n: 0 };
+      const html = [];
+      let lastDay = null, dayIndex = -1;
+      const dayFlags = [];
+      let lastGuest = 0, lastReply = 0;
+
+      for (const e of events) {
+        const type = String(e.event_type || '');
+        const when = parseEventDate(e.created_at);
+        const dayKey = when ? when.toDateString() : 'unknown';
+        if (dayKey !== lastDay) { lastDay = dayKey; dayIndex++; dayFlags[dayIndex] = { msg: false, act: false }; html.push({ day: rqDayLabel(when), index: dayIndex }); }
+        const internal = /^internal_(?:read_)?to_(\d+)$/.exec(type);
+        const text = escapeHtml(e.message || '');
+        const time = escapeHtml(rqTime(when));
+        const fullDate = escapeHtml(when ? when.toLocaleString('ar-u-nu-latn') : (e.created_at || ''));
+
+        // ---- مراسلات ----
+        const messageKinds = {
+          message_from_client: { side: 'in', icon: 'fa-user', tag: '' },
+          message_to_client: { side: 'out', icon: 'fa-headset', tag: '<span class="rq-tag rq-tag--sent"><i class="fa-solid fa-check-double"></i> أُرسل للزائر</span>' },
+          message_pending_approval: { side: 'out', icon: 'fa-headset', extra: 'rq-ev--pending', tag: '<span class="rq-tag rq-tag--pending"><i class="fa-regular fa-clock"></i> بانتظار موافقة المدير</span>' },
+          message_declined: { side: 'out', icon: 'fa-user-tie', extra: 'rq-ev--declined', tag: '<span class="rq-tag rq-tag--declined"><i class="fa-solid fa-rotate-left"></i> ملاحظات المدير على الرد</span>' },
+          message_rejected: { side: 'out', icon: 'fa-user-tie', extra: 'rq-ev--declined', tag: '<span class="rq-tag rq-tag--declined"><i class="fa-solid fa-xmark"></i> رُفض الرد</span>' }
+        };
+        const kind = internal ? { side: 'out', icon: 'fa-lock', extra: 'rq-ev--internal', tag: `<span class="rq-tag rq-tag--internal"><i class="fa-solid fa-lock"></i> داخلية إلى ${escapeHtml(staffName(internal[1]))}</span>` } : messageKinds[type];
+        if (kind) {
+          countMsg.n++; dayFlags[dayIndex].msg = true;
+          if (type === 'message_from_client') lastGuest = Number(e.id);
+          if (type === 'message_to_client' || type === 'message_pending_approval') lastReply = Number(e.id);
+          html.push(`<article class="rq-ev--message rq-ev--${kind.side} ${kind.extra || ''}" aria-label="${escapeHtml(actorName(e))}">
+            <span class="rq-avatar" aria-hidden="true"><i class="fa-solid ${kind.icon}"></i></span>
+            <div class="rq-bubble">
+              <div class="rq-meta"><b>${escapeHtml(actorName(e))}</b>${kind.tag}</div>
+              <p class="rq-text">${text || '<span style="color:#64748b">(بدون نص)</span>'}</p>
+              <div class="rq-foot"><time datetime="${escapeHtml(e.created_at || '')}" title="${fullDate}">${time}</time></div>
+            </div>
+          </article>`);
+          continue;
+        }
+
+        // ---- إجراءات ----
+        countAct.n++; dayFlags[dayIndex].act = true;
+        let icon = 'fa-circle-info', tone = '', title = eventLabels[type] || 'إجراء على الطلب', chips = [];
+        if (type === 'request_received') { icon = 'fa-inbox'; tone = 'rq-tone-gold'; if (e.message) chips.push(text); }
+        else if (type === 'request_assigned' || type === 'supervisor_assigned') {
+          icon = 'fa-user-check'; tone = 'rq-tone-gold';
+          const m = /(\d+)\s*$/.exec(e.message || '');
+          title = type === 'supervisor_assigned' ? 'تعيين مشرف الاستقبال' : 'إسناد الطلب';
+          chips.push(m ? `إلى <b>${escapeHtml(staffName(m[1]))}</b>` : text);
+        } else if (type === 'request_updated') {
+          icon = 'fa-pen-to-square';
+          const part = key => { const m = new RegExp(key + ':\\s*([^؛]*)').exec(e.message || ''); return m ? m[1].trim() : ''; };
+          const status = part('الحالة'), assignee = part('المسؤول'), notes = part('ملاحظات المراجعة');
+          if (status) chips.push(`الحالة: <b>${escapeHtml(REQUEST_STATUS_LABELS[status] || status)}</b>`);
+          if (assignee) chips.push(`المسؤول: <b>${escapeHtml(/^\d+$/.test(assignee) ? staffName(assignee) : assignee)}</b>`);
+          if (notes && notes !== 'لا يوجد') chips.push(`ملاحظات: ${escapeHtml(notes)}`);
+          if (!chips.length && e.message) chips.push(text);
+        } else if (type === 'message_approved') { icon = 'fa-circle-check'; tone = 'rq-tone-green'; if (e.message) chips.push(text); }
+        else if (type === 'quote_submitted') { icon = 'fa-file-invoice-dollar'; tone = 'rq-tone-gold'; if (e.message) chips.push(text); }
+        else if (type === 'quote_approved') { icon = 'fa-file-circle-check'; tone = 'rq-tone-green'; if (e.message) chips.push(text); }
+        else if (type === 'quote_returned') { icon = 'fa-rotate-left'; tone = 'rq-tone-red'; if (e.message) chips.push(text); }
+        else if (/^client_(accepted|changes)$/.test(type)) { icon = type === 'client_accepted' ? 'fa-handshake' : 'fa-comment-dots'; tone = type === 'client_accepted' ? 'rq-tone-green' : 'rq-tone-red'; title = type === 'client_accepted' ? 'وافق الزائر على العرض' : 'طلب الزائر تعديل العرض'; if (e.message) chips.push(text); }
+        else if (e.message) chips.push(text);
+        html.push(`<div class="rq-ev--action ${tone}">
+          <span class="rq-dot" aria-hidden="true"><i class="fa-solid ${icon}"></i></span>
+          <div class="rq-action-main">
+            <div><span class="rq-action-title">${escapeHtml(title)}</span>${e.actor_type && e.actor_type !== 'system' ? ` <span class="rq-action-by">· ${escapeHtml(actorName(e))}</span>` : ''}</div>
+            ${chips.length ? `<div class="rq-chips">${chips.map(c => `<span class="rq-chip">${c}</span>`).join('')}</div>` : ''}
+          </div>
+          <time class="rq-action-time" datetime="${escapeHtml(e.created_at || '')}" title="${fullDate}">${time}</time>
+        </div>`);
+      }
+
+      body.innerHTML = events.length
+        ? html.map(h => typeof h === 'string' ? h : `<div class="rq-day ${dayFlags[h.index].msg ? 'rq-day--msg' : ''} ${dayFlags[h.index].act ? 'rq-day--act' : ''}">${escapeHtml(h.day)}</div>`).join('')
+        : '<div class="rq-empty"><i class="fa-regular fa-comments"></i>لم تُسجل مراسلات أو إجراءات على هذا الطلب بعد</div>';
+      document.getElementById('rqCountAll').textContent = events.length;
+      document.getElementById('rqCountMessages').textContent = countMsg.n;
+      document.getElementById('rqCountActions').textContent = countAct.n;
+      document.getElementById('rqLogPending').hidden = !(lastGuest && lastGuest > lastReply);
+      setRequestLogFilter(body.dataset.filter || 'all');
+      // يُرسم السجل قبل ظهور النافذة؛ ننتظر حتى تصبح مرئية ثم نُظهر آخر المراسلات كما في أي محادثة
+      let tries = 0;
+      const toLatest = () => { if (body.clientHeight > 0) { body.style.scrollBehavior = 'auto'; body.scrollTop = body.scrollHeight; body.style.scrollBehavior = ''; } else if (++tries < 40) requestAnimationFrame(toLatest); };
+      requestAnimationFrame(toLatest);
     }
 
     function escapeHtml(str) {
