@@ -964,7 +964,7 @@ const App = {
               return `
                 <tr>
                   <td>
-                    <div style="font-weight: 700; color: #fff;">${c.name}</div>
+                    <div style="font-weight: 700; color: var(--text-primary);">${c.name}</div>
                     <div style="font-size: 0.75rem; color: var(--text-secondary);">${c.company || 'عميل فردي'}</div>
                     <small>${c.party_no || ''} · ${Accounting.partyStatusLabel(c.status)}</small>
                   </td>

@@ -1686,7 +1686,7 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 
 .modal-header h3 {
   font-size: 1.15rem;
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -6015,3 +6015,8 @@ tr.sk-row > td { padding: 14px 10px !important; }
 .sk-table i:nth-child(1) { width: 92%; } .sk-table i:nth-child(2) { width: 78%; } .sk-table i:nth-child(3) { width: 60%; }
 .sk-table small { font-size: .78rem; color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) { .sk-table i { animation: none; } }
+
+/* عدّاد تبويب بخلفية ملوّنة ثابتة (مثل الأخضر/الأزرق/الأحمر): النص أبيض في الوضعين */
+html body span.tab-count-badge[style*="background"] { color: var(--color-on-accent) !important; }
+/* رأس نافذة بخلفية داكنة ثابتة: يبقى العنوان فاتحاً في الوضعين */
+.modal-header[style*="#0f172a"] h3, .modal-header[style*="#1e293b"] h3 { color: #f8fafc; }

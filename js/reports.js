@@ -370,7 +370,7 @@ await this.loadIncomeStatement();
         if (expEl) expEl.textContent = Reports.formatNumber(d.total_expenses || 0) + ' ' + this.reportCurrency();
         if (profEl) {
           profEl.textContent = Reports.formatNumber(d.net_profit || 0) + ' ' + this.reportCurrency();
-          profEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
+          profEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--text-gold)' : 'var(--color-danger)';
         }
 
         const tbody = document.getElementById('fullPlBreakdownTable');
@@ -513,7 +513,7 @@ await this.loadIncomeStatement();
         if (expEl) expEl.textContent = Reports.formatNumber(d.total_operating_expenses || 0) + ' ' + this.reportCurrency();
         if (netEl) {
           netEl.textContent = Reports.formatNumber(d.net_profit || 0) + ' ' + this.reportCurrency();
-          netEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--gold-light)' : 'var(--accent-red)';
+          netEl.style.color = (d.net_profit || 0) >= 0 ? 'var(--text-gold)' : 'var(--color-danger)';
         }
 
         const revTbody = document.getElementById('isRevenuesTableBody');
