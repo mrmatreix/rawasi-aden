@@ -1397,7 +1397,7 @@ await this.loadIncomeStatement();
     App.openModal('contractingSeparationModal');
     const tbody = document.getElementById('contractingMatrixTableBody');
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text-secondary); padding: 25px;">جاري تحميل مصفوفة المقاولات المالية (IFRS 15)...</td></tr>';
+      tbody.innerHTML = '<tr class="sk-row"><td colspan="13"><div class="sk-table" role="status" aria-busy="true" aria-label="جاري تحميل مصفوفة المقاولات المالية (IFRS 15)"><i></i><i></i><i></i></div></td></tr>';
     }
 
     try {

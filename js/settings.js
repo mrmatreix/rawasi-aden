@@ -3740,7 +3740,7 @@ const Settings = {
     if (!tbody) return;
 
     try {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">⏳ جاري تحميل سجلات النسخ الاحتياطية...</td></tr>';
+      tbody.innerHTML = '<tr class="sk-row"><td colspan="8"><div class="sk-table" role="status" aria-busy="true" aria-label="جاري تحميل سجلات النسخ الاحتياطية"><i></i><i></i><i></i></div></td></tr>';
       const res = await fetch('/api/settings/backup/records');
       const json = await res.json();
 

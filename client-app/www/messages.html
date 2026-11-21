@@ -23,10 +23,7 @@
 
     <!-- Messages Container -->
     <div id="messagesContainer">
-      <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
-        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--gold); margin-bottom: 10px;"></i>
-        <p>جاري تحميل الرسائل...</p>
-      </div>
+      <div class="sk-list" role="status" aria-busy="true" aria-label="جاري تحميل الرسائل"><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div></div>
     </div>
   </div>
 
@@ -117,7 +114,8 @@
         messages = data.messages || [];
         renderMessages(messages);
       } catch (err) {
-        ClientApp.showToast(err.message || 'فشل تحميل الرسائل', 'error');
+      { const box = document.getElementById('messagesContainer'); if (box) box.innerHTML = ClientApp.errorState(err.message || 'فشل تحميل الرسائل'); }
+      ClientApp.showToast(err.message || 'فشل تحميل الرسائل', 'error');
       }
     }
 
@@ -137,11 +135,7 @@
       const container = document.getElementById('messagesContainer');
       if (!msgs || msgs.length === 0) {
         container.innerHTML = `
-          <div class="card" style="text-align: center; padding: 40px 20px;">
-            <i class="fa-solid fa-comments" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
-            <h3 style="font-size: 1rem; color: #FFFFFF; font-weight: bold;">لا توجد رسائل سابقة</h3>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">يمكنك بدء محادثة جديدة أو إرسال استفسار لإدارة الشركة بسهولة</p>
-          </div>
+          ${ClientApp.emptyState({ icon: 'fa-comments', title: 'لا توجد رسائل سابقة', text: 'يمكنك بدء محادثة جديدة أو إرسال استفسار لإدارة الشركة بسهولة' })}
         `;
         return;
       }

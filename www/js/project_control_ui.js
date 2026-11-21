@@ -367,7 +367,7 @@ const ProjectControlUI = {
                   </tr>
                 </thead>
                 <tbody id="engineerCertsTableBody">
-                  <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:16px;">جاري تحميل الشهادات...</td></tr>
+                  <tr class="sk-row"><td colspan="6"><div class="sk-table" role="status" aria-busy="true" aria-label="جاري تحميل الشهادات"><i></i><i></i><i></i></div></td></tr>
                 </tbody>
               </table>
             </div>

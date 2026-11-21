@@ -31,10 +31,7 @@
 
     <!-- Projects List Container -->
     <div id="projectsListContainer">
-      <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
-        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--gold); margin-bottom: 10px;"></i>
-        <p>جاري تحميل قائمة المشاريع...</p>
-      </div>
+      <div class="sk-list" role="status" aria-busy="true" aria-label="جاري تحميل قائمة المشاريع"><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div></div>
     </div>
   </div>
 
@@ -65,7 +62,8 @@
         allProjects = data.projects || [];
         renderProjects(allProjects);
       } catch (err) {
-        ClientApp.showToast(err.message || 'فشل تحميل المشاريع', 'error');
+      { const box = document.getElementById('projectsListContainer'); if (box) box.innerHTML = ClientApp.errorState(err.message || 'فشل تحميل المشاريع'); }
+      ClientApp.showToast(err.message || 'فشل تحميل المشاريع', 'error');
       }
     }
 
@@ -73,11 +71,7 @@
       const container = document.getElementById('projectsListContainer');
       if (!projects || projects.length === 0) {
         container.innerHTML = `
-          <div class="card" style="text-align: center; padding: 40px 20px;">
-            <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
-            <h3 style="font-size: 1rem; color: #FFFFFF; font-weight: bold;">لا توجد مشاريع مطابقة</h3>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">لم يتم العثور على مشاريع مسجلة لحسابك حالياً</p>
-          </div>
+          ${ClientApp.emptyState({ icon: 'fa-folder-open', title: 'لا توجد مشاريع مطابقة', text: 'لم يتم العثور على مشاريع مسجلة لحسابك حالياً' })}
         `;
         return;
       }

@@ -5027,7 +5027,7 @@ const Accounting = {
                     </tr>
                   </thead>
                   <tbody id="accountingPeriodsTableBody">
-                    <tr><td colspan="6" style="text-align: center;">جاري التحميل...</td></tr>
+                    <tr class="sk-row"><td colspan="6"><div class="sk-table" role="status" aria-busy="true" aria-label="جاري التحميل"><i></i><i></i><i></i></div></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -5215,7 +5215,7 @@ const Accounting = {
                     </tr>
                   </thead>
                   <tbody id="auditLogsTableBody">
-                    <tr><td colspan="7" style="text-align: center;">جاري التحميل...</td></tr>
+                    <tr class="sk-row"><td colspan="7"><div class="sk-table" role="status" aria-busy="true" aria-label="جاري التحميل"><i></i><i></i><i></i></div></td></tr>
                   </tbody>
                 </table>
               </div>

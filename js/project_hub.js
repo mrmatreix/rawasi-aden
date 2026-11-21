@@ -4278,11 +4278,7 @@ const ProjectHub = {
     if (!tbody) return;
 
     tbody.innerHTML = `
-      <tr>
-        <td colspan="11" style="text-align:center; padding: 25px; color: var(--text-secondary);">
-          جاري تحميل عرض السعر المتكامل وربط المخازن والموردين...
-        </td>
-      </tr>
+      <tr class="sk-row"><td colspan="11"><div class="sk-table" role="status" aria-busy="true" aria-label="جاري تحميل عرض السعر المتكامل وربط المخازن والموردين"><i></i><i></i><i></i></div></td></tr>
     `;
 
     const data = await this.loadIntegratedQuotation(true);

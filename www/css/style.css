@@ -2141,7 +2141,7 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 9999;
+  z-index: 200000;
   background: radial-gradient(circle at 50% 30%, #173258 0%, #0a1728 60%, #050b14 100%);
   display: flex;
   align-items: center;
@@ -5959,3 +5959,14 @@ button.tab-btn.active::after,
 #pane_settings_print [hidden]{display:none!important}
 @media(max-width:1100px){#pane_settings_print .print-settings-layout{grid-template-columns:1fr}#pane_settings_print .print-preview-sticky{position:static}.designer-actions{position:static}}
 .designer-paper{box-sizing:border-box;background:white;color:#172334;direction:rtl;margin-bottom:16px}
+
+/* ===== هياكل التحميل للجداول (بدل نص "جاري التحميل") ===== */
+@keyframes skShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+tr.sk-row > td { padding: 14px 10px !important; }
+.sk-table { display: grid; gap: 10px; }
+.sk-table i { display: block; height: 12px; border-radius: 7px;
+  background: linear-gradient(90deg, rgba(148,163,184,.10) 25%, rgba(148,163,184,.24) 50%, rgba(148,163,184,.10) 75%);
+  background-size: 200% 100%; animation: skShimmer 1.4s linear infinite; }
+.sk-table i:nth-child(1) { width: 92%; } .sk-table i:nth-child(2) { width: 78%; } .sk-table i:nth-child(3) { width: 60%; }
+.sk-table small { font-size: .78rem; color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) { .sk-table i { animation: none; } }

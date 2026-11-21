@@ -95,7 +95,8 @@ const ClientApp = {
     toast.className = `toast ${type}`;
     
     const icon = type === 'success' ? 'fa-circle-check' : (type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info');
-    toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+    toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span></span>`;
+    toast.querySelector('span').textContent = String(message ?? '');
     
     container.appendChild(toast);
     setTimeout(() => {
@@ -103,6 +104,27 @@ const ClientApp = {
       toast.style.transition = 'opacity 0.3s ease';
       setTimeout(() => toast.remove(), 300);
     }, 3500);
+  },
+
+  escape(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+
+  /** بطاقات هيكلية تظهر أثناء التحميل بدل نص "جاري التحميل" */
+  skeletonCards(count = 3, label = 'جاري التحميل') {
+    const card = '<div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div>';
+    return `<div class="sk-list" role="status" aria-busy="true" aria-label="${this.escape(label)}">${card.repeat(count)}</div>`;
+  },
+
+  /** حالة فارغة واضحة: أيقونة + عنوان + شرح + إجراء اختياري */
+  emptyState({ icon = 'fa-inbox', title, text = '', actionHref = '', actionLabel = '' }) {
+    const action = actionHref && actionLabel ? `<a class="btn btn-primary" href="${this.escape(actionHref)}">${this.escape(actionLabel)}</a>` : '';
+    return `<div class="empty-state"><div class="empty-state__icon"><i class="fa-solid ${this.escape(icon)}"></i></div><h3>${this.escape(title)}</h3>${text ? `<p>${this.escape(text)}</p>` : ''}${action}</div>`;
+  },
+
+  /** رسالة خطأ مع زر إعادة المحاولة (بدل ترك الصفحة فارغة أو عالقة على التحميل) */
+  errorState(message, retryLabel = 'إعادة المحاولة') {
+    return `<div class="empty-state is-error" role="alert"><div class="empty-state__icon"><i class="fa-solid fa-triangle-exclamation"></i></div><h3>تعذر تحميل البيانات</h3><p>${this.escape(message || 'تحقق من اتصالك بالإنترنت ثم أعد المحاولة.')}</p><button type="button" class="btn btn-secondary" onclick="location.reload()"><i class="fa-solid fa-rotate-right"></i> ${this.escape(retryLabel)}</button></div>`;
   },
 
   formatMoney(num, currency = 'ر.ي') {

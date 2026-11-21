@@ -16,7 +16,7 @@
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
           <div style="font-size: 0.75rem; color: var(--gold); font-weight: 700; text-transform: uppercase;">مرحباً بك في بوابتك الخاصة</div>
-          <h2 id="clientGreeting" style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;">جاري التحميل...</h2>
+          <h2 id="clientGreeting" style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin: 4px 0;"><span class="sk-text" style="width: 9em; height: 1.1em;" aria-label="جاري التحميل"></span></h2>
           <p id="clientCompany" style="font-size: 0.8rem; color: var(--text-muted);"></p>
         </div>
         <div style="background: var(--gold-glow); border: 1px solid var(--gold); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 1.2rem;">
@@ -34,22 +34,22 @@
     <div class="stats-grid">
       <div class="stat-box gold">
         <div class="stat-label"><i class="fa-solid fa-file-contract"></i> إجمالي قيمة العقود</div>
-        <div id="statContractValue" class="stat-value">0 ر.ي</div>
+        <div id="statContractValue" class="stat-value"><span class="sk-text"></span></div>
         <div class="stat-sub">القيمة المعتمدة للمشاريع</div>
       </div>
       <div class="stat-box info">
         <div class="stat-label"><i class="fa-solid fa-file-invoice"></i> إجمالي المستخلصات</div>
-        <div id="statInvoiced" class="stat-value">0 ر.ي</div>
+        <div id="statInvoiced" class="stat-value"><span class="sk-text"></span></div>
         <div class="stat-sub">المطالبات الصادرة</div>
       </div>
       <div class="stat-box success">
         <div class="stat-label"><i class="fa-solid fa-circle-check"></i> المسدد والمحصل</div>
-        <div id="statPaid" class="stat-value">0 ر.ي</div>
+        <div id="statPaid" class="stat-value"><span class="sk-text"></span></div>
         <div class="stat-sub">سندات القبض المؤكدة</div>
       </div>
       <div class="stat-box danger">
         <div class="stat-label"><i class="fa-solid fa-clock"></i> الرصيد المستحق المتبقي</div>
-        <div id="statBalance" class="stat-value">0 ر.ي</div>
+        <div id="statBalance" class="stat-value"><span class="sk-text"></span></div>
         <div class="stat-sub">المتبقي المطلوب سداده</div>
       </div>
     </div>
@@ -62,7 +62,7 @@
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
         <span style="font-size: 0.85rem; color: var(--text-muted);">متوسط نسبة الإنجاز العام</span>
-        <span id="avgProgressText" style="font-size: 1rem; font-weight: 800; color: var(--gold);">0%</span>
+        <span id="avgProgressText" style="font-size: 1rem; font-weight: 800; color: var(--gold);"><span class="sk-text" style="width: 3em;"></span></span>
       </div>
       <div class="progress-container">
         <div id="avgProgressBar" class="progress-fill" style="width: 0%;"></div>
@@ -104,7 +104,7 @@
         <a href="projects.html" style="font-size: 0.78rem; color: var(--gold); text-decoration: none;">عرض الكل <i class="fa-solid fa-angle-left"></i></a>
       </div>
       <div id="recentProjectsContainer">
-        <p style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 0.85rem;">جاري تحميل المشاريع...</p>
+        <div class="sk-list" role="status" aria-busy="true" aria-label="جاري تحميل المشاريع"><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div></div>
       </div>
     </div>
   </div>
@@ -159,6 +159,9 @@
         // قائمة المشاريع الحديثة
         renderRecentProjects(data.recent_projects || []);
       } catch (err) {
+        // لا تبقى الهياكل متحركة عند فشل التحميل
+        document.querySelectorAll('.sk-text').forEach(el => { el.replaceWith('—'); });
+        const recent = document.getElementById('recentProjectsContainer'); if (recent) recent.innerHTML = ClientApp.errorState(err.message || 'فشل تحميل بيانات لوحة التحكم');
         ClientApp.showToast(err.message || 'فشل تحميل بيانات لوحة التحكم', 'error');
       }
     }
@@ -166,7 +169,7 @@
     function renderRecentProjects(projects) {
       const container = document.getElementById('recentProjectsContainer');
       if (!projects || projects.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 16px 0; font-size: 0.85rem;">لا توجد مشاريع نشطة مسجلة حالياً</p>';
+        container.innerHTML = ClientApp.emptyState({ icon: 'fa-city', title: 'لا توجد مشاريع نشطة حالياً', text: 'عند بدء مشروعك معنا ستظهر هنا نسبة الإنجاز وآخر المستجدات.', actionHref: 'services.html', actionLabel: 'طلب خدمة جديدة' });
         return;
       }
 

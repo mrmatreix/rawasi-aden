@@ -518,3 +518,68 @@ body {
   from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: scale(1); }
 }
+
+/* ===== حالات التحميل والفراغ والخطأ ===== */
+@keyframes skShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.sk-list { display: grid; gap: 12px; }
+.sk-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; display: grid; gap: 10px; }
+.sk-line, .sk-text {
+  display: block; height: 12px; border-radius: 8px;
+  background: linear-gradient(90deg, rgba(148,163,184,.10) 25%, rgba(148,163,184,.22) 50%, rgba(148,163,184,.10) 75%);
+  background-size: 200% 100%; animation: skShimmer 1.4s linear infinite;
+}
+.sk-line.w-30 { width: 30%; } .sk-line.w-40 { width: 40%; } .sk-line.w-60 { width: 60%; } .sk-line.w-80 { width: 80%; }
+.sk-line.lg { height: 18px; }
+.sk-text { display: inline-block; width: 7em; height: 1em; vertical-align: middle; }
+.sk-row { display: flex; justify-content: space-between; gap: 12px; }
+@media (prefers-reduced-motion: reduce) { .sk-line, .sk-text { animation: none; } }
+
+.empty-state { background: var(--bg-card); border: 1px dashed var(--border); border-radius: 16px; text-align: center; padding: 34px 20px; }
+.empty-state__icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; font-size: 1.6rem;
+  background: var(--gold-glow); color: var(--gold); border: 1px solid var(--border-light); }
+.empty-state h3 { margin: 0 0 6px; font-size: 1rem; font-weight: 800; color: var(--text-main); }
+.empty-state p { margin: 0 auto; max-width: 320px; font-size: .85rem; line-height: 1.8; color: var(--text-muted); }
+.empty-state .btn { margin-top: 16px; width: auto; display: inline-flex; padding-inline: 22px; }
+.empty-state.is-error { border-style: solid; border-color: rgba(239, 68, 68, .35); }
+.empty-state.is-error .empty-state__icon { background: rgba(239, 68, 68, .12); color: var(--danger); border-color: rgba(239, 68, 68, .35); }
+
+/* ===== صفحة طلباتي وعروض الأسعار ===== */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 14px; flex-wrap: wrap; }
+.page-head h2 { margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--text-main); }
+.page-head p { margin: 2px 0 0; font-size: .8rem; color: var(--text-muted); }
+.page-head .btn { width: auto; display: inline-flex; padding: 9px 16px; }
+.sr-card { padding: 0; overflow: hidden; }
+.sr-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 16px 16px 12px; }
+.sr-card__no { font-size: .75rem; color: var(--gold); font-weight: 800; letter-spacing: .3px; direction: ltr; text-align: right; }
+.sr-card__title { margin: 2px 0 0; font-size: 1rem; font-weight: 800; color: var(--text-main); }
+.sr-status { flex: none; font-size: .72rem; font-weight: 800; padding: 5px 10px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.sr-status.tone-wait { color: #F59E0B; background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); }
+.sr-status.tone-action { color: #0B1329; background: var(--gold); border-color: var(--gold); }
+.sr-status.tone-ok { color: #10B981; background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
+.sr-status.tone-bad { color: #EF4444; background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); }
+.sr-status.tone-info { color: #60A5FA; background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.35); }
+.sr-steps { display: flex; gap: 4px; padding: 0 16px 14px; }
+.sr-steps span { flex: 1; height: 5px; border-radius: 4px; background: rgba(148,163,184,.18); }
+.sr-steps span.on { background: var(--gold); }
+.sr-quote { margin: 0 16px 14px; padding: 14px; border-radius: 14px; background: var(--bg-input); border: 1px solid var(--border-light); }
+.sr-quote__top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sr-quote__label { font-size: .75rem; color: var(--text-muted); font-weight: 700; }
+.sr-quote__amount { font-size: 1.35rem; font-weight: 900; color: var(--gold); }
+.sr-quote__meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--text-muted); margin-top: 6px; }
+.sr-quote__details { margin-top: 10px; font-size: .85rem; line-height: 1.9; color: var(--text-main); white-space: pre-wrap; }
+.sr-decide { margin-top: 12px; display: grid; gap: 8px; }
+.sr-decide textarea, .sr-chat__compose textarea { width: 100%; min-height: 70px; resize: vertical; background: var(--bg-main); color: var(--text-main);
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: .88rem; }
+.sr-decide__btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sr-chat { border-top: 1px solid var(--border); padding: 14px 16px 16px; }
+.sr-chat__title { font-size: .82rem; font-weight: 800; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.sr-chat__log { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; padding: 2px; }
+.sr-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: .86rem; line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
+.sr-msg small { display: block; font-size: .68rem; opacity: .7; margin-top: 2px; }
+.sr-msg.mine { align-self: flex-start; background: rgba(212,175,55,.16); border: 1px solid rgba(212,175,55,.35); border-start-start-radius: 4px; }
+.sr-msg.theirs { align-self: flex-end; background: var(--bg-input); border: 1px solid var(--border); border-start-end-radius: 4px; }
+.sr-chat__empty { font-size: .8rem; color: var(--text-muted); text-align: center; padding: 8px 0; }
+.sr-chat__compose { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
+.sr-chat__compose textarea { min-height: 44px; flex: 1; }
+.sr-chat__compose .btn { width: 46px; height: 46px; padding: 0; flex: none; display: grid; place-items: center; }
+@media (max-width: 360px) { .sr-decide__btns { grid-template-columns: 1fr; } }

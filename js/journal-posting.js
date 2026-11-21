@@ -35,7 +35,7 @@ Object.assign(Accounting, {
       document.getElementById('postingSummary').textContent = 'لا توجد فترة محددة';
       return;
     }
-    body.innerHTML = '<tr><td colspan="9">جاري تحميل قيود الفترة...</td></tr>';
+    body.innerHTML = '<tr class="sk-row"><td colspan="9"><div class="sk-table" role="status" aria-busy="true" aria-label="جاري تحميل قيود الفترة"><i></i><i></i><i></i></div></td></tr>';
     try {
       const params = new URLSearchParams({ from_date: period.start_date, to_date: period.end_date, include_closed: 'true', all: 'true' });
       const response = await fetch('/api/accounting/journal-entries?' + params);

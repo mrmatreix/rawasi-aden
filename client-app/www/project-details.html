@@ -30,8 +30,8 @@
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
-          <h2 id="projectName" style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin-bottom: 4px;">جاري التحميل...</h2>
-          <span id="projectStatusBadge" class="badge badge-active">قيد التنفيذ</span>
+          <h2 id="projectName" style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin-bottom: 4px;"><span class="sk-text" style="width: 10em; height: 1.1em;" aria-label="جاري التحميل"></span></h2>
+          <span id="projectStatusBadge" class="badge badge-active"><span class="sk-text" style="width: 4em;"></span></span>
         </div>
         <div style="text-align: left;">
           <div style="font-size: 0.7rem; color: var(--text-muted);">نسبة الإنجاز</div>
@@ -151,6 +151,10 @@
         // رأس الصفحة
         document.getElementById('headerProjectCode').innerText = p.code || '';
         document.getElementById('projectName').innerText = p.name;
+        // حالة المشروع الفعلية (كانت ثابتة "قيد التنفيذ" لكل المشاريع)
+        const statusBadge = document.getElementById('projectStatusBadge');
+        statusBadge.className = 'badge ' + (p.status === 'active' ? 'badge-active' : 'badge-approved');
+        statusBadge.textContent = p.status === 'active' ? 'قيد التنفيذ' : 'مكتمل';
         document.getElementById('projectProgressNum').innerText = ClientApp.formatProgress(p.progress_percentage);
         document.getElementById('projectProgressBar').style.width = `${ClientApp.progressWidth(p.progress_percentage)}%`;
         document.getElementById('msgProjectBtn').href = `messages.html?project_id=${p.id}&project_name=${encodeURIComponent(p.name)}`;
@@ -170,6 +174,8 @@
         renderDrawings(data.drawings || []);
         renderReports(data.daily_reports || []);
       } catch (err) {
+        document.getElementById('projectName').textContent = 'تعذر تحميل المشروع';
+        document.querySelectorAll('.sk-text').forEach(el => { el.replaceWith('—'); });
         ClientApp.showToast(err.message || 'تعذر تحميل تفاصيل المشروع', 'error');
       }
     }
@@ -185,7 +191,7 @@
     function renderInvoices(invoices) {
       const container = document.getElementById('invoicesList');
       if (!invoices || invoices.length === 0) {
-        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد مستخلصات مسجلة لهذا المشروع بعد.</div>';
+        container.innerHTML = ClientApp.emptyState({ icon: 'fa-file-invoice-dollar', title: 'لا توجد مستخلصات مسجلة لهذا المشروع بعد' });
         return;
       }
 
@@ -229,7 +235,7 @@
     function renderPayments(payments) {
       const container = document.getElementById('paymentsList');
       if (!payments || payments.length === 0) {
-        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد سندات قبض مسجلة لهذا المشروع بعد.</div>';
+        container.innerHTML = ClientApp.emptyState({ icon: 'fa-money-check', title: 'لا توجد سندات قبض مسجلة لهذا المشروع بعد' });
         return;
       }
 
@@ -253,7 +259,7 @@
     function renderDrawings(drawings) {
       const container = document.getElementById('drawingsList');
       if (!drawings || drawings.length === 0) {
-        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد مخططات هندسية مرفوعة حالياً.</div>';
+        container.innerHTML = ClientApp.emptyState({ icon: 'fa-compass-drafting', title: 'لا توجد مخططات هندسية مرفوعة حالياً' });
         return;
       }
 
@@ -276,7 +282,7 @@
     function renderReports(reports) {
       const container = document.getElementById('reportsList');
       if (!reports || reports.length === 0) {
-        container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-muted); padding: 30px 0;">لا توجد تقارير يومية من الموقع مسجلة بعد.</div>';
+        container.innerHTML = ClientApp.emptyState({ icon: 'fa-helmet-safety', title: 'لا توجد تقارير يومية من الموقع مسجلة بعد' });
         return;
       }
 
