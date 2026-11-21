@@ -660,16 +660,23 @@
         { title: 'التقارير المالية والختامية', category: 'تقارير', icon: '📈', nav: 'reports', keywords: 'قائمة الدخل ميزانية عمومية ارباح خسائر' },
         { title: 'المخازن والمستودعات', category: 'المخزون', icon: '📦', nav: 'inventory', keywords: 'مخزن بضاعة اصناف جرد صرف مواد' },
         { title: 'شؤون الموظفين والموارد البشرية', category: 'الموظفين', icon: '👔', nav: 'hr', keywords: 'رواتب موظفين اجازات حضور غياب' },
-        { title: 'تهيئة وإعدادات النظام', category: 'إدارة النظام', icon: '⚙️', nav: 'settings', keywords: 'اعدادات مستخدمين صلاحيات نسخ احتياطي' }
+        { title: 'تهيئة وإعدادات النظام', category: 'إدارة النظام', icon: '⚙️', nav: 'settings', keywords: 'اعدادات مستخدمين صلاحيات نسخ احتياطي' },
+        { title: 'تطبيق العملاء وطلبات الخدمات', category: 'العملاء', icon: '📱', nav: 'clientApp', keywords: 'بوابة العملاء طلبات زوار عروض اسعار رسائل' },
+        { title: 'ترحيل القيود والسندات', category: 'المالية والحسابات', icon: '✅', nav: 'journalPosting', keywords: 'ترحيل اعتماد مسودات فترات' },
+        { title: 'التدفقات النقدية', category: 'المالية والحسابات', icon: '💧', nav: 'cashFlow', keywords: 'تدفق نقدي توقعات سيولة' },
+        { title: 'دورة حياة العقود', category: 'المشاريع', icon: '📜', nav: 'contractLifecycle', keywords: 'عقود ضمانات تنبيهات انتهاء' },
+        { title: 'بنود الأعمال المرجعية', category: 'المشاريع', icon: '🧱', nav: 'projectWorkItems', keywords: 'بنود اعمال وحدات اسعار' },
+        { title: 'تقرير تقدم المشاريع', category: 'المشاريع', icon: '📐', nav: 'projectProgressReport', keywords: 'نسبة انجاز تقدم تقرير' },
+        { title: 'إغلاق المشاريع', category: 'المشاريع', icon: '🏁', nav: 'projectCloseout', keywords: 'اغلاق تسليم نهائي مشروع' }
       ],
 
       // إجراءات سريعة لفتح النوافذ
       quickActions: [
-        { title: 'مشروع جديد +', category: 'إجراء سريع', icon: '⚡', action: () => Projects.openNewModal(), keywords: 'اضافة مشروع جديد' },
-        { title: 'سند قبض جديد +', category: 'إجراء سريع', icon: '⚡', action: () => Accounting.openReceiptModal(), keywords: 'اضافة سند قبض تحصيل' },
-        { title: 'سند صرف جديد +', category: 'إجراء سريع', icon: '⚡', action: () => Accounting.openExpenseModal(), keywords: 'اضافة سند صرف نفقة' },
-        { title: 'قيد يومي جديد +', category: 'إجراء سريع', icon: '⚡', action: () => Accounting.openJournalModal(), keywords: 'اضافة قيد محاسبي' },
-        { title: 'صرف عهدة جديدة +', category: 'إجراء سريع', icon: '⚡', action: () => Accounting.openCustodyModal(), keywords: 'اضافة عهدة موظف' }
+        { title: 'مشروع جديد +', category: 'إجراء سريع', icon: '⚡', view: 'projects', action: () => Projects.openNewModal(), keywords: 'اضافة مشروع جديد' },
+        { title: 'سند قبض جديد +', category: 'إجراء سريع', icon: '⚡', view: 'revenues', action: () => Accounting.openReceiptModal(), keywords: 'اضافة سند قبض تحصيل' },
+        { title: 'سند صرف جديد +', category: 'إجراء سريع', icon: '⚡', view: 'expenses', action: () => Accounting.openExpenseModal(), keywords: 'اضافة سند صرف نفقة' },
+        { title: 'قيد يومي جديد +', category: 'إجراء سريع', icon: '⚡', view: 'journal', action: () => Accounting.openJournalModal(), keywords: 'اضافة قيد محاسبي' },
+        { title: 'صرف عهدة جديدة +', category: 'إجراء سريع', icon: '⚡', view: 'custody', action: () => Accounting.openCustodyModal(), keywords: 'اضافة عهدة موظف' }
       ],
 
       init() {
@@ -728,81 +735,109 @@
         }
       },
 
+      // توحيد الكتابة العربية للمطابقة: أ/إ/آ→ا، ة→ه، ى→ي، إزالة التشكيل، الأرقام العربية
+      normalize(value) {
+        return String(value ?? '').toLowerCase()
+          .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+          .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+          .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+          .replace(/\s+/g, ' ').trim();
+      },
+
+      escape(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      },
+
+      // الشاشات والإجراءات التي يملك المستخدم صلاحية فتحها فقط
+      canUse(item) {
+        const view = item.nav || item.view;
+        if (!view || typeof Auth === 'undefined' || typeof Auth.canAccessView !== 'function') return true;
+        try { return Auth.canAccessView(view); } catch (_) { return true; }
+      },
+
+      matches(item, terms) {
+        const hay = this.normalize([item.title, item.keywords, item.category].join(' '));
+        return terms.every(t => hay.includes(t));
+      },
+
+      // أنواع نتائج البحث في البيانات (من الخادم، حسب صلاحيات المستخدم)
+      remoteTypes: {
+        project:  { icon: '🏗️', category: 'مشروع',      open: id => { App.navigate('projects'); if (window.Projects && typeof Projects.viewDetails === 'function') Projects.viewDetails(id); } },
+        client:   { icon: '🤝', category: 'عميل',       open: id => App.openClientChainModal(id) },
+        supplier: { icon: '🚚', category: 'مورد',       open: id => App.showSupplierStatement(id) },
+        request:  { icon: '📨', category: 'طلب خدمة',   open: id => App.openGuestRequestAlert(id) }
+      },
+
       async search(query) {
-        const q = (query || '').trim().toLowerCase();
-        let results = [];
+        const terms = this.normalize(query).split(' ').filter(Boolean);
+        const actions = this.quickActions.filter(item => this.canUse(item));
+        const screens = this.staticEntries.filter(item => this.canUse(item));
+        this.remoteSeq = (this.remoteSeq || 0) + 1;
+        const seq = this.remoteSeq;
+        clearTimeout(this.remoteTimer);
 
-        if (!q) {
-          // عرض الإجراءات والشاشات الأكثر استخداماً
-          results = [
-            ...this.quickActions,
-            ...this.staticEntries.slice(0, 6)
-          ];
+        if (!terms.length) {
+          this.currentResults = [...actions, ...screens.slice(0, 6)];
+          this.loadingRemote = false;
         } else {
-          // 1. مطابقة الشاشات الثابتة
-          const matchedStatic = this.staticEntries.filter(item =>
-            item.title.toLowerCase().includes(q) ||
-            item.keywords.toLowerCase().includes(q) ||
-            item.category.toLowerCase().includes(q)
-          );
-
-          // 2. مطابقة الإجراءات السريعة
-          const matchedActions = this.quickActions.filter(item =>
-            item.title.toLowerCase().includes(q) ||
-            item.keywords.toLowerCase().includes(q)
-          );
-
-          results = [...matchedActions, ...matchedStatic];
-
-          // 3. البحث في المشاريع والعملاء المحملة في الذاكرة
-          if (window.Projects && Array.isArray(Projects.allProjects)) {
-            const matchedProjects = Projects.allProjects
-              .filter(p => (p.name && p.name.toLowerCase().includes(q)) || (p.code && p.code.toLowerCase().includes(q)) || (p.client_name && p.client_name.toLowerCase().includes(q)))
-              .slice(0, 4)
-              .map(p => ({
-                title: `مشروع: ${p.name}`,
-                category: 'المشاريع الإنشائية',
-                icon: '🏗️',
-                action: () => {
-                  App.navigate('projects');
-                  if (typeof Projects.viewDetails === 'function') Projects.viewDetails(p.id);
-                }
-              }));
-            results = results.concat(matchedProjects);
-          }
+          this.currentResults = [...actions.filter(i => this.matches(i, terms)), ...screens.filter(i => this.matches(i, terms))];
+          this.loadingRemote = terms.join('').length >= 2;
         }
-
-        this.currentResults = results;
-        this.selectedIndex = results.length > 0 ? 0 : -1;
+        this.selectedIndex = this.currentResults.length > 0 ? 0 : -1;
         this.renderResults();
+        if (!this.loadingRemote) return;
+
+        // البحث في المشاريع والعملاء والموردين والطلبات بعد توقف الكتابة لحظة
+        this.remoteTimer = setTimeout(async () => {
+          let remote = [];
+          try {
+            const res = await fetch('/api/search?q=' + encodeURIComponent(String(query).trim().slice(0, 80)));
+            const data = await res.json();
+            if (res.ok && data.success) {
+              remote = (data.results || []).filter(r => this.remoteTypes[r.type]).map(r => {
+                const type = this.remoteTypes[r.type];
+                return { title: r.title, subtitle: r.subtitle, category: type.category, icon: type.icon, action: () => type.open(r.id) };
+              });
+            }
+          } catch (_) { /* تبقى نتائج الشاشات المحلية */ }
+          if (seq !== this.remoteSeq || !this.isOpen()) return;
+          this.loadingRemote = false;
+          const hadSelection = this.selectedIndex;
+          this.currentResults = [...remote, ...this.currentResults];
+          // نتائج البيانات أدق من أسماء الشاشات، فتظهر أولاً
+          this.selectedIndex = this.currentResults.length ? (remote.length ? 0 : Math.max(0, hadSelection)) : -1;
+          this.renderResults();
+        }, 220);
       },
 
       renderResults() {
         if (!this.resultsEl) return;
+        const esc = v => this.escape(v);
 
         if (this.currentResults.length === 0) {
-          this.resultsEl.innerHTML = `
-            <div class="cmd-no-results">
+          this.resultsEl.innerHTML = this.loadingRemote
+            ? `<div class="cmd-no-results" role="status"><span style="font-size: 1.6rem;">⏳</span><p>جاري البحث في المشاريع والعملاء والطلبات...</p></div>`
+            : `<div class="cmd-no-results">
               <span style="font-size: 2rem;">🔍</span>
-              <p>لم يتم العثور على أي نتائج مطابقة لكلمة البحث</p>
-            </div>
-          `;
+              <p>لا توجد نتائج مطابقة. جرّب اسماً آخر أو رقم الطلب أو رقم الهاتف.</p>
+            </div>`;
           return;
         }
 
         this.resultsEl.innerHTML = this.currentResults.map((item, index) => {
           const isSelected = index === this.selectedIndex;
+          const category = item.subtitle ? `${esc(item.category || 'نظام')} · ${esc(item.subtitle)}` : esc(item.category || 'نظام');
           return `
-            <div class="cmd-result-item ${isSelected ? 'selected' : ''}" data-index="${index}" onclick="UI.GlobalSearch.selectItem(${index})">
-              <span class="cmd-item-icon">${item.icon || '📌'}</span>
+            <div class="cmd-result-item ${isSelected ? 'selected' : ''}" data-index="${index}" role="option" aria-selected="${isSelected}" onclick="UI.GlobalSearch.selectItem(${index})">
+              <span class="cmd-item-icon" aria-hidden="true">${esc(item.icon || '📌')}</span>
               <div class="cmd-item-info">
-                <span class="cmd-item-title">${item.title}</span>
-                <span class="cmd-item-category">${item.category || 'نظام'}</span>
+                <span class="cmd-item-title">${esc(item.title)}</span>
+                <span class="cmd-item-category">${category}</span>
               </div>
               <span class="cmd-item-enter-hint">↵</span>
             </div>
           `;
-        }).join('');
+        }).join('') + (this.loadingRemote ? '<div class="cmd-item-category" role="status" style="padding: 8px 14px; opacity: .8;">⏳ جاري البحث في المشاريع والعملاء والطلبات...</div>' : '');
 
         this.scrollToSelected();
       },

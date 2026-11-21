@@ -138,6 +138,7 @@ app.use('/api/contracts', requireAuth, require('./routes/contract_lifecycle'));
 app.use('/api/contracts', requireAuth, require('./routes/contract_alerts'));
 app.use('/api/client-portal', require('./routes/client_portal'));
 app.use('/api/admin/client-users', requireAuth, require('./routes/admin_client_users'));
+app.use('/api/search', requireAuth, require('./routes/search'));
 
 
 // مسار توثيق الـ API التفاعلي ومواصفة OpenAPI 3.0
