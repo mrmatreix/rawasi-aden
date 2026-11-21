@@ -60,6 +60,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // الملفات ذات بصمة الإصدار لا تتغير أبداً: تُقدَّم من الكاش فوراً (مفيد مع الشبكات الضعيفة)
+  if (/(?:^|&)v=/.test(url.search.slice(1))) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+        }
+        return networkResponse;
+      }))
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

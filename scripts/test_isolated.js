@@ -6,6 +6,7 @@ files.push(...['financial_report_filters','journal_reference_posting','party_reg
 files.push('tests/journal_posting_ui.test.js');
 files.push('tests/integration/cash_flow_projection.test.js');
 files.push('tests/cash_flow_ui.test.js');
+files.push('tests/dialogs_ui.test.js');
 files.push('tests/integration/sales_creation.test.js');
 files.push('tests/integration/project_setup.test.js');
 files.push('tests/integration/settings_access.test.js');

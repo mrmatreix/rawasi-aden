@@ -37,7 +37,7 @@ test('draft deletion follows user permission and refreshes the matching register
   global.Auth={hasPermission:permission=>permission==='expenses:cancel'};
   assert(Accounting.draftDeleteButton('expense',1).includes('حذف المسودة'));
   assert.equal(Accounting.draftDeleteButton('receipt',1),'');
-  global.confirm=()=>true;
+  global.UIDialog={confirm:async()=>true};
   global.fetch=async(url,options)=>{requested.push([url,options.method]);return {ok:true,json:async()=>({success:true,message:'deleted'})};};
   global.App={showToast:(...args)=>notices.push(args),closeModal(){},loadExpensesTable:async()=>refreshed.push('expense'),loadRevenuesTable:async()=>refreshed.push('receipt')};
   const original=Accounting.loadJournalEntries;
@@ -48,6 +48,6 @@ test('draft deletion follows user permission and refreshes the matching register
     assert.deepEqual(refreshed,['expense','receipt','journal']);
     global.fetch=async()=>({ok:false,json:async()=>({success:false,message:'posted protected'})});
     await Accounting.deleteDraft('expense',6);assert.deepEqual(notices.at(-1),['posted protected','error']);
-    global.confirm=()=>false;const before=requested.length;await Accounting.deleteDraft('journal',7);assert.equal(requested.length,before);
-  }finally{Accounting.loadJournalEntries=original;for(const key of ['Auth','confirm','fetch','App'])delete global[key];}
+    global.UIDialog={confirm:async()=>false};const before=requested.length;await Accounting.deleteDraft('journal',7);assert.equal(requested.length,before);
+  }finally{Accounting.loadJournalEntries=original;for(const key of ['Auth','UIDialog','fetch','App'])delete global[key];}
 });

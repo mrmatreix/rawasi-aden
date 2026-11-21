@@ -117,7 +117,7 @@ const Settings = {
   },
 
   async deleteClientUser(id, fullName) {
-    if (!confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
+    if (!await UIDialog.confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
       return;
     }
 
@@ -2918,7 +2918,7 @@ const Settings = {
       if (boundResetBtn) boundResetBtn.style.display = 'none';
       return;
     }
-    if (!confirm('هل تريد فك قفل الجهاز المعتمد لهذا المستخدم؟ سيتمكن من تسجيل الدخول من جهاز جديد واعتماده.')) {
+    if (!await UIDialog.confirm('هل تريد فك قفل الجهاز المعتمد لهذا المستخدم؟ سيتمكن من تسجيل الدخول من جهاز جديد واعتماده.')) {
       return;
     }
     try {
@@ -3333,7 +3333,7 @@ const Settings = {
         }
       });
     } else {
-      if (!confirm(`هل أنت متأكد من حذف المستخدم (${username}) نهائياً من النظام؟`)) {
+      if (!await UIDialog.confirm(`هل أنت متأكد من حذف المستخدم (${username}) نهائياً من النظام؟`)) {
         return;
       }
 
@@ -3368,7 +3368,7 @@ const Settings = {
 
   // ================== إنهاء جلسة مستخدم وفصله عن النظام ==================
   async disconnectUser(userId, userName) {
-    const isConfirm = confirm(`هل أنت متأكد من رغبتك في إنهاء جلسة المستخدم (${userName}) وفصله عن النظام فوراً لمنع التكرار؟`);
+    const isConfirm = await UIDialog.confirm(`هل أنت متأكد من رغبتك في إنهاء جلسة المستخدم (${userName}) وفصله عن النظام فوراً لمنع التكرار؟`);
     if (!isConfirm) return;
 
     try {
@@ -3611,7 +3611,7 @@ const Settings = {
     }
 
     const targetName = this._selectedBackupFile ? this._selectedBackupFile.name : this._selectedServerBackupName;
-    if (!confirm(`هل أنت متأكد تماماً من استعادة النسخة الاحتياطية (${targetName})؟\n\nتنبيه: سيتم استبدال كافة البيانات الحالية ببيانات النسخة المحددة.`)) {
+    if (!await UIDialog.confirm(`هل أنت متأكد تماماً من استعادة النسخة الاحتياطية (${targetName})؟\n\nتنبيه: سيتم استبدال كافة البيانات الحالية ببيانات النسخة المحددة.`)) {
       return;
     }
 
@@ -4055,7 +4055,7 @@ const Settings = {
   },
 
   async deleteBackupRecord(backupId, fileName) {
-    if (!confirm(`هل أنت متأكد من رغبتك في حذف النسخة الاحتياطية (${fileName}) نهائياً؟\n\nتنبيه: لا يمكن التراجع عن هذا الإجراء.`)) {
+    if (!await UIDialog.confirm(`هل أنت متأكد من رغبتك في حذف النسخة الاحتياطية (${fileName}) نهائياً؟\n\nتنبيه: لا يمكن التراجع عن هذا الإجراء.`)) {
       return;
     }
 
@@ -4285,8 +4285,8 @@ const Settings = {
     }
   },
 
-  confirmRestoreLogoutBackup(fileName) {
-    if (!confirm(`هل ترغب في استعادة النسخة الاحتياطية (${fileName})؟\n\nستتم إعادة المشروع تماماً إلى اللحظة التي تم فيها تسجيل الخروج وحفظ تلك النسخة.`)) {
+  async confirmRestoreLogoutBackup(fileName) {
+    if (!await UIDialog.confirm(`هل ترغب في استعادة النسخة الاحتياطية (${fileName})؟\n\nستتم إعادة المشروع تماماً إلى اللحظة التي تم فيها تسجيل الخروج وحفظ تلك النسخة.`)) {
       return;
     }
     this.selectServerBackup(fileName);
@@ -4665,7 +4665,7 @@ const Settings = {
   },
 
   async runMysqlMigration() {
-    const isConfirmed = confirm(
+    const isConfirmed = await UIDialog.confirm(
       "هل أنت متأكد من رغبتك في بدء ترحيل كافة الجداول والبيانات من SQLite إلى MySQL الآن؟\n\n" +
       "• سيتم نسخ كافة المشاريع، الفواتير، السندات، الحسابات، والعملاء.\n" +
       "• لن يتم حذف بياناتك القديمة من SQLite بل ستبقى محفوظة بأمان كنسخة احتياطية."
@@ -5202,7 +5202,7 @@ const Settings = {
     const passphrase = document.getElementById('vaultRestorePassphrase')?.value?.trim() || '';
     const restoreFiles = Boolean(document.getElementById('vaultRestoreFilesCheck')?.checked);
 
-    if (!confirm('تحذير نهائي: هل أنت متأكد من استعادة هذا الأرشيف وتحديث بيانات النظام والمشاريع؟\nسيقوم النظام بحفظ نسخة أمان طارئة تلقائياً.')) {
+    if (!await UIDialog.confirm('تحذير نهائي: هل أنت متأكد من استعادة هذا الأرشيف وتحديث بيانات النظام والمشاريع؟\nسيقوم النظام بحفظ نسخة أمان طارئة تلقائياً.')) {
       return;
     }
 

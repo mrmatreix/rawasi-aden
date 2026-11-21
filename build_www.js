@@ -30,5 +30,8 @@ if (!fs.existsSync(dest)) {
   }
 });
 
+// نوافذ التأكيد والتنبيه مشتركة: المصدر js/dialogs.js وتطبيق العملاء يأخذ نسخة منه
+fs.copyFileSync(path.join(root, 'js', 'dialogs.js'), path.join(root, 'client-app', 'www', 'js', 'dialogs.js'));
+
 console.log('✓ www build completed successfully for Cloudflare Pages!');
 process.exit(0);

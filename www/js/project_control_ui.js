@@ -421,7 +421,7 @@ const ProjectControlUI = {
 
   // اعتماد وتطبيق النسبة المحسوبة تلقائياً بنقرة واحدة
   async adoptCalculatedCompletion(pct) {
-    if (!confirm(`هل أنت متأكد من رغبتك في اعتماد النسبة المحسوبة فيزيائياً (${pct}%) كنسبة إنجاز رسمية للمشروع؟ سيتم تحديث شريط مؤشرات المشروع تلقائياً.`)) {
+    if (!await UIDialog.confirm(`هل أنت متأكد من رغبتك في اعتماد النسبة المحسوبة فيزيائياً (${pct}%) كنسبة إنجاز رسمية للمشروع؟ سيتم تحديث شريط مؤشرات المشروع تلقائياً.`)) {
       return;
     }
     const pid = this.getProjectId();
@@ -844,7 +844,7 @@ const ProjectControlUI = {
   },
 
   async deleteWBSActivity(activityId) {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا النشاط؟')) return;
+    if (!await UIDialog.confirm('هل أنت متأكد من رغبتك في حذف هذا النشاط؟')) return;
     const pid = this.getProjectId();
     try {
       const res = await this.fetch(`/api/project-control/${pid}/wbs/${activityId}`, { method: 'DELETE' });

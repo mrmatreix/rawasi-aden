@@ -217,9 +217,8 @@ const Auth = {
           }
         });
         const data = await res.json();
-        if (!data.success && data.session_terminated) {
-          this.stopHeartbeat();
-          this.logout(true, data.message || 'تم تسجيل الدخول بهذا الحساب من جهاز أو نافذة أخرى. تم إنهاء هذه الجلسة منعاً للتكرار.');
+        if (res.status === 401 || (!data.success && data.session_terminated)) {
+          this.handleExpiredSession(data.message);
         }
       } catch (e) {
         // خطأ شبكة مؤقت
@@ -232,6 +231,31 @@ const Auth = {
     if (this._heartbeatInterval) {
       clearInterval(this._heartbeatInterval);
       this._heartbeatInterval = null;
+    }
+  },
+
+  // Keep unsaved forms in the current page; never retry a write automatically.
+  handleExpiredSession(message) {
+    const expiredToken = this.token;
+    const username = this.currentUser?.username;
+    this.stopHeartbeat();
+    this.stopActivityTracker();
+    this.token = null;
+    this.sessionId = null;
+    this.currentUser = null;
+    sessionStorage.removeItem('rawasi_token');
+    sessionStorage.removeItem('rawasi_user');
+    sessionStorage.removeItem('rawasi_session_active');
+    if (expiredToken && localStorage.getItem('rawasi_token') === expiredToken) {
+      localStorage.removeItem('rawasi_token');
+      localStorage.removeItem('rawasi_user');
+    }
+    if (username) localStorage.setItem('rawasi_last_username', username);
+    this.showLogin();
+    const errorBox = document.getElementById('loginErrorMsg');
+    if (errorBox) {
+      errorBox.textContent = 'انتهت جلسة الدخول أو أُغلقت. سجل الدخول مجددًا في هذه الصفحة، ثم أعد الحفظ؛ تبقى البيانات غير المحفوظة في النموذج المفتوح.';
+      errorBox.style.display = 'block';
     }
   },
 
@@ -248,11 +272,10 @@ const Auth = {
         localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         this.updateUserUI();
         this.applyPermissions();
-      } else {
+      } else if (res.status === 401 || res.status === 403 || data.session_terminated) {
         // انتهت صلاحية الجلسة أو تم تسجيل الدخول من مكان آخر
         console.warn('جلسة الدخول منتهية أو غير صالحة:', data.message);
-        this.stopHeartbeat();
-        this.logout(false, data.message || 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول');
+        this.handleExpiredSession(data.message);
       }
     } catch (err) {
       console.warn('تعذر التحقق من الخادم حالياً، مواصلة العمل بالجلسة المخزنة محلياً:', err);
@@ -1087,7 +1110,8 @@ const Auth = {
       'cash': 'cash:view',
       'contractLifecycle': 'projects:view',
       'cashFlow': 'accounting:view,reports:view',
-      'settings': 'settings:users,settings:company,settings:backup,client_app:view'
+      'settings': 'settings:users,settings:company,settings:backup',
+      'clientApp': 'client_app:view'
     };
 
     const perm = viewPermMap[viewId];
@@ -1209,8 +1233,7 @@ const Auth = {
     if (typeof Sidebar !== 'undefined') Sidebar.refresh();
 
     // إخفاء أو إظهار ألسنة الإعدادات حسب الصلاحيات
-    const clientTab = document.getElementById('tabBtn_settings_client_app');
-    if(clientTab)clientTab.style.display=this.hasPermission('settings:users,client_app:view')?'':'none';
+    for (const [id,permission] of [['settingsHeaderAddUser','settings:users'],['settingsHeaderBackup','settings:backup'],['settingsHeaderRestore','settings:backup'],['clientAppAddUser','client_app:create']]) { const el=document.getElementById(id);if(el)el.style.display=this.hasPermission(permission)?'':'none'; }
     const usersTab = document.getElementById('tabBtn_settings_users');
     if (usersTab) usersTab.style.display = this.hasPermission('settings:users') ? '' : 'none';
 
@@ -1615,7 +1638,7 @@ const Auth = {
     if (!this._targetSecurityUserId) return;
     const target = this._securityUsersList.find(u => u.id === this._targetSecurityUserId);
     const targetName = target?.full_name || target?.username || 'هذا المستخدم';
-    const confirmReset = confirm(`هل أنت متأكد من رغبتك في إلغاء الإعدادات المخصصة للمستخدم (${targetName}) واستعادة الإعدادات العامة الافتراضية للنظام؟`);
+    const confirmReset = await UIDialog.confirm(`هل أنت متأكد من رغبتك في إلغاء الإعدادات المخصصة للمستخدم (${targetName}) واستعادة الإعدادات العامة الافتراضية للنظام؟`);
     if (!confirmReset) return;
 
     try {
@@ -1833,7 +1856,7 @@ const Auth = {
 
   // فك قفل الجهاز المعتمد لمستخدم محدد
   async resetAuthorizedDevice() {
-    if (!confirm('هل أنت متأكد من فك قفل الجهاز المعتمد؟ سيتم السماح للمستخدم بتسجيل الدخول من جهاز جديد واعتماده.')) {
+    if (!await UIDialog.confirm('هل أنت متأكد من فك قفل الجهاز المعتمد؟ سيتم السماح للمستخدم بتسجيل الدخول من جهاز جديد واعتماده.')) {
       return;
     }
     if (this._targetSecurityUserId) {
@@ -2004,7 +2027,7 @@ const Auth = {
 
   // تأكيد وإغلاق البرنامج بالكامل من شاشة الدخول مع حفظ نسخة احتياطية
   async confirmShutdownApp() {
-    const isConfirm = confirm('هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن وإنهاء البرنامج؟\n\nسيتم حفظ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.');
+    const isConfirm = await UIDialog.confirm('هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن وإنهاء البرنامج؟\n\nسيتم حفظ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.');
     if (!isConfirm) return;
 
     if (typeof App !== 'undefined' && App.showToast) {

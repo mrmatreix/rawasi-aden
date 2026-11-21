@@ -1638,7 +1638,7 @@ const Auth = {
     if (!this._targetSecurityUserId) return;
     const target = this._securityUsersList.find(u => u.id === this._targetSecurityUserId);
     const targetName = target?.full_name || target?.username || 'هذا المستخدم';
-    const confirmReset = confirm(`هل أنت متأكد من رغبتك في إلغاء الإعدادات المخصصة للمستخدم (${targetName}) واستعادة الإعدادات العامة الافتراضية للنظام؟`);
+    const confirmReset = await UIDialog.confirm(`هل أنت متأكد من رغبتك في إلغاء الإعدادات المخصصة للمستخدم (${targetName}) واستعادة الإعدادات العامة الافتراضية للنظام؟`);
     if (!confirmReset) return;
 
     try {
@@ -1856,7 +1856,7 @@ const Auth = {
 
   // فك قفل الجهاز المعتمد لمستخدم محدد
   async resetAuthorizedDevice() {
-    if (!confirm('هل أنت متأكد من فك قفل الجهاز المعتمد؟ سيتم السماح للمستخدم بتسجيل الدخول من جهاز جديد واعتماده.')) {
+    if (!await UIDialog.confirm('هل أنت متأكد من فك قفل الجهاز المعتمد؟ سيتم السماح للمستخدم بتسجيل الدخول من جهاز جديد واعتماده.')) {
       return;
     }
     if (this._targetSecurityUserId) {
@@ -2027,7 +2027,7 @@ const Auth = {
 
   // تأكيد وإغلاق البرنامج بالكامل من شاشة الدخول مع حفظ نسخة احتياطية
   async confirmShutdownApp() {
-    const isConfirm = confirm('هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن وإنهاء البرنامج؟\n\nسيتم حفظ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.');
+    const isConfirm = await UIDialog.confirm('هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن وإنهاء البرنامج؟\n\nسيتم حفظ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.');
     if (!isConfirm) return;
 
     if (typeof App !== 'undefined' && App.showToast) {

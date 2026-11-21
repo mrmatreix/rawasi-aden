@@ -15,6 +15,7 @@
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/js/dialogs.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -1696,7 +1697,7 @@
     }
 
     async function revokeSessions(id) {
-      if (!confirm('هل أنت متأكد من رغبتك في إبطال جميع جلسات الدخول الحالية وتجميد الحساب فوراً؟')) {
+      if (!await UIDialog.confirm('هل أنت متأكد من رغبتك في إبطال جميع جلسات الدخول الحالية وتجميد الحساب فوراً؟')) {
         return;
       }
       try {
@@ -1833,7 +1834,7 @@
     }
 
     async function deleteUser(id, fullName) {
-      if (!confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
+      if (!await UIDialog.confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
         return;
       }
 
@@ -1891,7 +1892,7 @@
     }
 
     async function addRecommendedServices() {
-      if (!confirm('سيتم إدراج 16 خدمة هندسية ومقاولات مقترحة. لن تُستبدل الخدمات الموجودة أو تعديلاتك الحالية. هل تريد المتابعة؟')) return;
+      if (!await UIDialog.confirm('سيتم إدراج 16 خدمة هندسية ومقاولات مقترحة. لن تُستبدل الخدمات الموجودة أو تعديلاتك الحالية. هل تريد المتابعة؟')) return;
       try {
         const res = await fetch('/api/admin/client-users/services-catalog/add-recommended', { method: 'POST', headers: getAuthHeaders() });
         const data = await res.json();
@@ -1940,7 +1941,7 @@
 
     async function deleteServiceCatalog(id) {
       const service = servicesCatalog.find(item => Number(item.id) === Number(id));
-      if (!service || !confirm(`حذف خدمة «${service.title}»؟ لا يمكن الحذف إذا كانت مرتبطة بطلبات سابقة.`)) return;
+      if (!service || !await UIDialog.confirm(`حذف خدمة «${service.title}»؟ لا يمكن الحذف إذا كانت مرتبطة بطلبات سابقة.`)) return;
       try {
         const res = await fetch(`/api/admin/client-users/services-catalog/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
         const data = await res.json();
@@ -2328,9 +2329,9 @@
     async function loadGuestAccessDays() {try{const res=await fetch('/api/admin/client-users/guest-access-settings',{headers:getAuthHeaders()});const data=await res.json();if(data.success)document.getElementById('guestAccessDays').value=data.days;}catch{}}
     async function saveGuestAccessDays() {try{const res=await fetch('/api/admin/client-users/guest-access-settings',{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({days:Number(document.getElementById('guestAccessDays').value)})});const data=await res.json();if(!data.success)throw new Error(data.message);showToast('تم حفظ مدة متابعة الزائر','success');}catch(err){showToast(err.message||'تعذر حفظ المدة','error');}}
     async function loadRetention(){try{const res=await fetch('/api/admin/client-users/service-request-retention',{headers:getAuthHeaders()});const data=await res.json();if(data.success){document.getElementById('retentionDays').value=data.days??'';document.getElementById('retentionSchedulerStatus').textContent=data.scheduler_enabled===false?'التنفيذ التلقائي معطل من إعداد الخادم؛ لن تُحذف الطلبات تلقائيًا حتى يُفعّل.':'';}}catch{showToast('تعذر تحميل مدة الاحتفاظ','error');}}
-    async function saveRetention(disable){const days=disable?null:Number(document.getElementById('retentionDays').value);if(!disable&&(!Number.isInteger(days)||days<1||days>3650)){showToast('أدخل مدة صحيحة من يوم إلى 3650 يوماً','error');return;}if(!disable&&!confirm('سيُحذف كل طلب غير مؤرشف تجاوز هذه المدة من تاريخ إنشائه، مع رسائله وعروضه ومرفقاته. هل تريد حفظ المدة؟'))return;try{const res=await fetch('/api/admin/client-users/service-request-retention',{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({days})});const data=await res.json();if(!data.success)throw new Error(data.message);document.getElementById('retentionDays').value=data.days??'';showToast(disable?'تم تعطيل الحذف التلقائي':'تم حفظ مدة الاحتفاظ','success');}catch(err){showToast(err.message||'تعذر حفظ الإعداد','error');}}
-    async function archiveRequest(id,archived){if(!archived&&!confirm('قد يصبح الطلب مؤهلاً للحذف التلقائي فور إلغاء الأرشفة إذا تجاوز مدة الاحتفاظ. هل تريد المتابعة؟'))return;try{const res=await fetch(`/api/admin/client-users/service-requests/${id}/archive`,{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({archived})});const data=await res.json();if(!data.success)throw new Error(data.message);showToast(archived?'تمت أرشفة الطلب':'تم إلغاء أرشفة الطلب','success');await loadServiceRequests();}catch(err){showToast(err.message||'تعذر تحديث الأرشيف','error');}}
-    async function deleteRequest(id){if(!confirm('حذف الطلب نهائياً مع رسائله وعروضه ومرفقاته؟'))return;try{const res=await fetch(`/api/admin/client-users/service-requests/${id}`,{method:'DELETE',headers:getAuthHeaders()});const data=await res.json();if(!data.success)throw new Error(data.message);showToast(data.message||'تم حذف الطلب','success');await loadServiceRequests();}catch(err){showToast(err.message||'تعذر حذف الطلب','error');}}
+    async function saveRetention(disable){const days=disable?null:Number(document.getElementById('retentionDays').value);if(!disable&&(!Number.isInteger(days)||days<1||days>3650)){showToast('أدخل مدة صحيحة من يوم إلى 3650 يوماً','error');return;}if(!disable&&!await UIDialog.confirm('سيُحذف كل طلب غير مؤرشف تجاوز هذه المدة من تاريخ إنشائه، مع رسائله وعروضه ومرفقاته. هل تريد حفظ المدة؟'))return;try{const res=await fetch('/api/admin/client-users/service-request-retention',{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({days})});const data=await res.json();if(!data.success)throw new Error(data.message);document.getElementById('retentionDays').value=data.days??'';showToast(disable?'تم تعطيل الحذف التلقائي':'تم حفظ مدة الاحتفاظ','success');}catch(err){showToast(err.message||'تعذر حفظ الإعداد','error');}}
+    async function archiveRequest(id,archived){if(!archived&&!await UIDialog.confirm('قد يصبح الطلب مؤهلاً للحذف التلقائي فور إلغاء الأرشفة إذا تجاوز مدة الاحتفاظ. هل تريد المتابعة؟'))return;try{const res=await fetch(`/api/admin/client-users/service-requests/${id}/archive`,{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({archived})});const data=await res.json();if(!data.success)throw new Error(data.message);showToast(archived?'تمت أرشفة الطلب':'تم إلغاء أرشفة الطلب','success');await loadServiceRequests();}catch(err){showToast(err.message||'تعذر تحديث الأرشيف','error');}}
+    async function deleteRequest(id){if(!await UIDialog.confirm('حذف الطلب نهائياً مع رسائله وعروضه ومرفقاته؟'))return;try{const res=await fetch(`/api/admin/client-users/service-requests/${id}`,{method:'DELETE',headers:getAuthHeaders()});const data=await res.json();if(!data.success)throw new Error(data.message);showToast(data.message||'تم حذف الطلب','success');await loadServiceRequests();}catch(err){showToast(err.message||'تعذر حذف الطلب','error');}}
     async function saveRequestSupervisor() {
       try{const res=await fetch('/api/admin/client-users/service-request-supervisor',{method:'PUT',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({supervisor_id:document.getElementById('defaultRequestSupervisor').value})});const data=await res.json();if(!data.success)throw new Error(data.message);showToast('تم حفظ مشرف استقبال الطلبات','success');}catch(err){showToast(err.message||'تعذر حفظ المشرف','error');}
     }
@@ -2574,7 +2575,7 @@
       const assignment=window.currentRequestAssignment;
       const recipient=document.getElementById('srvMessageRecipient').value;
       if(recipient==='visitor' && assignment?.source==='guest' && !assignment.manager && (!assignment.assignedTo || assignment.assignedTo===assignment.userId)) {
-        if(confirm('يُفضّل تعيين المشرف المختص للرد. اضغط موافق لاختيار المشرف، أو إلغاء لتخطي التعيين وإرسال الرد لموافقة المدير.')) {document.getElementById('srvReqAssigneeSelect').focus();document.getElementById('srvReqAssigneeSelect').scrollIntoView({behavior:'smooth',block:'center'});return;}
+        if(await UIDialog.confirm('يُفضّل تعيين المشرف المختص للرد. اضغط موافق لاختيار المشرف، أو إلغاء لتخطي التعيين وإرسال الرد لموافقة المدير.')) {document.getElementById('srvReqAssigneeSelect').focus();document.getElementById('srvReqAssigneeSelect').scrollIntoView({behavior:'smooth',block:'center'});return;}
       }
       try {const internal=recipient!=='visitor';const response=await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/${internal?'internal-message':'message'}`,{method:'POST',headers:getAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:document.getElementById('srvMessage').value,recipient_id:internal?Number(recipient):undefined,send_direct:!internal&&!!assignment?.manager})});const data=await response.json();if(!data.success)throw new Error(data.message);document.getElementById('srvMessage').value='';showToast(data.pending_approval?'أُرسل الرد لموافقة المدير العام':'تم إرسال الرسالة','success');await openServiceRequestModal(currentServiceRequestId);} catch(err){showToast(err.message||'تعذر إرسال الرسالة','error');}
     }
@@ -2625,7 +2626,7 @@
 
     async function executeConvertToProject() {
       if (!currentServiceRequestId) return;
-      if (!confirm('هل أنت متأكد من رغبتك في تحويل طلب الخدمة هذا إلى مشروع رسمي في النظام؟ سيتم إضافة العميل والمشروع وتحديث حالة الطلب.')) {
+      if (!await UIDialog.confirm('هل أنت متأكد من رغبتك في تحويل طلب الخدمة هذا إلى مشروع رسمي في النظام؟ سيتم إضافة العميل والمشروع وتحديث حالة الطلب.')) {
         return;
       }
 

@@ -77,7 +77,7 @@ Object.assign(Accounting, {
   async journalPostingAction(action, id) {
     if (!['approve', 'post'].includes(action) || this._postingBusy) return;
     const label = action === 'post' ? 'ترحيل' : 'اعتماد';
-    if (!confirm(`هل تريد ${label} هذا القيد؟`)) return;
+    if (!await UIDialog.confirm(`هل تريد ${label} هذا القيد؟`)) return;
     await this.executeJournalPosting(action, [Number(id)]);
   },
 
@@ -85,7 +85,7 @@ Object.assign(Accounting, {
     if (this._postingBusy) return;
     const ids = [...document.querySelectorAll('#postingJournalsBody .posting-choice:checked')].map(input => Number(input.value));
     if (!ids.length) return App.showToast('اختر قيودًا للترحيل', 'warning');
-    if (!confirm(`هل تريد ترحيل القيود المحددة وعددها ${ids.length}؟`)) return;
+    if (!await UIDialog.confirm(`هل تريد ترحيل القيود المحددة وعددها ${ids.length}؟`)) return;
     await this.executeJournalPosting('post', ids);
   },
 
@@ -148,6 +148,7 @@ Object.assign(Accounting, {
       const title=typeof Settings!=='undefined'&&Settings.getOperationTitle?Settings.getOperationTitle(kind==='expense'?'expense_register':'receipt_register',register.title):register.title;
       if (!rows.length) return App.showToast('لا توجد سندات للتصدير', 'warning');
       if (format === 'excel') {
+        const XLSX = globalThis.XLSX || await window.loadXlsx();
         const book = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), 'السندات');
         XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet([...totals].map(([currency, amount]) => ({ 'العملة': currency, 'إجمالي مبالغ السجل': amount }))), 'الإجماليات');

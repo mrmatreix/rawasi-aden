@@ -917,6 +917,7 @@
   </div>
 
   <!-- Scripts -->
+  <script src="js/dialogs.js"></script>
   <script src="js/secure-storage.js"></script>
   <script src="js/client-api.js"></script>
   <script src="js/client-auth.js"></script>
@@ -1446,7 +1447,7 @@
     async function guestQuoteResponse(quoteId,decision) {
       const note=document.getElementById('guestQuoteNote').value.trim();
       if(decision==='changes'&&!note){alert('يرجى كتابة الملاحظات');return;}
-      if(decision==='accept'&&!confirm('تأكيد الموافقة على عرض السعر؟'))return;
+      if(decision==='accept'&&!await UIDialog.confirm('تأكيد الموافقة على عرض السعر؟'))return;
       try {
         const response=await fetch('/api/client-portal/services/requests/guest-response',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),decision,quote_id:quoteId,note})});
         const data=await response.json();if(!data.success)throw new Error(data.message);await executeTrackRequest();

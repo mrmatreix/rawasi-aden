@@ -100,6 +100,7 @@
 
   <div id="bottomNav"></div>
 
+  <script src="js/dialogs.js"></script>
   <script src="js/secure-storage.js"></script>
   <script src="js/client-api.js"></script>
   <script src="js/client-auth.js"></script>
@@ -191,7 +192,7 @@
     }
 
     async function handleLogout() {
-      if (confirm('هل أنت متأكد من رغبتك في تسجيل الخروج؟')) {
+      if (await UIDialog.confirm('هل أنت متأكد من رغبتك في تسجيل الخروج؟')) {
         await ClientAuth.logout();
       }
     }

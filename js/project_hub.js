@@ -601,7 +601,7 @@ const ProjectHub = {
   },
 
   async deleteDrawing(id) {
-    if (!confirm('هل أنت متأكد من حذف هذا المخطط؟')) return;
+    if (!await UIDialog.confirm('هل أنت متأكد من حذف هذا المخطط؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/drawings/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -1051,7 +1051,7 @@ const ProjectHub = {
     const updateContract = document.getElementById('boqUpdateContractValueCheck')?.checked || false;
 
     if (mode === 'replace') {
-      if (!confirm(`⚠️ تحذير مهم:\nاخترت الاستبدال الكامل. سيتم حذف جميع بنود جدول الكميات الحالية لهذا المشروع (${this.data?.boq?.length || 0} بند) وإحلال ${this.boqParsedItems.length} بند جديد مكانها.\n\nهل تريد المتابعة بالتأكيد؟`)) {
+      if (!await UIDialog.confirm(`⚠️ تحذير مهم:\nاخترت الاستبدال الكامل. سيتم حذف جميع بنود جدول الكميات الحالية لهذا المشروع (${this.data?.boq?.length || 0} بند) وإحلال ${this.boqParsedItems.length} بند جديد مكانها.\n\nهل تريد المتابعة بالتأكيد؟`)) {
         return;
       }
     }
@@ -1391,7 +1391,7 @@ const ProjectHub = {
   },
 
   async deleteBoqItem(id) {
-    if (!confirm('هل أنت متأكد من حذف هذا البند من جدول الكميات؟')) return;
+    if (!await UIDialog.confirm('هل أنت متأكد من حذف هذا البند من جدول الكميات؟')) return;
     const pid = this.getActiveProjectId();
     if (!pid) return;
     const res = await fetch(`/api/project-hub/${pid}/boq/${id}`, { method: 'DELETE' });
@@ -1485,7 +1485,7 @@ const ProjectHub = {
   },
 
   async deleteQuotation(id) {
-    if (!confirm('هل تريد حذف عرض السعر؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف عرض السعر؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/quotations/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -1613,7 +1613,7 @@ const ProjectHub = {
   },
 
   async deleteBudget(id) {
-    if (!confirm('هل تريد حذف مركز الميزانية هذا؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف مركز الميزانية هذا؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/budgets/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -1706,7 +1706,7 @@ const ProjectHub = {
   },
 
   async deleteChangeOrder(id) {
-    if (!confirm('هل تريد حذف أمر التغيير هذا؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف أمر التغيير هذا؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/change-orders/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -1810,7 +1810,7 @@ const ProjectHub = {
   },
 
   async deletePurchase(id) {
-    if (!confirm('هل تريد حذف فاتورة المشتريات هذه؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف فاتورة المشتريات هذه؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/purchases/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -1897,7 +1897,7 @@ const ProjectHub = {
   },
 
   async deleteLabor(id) {
-    if (!confirm('هل تريد حذف هذا السجل؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف هذا السجل؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/labor/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -2398,7 +2398,7 @@ const ProjectHub = {
   },
 
   async deleteInvoice(id) {
-    if (!confirm('هل أنت متأكد من حذف هذا المستخلص نهائياً؟')) return;
+    if (!await UIDialog.confirm('هل أنت متأكد من حذف هذا المستخلص نهائياً؟')) return;
     try {
       const res = await fetch(`/api/project-hub/${this.currentProjectId}/invoices/${id}`, { method: 'DELETE' });
       const json = await res.json();
@@ -2498,7 +2498,7 @@ const ProjectHub = {
   },
 
   async deleteDailyReport(id) {
-    if (!confirm('هل تريد حذف هذا التقرير اليومي؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف هذا التقرير اليومي؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/daily-reports/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -2597,7 +2597,7 @@ const ProjectHub = {
   },
 
   async deleteWeeklyReport(id) {
-    if (!confirm('هل تريد حذف التقرير الأسبوعي؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف التقرير الأسبوعي؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/weekly-reports/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -2682,7 +2682,7 @@ const ProjectHub = {
   },
 
   async deleteHandover(id) {
-    if (!confirm('هل تريد حذف محضر الاستلام؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف محضر الاستلام؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/handovers/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -2767,7 +2767,7 @@ const ProjectHub = {
   },
 
   async deleteCorrespondence(id) {
-    if (!confirm('هل تريد حذف هذا الخطاب من الأرشيف؟')) return;
+    if (!await UIDialog.confirm('هل تريد حذف هذا الخطاب من الأرشيف؟')) return;
     const res = await fetch(`/api/project-hub/${this.currentProjectId}/correspondence/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
@@ -4084,7 +4084,7 @@ const ProjectHub = {
 
     if (saved) {
       await this.refreshProjectFiles();
-      if (confirm(`تم حفظ التقرير الشامل بنجاح في مجلد المشروع:\n${saved.filePath}\n\nهل تود فتح المجلد الآن في نظام ويندوز؟`)) {
+      if (await UIDialog.confirm(`تم حفظ التقرير الشامل بنجاح في مجلد المشروع:\n${saved.filePath}\n\nهل تود فتح المجلد الآن في نظام ويندوز؟`)) {
         this.openProjectFolderInExplorer();
       }
     }
@@ -4171,7 +4171,7 @@ const ProjectHub = {
     try {
       let bodyData = {};
       if (reset) {
-        if (!confirm('هل أنت متأكد من استعادة المسار الافتراضي لملفات المشاريع داخل مجلد البرنامج؟')) {
+        if (!await UIDialog.confirm('هل أنت متأكد من استعادة المسار الافتراضي لملفات المشاريع داخل مجلد البرنامج؟')) {
           return;
         }
         bodyData = { resetToDefault: true };
@@ -4633,7 +4633,7 @@ const ProjectHub = {
   async deleteQuotationItem(idx) {
     if (!this.integratedQuotationData || !this.integratedQuotationData.items) return;
     const it = this.integratedQuotationData.items[idx];
-    if (!confirm(`هل أنت متأكد من حذف البند (${it.description}) من عرض السعر؟`)) return;
+    if (!await UIDialog.confirm(`هل أنت متأكد من حذف البند (${it.description}) من عرض السعر؟`)) return;
 
     this.integratedQuotationData.items.splice(idx, 1);
     // إعادة ترقيم البنود
@@ -4693,7 +4693,7 @@ const ProjectHub = {
   },
 
   async importBoqToQuotation() {
-    if (!confirm('هل تريد استيراد البنود من جدول الكميات BOQ واستبدال بنود عرض السعر الحالية؟')) return;
+    if (!await UIDialog.confirm('هل تريد استيراد البنود من جدول الكميات BOQ واستبدال بنود عرض السعر الحالية؟')) return;
     try {
       App.showToast('جاري استيراد بنود BOQ...', 'info');
       const res = await fetch(`/api/project-hub/${this.currentProjectId}/integrated-quotation/import-boq`, {

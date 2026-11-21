@@ -625,7 +625,7 @@ const Inventory = {
   },
 
   async reconcileAudit(auditId) {
-    if (!confirm('هل أنت متأكد من ترحيل تسوية هذا الجرد إلى دفتر الأستاذ العام وتعديل أرصدة المخزون؟ هذه العملية ذرية غير قابلة للإلغاء (ACID).')) return;
+    if (!await UIDialog.confirm('هل أنت متأكد من ترحيل تسوية هذا الجرد إلى دفتر الأستاذ العام وتعديل أرصدة المخزون؟ هذه العملية ذرية غير قابلة للإلغاء (ACID).')) return;
 
     try {
       const res = await fetch(`/api/material-management/audits/${auditId}/reconcile`, {
@@ -1117,7 +1117,7 @@ const Inventory = {
   },
 
   async approveTransfer(transferId) {
-    if (!confirm('هل توافق على اعتماد تحويل هذه المواد وإعادة توجيه التكلفة محاسبياً بين المشروعين؟')) return;
+    if (!await UIDialog.confirm('هل توافق على اعتماد تحويل هذه المواد وإعادة توجيه التكلفة محاسبياً بين المشروعين؟')) return;
     try {
       const res = await fetch(`/api/material-management/inter-project-transfers/${transferId}/approve`, {
         method: 'POST',

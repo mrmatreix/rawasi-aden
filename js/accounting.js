@@ -1346,7 +1346,7 @@ const Accounting = {
 
         
         // إمكانية الطباعة الفورية
-        if (confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
+        if (await UIDialog.confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
           const acc = (this.accounts || []).find(a => String(a.id) === String(account_id));
           const cc = (this.costCenters || []).find(c => String(c.id) === String(cost_center_id));
           this.printReceipt({
@@ -1443,7 +1443,7 @@ const Accounting = {
         if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) Reports.loadDashboardKPIs();
         this.loadCashMovement();
         // إمكانية الطباعة الفورية
-        if (confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
+        if (await UIDialog.confirm(`تم إنشاء سند القبض ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
           const acc = (this.accounts || []).find(a => String(a.id) === String(account_id));
           const cc = (this.costCenters || []).find(c => String(c.id) === String(cost_center_id));
           this.printReceipt({
@@ -1859,7 +1859,7 @@ const Accounting = {
         }
         this.loadCashMovement();
 
-        if (confirm(`تم تسجيل سند الصرف ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
+        if (await UIDialog.confirm(`تم تسجيل سند الصرف ${data.receipt_no}. هل تريد طباعة السند الآن؟`)) {
           const acc = (this.accounts || []).find(a => String(a.id) === String(account_id));
           const cc = (this.costCenters || []).find(c => String(c.id) === String(cost_center_id));
           this.printExpenseReceipt({
@@ -3909,7 +3909,7 @@ const Accounting = {
 
   async deleteDraft(kind, id) {
     const route = { journal: 'accounting/journal-entries', expense: 'expenses', receipt: 'payments' }[kind];
-    if (!route || !confirm('هل تريد حذف هذه المسودة قبل الترحيل؟')) return;
+    if (!route || !await UIDialog.confirm('هل تريد حذف هذه المسودة قبل الترحيل؟')) return;
     this._deletingDrafts ||= new Set();
     const key = kind + ':' + id;
     if (this._deletingDrafts.has(key)) return;
@@ -3928,7 +3928,7 @@ const Accounting = {
   },
 
   async postDraft(kind, id) {
-    if (!confirm('هل تريد ترحيل المسودة وإنشاء أثرها المحاسبي؟')) return;
+    if (!await UIDialog.confirm('هل تريد ترحيل المسودة وإنشاء أثرها المحاسبي؟')) return;
     const route = kind === 'journal' ? 'accounting/journal-entries' : kind === 'expense' ? 'expenses' : 'payments';
     try {
       const response = await fetch(`/api/${route}/${id}/post`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -4603,7 +4603,7 @@ const Accounting = {
   },
 
   async deleteAccount(id, code, name) {
-    if (!confirm(`هل أنت متأكد من رغبتك في حذف الحساب [${code} - ${name}] نهائياً من دليل الحسابات؟\n\nتنبيه: إذا كان الحساب مرتبطاً بأي قيود يومية، أو سندات قبض/صرف، أو له حسابات فرعية، سيرفض النظام حذفه للحفاظ على سلامة الدفاتر ويمكنك تقييده (توقيفه) بدلاً من ذلك.`)) {
+    if (!await UIDialog.confirm(`هل أنت متأكد من رغبتك في حذف الحساب [${code} - ${name}] نهائياً من دليل الحسابات؟\n\nتنبيه: إذا كان الحساب مرتبطاً بأي قيود يومية، أو سندات قبض/صرف، أو له حسابات فرعية، سيرفض النظام حذفه للحفاظ على سلامة الدفاتر ويمكنك تقييده (توقيفه) بدلاً من ذلك.`)) {
       return;
     }
 
@@ -4811,7 +4811,7 @@ const Accounting = {
   },
 
   async deleteCostCenter(id, code, name) {
-    if (!confirm(`هل أنت متأكد من رغبتك في حذف مركز التكلفة [${code} - ${name}]؟\n\nإذا كانت هناك أي قيود محاسبية أو سندات قبض/صرف تستخدمه، سيرفض النظام الحذف لضمان صحة تقارير التكاليف.`)) {
+    if (!await UIDialog.confirm(`هل أنت متأكد من رغبتك في حذف مركز التكلفة [${code} - ${name}]؟\n\nإذا كانت هناك أي قيود محاسبية أو سندات قبض/صرف تستخدمه، سيرفض النظام الحذف لضمان صحة تقارير التكاليف.`)) {
       return;
     }
 

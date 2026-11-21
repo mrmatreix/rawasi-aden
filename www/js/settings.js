@@ -26,13 +26,13 @@ const Settings = {
   async init() {
     if(Auth.hasPermission('settings:company')){await this.loadCompanySettings();await this.loadPrintSettings();}
     if(Auth.hasPermission('settings:users'))await this.loadUsers();
-    const tabs={users:'settings:users',company:'settings:company',backup:'settings:backup',client_app:'settings:users,client_app:view'};
+    const tabs={users:'settings:users',company:'settings:company',backup:'settings:backup'};
     if(!Auth.hasPermission(tabs[this.activeTab]||'settings:company'))this.activeTab=Object.keys(tabs).find(tab=>Auth.hasPermission(tabs[tab]))||'users';
   },
 
   // ================== تبديل تبويبات الإعدادات ==================
   switchTab(tab) {
-    const needed={users:'settings:users',company:'settings:company',print:'settings:company',backup:'settings:backup',client_app:'settings:users,client_app:view'}[tab];
+    const needed={users:'settings:users',company:'settings:company',print:'settings:company',backup:'settings:backup'}[tab];
     if (needed && !Auth.hasPermission(needed)) return App.showToast('لا تملك صلاحية هذا القسم','error');
     this.activeTab = tab;
     if (typeof Sidebar !== 'undefined' && App.activeView === 'settings') Sidebar.sync('settings', tab);
@@ -59,15 +59,14 @@ const Settings = {
       this.loadLogoutBackups();
       this.loadMysqlStatus();
       this.loadCloudBackupStatus();
-    } else if (tab === 'client_app') {
-      this.loadClientUsersForSettings();
     }
   },
 
   // ================== إدارة حسابات تطبيـق العمالاء ==================
   async loadClientUsersForSettings() {
     try {
-      const token = localStorage.getItem('rawasi_token') || sessionStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
+      if (!Auth.hasPermission('client_app:view')) return;
+      const token = sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token') || localStorage.getItem('token') || '';
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
       const res = await fetch('/api/admin/client-users', { headers });
       const json = await res.json();
@@ -92,18 +91,20 @@ const Settings = {
       users.forEach(u => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>${u.full_name}</strong></td>
-          <td>${u.client_company || u.client_name || '-'}</td>
-          <td><div>${u.email}</div><small style="color: var(--text-muted);">${u.phone || ''}</small></td>
+          <td><strong>${this.escapeText(u.full_name)}</strong></td>
+          <td>${this.escapeText(u.client_company || u.client_name || '-') }</td>
+          <td><div>${this.escapeText(u.email)}</div><small style="color: var(--text-muted);">${this.escapeText(u.phone || '')}</small></td>
           <td><span class="badge" style="background: rgba(212, 175, 55, 0.2); color: #d4af37;">${u.role === 'owner' ? 'مالك (Owner)' : (u.role === 'manager' ? 'مدير (Manager)' : 'مطلع (Viewer)')}</span></td>
           <td><span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">${u.assigned_projects_count || 0} مشاريع</span></td>
           <td><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${u.two_factor_enabled ? 'مفعل (OTP)' : 'معطل'}</span></td>
           <td><span class="badge" style="background: ${u.status === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${u.status === 'active' ? '#34d399' : '#f87171'};">${u.status === 'active' ? 'نشط' : 'موقوف'}</span></td>
           <td>
             <a href="/views/client_users.html" target="_blank" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 0.8rem; color: #34d399; border-color: #10b981;">إدارة التفاصيل ↗</a>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.deleteClientUser(${u.id}, '${(u.full_name || '').replace(/'/g, "\\'")}')" style="padding: 3px 8px; font-size: 0.8rem; color: #f87171; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); margin-right: 4px;" title="حذف حساب العميل">🗑️ حذف</button>
+            ${Auth.hasPermission('client_app:delete') ? `<button type="button" class="btn btn-secondary btn-sm client-app-delete" style="padding:3px 8px;color:#f87171;margin-right:4px" title="حذف حساب العميل">🗑️ حذف</button>` : ''}
           </td>
         `;
+        const deleteButton=tr.querySelector('.client-app-delete');
+        if(deleteButton)deleteButton.addEventListener('click',()=>this.deleteClientUser(u.id,u.full_name||''));
         tbody.appendChild(tr);
       });
     } catch (e) {
@@ -116,7 +117,7 @@ const Settings = {
   },
 
   async deleteClientUser(id, fullName) {
-    if (!confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
+    if (!await UIDialog.confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
       return;
     }
 
@@ -2374,10 +2375,18 @@ const Settings = {
           let tfaBadgeHtml = '';
           const has2Fa = (u.two_factor_enabled !== 0 && u.two_factor_enabled !== false);
           if (u.role === 'admin' || u.username === 'admin' || has2Fa) {
-            const currentPin = u.two_factor_pin || '123456';
+            // الرمز لا يُعرض أبداً؛ الخادم يرسل فقط هل هو مُعيَّن أم لا.
+            const pinSet = Boolean(u.two_factor_configured);
             tfaBadgeHtml = `<div style="margin-top: 5px;">
-              <span class="badge" style="background: rgba(212, 175, 55, 0.15); color: var(--gold-light); border: 1px solid rgba(212, 175, 55, 0.4); font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="رمز التحقق بخطوتين (PIN) المعتمد لهذا الحساب - انقر للتعديل وتغيير الرمز">
-                🔐 PIN: <strong style="font-family: monospace; letter-spacing: 1px; color: #fbbf24;">${currentPin}</strong>
+              <span class="badge" style="background: ${pinSet ? 'rgba(212, 175, 55, 0.15)' : 'rgba(239, 68, 68, 0.12)'}; color: ${pinSet ? 'var(--gold-light)' : '#f87171'}; border: 1px solid ${pinSet ? 'rgba(212, 175, 55, 0.4)' : 'rgba(239, 68, 68, 0.4)'}; font-size: 0.72rem; cursor: pointer;" onclick="Settings.openEditUserModal(${u.id}, true)" title="${pinSet ? 'رمز التحقق بخطوتين مُعيَّن ومخفي - انقر لتغييره' : 'لم يُعيَّن رمز PIN لهذا الحساب - انقر لتعيينه'}">
+                ${pinSet ? '🔐 PIN مُعيَّن <strong style="font-family: monospace; letter-spacing: 2px;">••••••</strong>' : '⚠️ لا يوجد PIN — انقر لتعيينه'}
+              </span>
+            </div>`;
+          }
+          if (u.login_locked) {
+            tfaBadgeHtml += `<div style="margin-top: 5px;">
+              <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.45); font-size: 0.72rem; cursor: pointer;" onclick="Settings.unlockUserLogin(${u.id})" title="الحساب مقفل مؤقتاً بسبب محاولات دخول خاطئة - انقر لفك القفل">
+                ⛔ مقفل مؤقتاً — فك القفل
               </span>
             </div>`;
           }
@@ -2909,7 +2918,7 @@ const Settings = {
       if (boundResetBtn) boundResetBtn.style.display = 'none';
       return;
     }
-    if (!confirm('هل تريد فك قفل الجهاز المعتمد لهذا المستخدم؟ سيتمكن من تسجيل الدخول من جهاز جديد واعتماده.')) {
+    if (!await UIDialog.confirm('هل تريد فك قفل الجهاز المعتمد لهذا المستخدم؟ سيتمكن من تسجيل الدخول من جهاز جديد واعتماده.')) {
       return;
     }
     try {
@@ -3260,6 +3269,8 @@ const Settings = {
         App.showToast(data.message || 'تم حفظ المستخدم وتعيين الصلاحيات بنجاح!', 'success');
         App.closeModal('newUserModal');
         await this.loadUsers();
+      } else if (res.status === 401) {
+        Auth.handleExpiredSession?.(data.message);
       } else {
         App.showToast(data.message || 'حدث خطأ أثناء حفظ المستخدم', 'error');
       }
@@ -3322,7 +3333,7 @@ const Settings = {
         }
       });
     } else {
-      if (!confirm(`هل أنت متأكد من حذف المستخدم (${username}) نهائياً من النظام؟`)) {
+      if (!await UIDialog.confirm(`هل أنت متأكد من حذف المستخدم (${username}) نهائياً من النظام؟`)) {
         return;
       }
 
@@ -3343,9 +3354,21 @@ const Settings = {
     }
   },
 
+  // ================== فك قفل الدخول المؤقت عن حساب ==================
+  async unlockUserLogin(userId) {
+    try {
+      const res = await fetch(`/api/users/${userId}/unlock-login`, { method: 'POST' });
+      const data = await res.json();
+      App.showToast(data.message || (res.ok ? 'تم فك القفل' : 'تعذر فك القفل'), res.ok && data.success ? 'success' : 'error');
+      if (res.ok && data.success) await this.loadUsers();
+    } catch (e) {
+      App.showToast('خطأ في الاتصال بالخادم', 'error');
+    }
+  },
+
   // ================== إنهاء جلسة مستخدم وفصله عن النظام ==================
   async disconnectUser(userId, userName) {
-    const isConfirm = confirm(`هل أنت متأكد من رغبتك في إنهاء جلسة المستخدم (${userName}) وفصله عن النظام فوراً لمنع التكرار؟`);
+    const isConfirm = await UIDialog.confirm(`هل أنت متأكد من رغبتك في إنهاء جلسة المستخدم (${userName}) وفصله عن النظام فوراً لمنع التكرار؟`);
     if (!isConfirm) return;
 
     try {
@@ -3588,7 +3611,7 @@ const Settings = {
     }
 
     const targetName = this._selectedBackupFile ? this._selectedBackupFile.name : this._selectedServerBackupName;
-    if (!confirm(`هل أنت متأكد تماماً من استعادة النسخة الاحتياطية (${targetName})؟\n\nتنبيه: سيتم استبدال كافة البيانات الحالية ببيانات النسخة المحددة.`)) {
+    if (!await UIDialog.confirm(`هل أنت متأكد تماماً من استعادة النسخة الاحتياطية (${targetName})؟\n\nتنبيه: سيتم استبدال كافة البيانات الحالية ببيانات النسخة المحددة.`)) {
       return;
     }
 
@@ -4032,7 +4055,7 @@ const Settings = {
   },
 
   async deleteBackupRecord(backupId, fileName) {
-    if (!confirm(`هل أنت متأكد من رغبتك في حذف النسخة الاحتياطية (${fileName}) نهائياً؟\n\nتنبيه: لا يمكن التراجع عن هذا الإجراء.`)) {
+    if (!await UIDialog.confirm(`هل أنت متأكد من رغبتك في حذف النسخة الاحتياطية (${fileName}) نهائياً؟\n\nتنبيه: لا يمكن التراجع عن هذا الإجراء.`)) {
       return;
     }
 
@@ -4262,8 +4285,8 @@ const Settings = {
     }
   },
 
-  confirmRestoreLogoutBackup(fileName) {
-    if (!confirm(`هل ترغب في استعادة النسخة الاحتياطية (${fileName})؟\n\nستتم إعادة المشروع تماماً إلى اللحظة التي تم فيها تسجيل الخروج وحفظ تلك النسخة.`)) {
+  async confirmRestoreLogoutBackup(fileName) {
+    if (!await UIDialog.confirm(`هل ترغب في استعادة النسخة الاحتياطية (${fileName})؟\n\nستتم إعادة المشروع تماماً إلى اللحظة التي تم فيها تسجيل الخروج وحفظ تلك النسخة.`)) {
       return;
     }
     this.selectServerBackup(fileName);
@@ -4642,7 +4665,7 @@ const Settings = {
   },
 
   async runMysqlMigration() {
-    const isConfirmed = confirm(
+    const isConfirmed = await UIDialog.confirm(
       "هل أنت متأكد من رغبتك في بدء ترحيل كافة الجداول والبيانات من SQLite إلى MySQL الآن؟\n\n" +
       "• سيتم نسخ كافة المشاريع، الفواتير، السندات، الحسابات، والعملاء.\n" +
       "• لن يتم حذف بياناتك القديمة من SQLite بل ستبقى محفوظة بأمان كنسخة احتياطية."
@@ -5179,7 +5202,7 @@ const Settings = {
     const passphrase = document.getElementById('vaultRestorePassphrase')?.value?.trim() || '';
     const restoreFiles = Boolean(document.getElementById('vaultRestoreFilesCheck')?.checked);
 
-    if (!confirm('تحذير نهائي: هل أنت متأكد من استعادة هذا الأرشيف وتحديث بيانات النظام والمشاريع؟\nسيقوم النظام بحفظ نسخة أمان طارئة تلقائياً.')) {
+    if (!await UIDialog.confirm('تحذير نهائي: هل أنت متأكد من استعادة هذا الأرشيف وتحديث بيانات النظام والمشاريع؟\nسيقوم النظام بحفظ نسخة أمان طارئة تلقائياً.')) {
       return;
     }
 

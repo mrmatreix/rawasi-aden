@@ -77,7 +77,7 @@ Object.assign(Accounting, {
   async journalPostingAction(action, id) {
     if (!['approve', 'post'].includes(action) || this._postingBusy) return;
     const label = action === 'post' ? 'ترحيل' : 'اعتماد';
-    if (!confirm(`هل تريد ${label} هذا القيد؟`)) return;
+    if (!await UIDialog.confirm(`هل تريد ${label} هذا القيد؟`)) return;
     await this.executeJournalPosting(action, [Number(id)]);
   },
 
@@ -85,7 +85,7 @@ Object.assign(Accounting, {
     if (this._postingBusy) return;
     const ids = [...document.querySelectorAll('#postingJournalsBody .posting-choice:checked')].map(input => Number(input.value));
     if (!ids.length) return App.showToast('اختر قيودًا للترحيل', 'warning');
-    if (!confirm(`هل تريد ترحيل القيود المحددة وعددها ${ids.length}؟`)) return;
+    if (!await UIDialog.confirm(`هل تريد ترحيل القيود المحددة وعددها ${ids.length}؟`)) return;
     await this.executeJournalPosting('post', ids);
   },
 

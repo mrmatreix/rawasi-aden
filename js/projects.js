@@ -885,7 +885,7 @@ const Projects = {
         App.showToast(`تم تصدير حزمة ملفات المشروع بنجاح (${json.data.filesGenerated} ملف) 📦✨`, 'success');
         
         // رسالة تأكيد للمستخدم مع إمكانية فتح المجلد في ويندوز مباشرة
-        const confirmOpen = confirm(
+        const confirmOpen = await UIDialog.confirm(
           `تم تصدير وتفريغ ملفات المشروع بنجاح!\n` +
           `• المشروع: ${json.data.projectName}\n` +
           `• عدد الملفات: ${json.data.filesGenerated} ملفاً رسمياً (Excel + HTML + JSON)\n` +
@@ -941,7 +941,7 @@ const Projects = {
         }
       });
     } else {
-      if (!confirm(`هل أنت متأكد من رغبتك في حذف "${projName}"؟`)) {
+      if (!await UIDialog.confirm(`هل أنت متأكد من رغبتك في حذف "${projName}"؟`)) {
         this.list = previousList;
         this.renderProjectsTable();
         return;
