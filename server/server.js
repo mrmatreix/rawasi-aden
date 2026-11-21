@@ -22,11 +22,40 @@ app.use('/api/auth', createRateLimiter({max:40,windowMs:60000}));
 app.use('/api/client-portal/auth', createRateLimiter({max:40,windowMs:60000}));
 const serviceSubmissions = createRateLimiter({max:12,windowMs:15*60*1000});
 app.use('/api/client-portal/services/requests', (req,res,next)=>req.method==='POST'?serviceSubmissions(req,res,next):next());
+// حد صغير للمسارات العامة/المصادقة التي لا ترسل ملفات، حتى لا يستطيع أي شخص بلا حساب
+// إرسال طلبات بعشرات الميغابايت. طلبات خدمات الزوار تستثنى لأنها تحمل مرفقات (حتى 25MB للملف).
+// المحلل الذي يعمل أولاً يعلّم الطلب كمقروء فيتجاوزه المحلل العام الأكبر.
+const SMALL_BODY_LIMIT = '256kb';
+const smallBodyParsers = [
+  express.json({ limit: SMALL_BODY_LIMIT }),
+  express.text({ type: ['text/plain', 'application/json'], limit: SMALL_BODY_LIMIT }),
+  express.urlencoded({ extended: true, limit: SMALL_BODY_LIMIT })
+];
+app.use('/api/auth', smallBodyParsers);
+app.use('/api/client-portal', (req, res, next) => {
+  if (req.path.startsWith('/services/requests')) return next();
+  let i = 0;
+  const run = err => (err || i >= smallBodyParsers.length) ? next(err) : smallBodyParsers[i++](req, res, run);
+  run();
+});
+
 // أرشفة الماسح الضوئي ترسل PDF/صورة بصيغة Base64 (حتى 25MB)،
 // لذلك نحتاج هامشاً فوق الحجم الأصلي بسبب زيادة Base64 بنحو الثلث.
 app.use(express.json({ limit: '40mb' }));
 app.use(express.text({ type: ['text/plain', 'application/json'], limit: '40mb' }));
 app.use(express.urlencoded({ extended: true, limit: '40mb' }));
+
+// أخطاء قراءة جسم الطلب: رد JSON واضح بدل صفحة HTML الافتراضية
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, message: 'حجم البيانات المرسلة أكبر من المسموح لهذه العملية' });
+  }
+  if (err && err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, message: 'صيغة البيانات المرسلة غير صحيحة' });
+  }
+  return next(err);
+});
+
 app.use((req, res, next) => {
   if (typeof req.body === 'string') {
     try { req.body = JSON.parse(req.body); } catch {}
@@ -45,6 +74,30 @@ app.use('/api', async (_req,res,next) => {
 
 // حماية مسارات الـ API بـ CSRF Token
 app.use('/api', verifyCsrfToken);
+
+// تسجيل كل رد 5xx في سجلات الخادم: المسارات تلتقط أخطاءها وترد مباشرة دون طباعتها، فتبقى سجلات Railway فارغة
+app.use('/api', (req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = body => {
+    if (res.statusCode >= 500) console.error(`[API ${res.statusCode}] ${req.method} ${req.originalUrl}:`, (body && (body.error || body.message)) || 'unknown error');
+    return sendJson(body);
+  };
+  next();
+});
+
+// حالة الاتصال بقاعدة البيانات لشارة أونلاين/أوفلاين في الواجهة (عامة: لا تكشف إعدادات أو عناوين)
+app.get('/api/settings/db-status', async (_req, res) => {
+  const started = Date.now();
+  let timer;
+  try {
+    await Promise.race([database.get('SELECT 1 AS ready'), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 3000); })]);
+    const latencyMs = Date.now() - started;
+    res.json({ success: true, data: { isOnline: true, mode: 'online', activeDb: database.getActiveEngine ? database.getActiveEngine() : config.database.dbEngine, latencyMs, statusMessage: 'متصل بخادم النظام وقاعدة البيانات تعمل بشكل طبيعي' } });
+  } catch (err) {
+    console.error('[db-status] فشل فحص قاعدة البيانات:', err.message);
+    res.status(503).json({ success: false, data: { isOnline: false, mode: 'offline', activeDb: 'local', latencyMs: 0, statusMessage: 'تعذر الوصول إلى قاعدة البيانات على الخادم' } });
+  } finally { clearTimeout(timer); }
+});
 
 // مسارات واجهات برمجة التطبيقات (API Routes) مع التحقق الأمني
 app.use('/api/auth', require('./routes/auth'));
@@ -266,6 +319,29 @@ if (require.main === module) {
   process.once('SIGTERM',()=>shutdown(0)); process.once('SIGINT',()=>shutdown(0));
   process.once('uncaughtException',error=>{console.error('Fatal server error:',error.code||error.name);shutdown(1);});
   process.once('unhandledRejection',error=>{console.error('Fatal async error:',error?.code||error?.name||'unknown');shutdown(1);});
+  // تحذير في الإنتاج وstaging إذا بقي حساب موظف نشط بكلمة مرور افتراضية معروفة (مثل admin123 من بيانات العرض).
+  // تحذير فقط دون حظر الدخول، حتى لا يُقفل المسؤول خارج النظام إن كان يستخدمها فعلاً.
+  async function warnDefaultStaffPasswords() {
+    if (config.isDev) return;
+    try {
+      const bcrypt = require('bcryptjs');
+      const knownDefaults = ['admin123', 'account123', 'password', '123456'];
+      const users = await database.query("SELECT username, password_hash FROM users WHERE status = 'active' OR status IS NULL");
+      const flagged = [];
+      for (const u of users) {
+        if (!u.password_hash) continue;
+        for (const pw of knownDefaults) {
+          if (await bcrypt.compare(pw, u.password_hash)) { flagged.push(u.username); break; }
+        }
+      }
+      if (flagged.length) {
+        console.error(`⚠️ [Security] حسابات موظفين نشطة تستخدم كلمة مرور افتراضية معروفة، يجب تغييرها فوراً: ${flagged.join(', ')}`);
+      }
+    } catch (err) {
+      console.error('⚠️ [Security] تعذر فحص كلمات المرور الافتراضية:', err.message);
+    }
+  }
+
   database.ready.then(()=>server.listen(PORT, '0.0.0.0', () => {
     if (process.send) process.send({type:'ready',port:server.address().port});
     console.log('===========================================================');
@@ -276,6 +352,8 @@ if (require.main === module) {
 
     if (process.env.ENABLE_SERVICE_REQUEST_RETENTION !== 'false') try { require('./services/serviceRequestRetentionService').start(); }
     catch (err) { console.error('Request retention scheduler failed:',err.message); }
+
+    warnDefaultStaffPasswords();
 
     if (!config.schedulersEnabled) return;
 

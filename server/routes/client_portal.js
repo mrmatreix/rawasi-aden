@@ -17,9 +17,16 @@ const db = require('../database/db');
 const { 
   CLIENT_JWT_SECRET, 
   requireClientAuth, 
-  checkClientRateLimit, 
-  logClientAudit 
+  checkClientRateLimit,
+  logClientAudit,
+  isWeakClientPin,
+  getOtpLockRemainingMs,
+  registerOtpFailure,
+  clearOtpFailures,
+  issueClientToken,
+  BUMP_SESSION_SQL
 } = require('../middleware/client_auth');
+const crypto = require('crypto');
 const pushNotificationService = require('../services/pushNotificationService');
 
 // تطبيق محدد الطلبات العام لبوابة العملاء
@@ -32,9 +39,9 @@ function normalizeDigits(str) {
   return String(str).replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w));
 }
 
-// توليد رمز OTP عشوائي مكون من 6 أرقام
+// توليد رمز OTP عشوائي آمن تشفيرياً مكون من 6 أرقام
 function generateOtpCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 // =========================================================================
@@ -76,19 +83,19 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    if (user.status !== 'active') {
-      return res.status(403).json({
-        success: false,
-        message: 'تم تعطيل أو إيقاف حسابك من قِبل الإدارة. يرجى مراجعة إدارة الشركة.'
-      });
-    }
-
-    // التحقق من كلمة المرور
+    // التحقق من كلمة المرور أولاً، حتى لا تُكشف حالة الحساب لمن لا يعرف كلمة مروره
     const isPasswordValid = bcrypt.compareSync(String(password), user.password_hash);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
         message: 'بيانات الدخول غير صحيحة (البريد الإلكتروني أو كلمة المرور غير متطابقة)'
+      });
+    }
+
+    if (user.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        message: 'تم تعطيل أو إيقاف حسابك من قِبل الإدارة. يرجى مراجعة إدارة الشركة.'
       });
     }
 
@@ -128,17 +135,7 @@ router.post('/auth/login', async (req, res) => {
     }
 
     // إصدار التوكن النهائي مباشرة إذا لم يكن 2FA مفعلاً
-    const token = jwt.sign(
-      {
-        id: user.id,
-        client_id: user.client_id,
-        type: 'client',
-        role: user.role,
-        email: user.email
-      },
-      CLIENT_JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = issueClientToken(user);
 
     const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
     await db.run(`
@@ -227,23 +224,51 @@ router.post('/auth/verify-otp', async (req, res) => {
       });
     }
 
+    // قفل مؤقت بعد محاولات خاطئة متكررة على هذا الحساب
+    const lockMs = getOtpLockRemainingMs(user);
+    if (lockMs > 0) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        message: `تم إيقاف التحقق مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد ${Math.ceil(lockMs / 60000)} دقيقة.`
+      });
+    }
+
     // التحقق من صلاحية الكود:
     // 1. الكود المؤقت otp_code وتاريخ صلاحيته
-    // 2. أو رمز two_factor_pin الثابت كرمز أمان احتياطي
+    // 2. أو رمز الأمان الخاص بالحساب two_factor_pin (يُرفض الرمز الافتراضي أو السهل خارج بيئة التطوير)
     const now = new Date();
-    const isOtpValid = user.otp_code && 
-                       user.otp_code === cleanOtp && 
-                       user.otp_expires_at && 
-                       new Date(user.otp_expires_at) >= now;
+    const isOtpValid = Boolean(user.otp_code &&
+                       user.otp_code === cleanOtp &&
+                       user.otp_expires_at &&
+                       new Date(user.otp_expires_at) >= now);
 
-    const isPinValid = user.two_factor_pin && normalizeDigits(user.two_factor_pin) === cleanOtp;
+    const storedPin = normalizeDigits(String(user.two_factor_pin || '').trim());
+    const pinUsable = Boolean(storedPin) && (require('../config/environment').isDev || !isWeakClientPin(storedPin));
+    const isPinValid = pinUsable && storedPin === cleanOtp;
 
     if (!isOtpValid && !isPinValid) {
+      const nowLocked = await registerOtpFailure(user.id);
+      await logClientAudit(
+        { clientUser: user, headers: req.headers, socket: req.socket },
+        'CLIENT_OTP_FAILED',
+        'client_users',
+        user.id,
+        nowLocked ? 'محاولات تحقق خاطئة متكررة - تم القفل المؤقت' : 'محاولة تحقق برمز خاطئ'
+      );
+      if (!pinUsable) {
+        return res.status(403).json({
+          success: false,
+          message: 'لم يتم إعداد رمز أمان خاص بحسابك بعد. يرجى التواصل مع إدارة الشركة لإرسال دعوة التفعيل.'
+        });
+      }
       return res.status(400).json({
         success: false,
         message: 'رمز التحقق (OTP) غير صحيح أو منتهي الصلاحية'
       });
     }
+
+    await clearOtpFailures(user.id);
 
     // تصفير كود الـ OTP بعد استخدامه بنجاح
     await db.run(`
@@ -253,17 +278,7 @@ router.post('/auth/verify-otp', async (req, res) => {
     `, [req.ip || req.socket.remoteAddress || '127.0.0.1', user.id]);
 
     // إصدار توكن الجلسة لمدة 30 يوم
-    const token = jwt.sign(
-      {
-        id: user.id,
-        client_id: user.client_id,
-        type: 'client',
-        role: user.role,
-        email: user.email
-      },
-      CLIENT_JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = issueClientToken(user);
 
     await logClientAudit(
       { clientUser: user, headers: req.headers, socket: req.socket },
@@ -320,15 +335,97 @@ router.post('/auth/forgot-password', async (req, res) => {
 
     await db.run(`UPDATE client_users SET otp_code = ?, otp_expires_at = ? WHERE id = ?`, [otpCode, expiresAt, user.id]);
 
+    // استجابة مطابقة تماماً لحالة البريد غير المسجل حتى لا يُكشف وجود الحساب
     res.json({
       success: true,
-      message: 'تمت إرسال تعليمات ورمز إعادة تعيين كلمة المرور بنجاح',
-      maskedPhone: user.phone ? user.phone.replace(/(\d{3})\d+(\d{2})/, '$1****$2') : null,
+      message: 'إذا كان البريد الإلكتروني مسجلاً لدينا ومفعلاً، فسيتم إرسال تعليمات إعادة التعيين إليه.',
       debugOtp: require('../config/environment').isDev ? otpCode : undefined
     });
   } catch (err) {
     console.error('Forgot password error:', err);
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء طلب استعادة كلمة المرور' });
+  }
+});
+
+/**
+ * POST /api/client-portal/auth/reset-password
+ * تعيين كلمة مرور جديدة ذاتياً باستخدام رمز الأمان الخاص بالحساب (المرسل في دعوة التفعيل)
+ * أو رمز الاستعادة المؤقت من forgot-password (عند ربط خدمة إرسال الرسائل مستقبلاً)
+ */
+router.post('/auth/reset-password', async (req, res) => {
+  const genericError = 'البريد الإلكتروني أو رمز الأمان غير صحيح';
+  try {
+    const { email, code, new_password } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const cleanCode = normalizeDigits(String(code || '').trim());
+    const newPassword = String(new_password || '');
+
+    if (!cleanEmail || !cleanCode || !newPassword) {
+      return res.status(400).json({ success: false, message: 'يرجى إدخال البريد الإلكتروني ورمز الأمان وكلمة المرور الجديدة' });
+    }
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور الجديدة يجب أن تكون بين 8 و128 حرفاً' });
+    }
+
+    const user = await db.get(`
+      SELECT id, client_id, email, full_name, status, otp_code, otp_expires_at, two_factor_pin, otp_locked_until
+      FROM client_users WHERE LOWER(email) = ?
+    `, [cleanEmail]);
+
+    // رسالة موحدة للحساب غير الموجود أو غير النشط لمنع كشف وجود الحساب
+    if (!user || user.status !== 'active') {
+      return res.status(400).json({ success: false, message: genericError });
+    }
+
+    const lockMs = getOtpLockRemainingMs(user);
+    if (lockMs > 0) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        message: `تم إيقاف المحاولات مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد ${Math.ceil(lockMs / 60000)} دقيقة.`
+      });
+    }
+
+    const isOtpValid = Boolean(user.otp_code &&
+      user.otp_code === cleanCode &&
+      user.otp_expires_at &&
+      new Date(user.otp_expires_at) >= new Date());
+    const storedPin = normalizeDigits(String(user.two_factor_pin || '').trim());
+    const pinUsable = Boolean(storedPin) && (require('../config/environment').isDev || !isWeakClientPin(storedPin));
+    const isPinValid = pinUsable && storedPin === cleanCode;
+
+    if (!isOtpValid && !isPinValid) {
+      const nowLocked = await registerOtpFailure(user.id);
+      await logClientAudit(
+        { clientUser: user, headers: req.headers, socket: req.socket },
+        'CLIENT_PASSWORD_RESET_FAILED',
+        'client_users',
+        user.id,
+        nowLocked ? 'محاولات استعادة خاطئة متكررة - تم القفل المؤقت' : 'محاولة استعادة كلمة المرور برمز خاطئ'
+      );
+      return res.status(400).json({ success: false, message: genericError });
+    }
+
+    await clearOtpFailures(user.id);
+    const hash = bcrypt.hashSync(newPassword, bcrypt.genSaltSync(10));
+    await db.run(`
+      UPDATE client_users
+      SET password_hash = ?, otp_code = NULL, otp_expires_at = NULL, device_token = NULL, ${BUMP_SESSION_SQL}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [hash, user.id]);
+
+    await logClientAudit(
+      { clientUser: user, headers: req.headers, socket: req.socket },
+      'CLIENT_PASSWORD_RESET',
+      'client_users',
+      user.id,
+      'قام العميل بتعيين كلمة مرور جديدة ذاتياً'
+    );
+
+    res.json({ success: true, message: 'تم تعيين كلمة المرور الجديدة بنجاح. يمكنك تسجيل الدخول الآن.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تعيين كلمة المرور' });
   }
 });
 
@@ -439,8 +536,9 @@ router.post('/services/requests', async (req, res) => {
         const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, CLIENT_JWT_SECRET,{algorithms:['HS256']});
         if (decoded && decoded.type==='client' && decoded.id && decoded.client_id) {
-          const userCheck = await db.get(`SELECT id FROM client_users WHERE id = ? AND client_id = ? AND status = 'active'`, [decoded.id,decoded.client_id]);
-          if (userCheck) {
+          const userCheck = await db.get(`SELECT id, session_version FROM client_users WHERE id = ? AND client_id = ? AND status = 'active'`, [decoded.id,decoded.client_id]);
+          // جلسة ملغاة (بعد تغيير كلمة المرور) لا تربط الطلب بالحساب ويُعامل المرسل كزائر
+          if (userCheck && Number(decoded.sv || 0) === Number(userCheck.session_version || 0)) {
             clientUserId = userCheck.id;
             source = 'registered_client';
           }
@@ -748,6 +846,25 @@ router.post('/my-service-requests/:id/response', async (req,res) => {
 });
 
 /**
+ * يبني شرط SQL يقصر النتائج على المشاريع التي يملك فيها المستخدم كل الصلاحيات المطلوبة
+ * @param {object} req
+ * @param {string|string[]} perms اسم صلاحية أو أكثر (يجب توفرها جميعاً)
+ * @param {string} column عمود رقم المشروع في الاستعلام
+ */
+function permissionProjectFilter(req, perms, column) {
+  const permList = Array.isArray(perms) ? perms : [perms];
+  let ids = null;
+  for (const perm of permList) {
+    const allowed = req.clientUser.allowedProjectIdsFor(perm);
+    if (allowed === null) continue;
+    ids = ids === null ? allowed : ids.filter(id => allowed.includes(id));
+  }
+  if (ids === null) return { sql: '', params: [] };
+  if (ids.length === 0) return { sql: ' AND 1=0', params: [] };
+  return { sql: ` AND ${column} IN (${ids.map(() => '?').join(',')})`, params: ids };
+}
+
+/**
  * GET /api/client-portal/dashboard
  * ملخص لوحة التحكم للعميل (أرقام وإحصائيات مشاريعه فقط دون أي تكاليف داخلية)
  */
@@ -775,13 +892,21 @@ router.get('/dashboard', async (req, res) => {
         COUNT(p.id) AS total_projects,
         SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) AS active_projects,
         SUM(CASE WHEN p.status = 'completed' THEN 1 ELSE 0 END) AS completed_projects,
-        ROUND(AVG(COALESCE(p.progress_percentage, 0)), 1) AS avg_progress,
         ROUND(SUM(COALESCE(p.contract_value, 0)), 2) AS total_contract_values
       FROM projects p
       ${projectFilterClause}
     `, projectParams);
 
+    // متوسط الإنجاز يُحسب فقط من المشاريع المسموح فيها بعرض نسبة الإنجاز
+    const progressFilter = permissionProjectFilter(req, 'can_view_progress', 'p.id');
+    const progressSummary = await db.get(`
+      SELECT ROUND(AVG(COALESCE(p.progress_percentage, 0)), 1) AS avg_progress
+      FROM projects p
+      ${projectFilterClause}${progressFilter.sql}
+    `, [...projectParams, ...progressFilter.params]);
+
     // 2. إحصائيات المستخلصات الخاصة بمشاريع العميل (جدول bills)
+    const invoicesFilter = permissionProjectFilter(req, 'can_view_invoices', 'b.project_id');
     const billsSummary = await db.get(`
       SELECT 
         COUNT(b.id) AS total_bills_count,
@@ -789,16 +914,17 @@ router.get('/dashboard', async (req, res) => {
         ROUND(SUM(COALESCE(b.paid_amount, 0)), 2) AS total_paid_on_bills,
         SUM(CASE WHEN b.client_approval_status = 'pending' OR b.client_approval_status IS NULL THEN 1 ELSE 0 END) AS pending_approval_count
       FROM bills b
-      WHERE b.client_id = ? AND (b.status != 'cancelled' OR b.status IS NULL)
-    `, [clientId]);
+      WHERE b.client_id = ? AND (b.status != 'cancelled' OR b.status IS NULL)${invoicesFilter.sql}
+    `, [clientId, ...invoicesFilter.params]);
 
     // 3. إجمالي سندات القبض المستلمة من العميل (سندات قبض فعلية)
+    const paymentsFilter = permissionProjectFilter(req, 'can_view_payments', 'project_id');
     const paymentsSummary = await db.get(`
-      SELECT 
+      SELECT
         ROUND(SUM(COALESCE(amount, 0)), 2) AS total_collected
       FROM payments
-      WHERE client_id = ? AND type = 'قبض' AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
-    `, [clientId]);
+      WHERE client_id = ? AND type = 'قبض' AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)${paymentsFilter.sql}
+    `, [clientId, ...paymentsFilter.params]);
 
     // 4. الإشعارات غير المقروءة والرسائل المفتوحة
     const notifCount = await db.get(`
@@ -829,6 +955,9 @@ router.get('/dashboard', async (req, res) => {
       ORDER BY p.id DESC
       LIMIT 5
     `, projectParams);
+    recentProjects.forEach(p => {
+      if (!req.clientUser.hasPermission(p.id, 'can_view_progress')) p.progress_percentage = null;
+    });
 
     const totalContract = Number(projectsSummary?.total_contract_values || 0);
     const totalInvoiced = Number(billsSummary?.total_invoiced || 0);
@@ -848,7 +977,8 @@ router.get('/dashboard', async (req, res) => {
         total_projects: Number(projectsSummary?.total_projects || 0),
         active_projects: Number(projectsSummary?.active_projects || 0),
         completed_projects: Number(projectsSummary?.completed_projects || 0),
-        avg_progress: Number(projectsSummary?.avg_progress || 0),
+        // null عندما لا يوجد أي مشروع مسموح بعرض إنجازه، لتعرضه الواجهة "غير متاح" لا 0%
+        avg_progress: progressSummary?.avg_progress == null ? null : Number(progressSummary.avg_progress),
         total_contract_value: totalContract,
         total_invoiced: totalInvoiced,
         total_paid: totalPaid,
@@ -906,6 +1036,10 @@ router.get('/projects', async (req, res) => {
     querySql += ' ORDER BY p.id DESC';
 
     const projects = await db.query(querySql, params);
+    projects.forEach(p => {
+      if (!req.clientUser.hasPermission(p.id, 'can_view_progress')) p.progress_percentage = null;
+      if (!req.clientUser.hasPermission(p.id, 'can_view_invoices')) p.bills_count = null;
+    });
 
     res.json({
       success: true,
@@ -965,8 +1099,16 @@ router.get('/projects/:id', async (req, res) => {
       });
     }
 
+    // صلاحيات المستخدم على هذا المشروع
+    const perms = {};
+    ['can_view_progress', 'can_view_invoices', 'can_view_payments', 'can_view_reports',
+     'can_view_drawings', 'can_view_correspondence', 'can_approve_invoices', 'can_send_messages']
+      .forEach(name => { perms[name] = req.clientUser.hasPermission(projectId, name); });
+
+    if (!perms.can_view_progress) project.progress_percentage = null;
+
     // 2. مستخلصات المشروع (Bills)
-    const invoices = await db.query(`
+    const invoices = !perms.can_view_invoices ? [] : await db.query(`
       SELECT 
         id,
         bill_no,
@@ -990,8 +1132,8 @@ router.get('/projects/:id', async (req, res) => {
     `, [projectId, clientId]);
 
     // 3. دفعات وتحصيلات المشروع
-    const payments = await db.query(`
-      SELECT 
+    const payments = !perms.can_view_payments ? [] : await db.query(`
+      SELECT
         id,
         receipt_no,
         date,
@@ -1009,44 +1151,49 @@ router.get('/projects/:id', async (req, res) => {
 
     // 4. المخططات الهندسية المعتمدة (Drawings)
     let drawings = [];
-    try {
+    if (perms.can_view_drawings) try {
+      // الأسماء البديلة (AS) تحافظ على أسماء الحقول التي يقرؤها تطبيق العملاء
+      // ويُعرض للعميل المعتمد فقط (الواجهة تصف كل مخطط بأنه معتمد)
       drawings = await db.query(`
-        SELECT 
+        SELECT
           id,
-          drawing_number,
+          drawing_no AS drawing_number,
           title,
           category,
-          discipline,
+          category AS discipline,
           revision,
           scale,
           status,
-          file_path,
+          approval_date,
+          file_name,
           created_at
         FROM project_drawings
-        WHERE project_id = ?
+        WHERE project_id = ? AND (status IN ('معتمد', 'معتمد بملاحظات', 'approved') OR status IS NULL)
         ORDER BY id DESC
       `, [projectId]);
-    } catch {
+    } catch (err) {
+      console.error('Client project drawings query failed:', err.message);
       drawings = [];
     }
 
     // 5. تقارير الموقع اليومية (الملخص فقط المتاح للعميل)
     let dailyReports = [];
-    try {
+    if (perms.can_view_reports) try {
       dailyReports = await db.query(`
-        SELECT 
+        SELECT
           id,
-          report_date,
+          date AS report_date,
           weather,
-          work_summary,
+          work_performed AS work_summary,
           status,
           created_at
         FROM project_daily_reports
         WHERE project_id = ? AND (status = 'approved' OR status = 'معتمد' OR status IS NULL)
-        ORDER BY report_date DESC
+        ORDER BY date DESC
         LIMIT 15
       `, [projectId]);
-    } catch {
+    } catch (err) {
+      console.error('Client project daily reports query failed:', err.message);
       dailyReports = [];
     }
 
@@ -1056,7 +1203,8 @@ router.get('/projects/:id', async (req, res) => {
       invoices,
       payments,
       drawings,
-      daily_reports: dailyReports
+      daily_reports: dailyReports,
+      permissions: perms
     });
   } catch (err) {
     console.error('Project Details Error:', err);
@@ -1100,6 +1248,10 @@ router.get('/invoices', async (req, res) => {
       WHERE b.client_id = ?
     `;
     const params = [clientId];
+
+    const invFilter = permissionProjectFilter(req, 'can_view_invoices', 'b.project_id');
+    sql += invFilter.sql;
+    params.push(...invFilter.params);
 
     if (project_id) {
       sql += ' AND b.project_id = ?';
@@ -1159,7 +1311,7 @@ router.post('/invoices/:id/approve', async (req, res) => {
     }
 
     // فحص صلاحية الاعتماد للمستخدم
-    if (!req.clientUser.hasPermission(bill.project_id, 'can_approve_invoices') && req.clientUser.role === 'viewer') {
+    if (!req.clientUser.hasPermission(bill.project_id, 'can_approve_invoices')) {
       return res.status(403).json({
         success: false,
         message: 'ليس لديك صلاحية اعتماد أو رفض المستخلصات. يرجى مراجعة المالك.'
@@ -1248,6 +1400,10 @@ router.get('/payments', async (req, res) => {
     `;
     const params = [clientId];
 
+    const payFilter = permissionProjectFilter(req, 'can_view_payments', 'pay.project_id');
+    sql += payFilter.sql;
+    params.push(...payFilter.params);
+
     if (project_id) {
       sql += ' AND pay.project_id = ?';
       params.push(parseInt(project_id, 10));
@@ -1297,6 +1453,10 @@ router.get('/statement', async (req, res) => {
       WHERE b.client_id = ? AND (b.status != 'cancelled' OR b.status IS NULL)
     `;
     const invParams = [clientId];
+    // كشف الحساب يتطلب صلاحيتي المستخلصات والدفعات معاً حتى لا يكون الرصيد مضللاً
+    const stmtPerms = ['can_view_invoices', 'can_view_payments'];
+    const invStmtFilter = permissionProjectFilter(req, stmtPerms, 'b.project_id');
+    invSql += invStmtFilter.sql; invParams.push(...invStmtFilter.params);
     if (project_id) { invSql += ' AND b.project_id = ?'; invParams.push(parseInt(project_id, 10)); }
     if (from_date) { invSql += ' AND b.date >= ?'; invParams.push(from_date); }
     if (to_date) { invSql += ' AND b.date <= ?'; invParams.push(to_date); }
@@ -1318,6 +1478,8 @@ router.get('/statement', async (req, res) => {
       WHERE pay.client_id = ? AND pay.type = 'قبض'
     `;
     const payParams = [clientId];
+    const payStmtFilter = permissionProjectFilter(req, stmtPerms, 'pay.project_id');
+    paySql += payStmtFilter.sql; payParams.push(...payStmtFilter.params);
     if (project_id) { paySql += ' AND pay.project_id = ?'; payParams.push(parseInt(project_id, 10)); }
     if (from_date) { paySql += ' AND pay.date >= ?'; payParams.push(from_date); }
     if (to_date) { paySql += ' AND pay.date <= ?'; payParams.push(to_date); }
@@ -1492,12 +1654,33 @@ router.post('/messages', async (req, res) => {
       });
     }
 
+    // رابط المرفق: يُقبل رابط https أو ملف مرفوع على النظام نفسه فقط، لمنع روابط javascript: وأمثالها
+    let cleanAttachment = null;
+    if (attachment_url) {
+      const value = String(attachment_url).trim();
+      const isHttps = /^https:\/\/[^\s<>"']+$/i.test(value);
+      const isLocalUpload = /^\/uploads\/[A-Za-z0-9._\-\/]+$/.test(value) && !value.includes('..');
+      if (value.length > 1000 || (!isHttps && !isLocalUpload)) {
+        return res.status(400).json({ success: false, message: 'رابط المرفق غير صالح. يُقبل رابط يبدأ بـ https:// أو ملف مرفوع على النظام فقط.' });
+      }
+      cleanAttachment = value;
+    }
+
     const projectIdNum = project_id ? parseInt(project_id, 10) : null;
-    if (projectIdNum && !req.clientUser.canAccessProject(projectIdNum)) {
+    if (projectIdNum && !req.clientUser.hasPermission(projectIdNum, 'can_send_messages')) {
       return res.status(403).json({
         success: false,
         message: 'ليس لديك صلاحية لإرسال رسالة مرتبطة بهذا المشروع'
       });
+    }
+    if (!projectIdNum) {
+      const msgProjects = req.clientUser.allowedProjectIdsFor('can_send_messages');
+      if (msgProjects !== null && msgProjects.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'ليس لديك صلاحية إرسال الرسائل. يرجى مراجعة المالك.'
+        });
+      }
     }
 
     const insertResult = await db.run(`
@@ -1509,8 +1692,8 @@ router.post('/messages', async (req, res) => {
       projectIdNum,
       String(subject).trim(),
       String(body).trim(),
-      priority || 'normal',
-      attachment_url || null
+      ['low', 'normal', 'high', 'urgent'].includes(priority) ? priority : 'normal',
+      cleanAttachment
     ]);
 
     await logClientAudit(
@@ -1582,40 +1765,65 @@ router.put('/profile', async (req, res) => {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
-    // إذا طلب تغيير كلمة المرور
-    if (new_password) {
+    // التغييرات الأمنية (كلمة المرور، رمز الأمان، إيقاف التحقق بخطوتين) تتطلب كلمة المرور الحالية،
+    // حتى لا يستطيع من يملك جلسة مسروقة إضعاف حماية الحساب
+    const wantsNewPassword = Boolean(new_password);
+    const wantsNewPin = Boolean(two_factor_pin && String(two_factor_pin).trim());
+    const wantsDisable2fa = two_factor_enabled === false && Number(user.two_factor_enabled) === 1;
+
+    if (wantsNewPassword || wantsNewPin || wantsDisable2fa) {
       if (!current_password) {
-        return res.status(400).json({ success: false, message: 'يرجى إدخال كلمة المرور الحالية لتأكيد التغيير' });
+        return res.status(400).json({ success: false, message: 'يرجى إدخال كلمة المرور الحالية لتأكيد تغيير إعدادات الأمان' });
       }
-      const isMatch = bcrypt.compareSync(String(current_password), user.password_hash);
-      if (!isMatch) {
+      if (!bcrypt.compareSync(String(current_password), user.password_hash)) {
         return res.status(400).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
       }
-      if (String(new_password).length < 6) {
-        return res.status(400).json({ success: false, message: 'كلمة المرور الجديدة يجب ألا تقل عن 6 خانات' });
-      }
-      const salt = bcrypt.genSaltSync(10);
-      const newHash = bcrypt.hashSync(String(new_password), salt);
-      await db.run(`UPDATE client_users SET password_hash = ? WHERE id = ?`, [newHash, user.id]);
     }
 
-    // تحديث البيانات الأساسية
+    let updatedPin = user.two_factor_pin;
+    if (wantsNewPin) {
+      updatedPin = normalizeDigits(String(two_factor_pin).trim());
+      if (isWeakClientPin(updatedPin)) {
+        return res.status(400).json({ success: false, message: 'رمز الأمان يجب أن يكون 6 أرقام وألا يكون رمزاً سهلاً مثل 123456' });
+      }
+    }
+
+    let newHash = null;
+    if (wantsNewPassword) {
+      if (String(new_password).length < 8 || String(new_password).length > 128) {
+        return res.status(400).json({ success: false, message: 'كلمة المرور الجديدة يجب أن تكون بين 8 و128 حرفاً' });
+      }
+      newHash = bcrypt.hashSync(String(new_password), bcrypt.genSaltSync(10));
+    }
+
     const updatedName = full_name ? String(full_name).trim() : user.full_name;
     const updatedPhone = phone ? String(phone).trim() : user.phone;
-    const updatedPin = two_factor_pin ? normalizeDigits(String(two_factor_pin).trim()) : user.two_factor_pin;
     const updated2fa = typeof two_factor_enabled === 'boolean' ? (two_factor_enabled ? 1 : 0) : user.two_factor_enabled;
 
     await db.run(`
-      UPDATE client_users 
-      SET full_name = ?, phone = ?, two_factor_pin = ?, two_factor_enabled = ?, updated_at = CURRENT_TIMESTAMP
+      UPDATE client_users
+      SET full_name = ?, phone = ?, two_factor_pin = ?, two_factor_enabled = ?,
+          password_hash = COALESCE(?, password_hash),
+          ${newHash ? `${BUMP_SESSION_SQL},` : ''}
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [updatedName, updatedPhone, updatedPin, updated2fa, user.id]);
+    `, [updatedName, updatedPhone, updatedPin, updated2fa, newHash, user.id]);
 
-    await logClientAudit(req, 'CLIENT_UPDATE_PROFILE', 'client_users', user.id, 'تم تحديث بيانات الملف الشخصي');
+    const changes = [wantsNewPassword && 'كلمة المرور', wantsNewPin && 'رمز الأمان', wantsDisable2fa && 'إيقاف التحقق بخطوتين'].filter(Boolean);
+    await logClientAudit(req, wantsNewPassword ? 'CLIENT_CHANGE_PASSWORD' : 'CLIENT_UPDATE_PROFILE', 'client_users', user.id,
+      changes.length ? `تحديث الملف الشخصي مع تغيير: ${changes.join('، ')}` : 'تم تحديث بيانات الملف الشخصي');
+
+    // عند تغيير كلمة المرور تُلغى كل الجلسات الأخرى، ويحصل هذا الجهاز على جلسة جديدة
+    let token;
+    if (newHash) {
+      const fresh = await db.get(`SELECT * FROM client_users WHERE id = ?`, [user.id]);
+      token = issueClientToken(fresh);
+    }
 
     res.json({
       success: true,
-      message: 'تم تحديث الملف الشخصي بنجاح'
+      message: newHash ? 'تم تحديث الملف الشخصي وتغيير كلمة المرور. تم تسجيل الخروج من الأجهزة الأخرى.' : 'تم تحديث الملف الشخصي بنجاح',
+      token
     });
   } catch (err) {
     console.error('Update Profile Error:', err);

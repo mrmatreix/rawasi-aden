@@ -22,7 +22,8 @@ if (!fs.existsSync(dest)) {
 });
 
 // نسخ مجلدات الواجهة الأمامية
-['css', 'js', 'images'].forEach(dir => {
+// views مطلوب لأن الواجهة تحمّل الشاشات منه؛ بدونه بقيت www/views نسخة قديمة لا تُحدّث
+['css', 'js', 'images', 'views'].forEach(dir => {
   const src = path.join(root, dir);
   if (fs.existsSync(src)) {
     fs.cpSync(src, path.join(dest, dir), { recursive: true });

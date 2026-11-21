@@ -26,6 +26,7 @@ router.use(async (req,res,next)=>{
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../database/db');
+const { isWeakClientPin, BUMP_SESSION_SQL, CLEAR_OTP_LOCK_SQL } = require('../middleware/client_auth');
 const { logAudit } = require('../services/auditService');
 const toEnglishDigits = (value) => String(value ?? '').replace(/[٠-٩]/g, digit => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(digit)]);
 const parseDisplayOrder = (value) => Number(toEnglishDigits(value)) || 0;
@@ -554,7 +555,7 @@ router.post('/', async (req, res) => {
     const result = await db.run(`
       INSERT INTO client_users 
       (client_id, email, phone, password_hash, full_name, role, status, two_factor_enabled, two_factor_pin, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '123456', CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, CURRENT_TIMESTAMP)
     `, [
       parsedClientId,
       cleanEmail,
@@ -582,9 +583,9 @@ router.post('/', async (req, res) => {
       for (const pId of targetProjectIds) {
         await db.run(`
           INSERT INTO client_project_access 
-          (client_user_id, project_id, can_view_progress, can_view_invoices, can_view_payments, can_view_reports, can_view_drawings, can_approve_invoices, can_send_messages, granted_by)
-          VALUES (?, ?, 1, 1, 1, 1, 1, ?, 1, ?)
-        `, [newUserId, pId, userRole === 'owner' ? 1 : 0, req.user?.id || 1]);
+          (client_user_id, project_id, can_view_progress, can_view_invoices, can_view_payments, can_view_reports, can_view_drawings, can_view_correspondence, can_approve_invoices, can_send_messages, granted_by)
+          VALUES (?, ?, 1, 1, 1, 1, 1, 1, ?, 1, ?)
+        `, [newUserId, pId, (userRole === 'owner' || userRole === 'manager') ? 1 : 0, req.user?.id || 1]);
       }
     }
 
@@ -658,13 +659,20 @@ router.put('/:id', async (req, res) => {
     if (status && ['active', 'inactive', 'suspended'].includes(status)) { 
       updates.push('status = ?'); 
       params.push(status);
-      // إذا تم تجميد الحساب، مسح التوكن فوراً للإلغاء اللحظي للجلسة
+      // إذا تم تجميد الحساب: مسح رمز الجهاز وإلغاء كل الجلسات، فلا تعود صالحة حتى لو أُعيد تفعيل الحساب
       if (status !== 'active') {
         updates.push('device_token = NULL');
+        updates.push(BUMP_SESSION_SQL);
       }
     }
     if (typeof two_factor_enabled === 'boolean') { updates.push('two_factor_enabled = ?'); params.push(two_factor_enabled ? 1 : 0); }
-    if (two_factor_pin) { updates.push('two_factor_pin = ?'); params.push(String(two_factor_pin).trim()); }
+    if (two_factor_pin) {
+      const cleanPin = String(two_factor_pin).trim();
+      if (isWeakClientPin(cleanPin)) {
+        return res.status(400).json({ success: false, message: 'رمز الأمان يجب أن يكون 6 أرقام وألا يكون رمزاً افتراضياً أو سهلاً مثل 123456' });
+      }
+      updates.push('two_factor_pin = ?'); params.push(cleanPin);
+    }
 
     if (updates.length > 0) {
       updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -711,7 +719,7 @@ router.post('/:id/reset-password', async (req, res) => {
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(password, salt);
 
-    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, otp_code = NULL, otp_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
+    await db.run(`UPDATE client_users SET password_hash = ?, device_token = NULL, otp_code = NULL, otp_expires_at = NULL, ${BUMP_SESSION_SQL}, ${CLEAR_OTP_LOCK_SQL}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [hash, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_PASSWORD_RESET',
@@ -727,7 +735,11 @@ router.post('/:id/reset-password', async (req, res) => {
 });
 
 const makeTempPassword = () => `Rawasi#${crypto.randomBytes(5).toString('base64url')}`;
-const makeOtpCode = () => crypto.randomInt(100000, 1000000).toString();
+const makeOtpCode = () => {
+  let code;
+  do { code = crypto.randomInt(100000, 1000000).toString(); } while (isWeakClientPin(code));
+  return code;
+};
 const buildInviteText = ({ fullName, email, tempPassword, otpCode, portalUrl, message }) => {
   const greeting = String(message || `مرحباً ${fullName}، تم إنشاء حسابك في بوابة عملاء شركة رواسي عدن للهندسة والمقاولات.`).trim();
   return `${greeting}\n\nالبريد: ${email}\nكلمة المرور المؤقتة: ${tempPassword}\nرمز الأمان (OTP): ${otpCode}\nرابط الدخول: ${portalUrl}`;
@@ -779,6 +791,9 @@ router.post('/:id/send-invite', async (req, res) => {
     if (!/^\d{6}$/.test(otpCode)) {
       return res.status(400).json({ success: false, message: 'رمز OTP يجب أن يتكون من 6 أرقام إنجليزية' });
     }
+    if (isWeakClientPin(otpCode)) {
+      return res.status(400).json({ success: false, message: 'رمز الأمان سهل التخمين (مثل 123456). اختر رمزاً آخر أو اترك الرمز المولَّد تلقائياً.' });
+    }
     const message = String(requested.message || '').trim().slice(0, 600);
     const defaultShareText = buildInviteText({ fullName: user.full_name, email: user.email, tempPassword, otpCode, portalUrl, message });
     const whatsappShareText = String(requested.whatsapp_share_text || defaultShareText).trim().slice(0, 2500);
@@ -788,11 +803,14 @@ router.post('/:id/send-invite', async (req, res) => {
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(tempPassword, salt);
 
+    // رمز الدعوة يصبح رمز الأمان الدائم للحساب (two_factor_pin)، لأن تسجيل الدخول يستبدل otp_code المؤقت.
+    // يُحسب تاريخ الانتهاء في JavaScript ليعمل مع SQLite و MySQL معاً.
+    const otpExpiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString();
     await db.run(`
-      UPDATE client_users 
-      SET password_hash = ?, otp_code = ?, otp_expires_at = datetime('now', ?), updated_at = CURRENT_TIMESTAMP
+      UPDATE client_users
+      SET password_hash = ?, otp_code = ?, otp_expires_at = ?, two_factor_pin = ?, ${BUMP_SESSION_SQL}, ${CLEAR_OTP_LOCK_SQL}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [hash, otpCode, `+${expiryDays} days`, userId]);
+    `, [hash, otpCode, otpExpiresAt, otpCode, userId]);
 
     await logAudit(req, {
       action: 'CLIENT_USER_INVITE_SENT',
@@ -903,8 +921,8 @@ router.post('/:id/projects', async (req, res) => {
     for (const p of projects) {
       await db.run(`
         INSERT INTO client_project_access 
-        (client_user_id, project_id, can_view_progress, can_view_invoices, can_view_payments, can_view_reports, can_view_drawings, can_approve_invoices, can_send_messages, granted_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (client_user_id, project_id, can_view_progress, can_view_invoices, can_view_payments, can_view_reports, can_view_drawings, can_view_correspondence, can_approve_invoices, can_send_messages, granted_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         userId,
         p.project_id,
@@ -913,6 +931,7 @@ router.post('/:id/projects', async (req, res) => {
         p.can_view_payments !== undefined ? (p.can_view_payments ? 1 : 0) : 1,
         p.can_view_reports !== undefined ? (p.can_view_reports ? 1 : 0) : 1,
         p.can_view_drawings !== undefined ? (p.can_view_drawings ? 1 : 0) : 1,
+        p.can_view_correspondence !== undefined ? (p.can_view_correspondence ? 1 : 0) : 1,
         p.can_approve_invoices !== undefined ? (p.can_approve_invoices ? 1 : 0) : 0,
         p.can_send_messages !== undefined ? (p.can_send_messages ? 1 : 0) : 1,
         req.user?.id || 1

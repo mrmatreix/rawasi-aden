@@ -60,24 +60,27 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">رمز الـ PIN الاحتياطي الثابت (6 أرقام)</label>
-            <input type="text" id="profPin" maxlength="6" class="form-input" placeholder="123456" style="letter-spacing: 2px; font-weight: bold;">
+            <label class="form-label">تغيير رمز الأمان (6 أرقام)</label>
+            <input type="text" id="profPin" maxlength="6" inputmode="numeric" class="form-input" placeholder="اتركه فارغاً لإبقاء الرمز الحالي" style="letter-spacing: 2px; font-weight: bold;">
           </div>
+          <p style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.6; margin: -4px 0 4px;">
+            تغيير رمز الأمان أو إيقاف التحقق بخطوتين يتطلب إدخال كلمة المرور الحالية في الأسفل.
+          </p>
         </div>
 
         <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px;">
           <h4 style="font-size: 0.9rem; font-weight: bold; color: #FFFFFF; margin-bottom: 10px;">
-            <i class="fa-solid fa-key"></i> تغيير كلمة المرور (اختياري)
+            <i class="fa-solid fa-key"></i> كلمة المرور
           </h4>
 
           <div class="form-group">
             <label class="form-label">كلمة المرور الحالية</label>
-            <input type="password" id="currentPass" class="form-input" placeholder="أدخل كلمة المرور الحالية">
+            <input type="password" id="currentPass" class="form-input" autocomplete="current-password" placeholder="مطلوبة لتغيير كلمة المرور أو إعدادات الأمان">
           </div>
 
           <div class="form-group">
-            <label class="form-label">كلمة المرور الجديدة</label>
-            <input type="password" id="newPass" class="form-input" placeholder="6 خانات على الأقل">
+            <label class="form-label">كلمة المرور الجديدة (اختياري)</label>
+            <input type="password" id="newPass" class="form-input" autocomplete="new-password" minlength="8" placeholder="8 خانات على الأقل">
           </div>
         </div>
 
@@ -112,6 +115,8 @@
       loadProfile();
     });
 
+    let profile2faWasOn = false;
+
     async function loadProfile() {
       try {
         const data = await ClientAPI.get('/profile');
@@ -127,6 +132,7 @@
         document.getElementById('profEmail').value = p.email || '';
         document.getElementById('profPhone').value = p.phone || '';
         document.getElementById('prof2fa').checked = Boolean(p.two_factor_enabled);
+        profile2faWasOn = Boolean(p.two_factor_enabled);
       } catch (err) {
         ClientApp.showToast(err.message || 'فشل تحميل بيانات الملف الشخصي', 'error');
       }
@@ -147,22 +153,32 @@
 
       const curPass = document.getElementById('currentPass').value;
       const newPass = document.getElementById('newPass').value;
-      if (newPass) {
-        if (!curPass) {
-          ClientApp.showToast('يرجى إدخال كلمة المرور الحالية', 'error');
-          btn.disabled = false;
-          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات';
-          return;
-        }
-        payload.current_password = curPass;
-        payload.new_password = newPass;
+      // كلمة المرور الحالية مطلوبة لتغيير كلمة المرور أو رمز الأمان أو إيقاف التحقق بخطوتين
+      const needsCurrent = Boolean(newPass) || Boolean(payload.two_factor_pin) || (profile2faWasOn && !payload.two_factor_enabled);
+      if (needsCurrent && !curPass) {
+        ClientApp.showToast('أدخل كلمة المرور الحالية لتأكيد تغيير إعدادات الأمان', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات';
+        return;
       }
+      if (newPass && newPass.length < 8) {
+        ClientApp.showToast('كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات';
+        return;
+      }
+      if (curPass) payload.current_password = curPass;
+      if (newPass) payload.new_password = newPass;
 
       try {
         const res = await ClientAPI.put('/profile', payload);
         if (!res.success) throw new Error(res.message);
 
-        ClientApp.showToast('تم تحديث الملف الشخصي بنجاح', 'success');
+        // بعد تغيير كلمة المرور يُصدر الخادم جلسة جديدة لهذا الجهاز وتُلغى الجلسات الأخرى
+        if (res.token) await window.SecureStorage.set('token', res.token);
+        profile2faWasOn = Boolean(payload.two_factor_enabled);
+
+        ClientApp.showToast(res.message || 'تم تحديث الملف الشخصي بنجاح', 'success');
         document.getElementById('currentPass').value = '';
         document.getElementById('newPass').value = '';
         document.getElementById('profPin').value = '';

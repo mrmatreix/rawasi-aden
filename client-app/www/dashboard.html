@@ -142,9 +142,9 @@
         document.getElementById('statBalance').innerText = ClientApp.formatMoney(data.stats.outstanding_balance);
 
         // مؤشرات الإنجاز
-        const avg = data.stats.avg_progress || 0;
-        document.getElementById('avgProgressText').innerText = `${avg}%`;
-        document.getElementById('avgProgressBar').style.width = `${Math.min(100, Math.max(0, avg))}%`;
+        const avg = data.stats.avg_progress;
+        document.getElementById('avgProgressText').innerText = ClientApp.formatProgress(avg);
+        document.getElementById('avgProgressBar').style.width = `${ClientApp.progressWidth(avg)}%`;
         document.getElementById('activeProjectsCount').innerText = data.stats.active_projects || 0;
         document.getElementById('completedProjectsCount').innerText = data.stats.completed_projects || 0;
         document.getElementById('totalProjectsCount').innerText = data.stats.total_projects || 0;
@@ -183,12 +183,12 @@
 
           <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">
             <span>قيمة العقد: <b style="color: #FFFFFF;">${ClientApp.formatMoney(p.contract_value)}</b></span>
-            <span>نسبة الإنجاز: <b style="color: var(--gold);">${p.progress_percentage || 0}%</b></span>
+            <span>نسبة الإنجاز: <b style="color: ${ClientApp.isHidden(p.progress_percentage) ? 'var(--text-muted)' : 'var(--gold)'};">${ClientApp.formatProgress(p.progress_percentage)}</b></span>
           </div>
 
-          <div class="progress-container" style="height: 6px; margin: 8px 0;">
-            <div class="progress-fill" style="width: ${Math.min(100, Math.max(0, p.progress_percentage || 0))}%;"></div>
-          </div>
+          ${ClientApp.isHidden(p.progress_percentage) ? '' : `<div class="progress-container" style="height: 6px; margin: 8px 0;">
+            <div class="progress-fill" style="width: ${ClientApp.progressWidth(p.progress_percentage)}%;"></div>
+          </div>`}
 
           <div style="text-align: left; margin-top: 8px;">
             <a href="project-details.html?id=${p.id}" class="btn btn-secondary btn-sm">

@@ -118,6 +118,7 @@ async function requireClientAuth(req, res, next) {
         cu.two_factor_enabled,
         cu.device_token,
         cu.device_platform,
+        cu.session_version,
         c.name AS client_name,
         c.company AS client_company,
         c.phone AS client_phone,
@@ -140,6 +141,17 @@ async function requireClientAuth(req, res, next) {
         success: false,
         suspended: true,
         message: '⛔ تم إيقاف هذا الحساب أو تعطيله من قِبل إدارة الشركة. يرجى التواصل مع الدعم.'
+      });
+    }
+
+    // الجلسات الصادرة قبل آخر تغيير لكلمة المرور لم تعد صالحة
+    // (الجلسات القديمة بلا رقم إصدار تُعامل كإصدار 0 فتبقى صالحة حتى أول تغيير)
+    if (Number(decoded.sv || 0) !== Number(clientUser.session_version || 0)) {
+      return res.status(401).json({
+        success: false,
+        authError: true,
+        sessionRevoked: true,
+        message: '⛔ انتهت هذه الجلسة لأن كلمة المرور تغيّرت. يرجى تسجيل الدخول من جديد.'
       });
     }
 
@@ -222,6 +234,21 @@ async function requireClientAuth(req, res, next) {
         const projPerms = projectAccessMap[pId];
         if (!projPerms) return false;
         return Boolean(projPerms[permName]);
+      },
+
+      /**
+       * قائمة المشاريع التي يملك عليها المستخدم صلاحية محددة
+       * - null: لا قيود (المالك، أو حساب بلا قيود مشاريع وصلاحيته العامة غير ملغاة)
+       * - مصفوفة أرقام: المشاريع المسموحة فقط (قد تكون فارغة = لا شيء)
+       */
+      allowedProjectIdsFor: (permName) => {
+        if (clientUser.role === 'owner') return null;
+        if (Object.keys(projectAccessMap).length === 0) {
+          return parsedPermissions[permName] !== false ? null : [];
+        }
+        return Object.keys(projectAccessMap)
+          .filter(pId => projectAccessMap[pId][permName])
+          .map(pId => parseInt(pId, 10));
       }
     };
 
@@ -261,9 +288,82 @@ async function logClientAudit(req, action, entityType, entityId, details = null)
   }
 }
 
+// ==========================================
+// 4. رموز الأمان (PIN) وحماية التحقق من التخمين
+// ==========================================
+// رموز افتراضية أو سهلة لا تُقبل كرمز أمان لحساب عميل
+const WEAK_CLIENT_PINS = new Set([
+  '123456', '654321', '889900', '000000', '111111', '222222', '333333', '444444',
+  '555555', '666666', '777777', '888888', '999999', '121212', '112233', '123123'
+]);
+
+/** هل رمز الأمان غير صالح للاستخدام (فارغ، ليس 6 أرقام، أو افتراضي/سهل)؟ */
+function isWeakClientPin(pin) {
+  const value = String(pin || '').trim();
+  return !/^\d{6}$/.test(value) || WEAK_CLIENT_PINS.has(value);
+}
+
+// قفل مؤقت بعد محاولات تحقق خاطئة متكررة على الحساب نفسه (بغض النظر عن عنوان IP).
+// يُحفظ في صف الحساب (otp_failed_count / otp_locked_until) فلا يُمسح بإعادة تشغيل الخادم.
+const OTP_MAX_FAILURES = 5;
+const OTP_LOCK_MS = 15 * 60 * 1000;
+
+/** الوقت المتبقي على القفل بالمللي ثانية، من صف الحساب نفسه */
+function getOtpLockRemainingMs(user) {
+  if (!user || !user.otp_locked_until) return 0;
+  const remaining = new Date(user.otp_locked_until).getTime() - Date.now();
+  return Number.isFinite(remaining) && remaining > 0 ? remaining : 0;
+}
+
+/** يسجّل محاولة خاطئة ويعيد true إذا أصبح الحساب مقفلاً مؤقتاً */
+async function registerOtpFailure(userId) {
+  const row = await db.get('SELECT otp_failed_count FROM client_users WHERE id = ?', [userId]);
+  const count = Number(row?.otp_failed_count || 0) + 1;
+  if (count >= OTP_MAX_FAILURES) {
+    const lockedUntil = new Date(Date.now() + OTP_LOCK_MS).toISOString();
+    await db.run('UPDATE client_users SET otp_failed_count = 0, otp_locked_until = ? WHERE id = ?', [lockedUntil, userId]);
+    return true;
+  }
+  await db.run('UPDATE client_users SET otp_failed_count = ? WHERE id = ?', [count, userId]);
+  return false;
+}
+
+async function clearOtpFailures(userId) {
+  await db.run('UPDATE client_users SET otp_failed_count = 0, otp_locked_until = NULL WHERE id = ?', [userId]);
+}
+
+/** SQL جاهز لفك القفل (عند إعادة التعيين من الإدارة أو إرسال دعوة جديدة) */
+const CLEAR_OTP_LOCK_SQL = 'otp_failed_count = 0, otp_locked_until = NULL';
+
+/** إصدار جلسة عميل (30 يوماً) مرتبطة برقم إصدار الجلسات الحالي للحساب */
+function issueClientToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      client_id: user.client_id,
+      type: 'client',
+      role: user.role,
+      email: user.email,
+      sv: Number(user.session_version || 0)
+    },
+    CLIENT_JWT_SECRET,
+    { expiresIn: '30d' }
+  );
+}
+
+/** SQL جاهز لزيادة رقم إصدار الجلسات (يُلغي كل الجلسات السابقة) */
+const BUMP_SESSION_SQL = 'session_version = COALESCE(session_version, 0) + 1';
+
 module.exports = {
   CLIENT_JWT_SECRET,
   requireClientAuth,
   checkClientRateLimit,
-  logClientAudit
+  logClientAudit,
+  isWeakClientPin,
+  getOtpLockRemainingMs,
+  registerOtpFailure,
+  clearOtpFailures,
+  issueClientToken,
+  BUMP_SESSION_SQL,
+  CLEAR_OTP_LOCK_SQL
 };

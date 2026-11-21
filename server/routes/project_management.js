@@ -2344,7 +2344,7 @@ router.post('/:projectId/settlement', async (req, res) => {
 
     // إذا كانت المخالصة معتمدة ومغلقة، نقوم بتحديث حالة المشروع إلى completed
     if (status === 'مغلق ومصفى' || status === 'معتمد وموقع') {
-      await run('UPDATE projects SET status = "completed", progress_percentage = 100 WHERE id = ?', [projectId]);
+      await run("UPDATE projects SET status = 'completed', progress_percentage = 100 WHERE id = ?", [projectId]);
     }
 
     const saved = await get('SELECT * FROM project_final_settlements WHERE project_id = ?', [projectId]);

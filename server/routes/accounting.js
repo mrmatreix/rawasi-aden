@@ -530,7 +530,7 @@ router.get('/next-numbers', requirePermission('accounting:view,expenses:view,rev
     const currentYear = new Date().getFullYear();
 
     // 1. سند قبض
-    const rcCount = await get('SELECT COUNT(*) as cnt FROM payments WHERE type = "قبض"');
+    const rcCount = await get("SELECT COUNT(*) as cnt FROM payments WHERE type = 'قبض'");
     let rcSeq = ((rcCount ? rcCount.cnt : 0) || 0) + 1;
     let nextRc = `RC-${currentYear}-${String(rcSeq).padStart(4, '0')}`;
     while (await get('SELECT id FROM payments WHERE receipt_no = ?', [nextRc])) {
@@ -539,7 +539,7 @@ router.get('/next-numbers', requirePermission('accounting:view,expenses:view,rev
     }
 
     // 2. سند صرف (payments)
-    const pvCount = await get('SELECT COUNT(*) as cnt FROM payments WHERE type = "صرف"');
+    const pvCount = await get("SELECT COUNT(*) as cnt FROM payments WHERE type = 'صرف'");
     let pvSeq = ((pvCount ? pvCount.cnt : 0) || 0) + 1;
     let nextPv = `PV-${currentYear}-${String(pvSeq).padStart(4, '0')}`;
     while (await get('SELECT id FROM payments WHERE receipt_no = ?', [nextPv])) {

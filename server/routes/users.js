@@ -8,8 +8,8 @@ const { requirePermission } = require('../middleware/security');
 // جلب بيانات الفروع والأقسام والمشاريع لنطاق الصلاحيات
 router.get('/scopes-meta', requirePermission('settings:users'), async (req, res) => {
   try {
-    const branches = await query('SELECT id, code, name FROM branches WHERE status = "active" ORDER BY id ASC');
-    const departments = await query('SELECT id, code, name FROM departments WHERE status = "active" ORDER BY id ASC');
+    const branches = await query("SELECT id, code, name FROM branches WHERE status = 'active' ORDER BY id ASC");
+    const departments = await query("SELECT id, code, name FROM departments WHERE status = 'active' ORDER BY id ASC");
     const projects = await query('SELECT id, code, name, status FROM projects ORDER BY id ASC');
     const roles = await query('SELECT id, name, display_name FROM roles ORDER BY id ASC');
     res.json({ success: true, branches, departments, projects, roles });

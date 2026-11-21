@@ -150,8 +150,8 @@
         // رأس الصفحة
         document.getElementById('headerProjectCode').innerText = p.code || '';
         document.getElementById('projectName').innerText = p.name;
-        document.getElementById('projectProgressNum').innerText = `${p.progress_percentage || 0}%`;
-        document.getElementById('projectProgressBar').style.width = `${Math.min(100, Math.max(0, p.progress_percentage || 0))}%`;
+        document.getElementById('projectProgressNum').innerText = ClientApp.formatProgress(p.progress_percentage);
+        document.getElementById('projectProgressBar').style.width = `${ClientApp.progressWidth(p.progress_percentage)}%`;
         document.getElementById('msgProjectBtn').href = `messages.html?project_id=${p.id}&project_name=${encodeURIComponent(p.name)}`;
 
         // العقد

@@ -292,6 +292,11 @@ async function initMysql() {
     await checkAndAddCol('custodies', 'related_custody_id', 'INT NULL');
     await checkAndAddCol('custodies', 'related_custody_no', 'VARCHAR(100) NULL');
     await checkAndAddCol('custodies', 'status', 'VARCHAR(50) DEFAULT \'مفتوحة\'');
+    await checkAndAddCol('custodies', 'project_id', 'INT NULL');
+    await checkAndAddCol('custodies', 'account_id', 'INT NULL');
+    await checkAndAddCol('custodies', 'account_code', 'VARCHAR(50) NULL');
+    await checkAndAddCol('custodies', 'account_name', 'VARCHAR(255) NULL');
+    await checkAndAddCol('custodies', 'payment_method', 'VARCHAR(50) DEFAULT \'نقدي\'');
 
     await checkAndAddCol('payroll', 'journal_entry_id', 'INT NULL');
 
@@ -882,6 +887,11 @@ function initSqlite() {
     if (!custCols.includes('related_custody_id')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN related_custody_id INTEGER REFERENCES custodies(id);");
     if (!custCols.includes('related_custody_no')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN related_custody_no TEXT;");
     if (!custCols.includes('status')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN status TEXT DEFAULT 'مفتوحة';");
+    if (!custCols.includes('project_id')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN project_id INTEGER REFERENCES projects(id);");
+    if (!custCols.includes('account_id')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN account_id INTEGER;");
+    if (!custCols.includes('account_code')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN account_code TEXT;");
+    if (!custCols.includes('account_name')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN account_name TEXT;");
+    if (!custCols.includes('payment_method')) sqliteDb.exec("ALTER TABLE custodies ADD COLUMN payment_method TEXT DEFAULT 'نقدي';");
 
     sqliteDb.exec(`
       UPDATE custodies SET custody_no = 'CST-2024-' || printf('%04d', id) WHERE custody_no IS NULL OR custody_no = '';
@@ -2700,6 +2710,39 @@ function initSqlite() {
 }
 
 /**
+ * عمود رقم إصدار جلسات العميل (session_version):
+ * يُزاد عند تغيير كلمة المرور فتُلغى كل الجلسات المصدرة قبلها.
+ * يُضاف أثناء التهيئة نفسها (قبل قبول أي طلب) وعبر المحرك مباشرة لتجنب انتظار ensureReady.
+ */
+// أعمدة أمان حسابات العملاء المضافة بعد إنشاء الجدول الأصلي:
+// session_version لإلغاء الجلسات، و otp_failed_count / otp_locked_until لقفل التحقق الدائم (لا يُمسح بإعادة التشغيل)
+const CLIENT_SECURITY_COLUMNS = [
+  { name: 'session_version', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
+  { name: 'otp_failed_count', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
+  { name: 'otp_locked_until', mysql: 'VARCHAR(40) NULL', sqlite: 'TEXT' }
+];
+
+async function ensureClientSessionColumn() {
+  for (const col of CLIENT_SECURITY_COLUMNS) {
+    try {
+      if (activeEngine === 'mysql' && mysqlPool) {
+        const [cols] = await mysqlPool.query('SHOW COLUMNS FROM client_users LIKE ?', [col.name]);
+        if (!cols || cols.length === 0) {
+          await mysqlPool.query(`ALTER TABLE client_users ADD COLUMN ${col.name} ${col.mysql}`);
+        }
+      } else if (sqliteDb) {
+        const cols = sqliteDb.prepare('PRAGMA table_info(client_users)').all().map(c => c.name);
+        if (cols.length && !cols.includes(col.name)) {
+          sqliteDb.exec(`ALTER TABLE client_users ADD COLUMN ${col.name} ${col.sqlite};`);
+        }
+      }
+    } catch (err) {
+      console.error(`Client security column check failed (${col.name}):`, err.message);
+    }
+  }
+}
+
+/**
  * دالة التهيئة والتشغيل العامة عند بدء الخادم
  */
 let initializing = null;
@@ -2744,6 +2787,7 @@ async function initializeDatabase() {
         const [columns] = await mysqlPool.query("SHOW COLUMNS FROM project_boq LIKE 'work_item_id'");
         if (!columns.length) await mysqlPool.query('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
       }
+      await ensureClientSessionColumn();
       databaseState = 'ready'; databaseError = null;
     } catch (error) {
       databaseState = 'failed'; databaseError = error;
@@ -2756,6 +2800,30 @@ async function initializeDatabase() {
 }
 const ready = initializeDatabase();
 ready.catch(error => console.error('Database initialization failed:', error.code || error.name));
+
+/**
+ * ترحيل بيانات لمرة واحدة: منح حسابات العملاء بدور "مدير" صلاحية اعتماد المستخلصات
+ * على مشاريعهم، بعد أن أصبح الخادم يطبّق صلاحية can_approve_invoices على كل الأدوار.
+ * يُسجَّل تنفيذه في جدول settings حتى لا يتكرر ويلغي ما يعدّله المسؤول لاحقاً.
+ */
+async function runOneTimeDataMigrations() {
+  const MIGRATION_KEY = 'migration_client_manager_approval_v1';
+  try {
+    const done = await get('SELECT `value` FROM settings WHERE `key` = ?', [MIGRATION_KEY]);
+    if (done) return;
+    const result = await run(`
+      UPDATE client_project_access
+      SET can_approve_invoices = 1
+      WHERE can_approve_invoices = 0
+        AND client_user_id IN (SELECT id FROM client_users WHERE role = 'manager')
+    `);
+    await run('INSERT INTO settings (`key`, `value`) VALUES (?, ?)', [MIGRATION_KEY, new Date().toISOString()]);
+    console.log(`✅ [Rawasi DB] Granted invoice approval to client managers (${result?.changes ?? result?.affectedRows ?? 0} rows).`);
+  } catch (err) {
+    console.error('One-time data migration failed:', err.message);
+  }
+}
+ready.then(runOneTimeDataMigrations).catch(() => {});
 async function ensureReady() {
   if (initializing) await initializing;
   if (databaseState !== 'ready') throw Object.assign(new Error('Database unavailable'), { code: 'DATABASE_UNAVAILABLE', statusCode: 503, cause: databaseError });
