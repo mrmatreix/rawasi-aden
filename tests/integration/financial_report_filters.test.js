@@ -45,6 +45,15 @@ test('financial reports show expense accounts and share posting, hierarchy, cent
   assert.equal(noZero.data.accounts.find(row=>row.code==='31101001').type_label,'المصروفات');
   assert.equal((await api('/api/reports/trial-balance'+query+'&hide_zero=invalid')).status,400);
   const posted=await report('income-statement','&posting_status=posted'); const pending=await report('income-statement','&posting_status=unposted');
+  const mainTrial=await report('trial-balance','&display_level=main&hide_zero=true');
+  const leafTrial=await report('trial-balance','&display_level=subsidiary&hide_zero=true');
+  assert.ok(mainTrial.data.accounts.length>0);
+  assert.ok(mainTrial.data.accounts.every(row=>row.account_kind==='main'));
+  assert.ok(leafTrial.data.accounts.every(row=>row.account_kind==='subsidiary'));
+  assert.deepEqual(mainTrial.data.totals,leafTrial.data.totals);
+  const pendingTrial=await report('trial-balance','&posting_status=unposted&hide_zero=true');
+  assert.equal(pendingTrial.data.accounts.find(row=>row.code==='32102001').period_debit,125);
+  assert.equal(pendingTrial.data.accounts.find(row=>row.code==='41101001').period_credit,50);
   assert.equal(posted.data.total_expenses,105); assert.equal(pending.data.total_expenses,125); assert.equal(posted.data.total_expenses+pending.data.total_expenses,all.data.total_expenses);
   const centered=await report('income-statement','&cost_center_id='+cc); assert.equal(centered.data.total_expenses,170); assert.equal(centered.data.total_revenues,300);
   for(const mode of ['main','main_and_subsidiary']) { const shaped=await report('income-statement','&display_level='+mode); assert.equal(shaped.data.total_expenses,230); assert.equal(shaped.data.expenses.find(row=>row.code==='3').amount,230); if(mode==='main') assert.ok(shaped.data.expenses.every(row=>row.account_kind==='main')); }

@@ -575,7 +575,9 @@ class CloudBackupCryptoService {
       return {
         enabled: map.cloud_backup_enabled === 'true' || map.cloud_backup_enabled === '1',
         autoSyncAfterBackup: map.cloud_backup_auto_sync === 'true' || map.cloud_backup_auto_sync === '1',
-        provider: map.cloud_backup_provider || 'cloud_vault', // 'cloud_vault' | 'local_cloud_folder' | 's3_webhook'
+        // لا نعتبر أي مجلد داخل التطبيق "سحابة". النسخ خارج الموقع يجب أن
+        // تذهب إلى endpoint مستقل ومضبوط صراحة.
+        provider: map.cloud_backup_provider === 's3_webhook' ? 'offsite_webhook' : (map.cloud_backup_provider || 'not_configured'), // 'not_configured' | 'offsite_webhook'
         endpointUrl: map.cloud_backup_endpoint || '',
         authToken: map.cloud_backup_token || '',
         syncedFolder: require('../config/environment').isDev && map.cloud_backup_folder || path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'),
@@ -586,9 +588,9 @@ class CloudBackupCryptoService {
       };
     } catch (e) {
       return {
-        enabled: true,
-        autoSyncAfterBackup: true,
-        provider: 'cloud_vault',
+        enabled: false,
+        autoSyncAfterBackup: false,
+        provider: 'not_configured',
         endpointUrl: '',
         authToken: '',
         syncedFolder: path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'),
@@ -604,10 +606,20 @@ class CloudBackupCryptoService {
    * حفظ إعدادات المزامنة السحابية
    */
   async saveCloudConfig(newConfig = {}, user = 'admin', req = null) {
+    const provider = newConfig.provider === 's3_webhook' ? 'offsite_webhook' : (newConfig.provider || 'not_configured');
+    if (!['not_configured', 'offsite_webhook', 'local_cloud_folder'].includes(provider)) {
+      throw new Error('نوع وجهة النسخ غير معتمد. استخدم وجهة خارجية مستقلة عبر Webhook.');
+    }
+    if (Boolean(newConfig.enabled) && provider === 'offsite_webhook' && !/^https:\/\//i.test(String(newConfig.endpointUrl || ''))) {
+      throw new Error('يلزم رابط HTTPS صالح لوجهة النسخ الخارجية.');
+    }
+    if (Boolean(newConfig.enabled) && provider === 'local_cloud_folder' && !require('../config/environment').isDev) {
+      throw new Error('المجلد المحلي ليس وجهة خارجية في Railway؛ استخدم Webhook إلى تخزين مستقل.');
+    }
     const entries = [
       ['cloud_backup_enabled', String(Boolean(newConfig.enabled))],
       ['cloud_backup_auto_sync', String(Boolean(newConfig.autoSyncAfterBackup))],
-      ['cloud_backup_provider', newConfig.provider || 'cloud_vault'],
+      ['cloud_backup_provider', provider],
       ['cloud_backup_endpoint', newConfig.endpointUrl || ''],
       ['cloud_backup_folder', newConfig.syncedFolder || ''],
       ['cloud_backup_encrypt', String(newConfig.autoEncrypt !== undefined ? Boolean(newConfig.autoEncrypt) : true)]
@@ -615,9 +627,8 @@ class CloudBackupCryptoService {
     if (newConfig.authToken) entries.push(['cloud_backup_token',newConfig.authToken]);
     else if (newConfig.clearAuthToken === true) entries.push(['cloud_backup_token','']);
 
-    if (newConfig.encryptionPassphrase && newConfig.encryptionPassphrase.trim().length >= 4) {
-      entries.push(['cloud_backup_passphrase', newConfig.encryptionPassphrase.trim()]);
-    }
+    // لا نحفظ عبارة التشفير في SQLite. تحفظ في BACKUP_ENCRYPTION_KEY ضمن
+    // Railway Variables أو في مدير أسرار مستقل فقط.
 
     for (const [k, v] of entries) {
       await run(`INSERT OR REPLACE INTO settings (\`key\`, \`value\`) VALUES (?, ?)`, [k, v]);
@@ -630,7 +641,7 @@ class CloudBackupCryptoService {
         entity_id: 'cloud_backup',
         details: {
           enabled: newConfig.enabled,
-          provider: newConfig.provider,
+          provider,
           autoSync: newConfig.autoSyncAfterBackup
         }
       });
@@ -644,7 +655,15 @@ class CloudBackupCryptoService {
    */
   async testCloudConnection(customConfig = null) {
     const config = customConfig || await this.getCloudConfig();
-    const provider = config.provider || 'cloud_vault';
+    const provider = config.provider || 'not_configured';
+
+    if (provider === 'not_configured') {
+      return {
+        success: false,
+        provider,
+        message: 'لا توجد وجهة نسخ خارجية معتمدة. أضف endpoint مستقلاً ومفتاحه السري أولاً.'
+      };
+    }
 
     if (provider === 'local_cloud_folder') {
       const folder = path.resolve(config.syncedFolder || path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'));
@@ -670,7 +689,7 @@ class CloudBackupCryptoService {
       }
     }
 
-    if (provider === 's3_webhook') {
+    if (provider === 'offsite_webhook') {
       if (!config.endpointUrl || !config.endpointUrl.startsWith('http')) {
         return {
           success: false,
@@ -720,13 +739,7 @@ class CloudBackupCryptoService {
       }
     }
 
-    // المزود الافتراضي: خزنة سحابة رواسي الآمنة (Cloud Vault)
-    return {
-      success: true,
-      provider: 'cloud_vault',
-      latencyMs: 12,
-      message: 'خزنة سحابة رواسي عدن الآمنة المشفرة نشطة وجاهزة للمزامنة السحابية الفورية ☁️🔒'
-    };
+    return { success: false, provider, message: 'نوع الوجهة الخارجية غير مدعوم.' };
   }
 
   /**
@@ -748,8 +761,15 @@ class CloudBackupCryptoService {
 
     try {
       const fileStats = fs.statSync(filePath);
-      const provider = config.provider || 'cloud_vault';
+      const provider = config.provider || 'not_configured';
       let syncResult = null;
+
+      if (!config.enabled || provider === 'not_configured') {
+        throw new Error('المزامنة الخارجية غير مفعلة. لا تُعد الخزنة المحلية نسخة خارج الموقع.');
+      }
+      if (!this.isEncrypted(filePath)) {
+        throw new Error('يُمنع رفع أرشيف غير مشفر إلى وجهة خارجية. أنشئ أرشيف AES-256-GCM أولاً.');
+      }
 
       if (provider === 'local_cloud_folder') {
         const destDir = path.resolve(config.syncedFolder || path.join(require('../config/environment').storage.backups, 'cloud_drive_sync'));
@@ -757,7 +777,7 @@ class CloudBackupCryptoService {
         const destFile = path.join(destDir, fileName);
         fs.copyFileSync(filePath, destFile);
         syncResult = { target: destFile, size: fileStats.size };
-      } else if (provider === 's3_webhook' && config.endpointUrl) {
+      } else if (provider === 'offsite_webhook' && config.endpointUrl) {
         // إرسال عبر الـ Webhook
         const fileBuf = fs.readFileSync(filePath);
         const res = await fetch(config.endpointUrl, {
@@ -775,10 +795,7 @@ class CloudBackupCryptoService {
           throw new Error(`فشل رفع الملف إلى الـ Endpoint السحابي (كود الاستجابة: ${res.status})`);
         }
         syncResult = { status: res.status };
-      } else {
-        // خزنة سحابة رواسي الافتراضية
-        syncResult = { vault: 'rawasi_cloud_secure', size: fileStats.size };
-      }
+      } else throw new Error('وجهة النسخ الخارجي غير مكتملة أو غير صالحة.');
 
       // تحديث حالة السجل في Vault Manifest
       const manifestData = this.loadVaultManifest();
@@ -820,9 +837,13 @@ class CloudBackupCryptoService {
     const items = this.listVaultItems();
     if (items.length === 0) {
       // إذا لم توجد حزمة سابقة في الخزنة، ننشئ حزمة فورية ونرفعها
+      const passphrase = process.env.BACKUP_ENCRYPTION_KEY || '';
+      if (passphrase.length < 12) {
+        throw new Error('يلزم ضبط BACKUP_ENCRYPTION_KEY سرياً قبل إنشاء أرشيف خارجي مشفر.');
+      }
       const archive = await this.createFullSystemArchive({
         encrypt: true,
-        passphrase: 'RawasiAdenSecureKey2026',
+        passphrase,
         includeProjectsFiles: true,
         user: 'system_auto_sync'
       });

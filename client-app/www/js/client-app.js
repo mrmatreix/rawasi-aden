@@ -114,6 +114,19 @@ const ClientApp = {
     return `${formatted} ${currency}`;
   },
 
+  // نسبة الإنجاز: الخادم يرسل null عندما لا يملك المستخدم صلاحية عرضها، فتُعرض "غير متاح" لا 0%
+  isHidden(value) {
+    return value === null || value === undefined;
+  },
+
+  formatProgress(value) {
+    return this.isHidden(value) ? 'غير متاح' : `${Number(value) || 0}%`;
+  },
+
+  progressWidth(value) {
+    return this.isHidden(value) ? 0 : Math.min(100, Math.max(0, Number(value) || 0));
+  },
+
   formatDate(dateStr) {
     if (!dateStr) return '—';
     try {

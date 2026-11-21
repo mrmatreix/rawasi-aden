@@ -17,9 +17,16 @@ const db = require('../database/db');
 const { 
   CLIENT_JWT_SECRET, 
   requireClientAuth, 
-  checkClientRateLimit, 
-  logClientAudit 
+  checkClientRateLimit,
+  logClientAudit,
+  isWeakClientPin,
+  getOtpLockRemainingMs,
+  registerOtpFailure,
+  clearOtpFailures,
+  issueClientToken,
+  BUMP_SESSION_SQL
 } = require('../middleware/client_auth');
+const crypto = require('crypto');
 const pushNotificationService = require('../services/pushNotificationService');
 
 // تطبيق محدد الطلبات العام لبوابة العملاء
@@ -32,9 +39,9 @@ function normalizeDigits(str) {
   return String(str).replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w));
 }
 
-// توليد رمز OTP عشوائي مكون من 6 أرقام
+// توليد رمز OTP عشوائي آمن تشفيرياً مكون من 6 أرقام
 function generateOtpCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 // =========================================================================
@@ -76,19 +83,19 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    if (user.status !== 'active') {
-      return res.status(403).json({
-        success: false,
-        message: 'تم تعطيل أو إيقاف حسابك من قِبل الإدارة. يرجى مراجعة إدارة الشركة.'
-      });
-    }
-
-    // التحقق من كلمة المرور
+    // التحقق من كلمة المرور أولاً، حتى لا تُكشف حالة الحساب لمن لا يعرف كلمة مروره
     const isPasswordValid = bcrypt.compareSync(String(password), user.password_hash);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
         message: 'بيانات الدخول غير صحيحة (البريد الإلكتروني أو كلمة المرور غير متطابقة)'
+      });
+    }
+
+    if (user.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        message: 'تم تعطيل أو إيقاف حسابك من قِبل الإدارة. يرجى مراجعة إدارة الشركة.'
       });
     }
 
@@ -128,17 +135,7 @@ router.post('/auth/login', async (req, res) => {
     }
 
     // إصدار التوكن النهائي مباشرة إذا لم يكن 2FA مفعلاً
-    const token = jwt.sign(
-      {
-        id: user.id,
-        client_id: user.client_id,
-        type: 'client',
-        role: user.role,
-        email: user.email
-      },
-      CLIENT_JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = issueClientToken(user);
 
     const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
     await db.run(`
@@ -227,23 +224,51 @@ router.post('/auth/verify-otp', async (req, res) => {
       });
     }
 
+    // قفل مؤقت بعد محاولات خاطئة متكررة على هذا الحساب
+    const lockMs = getOtpLockRemainingMs(user);
+    if (lockMs > 0) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        message: `تم إيقاف التحقق مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد ${Math.ceil(lockMs / 60000)} دقيقة.`
+      });
+    }
+
     // التحقق من صلاحية الكود:
     // 1. الكود المؤقت otp_code وتاريخ صلاحيته
-    // 2. أو رمز two_factor_pin الثابت كرمز أمان احتياطي
+    // 2. أو رمز الأمان الخاص بالحساب two_factor_pin (يُرفض الرمز الافتراضي أو السهل خارج بيئة التطوير)
     const now = new Date();
-    const isOtpValid = user.otp_code && 
-                       user.otp_code === cleanOtp && 
-                       user.otp_expires_at && 
-                       new Date(user.otp_expires_at) >= now;
+    const isOtpValid = Boolean(user.otp_code &&
+                       user.otp_code === cleanOtp &&
+                       user.otp_expires_at &&
+                       new Date(user.otp_expires_at) >= now);
 
-    const isPinValid = user.two_factor_pin && normalizeDigits(user.two_factor_pin) === cleanOtp;
+    const storedPin = normalizeDigits(String(user.two_factor_pin || '').trim());
+    const pinUsable = Boolean(storedPin) && (require('../config/environment').isDev || !isWeakClientPin(storedPin));
+    const isPinValid = pinUsable && storedPin === cleanOtp;
 
     if (!isOtpValid && !isPinValid) {
+      const nowLocked = await registerOtpFailure(user.id);
+      await logClientAudit(
+        { clientUser: user, headers: req.headers, socket: req.socket },
+        'CLIENT_OTP_FAILED',
+        'client_users',
+        user.id,
+        nowLocked ? 'محاولات تحقق خاطئة متكررة - تم القفل المؤقت' : 'محاولة تحقق برمز خاطئ'
+      );
+      if (!pinUsable) {
+        return res.status(403).json({
+          success: false,
+          message: 'لم يتم إعداد رمز أمان خاص بحسابك بعد. يرجى التواصل مع إدارة الشركة لإرسال دعوة التفعيل.'
+        });
+      }
       return res.status(400).json({
         success: false,
         message: 'رمز التحقق (OTP) غير صحيح أو منتهي الصلاحية'
       });
     }
+
+    await clearOtpFailures(user.id);
 
     // تصفير كود الـ OTP بعد استخدامه بنجاح
     await db.run(`
@@ -253,17 +278,7 @@ router.post('/auth/verify-otp', async (req, res) => {
     `, [req.ip || req.socket.remoteAddress || '127.0.0.1', user.id]);
 
     // إصدار توكن الجلسة لمدة 30 يوم
-    const token = jwt.sign(
-      {
-        id: user.id,
-        client_id: user.client_id,
-        type: 'client',
-        role: user.role,
-        email: user.email
-      },
-      CLIENT_JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = issueClientToken(user);
 
     await logClientAudit(
       { clientUser: user, headers: req.headers, socket: req.socket },
@@ -320,15 +335,97 @@ router.post('/auth/forgot-password', async (req, res) => {
 
     await db.run(`UPDATE client_users SET otp_code = ?, otp_expires_at = ? WHERE id = ?`, [otpCode, expiresAt, user.id]);
 
+    // استجابة مطابقة تماماً لحالة البريد غير المسجل حتى لا يُكشف وجود الحساب
     res.json({
       success: true,
-      message: 'تمت إرسال تعليمات ورمز إعادة تعيين كلمة المرور بنجاح',
-      maskedPhone: user.phone ? user.phone.replace(/(\d{3})\d+(\d{2})/, '$1****$2') : null,
+      message: 'إذا كان البريد الإلكتروني مسجلاً لدينا ومفعلاً، فسيتم إرسال تعليمات إعادة التعيين إليه.',
       debugOtp: require('../config/environment').isDev ? otpCode : undefined
     });
   } catch (err) {
     console.error('Forgot password error:', err);
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء طلب استعادة كلمة المرور' });
+  }
+});
+
+/**
+ * POST /api/client-portal/auth/reset-password
+ * تعيين كلمة مرور جديدة ذاتياً باستخدام رمز الأمان الخاص بالحساب (المرسل في دعوة التفعيل)
+ * أو رمز الاستعادة المؤقت من forgot-password (عند ربط خدمة إرسال الرسائل مستقبلاً)
+ */
+router.post('/auth/reset-password', async (req, res) => {
+  const genericError = 'البريد الإلكتروني أو رمز الأمان غير صحيح';
+  try {
+    const { email, code, new_password } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const cleanCode = normalizeDigits(String(code || '').trim());
+    const newPassword = String(new_password || '');
+
+    if (!cleanEmail || !cleanCode || !newPassword) {
+      return res.status(400).json({ success: false, message: 'يرجى إدخال البريد الإلكتروني ورمز الأمان وكلمة المرور الجديدة' });
+    }
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ success: false, message: 'كلمة المرور الجديدة يجب أن تكون بين 8 و128 حرفاً' });
+    }
+
+    const user = await db.get(`
+      SELECT id, client_id, email, full_name, status, otp_code, otp_expires_at, two_factor_pin, otp_locked_until
+      FROM client_users WHERE LOWER(email) = ?
+    `, [cleanEmail]);
+
+    // رسالة موحدة للحساب غير الموجود أو غير النشط لمنع كشف وجود الحساب
+    if (!user || user.status !== 'active') {
+      return res.status(400).json({ success: false, message: genericError });
+    }
+
+    const lockMs = getOtpLockRemainingMs(user);
+    if (lockMs > 0) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        message: `تم إيقاف المحاولات مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد ${Math.ceil(lockMs / 60000)} دقيقة.`
+      });
+    }
+
+    const isOtpValid = Boolean(user.otp_code &&
+      user.otp_code === cleanCode &&
+      user.otp_expires_at &&
+      new Date(user.otp_expires_at) >= new Date());
+    const storedPin = normalizeDigits(String(user.two_factor_pin || '').trim());
+    const pinUsable = Boolean(storedPin) && (require('../config/environment').isDev || !isWeakClientPin(storedPin));
+    const isPinValid = pinUsable && storedPin === cleanCode;
+
+    if (!isOtpValid && !isPinValid) {
+      const nowLocked = await registerOtpFailure(user.id);
+      await logClientAudit(
+        { clientUser: user, headers: req.headers, socket: req.socket },
+        'CLIENT_PASSWORD_RESET_FAILED',
+        'client_users',
+        user.id,
+        nowLocked ? 'محاولات استعادة خاطئة متكررة - تم القفل المؤقت' : 'محاولة استعادة كلمة المرور برمز خاطئ'
+      );
+      return res.status(400).json({ success: false, message: genericError });
+    }
+
+    await clearOtpFailures(user.id);
+    const hash = bcrypt.hashSync(newPassword, bcrypt.genSaltSync(10));
+    await db.run(`
+      UPDATE client_users
+      SET password_hash = ?, otp_code = NULL, otp_expires_at = NULL, device_token = NULL, ${BUMP_SESSION_SQL}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [hash, user.id]);
+
+    await logClientAudit(
+      { clientUser: user, headers: req.headers, socket: req.socket },
+      'CLIENT_PASSWORD_RESET',
+      'client_users',
+      user.id,
+      'قام العميل بتعيين كلمة مرور جديدة ذاتياً'
+    );
+
+    res.json({ success: true, message: 'تم تعيين كلمة المرور الجديدة بنجاح. يمكنك تسجيل الدخول الآن.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تعيين كلمة المرور' });
   }
 });
 
@@ -344,10 +441,25 @@ router.post('/auth/forgot-password', async (req, res) => {
 router.get('/services', async (req, res) => {
   try {
     const services = await db.query(`
-      SELECT id, code, title, category, description, icon, display_order
+      SELECT id, code, title,
+        CASE category
+          WHEN 'التصميم والإشراف' THEN 'design'
+          WHEN 'المقاولات' THEN 'execution'
+          WHEN 'ترميم وصيانة' THEN 'finishing'
+          WHEN 'تشطيبات' THEN 'finishing'
+          WHEN 'أنظمة' THEN 'systems'
+          WHEN 'بنية تحتية' THEN 'infrastructure'
+          WHEN 'استشارات' THEN 'consulting'
+          WHEN 'توريد' THEN 'supply'
+          WHEN 'survey' THEN 'infrastructure'
+          ELSE category END AS category,
+        description, icon, display_order
       FROM engineering_services
       WHERE is_active = 1
-      ORDER BY display_order ASC, id ASC
+      ORDER BY CASE category
+        WHEN 'design' THEN 10 WHEN 'execution' THEN 20 WHEN 'finishing' THEN 30
+        WHEN 'systems' THEN 40 WHEN 'infrastructure' THEN 50 WHEN 'consulting' THEN 60
+        WHEN 'supply' THEN 70 ELSE 90 END, display_order ASC, id ASC
     `);
 
     res.json({
@@ -424,8 +536,9 @@ router.post('/services/requests', async (req, res) => {
         const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, CLIENT_JWT_SECRET,{algorithms:['HS256']});
         if (decoded && decoded.type==='client' && decoded.id && decoded.client_id) {
-          const userCheck = await db.get(`SELECT id FROM client_users WHERE id = ? AND client_id = ? AND status = 'active'`, [decoded.id,decoded.client_id]);
-          if (userCheck) {
+          const userCheck = await db.get(`SELECT id, session_version FROM client_users WHERE id = ? AND client_id = ? AND status = 'active'`, [decoded.id,decoded.client_id]);
+          // جلسة ملغاة (بعد تغيير كلمة المرور) لا تربط الطلب بالحساب ويُعامل المرسل كزائر
+          if (userCheck && Number(decoded.sv || 0) === Number(userCheck.session_version || 0)) {
             clientUserId = userCheck.id;
             source = 'registered_client';
           }
@@ -435,17 +548,11 @@ router.post('/services/requests', async (req, res) => {
       }
     }
 
-    // 3. توليد رقم طلب فريد SR-YYYY-XXXX
-    const currentYear = new Date().getFullYear();
-    const countRow = await db.get(`
-      SELECT COUNT(id) as total FROM service_requests
-      WHERE request_no LIKE ?
-    `, [`SR-${currentYear}-%`]);
-    const nextSeq = (Number(countRow?.total || 0) + 1).toString().padStart(4, '0');
-    const requestNo = `SR-${currentYear}-${nextSeq}`;
+    // Reserve a durable sequence before saving files, including after request deletion.
+    const requestNo=await require('../services/serviceRequestRetentionService').reserveNumber(new Date().getFullYear());
 
     // توليد كود تحقق آمن
-    const verificationCode = require('crypto').randomInt(100000,1000000).toString();
+    const verificationCode = require('crypto').randomBytes(14).toString('hex');
 
     // 4. معالجة وحفظ المرفقات المرفوعة بأمان
     if(!Array.isArray(attachments)||attachments.length>10)throw Object.assign(new Error('الحد الأقصى عشرة مرفقات'),{statusCode:400});
@@ -497,14 +604,22 @@ router.post('/services/requests', async (req, res) => {
     const cleanNotes = notes ? String(notes).trim() : null;
     const budgetNum = estimated_budget ? parseFloat(estimated_budget) : null;
 
+    const supervisorSetting=await db.get("SELECT value FROM settings WHERE `key`='service_request_supervisor_id'");
+    let supervisorId=Number(supervisorSetting?.value)||null;
+    if(supervisorId){
+      const supervisor=await db.get("SELECT u.id,u.role,u.permissions,(SELECT permissions FROM roles WHERE name=u.role LIMIT 1) AS role_permissions FROM users u WHERE u.id=? AND (u.status='active' OR u.status IS NULL)",[supervisorId]);
+      let permissions=[];try{permissions=JSON.parse(supervisor?.permissions||supervisor?.role_permissions||'[]');}catch{}
+      if(!supervisor || !require('../middleware/security').hasUserPermission({...supervisor,permissions},'client_app:requests_review'))supervisorId=null;
+    }
+
     const requestId = await db.transaction(async tx=>{
     const insertResult = await tx.run(`
       INSERT INTO service_requests (
         request_no, client_user_id, source, client_name, phone, email,
         project_name, project_type, location, description,
         estimated_budget, currency, expected_start_date, notes,
-        attachments, status, verification_code, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        attachments, status, verification_code, assigned_to, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       requestNo,
       clientUserId,
@@ -521,7 +636,8 @@ router.post('/services/requests', async (req, res) => {
       expected_start_date || null,
       cleanNotes,
       JSON.stringify(savedAttachments),
-      verificationCode
+      verificationCode,
+      supervisorId
     ]);
 
     const requestId = insertResult.lastID || insertResult.insertId;
@@ -533,6 +649,9 @@ router.post('/services/requests', async (req, res) => {
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
       `, [requestId, s.id, s.title]);
     }
+
+    await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)', [requestId,'system',null,'request_received','مرحباً بكم في رواسي عدن، استلمنا طلبكم وسيتم تحويله للمشرف لمراجعته والتواصل معكم.']);
+    if(supervisorId) await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[requestId,'system',null,'supervisor_assigned',`أُحيل الطلب إلى مشرف الخدمة رقم ${supervisorId}`]);
 
       return requestId;
     });
@@ -553,9 +672,15 @@ router.post('/services/requests', async (req, res) => {
       console.warn('Could not insert audit log for service request:', auditErr);
     }
 
+    if (source === 'guest') {
+      const configured=await db.get("SELECT value FROM settings WHERE `key`='guest_request_access_days'");
+      const days=Number(configured?.value); const lifetime=Number.isInteger(days)&&days>=1&&days<=365?days:30;
+      const token=jwt.sign({type:'guest_request',request_no:requestNo,verification_code:verificationCode},CLIENT_JWT_SECRET,{algorithm:'HS256',expiresIn:lifetime*86400});
+      res.cookie('rawasi_guest_request',token,{httpOnly:true,secure:!['localhost','127.0.0.1','::1'].includes(req.hostname),sameSite:'lax',path:'/api/client-portal/services/requests',maxAge:lifetime*86400000});
+    }
     res.json({
       success: true,
-      message: 'تم إرسال طلبكم بنجاح إلى إدارة مكتب رواسي عدن. سيقوم مهندسونا بالتواصل معكم في أقرب وقت.',
+      message: 'مرحباً بكم في رواسي عدن، استلمنا طلبكم وسيتم تحويله للمشرف لمراجعته والتواصل معكم.',
       data: {
         request_id: requestId,
         request_no: requestNo,
@@ -579,7 +704,21 @@ router.post('/services/requests', async (req, res) => {
  * GET /api/client-portal/services/requests/track
  * متابعة حالة الطلب للزائر باستخدام رقم الطلب ورمز التحقق
  */
+router.get('/services/requests/guest-session', async (req,res) => {
+  res.set('Cache-Control','no-store');
+  try {
+    const part=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('rawasi_guest_request='));
+    const token=part ? decodeURIComponent(part.slice('rawasi_guest_request='.length)) : '';
+    const data=jwt.verify(token,CLIENT_JWT_SECRET,{algorithms:['HS256']});
+    if(data.type!=='guest_request'||!data.request_no||!/^[a-f0-9]{28}$/.test(data.verification_code||'')) throw new Error('invalid');
+    const found=await db.get("SELECT id FROM service_requests WHERE request_no=? AND verification_code=? AND source='guest'",[data.request_no,data.verification_code]);
+    if(!found) throw new Error('invalid');
+    res.json({success:true,request_no:data.request_no,verification_code:data.verification_code,expires_at:new Date(data.exp*1000).toISOString()});
+  } catch {res.status(401).json({success:false,message:'انتهت جلسة متابعة الزائر أو لم تبدأ'});}
+});
+
 router.get('/services/requests/track', async (req, res) => {
+  res.set('Cache-Control','no-store');
   try {
     const { request_no, verification_code } = req.query;
     if (!request_no || !verification_code) {
@@ -591,8 +730,10 @@ router.get('/services/requests/track', async (req, res) => {
 
     const request = await db.get(`
       SELECT 
-        sr.id, sr.request_no, sr.client_name, sr.project_name, sr.project_type,
-        sr.location, sr.status, sr.admin_notes, sr.quoted_amount, sr.currency,
+        sr.id, sr.request_no, sr.client_name, sr.project_name, sr.project_type, sr.source,
+        sr.location, sr.status,
+        CASE WHEN EXISTS (SELECT 1 FROM service_request_quotes q WHERE q.request_id=sr.id AND q.state IN ('sent','accepted')) THEN sr.quoted_amount ELSE NULL END AS quoted_amount,
+        sr.currency,
         sr.created_at, sr.updated_at
       FROM service_requests sr
       WHERE UPPER(sr.request_no) = UPPER(?) AND sr.verification_code = ?
@@ -608,6 +749,10 @@ router.get('/services/requests/track', async (req, res) => {
     const items = await db.query(`
       SELECT service_title FROM service_request_items WHERE request_id = ?
     `, [request.id]);
+    if (String(verification_code).length >= 28) {
+      request.quote = await db.get("SELECT id,version,details,duration,amount,currency,state FROM service_request_quotes WHERE request_id=? AND state IN ('sent','accepted') ORDER BY version DESC LIMIT 1",[request.id]);
+      request.messages = await db.query("SELECT actor_type,message,created_at FROM service_request_events WHERE request_id=? AND event_type IN ('request_received','message_to_client','message_from_client') ORDER BY id",[request.id]);
+    }
 
     res.json({
       success: true,
@@ -621,10 +766,103 @@ router.get('/services/requests/track', async (req, res) => {
   }
 });
 
+router.post('/services/requests/guest-message', async (req,res) => {
+  const {request_no,verification_code}=req.body, message=String(req.body.message||'').trim();
+  if(!request_no || !/^[a-f0-9]{28}$/.test(String(verification_code||'')) || !message || message.length>4000)return res.status(400).json({success:false,message:'أدخل رمز المتابعة والرسالة'});
+  try {
+    const request=await db.get("SELECT id FROM service_requests WHERE UPPER(request_no)=UPPER(?) AND verification_code=? AND source='guest'",[String(request_no).trim(),verification_code]);
+    if(!request)return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[request.id,'guest',null,'message_from_client',message]);
+    res.json({success:true});
+  }catch(err){res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/services/requests/guest-response', async (req,res) => {
+  const {request_no,verification_code,decision,quote_id}=req.body;
+  const note=String(req.body.note||'').trim();
+  if(!request_no || !/^[a-f0-9]{28}$/.test(String(verification_code||'')) || !['accept','changes'].includes(decision) || (decision==='changes'&&!note) || note.length>4000)
+    return res.status(400).json({success:false,message:'بيانات الرد غير صالحة؛ للطلبات القديمة يرجى التواصل مع الإدارة'});
+  try {
+    const result=await db.transaction(async tx=>{
+      const request=await tx.get("SELECT id,status FROM service_requests WHERE UPPER(request_no)=UPPER(?) AND verification_code=? AND source='guest'",[String(request_no).trim(),verification_code]);
+      if(!request)return {status:404,message:'الطلب غير موجود'};
+      const quote=await tx.get("SELECT id FROM service_request_quotes WHERE request_id=? AND state='sent' ORDER BY version DESC LIMIT 1",[request.id]);
+      if(request.status!=='quoted'||!quote||Number(quote.id)!==Number(quote_id))return {status:409,message:'العرض تغير أو تمت الإجابة عليه'};
+      const updated=await tx.run("UPDATE service_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='quoted'",[decision==='accept'?'client_accepted':'client_changes',request.id]);
+      if(!updated.changes)return {status:409,message:'حالة الطلب تغيرت'};
+      await tx.run('UPDATE service_request_quotes SET state=?,client_response=?,client_responded_at=CURRENT_TIMESTAMP WHERE id=?',[decision==='accept'?'accepted':'changes_requested',note,quote.id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[request.id,'guest',null,decision==='accept'?'client_accepted':'client_changes',note]);
+      return {status:200};
+    });
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch(err){console.error('guest quote response',err);res.status(500).json({success:false,message:'تعذر تسجيل الرد'});}
+});
+
 // =========================================================================
 // المسارات المحمية بالكامل بـ requireClientAuth (Deny by Default)
 // =========================================================================
 router.use(requireClientAuth);
+
+// The authenticated client can only access requests submitted by that account.
+router.get('/my-service-requests', async (req, res) => {
+  try {
+    const requests = await db.query(`SELECT id,request_no,project_name,status,created_at,updated_at FROM service_requests WHERE client_user_id=? ORDER BY id DESC`,[req.clientUser.id]);
+    for (const request of requests) {
+      request.quote = await db.get(`SELECT id,version,details,duration,amount,currency,state,client_response,approved_at FROM service_request_quotes WHERE request_id=? AND state IN ('sent','accepted') ORDER BY version DESC LIMIT 1`,[request.id]);
+      request.messages = await db.query("SELECT actor_type,message,created_at FROM service_request_events WHERE request_id=? AND event_type IN ('request_received','message_to_client','message_from_client') ORDER BY id",[request.id]);
+    }
+    res.json({success:true,requests});
+  } catch(err) { console.error('client requests',err); res.status(500).json({success:false,message:'تعذر جلب الطلبات'}); }
+});
+
+router.post('/my-service-requests/:id/message', async (req,res) => {
+  const id=Number(req.params.id), message=String(req.body.message||'').trim();
+  if(!message || message.length>4000) return res.status(400).json({success:false,message:'أدخل رسالة لا تزيد عن 4000 حرف'});
+  try {
+    if(!(await db.get('SELECT id FROM service_requests WHERE id=? AND client_user_id=?',[id,req.clientUser.id]))) return res.status(404).json({success:false,message:'الطلب غير موجود'});
+    await db.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'client',req.clientUser.id,'message_from_client',message]);
+    res.json({success:true});
+  } catch(err) {res.status(500).json({success:false,message:'تعذر إرسال الرسالة'});}
+});
+
+router.post('/my-service-requests/:id/response', async (req,res) => {
+  const decision=req.body.decision, note=String(req.body.note||'').trim();
+  if (!['accept','changes'].includes(decision) || (decision==='changes'&&!note) || note.length>4000) return res.status(400).json({success:false,message:'أدخل الملاحظات عند طلب التعديل'});
+  try {
+    const result=await db.transaction(async tx=>{
+      const id=Number(req.params.id);
+      const request=await tx.get('SELECT id,status FROM service_requests WHERE id=? AND client_user_id=?',[id,req.clientUser.id]);
+      if(!request) return {status:404,message:'الطلب غير موجود'};
+      const quote=await tx.get("SELECT id FROM service_request_quotes WHERE request_id=? AND state='sent' ORDER BY version DESC LIMIT 1",[id]);
+      if(request.status!=='quoted'||!quote||quote.id!==Number(req.body.quote_id)) return {status:409,message:'العرض تغير أو تمت الإجابة عليه'};
+      const update=await tx.run("UPDATE service_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='quoted'",[decision==='accept'?'client_accepted':'client_changes',id]);
+      if(!update.changes)return {status:409,message:'حالة الطلب تغيرت'};
+      await tx.run('UPDATE service_request_quotes SET state=?,client_response=?,client_responded_at=CURRENT_TIMESTAMP WHERE id=?',[decision==='accept'?'accepted':'changes_requested',note,quote.id]);
+      await tx.run('INSERT INTO service_request_events (request_id,actor_type,actor_id,event_type,message) VALUES (?,?,?,?,?)',[id,'client',req.clientUser.id,decision==='accept'?'client_accepted':'client_changes',note]);
+      return {status:200};
+    });
+    res.status(result.status).json({success:result.status===200,...result});
+  } catch(err) {console.error('client quote response',err);res.status(500).json({success:false,message:'تعذر تسجيل الرد'});}
+});
+
+/**
+ * يبني شرط SQL يقصر النتائج على المشاريع التي يملك فيها المستخدم كل الصلاحيات المطلوبة
+ * @param {object} req
+ * @param {string|string[]} perms اسم صلاحية أو أكثر (يجب توفرها جميعاً)
+ * @param {string} column عمود رقم المشروع في الاستعلام
+ */
+function permissionProjectFilter(req, perms, column) {
+  const permList = Array.isArray(perms) ? perms : [perms];
+  let ids = null;
+  for (const perm of permList) {
+    const allowed = req.clientUser.allowedProjectIdsFor(perm);
+    if (allowed === null) continue;
+    ids = ids === null ? allowed : ids.filter(id => allowed.includes(id));
+  }
+  if (ids === null) return { sql: '', params: [] };
+  if (ids.length === 0) return { sql: ' AND 1=0', params: [] };
+  return { sql: ` AND ${column} IN (${ids.map(() => '?').join(',')})`, params: ids };
+}
 
 /**
  * GET /api/client-portal/dashboard
@@ -654,13 +892,21 @@ router.get('/dashboard', async (req, res) => {
         COUNT(p.id) AS total_projects,
         SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) AS active_projects,
         SUM(CASE WHEN p.status = 'completed' THEN 1 ELSE 0 END) AS completed_projects,
-        ROUND(AVG(COALESCE(p.progress_percentage, 0)), 1) AS avg_progress,
         ROUND(SUM(COALESCE(p.contract_value, 0)), 2) AS total_contract_values
       FROM projects p
       ${projectFilterClause}
     `, projectParams);
 
+    // متوسط الإنجاز يُحسب فقط من المشاريع المسموح فيها بعرض نسبة الإنجاز
+    const progressFilter = permissionProjectFilter(req, 'can_view_progress', 'p.id');
+    const progressSummary = await db.get(`
+      SELECT ROUND(AVG(COALESCE(p.progress_percentage, 0)), 1) AS avg_progress
+      FROM projects p
+      ${projectFilterClause}${progressFilter.sql}
+    `, [...projectParams, ...progressFilter.params]);
+
     // 2. إحصائيات المستخلصات الخاصة بمشاريع العميل (جدول bills)
+    const invoicesFilter = permissionProjectFilter(req, 'can_view_invoices', 'b.project_id');
     const billsSummary = await db.get(`
       SELECT 
         COUNT(b.id) AS total_bills_count,
@@ -668,16 +914,17 @@ router.get('/dashboard', async (req, res) => {
         ROUND(SUM(COALESCE(b.paid_amount, 0)), 2) AS total_paid_on_bills,
         SUM(CASE WHEN b.client_approval_status = 'pending' OR b.client_approval_status IS NULL THEN 1 ELSE 0 END) AS pending_approval_count
       FROM bills b
-      WHERE b.client_id = ? AND (b.status != 'cancelled' OR b.status IS NULL)
-    `, [clientId]);
+      WHERE b.client_id = ? AND (b.status != 'cancelled' OR b.status IS NULL)${invoicesFilter.sql}
+    `, [clientId, ...invoicesFilter.params]);
 
     // 3. إجمالي سندات القبض المستلمة من العميل (سندات قبض فعلية)
+    const paymentsFilter = permissionProjectFilter(req, 'can_view_payments', 'project_id');
     const paymentsSummary = await db.get(`
-      SELECT 
+      SELECT
         ROUND(SUM(COALESCE(amount, 0)), 2) AS total_collected
       FROM payments
-      WHERE client_id = ? AND type = 'قبض' AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)
-    `, [clientId]);
+      WHERE client_id = ? AND type = 'قبض' AND (status IN ('cleared', 'posted', 'approved') OR status IS NULL)${paymentsFilter.sql}
+    `, [clientId, ...paymentsFilter.params]);
 
     // 4. الإشعارات غير المقروءة والرسائل المفتوحة
     const notifCount = await db.get(`
@@ -708,6 +955,9 @@ router.get('/dashboard', async (req, res) => {
       ORDER BY p.id DESC
       LIMIT 5
     `, projectParams);
+    recentProjects.forEach(p => {
+      if (!req.clientUser.hasPermission(p.id, 'can_view_progress')) p.progress_percentage = null;
+    });
 
     const totalContract = Number(projectsSummary?.total_contract_values || 0);
     const totalInvoiced = Number(billsSummary?.total_invoiced || 0);
@@ -727,7 +977,8 @@ router.get('/dashboard', async (req, res) => {
         total_projects: Number(projectsSummary?.total_projects || 0),
         active_projects: Number(projectsSummary?.active_projects || 0),
         completed_projects: Number(projectsSummary?.completed_projects || 0),
-        avg_progress: Number(projectsSummary?.avg_progress || 0),
+        // null عندما لا يوجد أي مشروع مسموح بعرض إنجازه، لتعرضه الواجهة "غير متاح" لا 0%
+        avg_progress: progressSummary?.avg_progress == null ? null : Number(progressSummary.avg_progress),
         total_contract_value: totalContract,
         total_invoiced: totalInvoiced,
         total_paid: totalPaid,
@@ -785,6 +1036,10 @@ router.get('/projects', async (req, res) => {
     querySql += ' ORDER BY p.id DESC';
 
     const projects = await db.query(querySql, params);
+    projects.forEach(p => {
+      if (!req.clientUser.hasPermission(p.id, 'can_view_progress')) p.progress_percentage = null;
+      if (!req.clientUser.hasPermission(p.id, 'can_view_invoices')) p.bills_count = null;
+    });
 
     res.json({
       success: true,
@@ -844,8 +1099,16 @@ router.get('/projects/:id', async (req, res) => {
       });
     }
 
+    // صلاحيات المستخدم على هذا المشروع
+    const perms = {};
+    ['can_view_progress', 'can_view_invoices', 'can_view_payments', 'can_view_reports',
+     'can_view_drawings', 'can_view_correspondence', 'can_approve_invoices', 'can_send_messages']
+      .forEach(name => { perms[name] = req.clientUser.hasPermission(projectId, name); });
+
+    if (!perms.can_view_progress) project.progress_percentage = null;
+
     // 2. مستخلصات المشروع (Bills)
-    const invoices = await db.query(`
+    const invoices = !perms.can_view_invoices ? [] : await db.query(`
       SELECT 
         id,
         bill_no,
@@ -869,8 +1132,8 @@ router.get('/projects/:id', async (req, res) => {
     `, [projectId, clientId]);
 
     // 3. دفعات وتحصيلات المشروع
-    const payments = await db.query(`
-      SELECT 
+    const payments = !perms.can_view_payments ? [] : await db.query(`
+      SELECT
         id,
         receipt_no,
         date,
@@ -888,44 +1151,49 @@ router.get('/projects/:id', async (req, res) => {
 
     // 4. المخططات الهندسية المعتمدة (Drawings)
     let drawings = [];
-    try {
+    if (perms.can_view_drawings) try {
+      // الأسماء البديلة (AS) تحافظ على أسماء الحقول التي يقرؤها تطبيق العملاء
+      // ويُعرض للعميل المعتمد فقط (الواجهة تصف كل مخطط بأنه معتمد)
       drawings = await db.query(`
-        SELECT 
+        SELECT
           id,
-          drawing_number,
+          drawing_no AS drawing_number,
           title,
           category,
-          discipline,
+          category AS discipline,
           revision,
           scale,
           status,
-          file_path,
+          approval_date,
+          file_name,
           created_at
         FROM project_drawings
-        WHERE project_id = ?
+        WHERE project_id = ? AND (status IN ('معتمد', 'معتمد بملاحظات', 'approved') OR status IS NULL)
         ORDER BY id DESC
       `, [projectId]);
-    } catch {
+    } catch (err) {
+      console.error('Client project drawings query failed:', err.message);
       drawings = [];
     }
 
     // 5. تقارير الموقع اليومية (الملخص فقط المتاح للعميل)
     let dailyReports = [];
-    try {
+    if (perms.can_view_reports) try {
       dailyReports = await db.query(`
-        SELECT 
+        SELECT
           id,
-          report_date,
+          date AS report_date,
           weather,
-          work_summary,
+          work_performed AS work_summary,
           status,
           created_at
         FROM project_daily_reports
         WHERE project_id = ? AND (status = 'approved' OR status = 'معتمد' OR status IS NULL)
-        ORDER BY report_date DESC
+        ORDER BY date DESC
         LIMIT 15
       `, [projectId]);
-    } catch {
+    } catch (err) {
+      console.error('Client project daily reports query failed:', err.message);
       dailyReports = [];
     }
 
@@ -935,7 +1203,8 @@ router.get('/projects/:id', async (req, res) => {
       invoices,
       payments,
       drawings,
-      daily_reports: dailyReports
+      daily_reports: dailyReports,
+      permissions: perms
     });
   } catch (err) {
     console.error('Project Details Error:', err);
@@ -979,6 +1248,10 @@ router.get('/invoices', async (req, res) => {
       WHERE b.client_id = ?
     `;
     const params = [clientId];
+
+    const invFilter = permissionProjectFilter(req, 'can_view_invoices', 'b.project_id');
+    sql += invFilter.sql;
+    params.push(...invFilter.params);
 
     if (project_id) {
       sql += ' AND b.project_id = ?';
@@ -1038,7 +1311,7 @@ router.post('/invoices/:id/approve', async (req, res) => {
     }
 
     // فحص صلاحية الاعتماد للمستخدم
-    if (!req.clientUser.hasPermission(bill.project_id, 'can_approve_invoices') && req.clientUser.role === 'viewer') {
+    if (!req.clientUser.hasPermission(bill.project_id, 'can_approve_invoices')) {
       return res.status(403).json({
         success: false,
         message: 'ليس لديك صلاحية اعتماد أو رفض المستخلصات. يرجى مراجعة المالك.'
@@ -1127,6 +1400,10 @@ router.get('/payments', async (req, res) => {
     `;
     const params = [clientId];
 
+    const payFilter = permissionProjectFilter(req, 'can_view_payments', 'pay.project_id');
+    sql += payFilter.sql;
+    params.push(...payFilter.params);
+
     if (project_id) {
       sql += ' AND pay.project_id = ?';
       params.push(parseInt(project_id, 10));
@@ -1176,6 +1453,10 @@ router.get('/statement', async (req, res) => {
       WHERE b.client_id = ? AND (b.status != 'cancelled' OR b.status IS NULL)
     `;
     const invParams = [clientId];
+    // كشف الحساب يتطلب صلاحيتي المستخلصات والدفعات معاً حتى لا يكون الرصيد مضللاً
+    const stmtPerms = ['can_view_invoices', 'can_view_payments'];
+    const invStmtFilter = permissionProjectFilter(req, stmtPerms, 'b.project_id');
+    invSql += invStmtFilter.sql; invParams.push(...invStmtFilter.params);
     if (project_id) { invSql += ' AND b.project_id = ?'; invParams.push(parseInt(project_id, 10)); }
     if (from_date) { invSql += ' AND b.date >= ?'; invParams.push(from_date); }
     if (to_date) { invSql += ' AND b.date <= ?'; invParams.push(to_date); }
@@ -1197,6 +1478,8 @@ router.get('/statement', async (req, res) => {
       WHERE pay.client_id = ? AND pay.type = 'قبض'
     `;
     const payParams = [clientId];
+    const payStmtFilter = permissionProjectFilter(req, stmtPerms, 'pay.project_id');
+    paySql += payStmtFilter.sql; payParams.push(...payStmtFilter.params);
     if (project_id) { paySql += ' AND pay.project_id = ?'; payParams.push(parseInt(project_id, 10)); }
     if (from_date) { paySql += ' AND pay.date >= ?'; payParams.push(from_date); }
     if (to_date) { paySql += ' AND pay.date <= ?'; payParams.push(to_date); }
@@ -1371,12 +1654,33 @@ router.post('/messages', async (req, res) => {
       });
     }
 
+    // رابط المرفق: يُقبل رابط https أو ملف مرفوع على النظام نفسه فقط، لمنع روابط javascript: وأمثالها
+    let cleanAttachment = null;
+    if (attachment_url) {
+      const value = String(attachment_url).trim();
+      const isHttps = /^https:\/\/[^\s<>"']+$/i.test(value);
+      const isLocalUpload = /^\/uploads\/[A-Za-z0-9._\-\/]+$/.test(value) && !value.includes('..');
+      if (value.length > 1000 || (!isHttps && !isLocalUpload)) {
+        return res.status(400).json({ success: false, message: 'رابط المرفق غير صالح. يُقبل رابط يبدأ بـ https:// أو ملف مرفوع على النظام فقط.' });
+      }
+      cleanAttachment = value;
+    }
+
     const projectIdNum = project_id ? parseInt(project_id, 10) : null;
-    if (projectIdNum && !req.clientUser.canAccessProject(projectIdNum)) {
+    if (projectIdNum && !req.clientUser.hasPermission(projectIdNum, 'can_send_messages')) {
       return res.status(403).json({
         success: false,
         message: 'ليس لديك صلاحية لإرسال رسالة مرتبطة بهذا المشروع'
       });
+    }
+    if (!projectIdNum) {
+      const msgProjects = req.clientUser.allowedProjectIdsFor('can_send_messages');
+      if (msgProjects !== null && msgProjects.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'ليس لديك صلاحية إرسال الرسائل. يرجى مراجعة المالك.'
+        });
+      }
     }
 
     const insertResult = await db.run(`
@@ -1388,8 +1692,8 @@ router.post('/messages', async (req, res) => {
       projectIdNum,
       String(subject).trim(),
       String(body).trim(),
-      priority || 'normal',
-      attachment_url || null
+      ['low', 'normal', 'high', 'urgent'].includes(priority) ? priority : 'normal',
+      cleanAttachment
     ]);
 
     await logClientAudit(
@@ -1461,40 +1765,65 @@ router.put('/profile', async (req, res) => {
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
-    // إذا طلب تغيير كلمة المرور
-    if (new_password) {
+    // التغييرات الأمنية (كلمة المرور، رمز الأمان، إيقاف التحقق بخطوتين) تتطلب كلمة المرور الحالية،
+    // حتى لا يستطيع من يملك جلسة مسروقة إضعاف حماية الحساب
+    const wantsNewPassword = Boolean(new_password);
+    const wantsNewPin = Boolean(two_factor_pin && String(two_factor_pin).trim());
+    const wantsDisable2fa = two_factor_enabled === false && Number(user.two_factor_enabled) === 1;
+
+    if (wantsNewPassword || wantsNewPin || wantsDisable2fa) {
       if (!current_password) {
-        return res.status(400).json({ success: false, message: 'يرجى إدخال كلمة المرور الحالية لتأكيد التغيير' });
+        return res.status(400).json({ success: false, message: 'يرجى إدخال كلمة المرور الحالية لتأكيد تغيير إعدادات الأمان' });
       }
-      const isMatch = bcrypt.compareSync(String(current_password), user.password_hash);
-      if (!isMatch) {
+      if (!bcrypt.compareSync(String(current_password), user.password_hash)) {
         return res.status(400).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
       }
-      if (String(new_password).length < 6) {
-        return res.status(400).json({ success: false, message: 'كلمة المرور الجديدة يجب ألا تقل عن 6 خانات' });
-      }
-      const salt = bcrypt.genSaltSync(10);
-      const newHash = bcrypt.hashSync(String(new_password), salt);
-      await db.run(`UPDATE client_users SET password_hash = ? WHERE id = ?`, [newHash, user.id]);
     }
 
-    // تحديث البيانات الأساسية
+    let updatedPin = user.two_factor_pin;
+    if (wantsNewPin) {
+      updatedPin = normalizeDigits(String(two_factor_pin).trim());
+      if (isWeakClientPin(updatedPin)) {
+        return res.status(400).json({ success: false, message: 'رمز الأمان يجب أن يكون 6 أرقام وألا يكون رمزاً سهلاً مثل 123456' });
+      }
+    }
+
+    let newHash = null;
+    if (wantsNewPassword) {
+      if (String(new_password).length < 8 || String(new_password).length > 128) {
+        return res.status(400).json({ success: false, message: 'كلمة المرور الجديدة يجب أن تكون بين 8 و128 حرفاً' });
+      }
+      newHash = bcrypt.hashSync(String(new_password), bcrypt.genSaltSync(10));
+    }
+
     const updatedName = full_name ? String(full_name).trim() : user.full_name;
     const updatedPhone = phone ? String(phone).trim() : user.phone;
-    const updatedPin = two_factor_pin ? normalizeDigits(String(two_factor_pin).trim()) : user.two_factor_pin;
     const updated2fa = typeof two_factor_enabled === 'boolean' ? (two_factor_enabled ? 1 : 0) : user.two_factor_enabled;
 
     await db.run(`
-      UPDATE client_users 
-      SET full_name = ?, phone = ?, two_factor_pin = ?, two_factor_enabled = ?, updated_at = CURRENT_TIMESTAMP
+      UPDATE client_users
+      SET full_name = ?, phone = ?, two_factor_pin = ?, two_factor_enabled = ?,
+          password_hash = COALESCE(?, password_hash),
+          ${newHash ? `${BUMP_SESSION_SQL},` : ''}
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [updatedName, updatedPhone, updatedPin, updated2fa, user.id]);
+    `, [updatedName, updatedPhone, updatedPin, updated2fa, newHash, user.id]);
 
-    await logClientAudit(req, 'CLIENT_UPDATE_PROFILE', 'client_users', user.id, 'تم تحديث بيانات الملف الشخصي');
+    const changes = [wantsNewPassword && 'كلمة المرور', wantsNewPin && 'رمز الأمان', wantsDisable2fa && 'إيقاف التحقق بخطوتين'].filter(Boolean);
+    await logClientAudit(req, wantsNewPassword ? 'CLIENT_CHANGE_PASSWORD' : 'CLIENT_UPDATE_PROFILE', 'client_users', user.id,
+      changes.length ? `تحديث الملف الشخصي مع تغيير: ${changes.join('، ')}` : 'تم تحديث بيانات الملف الشخصي');
+
+    // عند تغيير كلمة المرور تُلغى كل الجلسات الأخرى، ويحصل هذا الجهاز على جلسة جديدة
+    let token;
+    if (newHash) {
+      const fresh = await db.get(`SELECT * FROM client_users WHERE id = ?`, [user.id]);
+      token = issueClientToken(fresh);
+    }
 
     res.json({
       success: true,
-      message: 'تم تحديث الملف الشخصي بنجاح'
+      message: newHash ? 'تم تحديث الملف الشخصي وتغيير كلمة المرور. تم تسجيل الخروج من الأجهزة الأخرى.' : 'تم تحديث الملف الشخصي بنجاح',
+      token
     });
   } catch (err) {
     console.error('Update Profile Error:', err);

@@ -18,7 +18,7 @@ router.get('/service_requests/:name',async(req,res)=>{
   const record=requests.find(row=>{try{return JSON.parse(row.attachments).some(att=>att.diskFileName===req.params.name||att.url==='/uploads/service_requests/'+req.params.name);}catch{return false;}});
   if(!record)return res.sendStatus(404);
   if(req.clientUser){if(record.client_user_id!==req.clientUser.id)return res.sendStatus(403);}
-  else {let permitted=false;requirePermission('settings:users')(req,{status(){return this;},json(){return this;}},()=>{permitted=true;});if(!permitted)return res.sendStatus(403);}
+  else {let permitted=false;requirePermission('client_app:requests_view')(req,{status(){return this;},json(){return this;}},()=>{permitted=true;});if(!permitted)return res.sendStatus(403);if(require('../middleware/security').isScopedRequestSupervisor(req.user)){const scoped=await db.get('SELECT assigned_to FROM service_requests WHERE id=?',[record.id]);if(Number(scoped?.assigned_to)!==Number(req.user.id))return res.sendStatus(404);}}
   res.set({'Content-Type':'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(req.params.name),'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
   res.sendFile(file);
  }catch(error){res.sendStatus(error.statusCode||404);}

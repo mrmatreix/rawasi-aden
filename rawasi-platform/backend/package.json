@@ -1,0 +1,17 @@
+{
+  "name": "rawasi-platform-schema",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "schema:validate": "prisma validate --schema prisma/schema.prisma",
+    "schema:test": "node tests/schema-migration.test.cjs",
+    "domain:test": "node --test tests/core-domain.test.ts tests/scope-guard.test.ts",
+    "domain:typecheck": "tsc --noEmit -p tsconfig.domain.json"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "prisma": "6.19.0",
+    "typescript": "5.8.3"
+  },
+  "type": "module"
+}

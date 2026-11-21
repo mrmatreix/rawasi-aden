@@ -392,6 +392,7 @@
         <span>الدخول كزائر</span>
         <i class="fa-solid fa-angle-left text-gold" style="font-size: 0.85rem;"></i>
       </a>
+      <a href="staff.html" class="btn btn-guest-login" style="margin-top:12px">دخول فريق العمل</a>
     </div>
 
     <div style="text-align: center; margin-top: 18px;">
@@ -409,15 +410,39 @@
         <i class="fa-solid fa-key"></i>
       </div>
       <h3 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin-bottom: 8px;">استعادة كلمة المرور</h3>
-      <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px;">
-        لأسباب أمنية وهندسية، يتم تعيين وتحديث كلمات المرور حصرياً عبر إدارة تقنية المعلومات وإدارة المشاريع في شركة رواسي عدن.
+      <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px;">
+        أدخل بريدك ورمز الأمان المكوّن من 6 أرقام الذي وصلك في رسالة تفعيل الحساب، ثم اختر كلمة مرور جديدة.
       </p>
-      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 20px; text-align: right; font-size: 0.8rem;">
-        <div style="color: var(--gold); font-weight: 700; margin-bottom: 6px;"><i class="fa-solid fa-circle-info"></i> خطوات الاستعادة:</div>
-        <div style="color: #cbd5e1; line-height: 1.6;">تواصل مع المهندس المسؤول عن مشروعك أو إدارة النظام لتزويدك بكلمة مرور مؤقتة فورية.</div>
-      </div>
-      <button type="button" onclick="closeForgotModal()" class="btn btn-primary" style="width: 100%;">
-        <span>حسناً، فهمت ذلك</span>
+
+      <div id="resetErrorAlert" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.45); border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; color: #fca5a5; font-size: 0.8rem; font-weight: 700;"></div>
+
+      <form id="resetPasswordForm" onsubmit="submitPasswordReset(event)" style="text-align: right;">
+        <div class="form-group">
+          <label class="form-label" for="resetEmailInput"><i class="fa-solid fa-envelope text-gold"></i> <span>البريد الإلكتروني المسجل</span></label>
+          <input type="email" id="resetEmailInput" class="form-input" required autocomplete="email" inputmode="email" autocapitalize="none" placeholder="client@example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="resetCodeInput"><i class="fa-solid fa-shield-halved text-gold"></i> <span>رمز الأمان (6 أرقام)</span></label>
+          <input type="tel" id="resetCodeInput" class="form-input" required inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" style="letter-spacing: 6px; text-align: center;">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="resetNewPassword"><i class="fa-solid fa-lock text-gold"></i> <span>كلمة المرور الجديدة (8 خانات على الأقل)</span></label>
+          <input type="password" id="resetNewPassword" class="form-input" required minlength="8" maxlength="128" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="resetConfirmPassword"><i class="fa-solid fa-lock text-gold"></i> <span>تأكيد كلمة المرور</span></label>
+          <input type="password" id="resetConfirmPassword" class="form-input" required minlength="8" maxlength="128" autocomplete="new-password">
+        </div>
+        <button type="submit" id="resetSubmitBtn" class="btn btn-primary" style="width: 100%; margin-bottom: 10px;">
+          <span>تعيين كلمة المرور</span>
+        </button>
+      </form>
+
+      <p style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px;">
+        لا تملك رمز الأمان؟ تواصل مع إدارة الشركة لإرسال دعوة تفعيل جديدة.
+      </p>
+      <button type="button" onclick="closeForgotModal()" class="btn btn-secondary btn-sm" style="width: 100%;">
+        إلغاء والعودة
       </button>
     </div>
   </div>
@@ -434,7 +459,7 @@
       </p>
 
       <div class="otp-inputs">
-        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 0)">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" class="otp-digit" oninput="handleOtpInput(this, 0)">
         <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 1)">
         <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 2)">
         <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="otp-digit" oninput="handleOtpInput(this, 3)">
@@ -495,11 +520,51 @@
     }
 
     function openForgotModal() {
+      const loginEmail = document.getElementById('emailInput').value.trim();
+      document.getElementById('resetPasswordForm').reset();
+      if (loginEmail) document.getElementById('resetEmailInput').value = loginEmail;
+      showResetError('');
       document.getElementById('forgotModal').classList.add('active');
     }
 
     function closeForgotModal() {
       document.getElementById('forgotModal').classList.remove('active');
+    }
+
+    function showResetError(msg) {
+      const box = document.getElementById('resetErrorAlert');
+      box.textContent = msg;
+      box.style.display = msg ? 'block' : 'none';
+    }
+
+    async function submitPasswordReset(e) {
+      e.preventDefault();
+      const email = document.getElementById('resetEmailInput').value.trim();
+      const code = document.getElementById('resetCodeInput').value.trim();
+      const newPassword = document.getElementById('resetNewPassword').value;
+      const confirmPassword = document.getElementById('resetConfirmPassword').value;
+
+      if (!/^[0-9٠-٩]{6}$/.test(code)) return showResetError('رمز الأمان يجب أن يتكون من 6 أرقام.');
+      if (newPassword.length < 8) return showResetError('كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل.');
+      if (newPassword !== confirmPassword) return showResetError('تأكيد كلمة المرور غير مطابق.');
+
+      const btn = document.getElementById('resetSubmitBtn');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+      showResetError('');
+      try {
+        const res = await ClientAPI.post('/auth/reset-password', { email, code, new_password: newPassword });
+        closeForgotModal();
+        document.getElementById('emailInput').value = email;
+        document.getElementById('passwordInput').value = '';
+        ClientApp.showToast(res.message || 'تم تعيين كلمة المرور الجديدة بنجاح', 'success');
+      } catch (err) {
+        showResetError(err.message || 'تعذر تعيين كلمة المرور، حاول مرة أخرى.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
     }
 
     async function handleLogin(e) {
@@ -534,15 +599,50 @@
       }
     }
 
+    // يوزّع رمزاً من عدة أرقام على الخانات بدءاً من خانة معينة (لصق، أو تعبئة تلقائية من رسالة)
+    function fillOtpFrom(text, startIndex) {
+      const digits = document.querySelectorAll('.otp-digit');
+      const clean = String(text || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g, '');
+      if (!clean) return;
+      let i = startIndex;
+      for (const ch of clean) {
+        if (i >= digits.length) break;
+        digits[i].value = ch;
+        i++;
+      }
+      const filled = Array.from(digits).every(d => d.value.length === 1);
+      if (filled) submitOtp();
+      else digits[Math.min(i, digits.length - 1)].focus();
+    }
+
     function handleOtpInput(input, index) {
       const digits = document.querySelectorAll('.otp-digit');
-      if (input.value.length === 1 && index < digits.length - 1) {
+      const value = input.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g, '');
+      if (value.length > 1) {
+        // تعبئة تلقائية وضعت الرمز كاملاً في خانة واحدة
+        fillOtpFrom(value, index);
+        return;
+      }
+      input.value = value;
+      if (value.length === 1 && index < digits.length - 1) {
         digits[index + 1].focus();
       }
-      if (index === digits.length - 1 && input.value.length === 1) {
+      if (Array.from(digits).every(d => d.value.length === 1)) {
         submitOtp();
       }
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.otp-digit').forEach((box, index, all) => {
+        box.addEventListener('paste', e => {
+          e.preventDefault();
+          fillOtpFrom((e.clipboardData || window.clipboardData).getData('text'), index);
+        });
+        box.addEventListener('keydown', e => {
+          if (e.key === 'Backspace' && !box.value && index > 0) all[index - 1].focus();
+        });
+      });
+    });
 
     function getEnteredOtp() {
       const digits = document.querySelectorAll('.otp-digit');

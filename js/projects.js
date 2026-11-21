@@ -83,7 +83,8 @@ const Projects = {
       // 1. فلتر الحالة
       if (status !== 'all') {
         const pStatus = p.status || 'active';
-        if (pStatus !== status) return false;
+        const normalize = value => ['جاري','جارية','قيد التنفيذ','تحت التنفيذ','in_progress'].includes(value) ? 'active' : ['مكتمل','منفذ','منفذة','مكتملة','completed','مكتمل ومستلم'].includes(value) ? 'completed' : ['تحت الدراسة','دراسة'].includes(value) ? 'under_study' : value;
+        if (status === 'active_completed' ? !['active','completed'].includes(normalize(pStatus)) : normalize(pStatus) !== status) return false;
       }
 
       // 2. فلتر العميل

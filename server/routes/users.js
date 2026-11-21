@@ -8,8 +8,8 @@ const { requirePermission } = require('../middleware/security');
 // جلب بيانات الفروع والأقسام والمشاريع لنطاق الصلاحيات
 router.get('/scopes-meta', requirePermission('settings:users'), async (req, res) => {
   try {
-    const branches = await query('SELECT id, code, name FROM branches WHERE status = "active" ORDER BY id ASC');
-    const departments = await query('SELECT id, code, name FROM departments WHERE status = "active" ORDER BY id ASC');
+    const branches = await query("SELECT id, code, name FROM branches WHERE status = 'active' ORDER BY id ASC");
+    const departments = await query("SELECT id, code, name FROM departments WHERE status = 'active' ORDER BY id ASC");
     const projects = await query('SELECT id, code, name, status FROM projects ORDER BY id ASC');
     const roles = await query('SELECT id, name, display_name FROM roles ORDER BY id ASC');
     res.json({ success: true, branches, departments, projects, roles });
@@ -25,7 +25,7 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
     const now = Date.now();
 
     const users = await query(`
-      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
+      SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at, u.login_locked_until,
              u.branch_id, u.branch, u.department_id, u.department, u.allowed_projects, u.allowed_branches, u.allowed_departments,
              u.is_logged_in, u.last_heartbeat, u.last_login_at, u.last_login_ip, u.last_login_device,
              r.display_name as role_name
@@ -77,7 +77,14 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
 
       return { 
         ...u, 
-        two_factor_pin: u.two_factor_pin || (u.role === 'admin' || u.username === 'admin' ? '123456' : ''),
+        // Never return a secret PIN in a user-management response.  The UI only
+        // needs to know whether one exists; exposing or substituting a default
+        // PIN caused edits to overwrite a valid configuration in production.
+        two_factor_pin: '',
+        two_factor_configured: Boolean(u.two_factor_pin),
+        login_locked: Boolean(u.login_locked_until && new Date(u.login_locked_until).getTime() > Date.now()),
+        failed_login_count: undefined,
+        login_locked_until: undefined,
         two_factor_enabled: u.two_factor_enabled !== undefined && u.two_factor_enabled !== null ? u.two_factor_enabled : 1,
         branch_id: u.branch_id || 1,
         branch: u.branch || 'المركز الرئيسي',
@@ -102,6 +109,7 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
 // إضافة مستخدم جديد مع الصلاحيات
 router.post('/', requirePermission('settings:users'), async (req, res) => {
   try {
+    if (typeof req.body.password !== 'string' || req.body.password.length < 8 || req.body.password !== req.body.password_confirm) return res.status(400).json({success:false,message:'كلمة المرور يجب أن تكون 8 خانات على الأقل ومطابقة للتأكيد'});
     const { 
       username, password, full_name, role_id, role, email, phone, status = 'active', 
       permissions, security_settings, two_factor_pin, two_factor_enabled,
@@ -144,8 +152,11 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       ? JSON.stringify(allowed_departments) 
       : (allowed_departments || '*');
 
-    const cleanPin = two_factor_pin !== undefined ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || '123456') : '123456';
+    const cleanPin = two_factor_pin !== undefined ? String(two_factor_pin).replace(/\D/g, '') : '';
     const tfaEnabled = two_factor_enabled !== undefined ? (two_factor_enabled ? 1 : 0) : 1;
+    if (tfaEnabled && !/^\d{6}$/.test(cleanPin)) {
+      return res.status(400).json({ success: false, message: 'يتطلب التحقق بخطوتين رمز PIN خاصاً من 6 أرقام.' });
+    }
 
     const result = await run(`
       INSERT INTO users (
@@ -155,7 +166,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      cleanUsername, password_hash, full_name.trim(), roleIdVal || 2, roleName, email || '', phone || '', status, 
+      cleanUsername, password_hash, full_name.trim(), roleIdVal || null, roleName, email || '', phone || '', status,
       permsString, secString, cleanPin, tfaEnabled,
       branch_id || 1, branch || 'المركز الرئيسي', department_id || 1, department || 'الإدارة العامة',
       allowedProjectsStr, allowedBranchesStr, allowedDepartmentsStr
@@ -182,10 +193,15 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       throw new Error('فشل التحقق من حفظ المستخدم في قاعدة البيانات');
     }
 
+    await require('../services/auditService').logAudit(req, {
+      action: 'USER_CREATED', entity_type: 'user', entity_id: newId,
+      details: { target: insertedUser.username, role: insertedUser.role }
+    });
+    const { two_factor_pin: _newPin, ...safeInserted } = insertedUser;
     res.json({
       success: true,
       message: `تم إضافة المستخدم (${insertedUser.full_name}) وتعيين صلاحياته ونطاقه بنجاح!`,
-      data: insertedUser
+      data: { ...safeInserted, two_factor_pin: '', two_factor_configured: Boolean(_newPin) }
     });
   } catch (err) {
     console.error('Error creating user:', err);
@@ -196,6 +212,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
 // تعديل بيانات وصلاحيات مستخدم
 router.put('/:id', requirePermission('settings:users'), async (req, res) => {
   try {
+    if ((req.body.password || req.body.password_confirm) && (typeof req.body.password !== 'string' || req.body.password.length < 8 || req.body.password !== req.body.password_confirm)) return res.status(400).json({success:false,message:'كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل ومطابقة للتأكيد'});
     const userId = parseInt(req.params.id);
     const { 
       username, password, full_name, role_id, role, email, phone, status, 
@@ -218,6 +235,7 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
 
     let roleName = role || user.role;
     let roleIdVal = role_id !== undefined ? role_id : user.role_id;
+    if(role && !role_id)roleIdVal=(await get('SELECT id FROM roles WHERE name=?',[role]))?.id || null;
     if (role_id) {
       const roleObj = await get('SELECT name FROM roles WHERE id = ?', [role_id]);
       if (roleObj) roleName = roleObj.name;
@@ -244,12 +262,19 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
     const deptIdVal = department_id !== undefined ? department_id : (user.department_id || 1);
     const deptVal = department !== undefined ? department : (user.department || 'الإدارة العامة');
 
-    const cleanPin = two_factor_pin !== undefined 
-      ? (String(two_factor_pin).replace(/\D/g, '').slice(0, 6) || user.two_factor_pin || '123456')
-      : (user.two_factor_pin || '123456');
+    // A blank PIN on edit means "keep the existing PIN".  It must never be
+    // silently converted to a public default.
+    const submittedPin = two_factor_pin === undefined ? '' : String(two_factor_pin).replace(/\D/g, '');
+    if (submittedPin && !/^\d{6}$/.test(submittedPin)) {
+      return res.status(400).json({ success: false, message: 'رمز PIN يجب أن يتكون من 6 أرقام.' });
+    }
+    const cleanPin = submittedPin || user.two_factor_pin || '';
     const tfaEnabled = two_factor_enabled !== undefined 
       ? (two_factor_enabled ? 1 : 0) 
       : (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null ? user.two_factor_enabled : 1);
+    if (tfaEnabled && !/^\d{6}$/.test(cleanPin)) {
+      return res.status(400).json({ success: false, message: 'لا يمكن تفعيل التحقق بخطوتين قبل تعيين رمز PIN خاص من 6 أرقام.' });
+    }
 
     if (password && password.trim().length > 0) {
       const salt = bcrypt.genSaltSync(10);
@@ -259,7 +284,8 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
         SET username = ?, password_hash = ?, full_name = ?, role_id = ?, role = ?, email = ?, phone = ?, status = ?, 
             permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?,
             branch_id = ?, branch = ?, department_id = ?, department = ?, 
-            allowed_projects = ?, allowed_branches = ?, allowed_departments = ?
+            allowed_projects = ?, allowed_branches = ?, allowed_departments = ?,
+            failed_login_count = 0, login_locked_until = NULL
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -330,10 +356,29 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
       WHERE u.id = ?
     `, [userId]);
 
+    // سجل تدقيق: ما الذي تغيّر في الحساب (بدون أي قيم سرية)
+    const changed = [];
+    if ((updatedUser.role || '') !== (user.role || '')) changed.push('role');
+    if ((updatedUser.permissions || '') !== (user.permissions || '')) changed.push('permissions');
+    if ((updatedUser.status || '') !== (user.status || '')) changed.push('status');
+    if (password && password.trim().length > 0) changed.push('password_reset');
+    if ((updatedUser.two_factor_pin || '') !== (user.two_factor_pin || '')) changed.push('2fa_pin');
+    if (String(updatedUser.two_factor_enabled) !== String(user.two_factor_enabled)) changed.push('2fa_enabled');
+    if ((updatedUser.allowed_projects || '') !== (user.allowed_projects || '')) changed.push('allowed_projects');
+    if (changed.length) {
+      await require('../services/auditService').logAudit(req, {
+        action: 'USER_SECURITY_CHANGE', entity_type: 'user', entity_id: userId,
+        details: { target: updatedUser.username, changed },
+        old_values: { role: user.role, status: user.status, permissions: user.permissions },
+        new_values: { role: updatedUser.role, status: updatedUser.status, permissions: updatedUser.permissions }
+      });
+    }
+
+    const { two_factor_pin: _hiddenPin, ...safeUser } = updatedUser;
     res.json({
       success: true,
       message: `تم تحديث بيانات وصلاحيات ونطاق المستخدم (${updatedUser.full_name}) بنجاح!`,
-      data: updatedUser
+      data: { ...safeUser, two_factor_pin: '', two_factor_configured: Boolean(_hiddenPin) }
     });
   } catch (err) {
     console.error('Error updating user:', err);
@@ -356,6 +401,10 @@ router.patch('/:id/status', requirePermission('settings:users'), async (req, res
 
     const newStatus = user.status === 'active' ? 'inactive' : 'active';
     await run('UPDATE users SET status = ? WHERE id = ?', [newStatus, userId]);
+    await require('../services/auditService').logAudit(req, {
+      action: 'USER_SECURITY_CHANGE', entity_type: 'user', entity_id: userId,
+      details: { target: user.username, changed: ['status'] }, old_values: { status: user.status }, new_values: { status: newStatus }
+    });
 
     const statusLabel = newStatus === 'active' ? 'تنشيط' : 'تعطيل';
     res.json({
@@ -388,6 +437,21 @@ router.delete('/:id', requirePermission('settings:users'), async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ أثناء حذف المستخدم', error: err.message });
+  }
+});
+
+// فك قفل الدخول المؤقت عن حساب موظف بعد محاولات خاطئة متكررة
+router.post('/:id/unlock-login', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const user = await get('SELECT id, username, full_name FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    await run('UPDATE users SET failed_login_count = 0, login_locked_until = NULL WHERE id = ?', [userId]);
+    require('../middleware/security').clearLoginAttemptsFor(user.username);
+    await require('../services/auditService').logAudit(req, { action: 'ACCOUNT_UNLOCKED', entity_type: 'user', entity_id: userId, details: { target: user.username } });
+    res.json({ success: true, message: `تم فك قفل الدخول عن حساب (${user.full_name || user.username}).` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'تعذر فك قفل الحساب' });
   }
 });
 

@@ -70,7 +70,7 @@
         "type": "object",
         "required": ["manager_password"],
         "properties": {
-          "manager_password": { "type": "string", "format": "password", "example": "admin123" },
+          "manager_password": { "type": "string", "format": "password", "example": "your-password" },
           "notes": { "type": "string", "example": "إقفال نهاية الربع المالي الثالث بعد مطابقة البنك" }
         }
       }
@@ -108,7 +108,7 @@
                 "required": ["username", "password"],
                 "properties": {
                   "username": { "type": "string", "example": "admin" },
-                  "password": { "type": "string", "format": "password", "example": "admin123" }
+                  "password": { "type": "string", "format": "password", "example": "your-password" }
                 }
               }
             }

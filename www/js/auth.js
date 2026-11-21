@@ -1067,6 +1067,8 @@ const Auth = {
       'dashboard': 'dashboard:view',
       'projects': 'projects:view',
       'projectHub': 'projects:view',
+      'projectWorkItems': 'projects:view',
+      'projectProgressReport': 'projects:view,reports:view',
       'projectCloseout': 'projects:view,reports:view',
       'inventory': 'inventory:view',
       'hr': 'hr:view',
@@ -1074,6 +1076,7 @@ const Auth = {
       'revenues': 'revenues:view',
       'expenses': 'expenses:view',
       'journal': 'accounting:journal,accounting:view,reports:view',
+      'journalPosting': 'accounting:view',
       'chartOfAccounts': 'accounting:view,settings:company',
       'costCenters': 'accounting:view,projects:view',
       'currencies': 'accounting:view,settings:company',
@@ -1084,7 +1087,7 @@ const Auth = {
       'cash': 'cash:view',
       'contractLifecycle': 'projects:view',
       'cashFlow': 'accounting:view,reports:view',
-      'settings': 'settings:users,settings:company,settings:backup'
+      'settings': 'settings:users,settings:company,settings:backup,client_app:view'
     };
 
     const perm = viewPermMap[viewId];
@@ -1206,9 +1209,13 @@ const Auth = {
     if (typeof Sidebar !== 'undefined') Sidebar.refresh();
 
     // إخفاء أو إظهار ألسنة الإعدادات حسب الصلاحيات
+    const clientTab = document.getElementById('tabBtn_settings_client_app');
+    if(clientTab)clientTab.style.display=this.hasPermission('settings:users,client_app:view')?'':'none';
     const usersTab = document.getElementById('tabBtn_settings_users');
     if (usersTab) usersTab.style.display = this.hasPermission('settings:users') ? '' : 'none';
 
+    const printTab = document.getElementById('tabBtn_settings_print');
+    if(printTab)printTab.style.display=this.hasPermission('settings:company')?'':'none';
     const compTab = document.getElementById('tabBtn_settings_company');
     if (compTab) compTab.style.display = this.hasPermission('settings:company') ? '' : 'none';
 

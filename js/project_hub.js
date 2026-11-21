@@ -1315,28 +1315,32 @@ const ProjectHub = {
     }
   },
 
-  openNewBoqModal() {
+  async openNewBoqModal() {
     document.getElementById('boqModalForm').reset();
     document.getElementById('boqModalId').value = '';
     const nextNo = `${(this.data?.boq?.length || 0) + 1}.01`;
     document.getElementById('boqModalNo').value = nextNo;
+    await ProjectSetup.boqReferences();
     App.openModal('boqItemModal');
   },
 
-  editBoqItem(id) {
+  async editBoqItem(id) {
     const b = (this.data.boq || []).find(item => item.id == id);
     if (!b) return;
 
     document.getElementById('boqModalId').value = b.id;
     document.getElementById('boqModalNo').value = b.item_no;
     document.getElementById('boqModalDesc').value = b.description;
-    document.getElementById('boqModalCategory').value = b.category;
+    const categorySelect = document.getElementById('boqModalCategory');
+    if (b.category && ![...categorySelect.options].some(option => option.value === b.category)) categorySelect.add(new Option(b.category, b.category));
+    categorySelect.value = b.category;
     document.getElementById('boqModalUnit').value = b.unit;
     document.getElementById('boqModalContractQty').value = b.contract_qty;
     document.getElementById('boqModalExecutedQty').value = b.executed_qty;
     document.getElementById('boqModalRate').value = b.unit_rate;
     document.getElementById('boqModalStatus').value = b.status || 'جاري التنفيذ';
     document.getElementById('boqModalNotes').value = b.notes || '';
+    await ProjectSetup.boqReferences(b.work_item_id);
 
     App.openModal('boqItemModal');
   },
@@ -1350,6 +1354,7 @@ const ProjectHub = {
     const payload = {
       projectId: pid,
       item_no: document.getElementById('boqModalNo').value,
+      work_item_id: document.getElementById('boqWorkItem')?.value || null,
       description: document.getElementById('boqModalDesc').value,
       category: document.getElementById('boqModalCategory').value,
       unit: document.getElementById('boqModalUnit').value,
@@ -1428,8 +1433,12 @@ const ProjectHub = {
     }).join('');
   },
 
-  openNewQuotationModal() {
+  openNewQuotationModal(selectProject = false) {
     document.getElementById('quoModalForm').reset();
+    const project = document.getElementById('quoModalProject');
+    const options = [...(document.getElementById('hubProjectSelect')?.options || [])].filter(option => Number(option.value) > 0);
+    project.replaceChildren(new Option('اختر المشروع...', ''), ...options.map(option => new Option(option.textContent, option.value)));
+    project.value = selectProject ? '' : String(this.currentProjectId || '');
     document.getElementById('quoModalNo').value = `QUO-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`;
     document.getElementById('quoModalDate').value = new Date().toISOString().split('T')[0];
     App.openModal('newQuotationModal');
@@ -1437,6 +1446,8 @@ const ProjectHub = {
 
   async submitQuotationForm(e) {
     if (e) e.preventDefault();
+    const projectId = Number(document.getElementById('quoModalProject')?.value);
+    if (!projectId) return App.showToast('يرجى اختيار المشروع لعرض السعر', 'warning');
     const payload = {
       quotation_no: document.getElementById('quoModalNo').value,
       title: document.getElementById('quoModalTitle').value,
@@ -1451,7 +1462,7 @@ const ProjectHub = {
       notes: document.getElementById('quoModalNotes').value
     };
 
-    const res = await fetch(`/api/project-hub/${this.currentProjectId}/quotations`, {
+    const res = await fetch(`/api/project-hub/${projectId}/quotations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1461,6 +1472,8 @@ const ProjectHub = {
     if (json.success) {
       App.showToast('تم إنشاء عرض السعر بنجاح', 'success');
       App.closeModal('newQuotationModal');
+      this.currentProjectId = projectId;
+      document.getElementById('hubProjectSelect').value = String(projectId);
       await this.loadProjectData();
     } else {
       App.showToast(json.message || 'فشل في حفظ عرض السعر', 'error');

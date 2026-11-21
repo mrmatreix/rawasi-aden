@@ -89,6 +89,40 @@ function resetLoginAttempts(req) {
   loginAttempts.delete(key);
 }
 
+// قفل حساب الموظف نفسه بعد محاولات خاطئة متتالية (كلمة مرور أو رمز 2FA أو فك قفل الشاشة)،
+// بغض النظر عن عنوان IP، ومحفوظ في صف المستخدم فلا يُمسح بإعادة تشغيل الخادم.
+const STAFF_MAX_FAILURES = 5;
+const STAFF_LOCK_MS = 15 * 60 * 1000;
+function getStaffLockRemainingMs(user) {
+  if (!user || !user.login_locked_until) return 0;
+  const remaining = new Date(user.login_locked_until).getTime() - Date.now();
+  return Number.isFinite(remaining) && remaining > 0 ? remaining : 0;
+}
+/** يسجّل محاولة خاطئة؛ يعيد عدد المحاولات المتبقية وهل قُفل الحساب */
+async function registerStaffFailure(userId) {
+  const db = require('../database/db');
+  const row = await db.get('SELECT failed_login_count FROM users WHERE id = ?', [userId]);
+  const count = Number(row?.failed_login_count || 0) + 1;
+  if (count >= STAFF_MAX_FAILURES) {
+    await db.run('UPDATE users SET failed_login_count = 0, login_locked_until = ? WHERE id = ?', [new Date(Date.now() + STAFF_LOCK_MS).toISOString(), userId]);
+    return { locked: true, remainingAttempts: 0, lockoutSeconds: STAFF_LOCK_MS / 1000 };
+  }
+  await db.run('UPDATE users SET failed_login_count = ? WHERE id = ?', [count, userId]);
+  return { locked: false, remainingAttempts: STAFF_MAX_FAILURES - count, lockoutSeconds: 0 };
+}
+/** يمسح عدادات الذاكرة (IP + اسم المستخدم) لهذا الحساب عند فك القفل من الإدارة */
+function clearLoginAttemptsFor(username) {
+  const suffix = '::' + String(username || '').trim().toLowerCase();
+  for (const key of loginAttempts.keys()) if (key.endsWith(suffix)) loginAttempts.delete(key);
+}
+async function clearStaffFailures(userId) {
+  await require('../database/db').run('UPDATE users SET failed_login_count = 0, login_locked_until = NULL WHERE id = ?', [userId]);
+}
+function staffLockedResponse(res, remainingMs) {
+  const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  return res.status(429).json({ success: false, rateLimited: true, accountLocked: true, lockoutSeconds: Math.ceil(remainingMs / 1000), remainingAttempts: 0, message: `⛔ تم قفل الحساب مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد ${minutes} دقيقة أو اطلب من المدير فك القفل.` });
+}
+
 // تنظيف دوري للذاكرة كل 10 دقائق
 setInterval(() => {
   const now = Date.now();
@@ -203,6 +237,12 @@ const requireAuth = async (req, res, next) => {
     else {try{const parsed=JSON.parse(permissionValue);if(Array.isArray(parsed))permissions=parsed;}catch{permissions=String(permissionValue).split(',').map(p=>p.trim()).filter(Boolean);}}
     req.user = {...decoded,...current,permissions};
     delete req.user.session_token; delete req.user.active_sessions;
+    if (current.role === 'service_supervisor') {
+      const pathname=(req.originalUrl || '').split('?')[0];
+      const allowed=/^\/api\/auth\/(?:me|staff-access|logout|heartbeat|verify|session)(?:\/|$)/.test(pathname) || /^\/api\/admin\/client-users\/service-requests(?:\/|$)/.test(pathname) || /^\/uploads\/service_requests\//.test(pathname);
+      if(!allowed)return res.status(403).json({success:false,message:'هذا الحساب مخصص لمساحة المشرف في التطبيق'});
+      if(!/^\/api\/auth\/(?:me|logout)(?:\/|$)/.test(pathname) && !hasUserPermission(req.user,'client_app:staff_login'))return res.status(403).json({success:false,message:'حسابك لا يملك صلاحية دخول فريق العمل في التطبيق'});
+    }
     req.user.scope = null;
     // ضمان توفر كائن النطاق الصلاحي (Scope Context)
     if (!req.user.scope) {
@@ -254,6 +294,28 @@ function parseScopeArray(scopeVal) {
 /**
  * التحقق من صلاحية المستخدم على عملية معينة (Deny by Default)
  */
+/**
+ * مشرف طلبات مقيّد: لا يرى طلبات الزوار وردودهم إلا بعد إسنادها إليه.
+ * يشمل دور service_supervisor، وأي موظف فُعّل له خيار "مشرف" (client_app:supervisor) صراحةً.
+ * يُفحص الخيار في قائمة صلاحيات المستخدم نفسها، لا عبر hasUserPermission، حتى لا يُقيَّد
+ * المدير العام أو من يملك صلاحية شاملة (*) أو قالب مسؤول التطبيق.
+ */
+function isScopedRequestSupervisor(user) {
+  if (!user || user.role === 'admin') return false;
+  if (user.role === 'service_supervisor') return true;
+  let permissions = user.permissions;
+  if (!Array.isArray(permissions)) {
+    const raw = user.permissions || user.role_permissions || '[]';
+    try { permissions = JSON.parse(raw); } catch { permissions = String(raw).split(',').map(p => p.trim()); }
+  }
+  return Array.isArray(permissions) && permissions.includes('client_app:supervisor');
+}
+
+/** من يحق له إسناد طلبات الزوار للمشرفين: المدير العام، أو خدمة العملاء بصلاحية التحديد، وليس مشرفاً مقيّداً */
+function canAssignServiceRequests(user) {
+  return Boolean(user) && !isScopedRequestSupervisor(user) && hasUserPermission(user, 'client_app:requests_assign_supervisor');
+}
+
 function hasUserPermission(user, requiredPerm) {
   if (!user) return false;
 
@@ -492,12 +554,19 @@ module.exports = {
   loginRateLimiter,
   recordFailedLogin,
   resetLoginAttempts,
+  getStaffLockRemainingMs,
+  registerStaffFailure,
+  clearStaffFailures,
+  clearLoginAttemptsFor,
+  staffLockedResponse,
   generateCsrfToken,
   verifyCsrfToken,
   requireAuth,
   requirePermission,
   requireScope,
   hasUserPermission,
+  isScopedRequestSupervisor,
+  canAssignServiceRequests,
   checkUserScope,
   parseScopeArray,
   JWT_SECRET
