@@ -630,14 +630,13 @@ function initSqlite() {
     }
 
     // فهارس الأداء وتفادي القفل
-    sqliteDb.exec(`
-      CREATE INDEX IF NOT EXISTS idx_contracts_project_signing ON project_contracts (project_id, signing_date);
-      CREATE INDEX IF NOT EXISTS idx_projects_client_status ON projects (client_id, status);
-      CREATE INDEX IF NOT EXISTS idx_je_status_date ON journal_entries (status, date);
-      CREATE INDEX IF NOT EXISTS idx_payments_project_date_type ON payments (project_id, date, type, status);
-    `);
+    const preIndexes = [['project_contracts', 'CREATE INDEX IF NOT EXISTS idx_contracts_project_signing ON project_contracts (project_id, signing_date)'],
+      ['projects', 'CREATE INDEX IF NOT EXISTS idx_projects_client_status ON projects (client_id, status)'],
+      ['journal_entries', 'CREATE INDEX IF NOT EXISTS idx_je_status_date ON journal_entries (status, date)'],
+      ['payments', 'CREATE INDEX IF NOT EXISTS idx_payments_project_date_type ON payments (project_id, date, type, status)']];
+    for (const [table, sql] of preIndexes) if (tableList.includes(table)) sqliteDb.exec(sql);
   } catch (e) {
-    console.warn('Pre-schema check note:', e.message);
+    recordBootIssue('Pre-schema checks', e);
   }
 
   const schemaPath = path.join(__dirname, 'schema.sql');
@@ -851,31 +850,7 @@ function initSqlite() {
       sqliteDb.exec('UPDATE accounts SET cost_center_required = 1 WHERE default_cost_center_id IS NOT NULL;');
     }
     if (!accountCenterCols.includes('analytical_type')) sqliteDb.exec("ALTER TABLE accounts ADD COLUMN analytical_type TEXT NOT NULL DEFAULT 'general';");
-    initializeChartOfAccountsColumns(sqliteDb, accountCenterCols);
-    // الأستاذ المساعد (المرحلة 4.7): طرف سطر القيد (عميل/مورد/موظف) لاشتقاق أرصدة الأطراف من الأستاذ العام
-    const lineCols = sqliteDb.prepare('PRAGMA table_info(journal_entry_lines)').all().map(c => c.name);
-    if (!lineCols.includes('party_type')) sqliteDb.exec('ALTER TABLE journal_entry_lines ADD COLUMN party_type TEXT;');
-    if (!lineCols.includes('party_id')) sqliteDb.exec('ALTER TABLE journal_entry_lines ADD COLUMN party_id INTEGER;');
-    sqliteDb.exec('CREATE INDEX IF NOT EXISTS idx_jel_party ON journal_entry_lines(party_type, party_id);');
-    // الرواتب (المرحلة 4.5): قيد الاستحقاق في journal_entry_id وقيد الصرف منفصل
-    const payrollCols = sqliteDb.prepare('PRAGMA table_info(payroll)').all().map(c => c.name);
-    if (payrollCols.length && !payrollCols.includes('payment_journal_entry_id')) sqliteDb.exec('ALTER TABLE payroll ADD COLUMN payment_journal_entry_id INTEGER REFERENCES journal_entries(id);');
-    // أعمدة كشف الراتب الشامل كانت تُضاف فقط بسكربت migrate_comprehensive_payroll.js؛ بدونها يفشل إعداد المسير في قاعدة جديدة
-    const ensureCols = (table, defs) => {
-      const have = sqliteDb.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
-      if (!have.length) return;
-      for (const [name, def] of defs) if (!have.includes(name)) sqliteDb.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def};`);
-    };
-    ensureCols('payroll', [['allowances', 'REAL DEFAULT 0'], ['overtime_amount', 'REAL DEFAULT 0'], ['earned_basic', 'REAL DEFAULT 0'], ['transport_allowance', 'REAL DEFAULT 0'], ['appearance_allowance', 'REAL DEFAULT 0'],
-      ['nature_of_work_allowance', 'REAL DEFAULT 0'], ['living_allowance', 'REAL DEFAULT 0'], ['health_insurance_allowance', 'REAL DEFAULT 0'],
-      ['gross_salary', 'REAL DEFAULT 0'], ['insurance_employee', 'REAL DEFAULT 0'], ['insurance_employer', 'REAL DEFAULT 0'],
-      ['absence_penalty_deductions', 'REAL DEFAULT 0'], ['loan_installments', 'REAL DEFAULT 0'], ['taxable_base', 'REAL DEFAULT 0'],
-      ['tax_amount', 'REAL DEFAULT 0'], ['skills_fund', 'REAL DEFAULT 0'], ['unpaid_leave_deduction', 'REAL DEFAULT 0'],
-      ['total_net_salary', 'REAL DEFAULT 0'], ['working_days', 'INTEGER DEFAULT 31'], ['month_days', 'INTEGER DEFAULT 31'],
-      ['cost_center', "TEXT DEFAULT 'الإدارة العامة'"], ['bank_account', "TEXT DEFAULT ''"]]);
-    ensureCols('employees', [['transport_pct', 'REAL DEFAULT 20'], ['appearance_pct', 'REAL DEFAULT 25'], ['nature_of_work_pct', 'REAL DEFAULT 30'],
-      ['living_allowance', 'REAL DEFAULT 90000'], ['health_insurance_allowance', 'REAL DEFAULT 30000'], ['cost_center', "TEXT DEFAULT 'الإدارة العامة'"],
-      ['bank_account', "TEXT DEFAULT ''"]]);
+    // أعمدة المراحل 2 و4.5 و4.7 انتقلت إلى الترحيلات المرقّمة (server/database/migrations)
     sqliteDb.exec(`CREATE TABLE IF NOT EXISTS supporting_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
       file_name TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
@@ -1753,7 +1728,7 @@ function initSqlite() {
     // Demo warehouses, bank balances and tax configuration are never inserted at startup.
 
   } catch (err) {
-    console.warn('Accounting migration note (SQLite):', err.message);
+    recordBootIssue('Accounting migration', err);
   }
 
   // ============================================================
@@ -1901,7 +1876,7 @@ function initSqlite() {
       if (!dailyCols.includes('approved_by')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN approved_by TEXT;");
       if (!dailyCols.includes('approved_at')) sqliteDb.exec("ALTER TABLE project_daily_reports ADD COLUMN approved_at DATETIME;");
     } catch (e) {
-      console.warn('Daily reports migration note (SQLite):', e.message);
+      recordBootIssue('Daily reports migration', e);
     }
 
     // ترقية وتطوير وحدة علاقات الموردين (SRM / Vendor Profile Migration)
@@ -2077,7 +2052,7 @@ function initSqlite() {
       `);
       console.log('✅ [Rawasi DB] SRM & Vendor Financial Profiles view & tables initialized');
     } catch (e) {
-      console.warn('SRM vendor migration note (SQLite):', e.message);
+      recordBootIssue('SRM vendor migration', e);
     }
 
     // ترقية وتطوير دورة حياة العميل والربط الهرمي التلقائي (Client Lifecycle & Hierarchy Migration)
@@ -2432,7 +2407,7 @@ function initSqlite() {
 
       console.log('✅ [Rawasi DB] Client Lifecycle & Portal tables initialized');
     } catch (e) {
-      console.warn('Client hierarchy migration note (SQLite):', e.message);
+      recordBootIssue('Client hierarchy migration', e);
     }
 
     // =========================================================================
@@ -2579,7 +2554,7 @@ function initSqlite() {
 
       console.log('✅ [Rawasi DB] Modern Payment Lifecycle, Methods & Financial Accounts initialized');
     } catch (e) {
-      console.warn('Payment architecture migration note (SQLite):', e.message);
+      recordBootIssue('Payment architecture migration', e);
     }
 
     // =========================================================================
@@ -2715,7 +2690,7 @@ function initSqlite() {
 
       console.log('✅ [Rawasi DB] General Ledger Integrity Rules, Leaf Triggers & Mappings initialized');
     } catch (e) {
-      console.warn('Ledger integrity migration note (SQLite):', e.message);
+      recordBootIssue('Ledger integrity migration', e);
     }
 
     try {
@@ -2728,10 +2703,10 @@ function initSqlite() {
         }
       }
     } catch (e) {
-      console.warn('Backup system migration note (SQLite):', e.message);
+      recordBootIssue('Backup system migration', e);
     }
   } catch (err) {
-    console.warn('Project control migration note (SQLite):', err.message);
+    recordBootIssue('Project control migration', err);
   }
 
   activeEngine = 'sqlite';
@@ -2820,6 +2795,14 @@ async function initializeDatabase() {
         const [columns] = await mysqlPool.query("SHOW COLUMNS FROM project_boq LIKE 'work_item_id'");
         if (!columns.length) await mysqlPool.query('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
       }
+      if (activeEngine === 'sqlite') {
+        const ran = require('./migrations').runMigrations(sqliteDb);
+        if (ran.length) console.log(`✅ [Rawasi DB] Schema migrations applied: ${ran.join(', ')}`);
+        seedSystemAccountMappings(sqliteDb);
+        assertCleanBoot();
+      } else {
+        console.warn('⚠️ [Rawasi DB] MySQL engine is not supported since the ledger hardening (stages 1-4): triggers, roles, party columns and migrations exist only for SQLite.');
+      }
       await ensureClientSessionColumn();
       databaseState = 'ready'; databaseError = null;
     } catch (error) {
@@ -2853,7 +2836,7 @@ async function runOneTimeDataMigrations() {
     await run('INSERT INTO settings (`key`, `value`) VALUES (?, ?)', [MIGRATION_KEY, new Date().toISOString()]);
     console.log(`✅ [Rawasi DB] Granted invoice approval to client managers (${result?.changes ?? result?.affectedRows ?? 0} rows).`);
   } catch (err) {
-    console.error('One-time data migration failed:', err.message);
+    recordBootIssue('One-time data migration', err);
   }
 }
 ready.then(runOneTimeDataMigrations).catch(() => {});
@@ -2975,28 +2958,9 @@ const UNBALANCED_NEW_ENTRIES_SQL = `
       OR ABS(COALESCE(SUM(l.debit), 0) - je.total_debit) > 0.005
   LIMIT 1`;
 
-// Chart-of-accounts columns, normal-balance maintenance and the system-account role table (stage 2).
-// Mappings are only seeded when missing; the repair script and the settings API own later changes.
-function initializeChartOfAccountsColumns(sqliteDb, existingCols) {
-  const cols = new Set(existingCols);
-  const add = { parent_code: 'TEXT', is_contra: 'INTEGER DEFAULT 0', is_active: 'INTEGER DEFAULT 1', normal_balance: 'TEXT', updated_at: 'DATETIME' };
-  for (const [c, def] of Object.entries(add)) if (!cols.has(c)) sqliteDb.exec(`ALTER TABLE accounts ADD COLUMN ${c} ${def};`);
-  const debitTypes = "('asset','assets','أصول','اصول','أصل','اصل','أصول ثابتة','أصول متداولة','expense','expenses','cost','مصروفات','مصاريف','مصروف','تكاليف')";
-  const normal = `CASE WHEN LOWER(TRIM(NEW.type)) IN ${debitTypes} THEN (CASE WHEN COALESCE(NEW.is_contra,0)=1 THEN 'credit' ELSE 'debit' END)
-    ELSE (CASE WHEN COALESCE(NEW.is_contra,0)=1 THEN 'debit' ELSE 'credit' END) END`;
-  sqliteDb.exec(`
-    DROP TRIGGER IF EXISTS trg_accounts_normal_balance_insert;
-    CREATE TRIGGER trg_accounts_normal_balance_insert AFTER INSERT ON accounts
-    BEGIN UPDATE accounts SET normal_balance = ${normal} WHERE id = NEW.id; END;
-    DROP TRIGGER IF EXISTS trg_accounts_normal_balance_update;
-    CREATE TRIGGER trg_accounts_normal_balance_update AFTER UPDATE OF type, is_contra ON accounts
-    BEGIN UPDATE accounts SET normal_balance = ${normal} WHERE id = NEW.id; END;
-  `);
-  sqliteDb.exec(`UPDATE accounts SET normal_balance = CASE WHEN LOWER(TRIM(type)) IN ${debitTypes}
-    THEN (CASE WHEN COALESCE(is_contra,0)=1 THEN 'credit' ELSE 'debit' END) ELSE (CASE WHEN COALESCE(is_contra,0)=1 THEN 'debit' ELSE 'credit' END) END
-    WHERE normal_balance IS NULL`);
-  const { MAPPINGS_DDL } = require('./chartOfAccountsRepair');
-  sqliteDb.exec(MAPPINGS_DDL);
+// System account roles: link every role that has no mapping yet to its default account (every boot,
+// because new roles are added in later releases). Existing mappings are never changed here.
+function seedSystemAccountMappings(sqliteDb) {
   const { SYSTEM_ACCOUNT_ROLES } = require('../services/chartOfAccountsRules');
   const seed = sqliteDb.prepare(`INSERT OR IGNORE INTO system_account_mappings (role, account_id, updated_by)
     SELECT ?, a.id, 'system-default' FROM accounts a
@@ -3004,6 +2968,28 @@ function initializeChartOfAccountsColumns(sqliteDb, existingCols) {
       AND (? = 1 OR (a.is_posting = 1 AND NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = a.id)))`);
   for (const [role, def] of Object.entries(SYSTEM_ACCOUNT_ROLES)) for (const code of def.codes) seed.run(role, code, def.group ? 1 : 0);
 }
+
+// Boot issues (stage 5): the inline migration blocks used to swallow failures with console.warn, so a failed
+// ALTER silently skipped the rest of its block. Failures are now recorded, logged as errors, exposed in
+// getBootIssues(), and stop the boot outside production (RAWASI_STRICT_BOOT=true|false overrides).
+// var (not const): the boot starts at module load, before this line is reached
+var bootIssues;
+function recordBootIssue(area, err) {
+  const issue = { area, message: err && err.message ? err.message : String(err), at: new Date().toISOString() };
+  (bootIssues = bootIssues || []).push(issue);
+  console.error(`❌ [Rawasi DB] ${area}: ${issue.message}`);
+}
+function strictBoot() {
+  if (process.env.RAWASI_STRICT_BOOT === 'true') return true;
+  if (process.env.RAWASI_STRICT_BOOT === 'false') return false;
+  return process.env.NODE_ENV !== 'production';
+}
+function assertCleanBoot() {
+  if (bootIssues && bootIssues.length && strictBoot()) {
+    throw Object.assign(new Error(`Database boot had ${bootIssues.length} schema issue(s): ${bootIssues.map(i => i.area + ': ' + i.message).join(' | ')}`), { code: 'BOOT_SCHEMA_ISSUES' });
+  }
+}
+function getBootIssues() { return (bootIssues || []).slice(); }
 
 function unbalancedLedgerError(entryNo) {
   return Object.assign(new Error(`⛔ القيد ${entryNo} غير متزن أو بلا سطور كافية؛ تم إلغاء العملية بالكامل`), { statusCode: 400, code: 'LEDGER_UNBALANCED' });
@@ -3255,7 +3241,7 @@ function getMysqlConfig() {
 module.exports = {
   get db() { return sqliteDb; },
   get mysqlPool() { return mysqlPool; },
-  ready, closeDatabase, getDatabaseState,
+  ready, closeDatabase, getDatabaseState, getBootIssues,
   query,
   get,
   run,

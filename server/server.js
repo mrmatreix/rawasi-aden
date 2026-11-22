@@ -58,6 +58,10 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 
+// طبقة الأخطاء الموحدة (المرحلة 5): لا تصل تفاصيل SQL أو أخطاء التنفيذ إلى المستخدم
+const { safeErrorResponses, errorHandler } = require('./middleware/errors');
+app.use(safeErrorResponses);
+
 app.use((req, res, next) => {
   if (typeof req.body === 'string') {
     try { req.body = JSON.parse(req.body); } catch {}
@@ -287,11 +291,7 @@ app.get(['/ws/alerts', '/ws/contracts', '/ws'], requireAuth, (req, res) => {
 });
 
 app.use((_req,res)=>res.status(404).json({success:false,message:'المسار غير موجود'}));
-app.use((error,_req,res,_next)=>{
-  const status=Number(error.statusCode||error.status)||500;
-  if(status>=500)console.error('Request failed:',error.code||error.name);
-  if(!res.headersSent)res.status(status).json({success:false,message:status>=500?'تعذر إتمام الطلب':'الطلب غير صالح'});
-});
+app.use(errorHandler);
 
 if (require.main === module) {
   const http = require('http');
