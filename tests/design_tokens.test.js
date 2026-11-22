@@ -49,3 +49,14 @@ test('buttons do not repaint themselves with inline gradients instead of a varia
  const painted=[...html.matchAll(/<button\b[^<>]*class="[^"]*\bbtn\b[^"]*"[^<>]*style="[^"]*background:\s*linear-gradient\(135deg,\s*#(?:059669|10b981|b91c1c|ef4444|2563eb)/g)];
  assert.equal(painted.length,0,'use btn-success / btn-danger / btn-info');
 });
+
+// نافذة رمز التحقق بخطوتين تُفتح فوق شاشة الدخول؛ إن كانت تحتها يبدو الدخول معلقاً بعد كلمة مرور صحيحة
+test('2FA PIN modal stacks above the login screen',()=>{
+ const css=fs.readFileSync(path.join(root,'css','style.css'),'utf8');
+ const login=Number((css.match(/\.login-screen-overlay\s*\{[^}]*?z-index:\s*(\d+)/)||[])[1]);
+ for(const file of ['index.html',path.join('www','index.html')]){
+  const html=fs.readFileSync(path.join(root,file),'utf8');
+  const modal=Number((html.match(/id="twoFactorModal"[^>]*z-index:\s*(\d+)/)||[])[1]);
+  assert.ok(login>0&&modal>login,file+': twoFactorModal z-index ('+modal+') must exceed .login-screen-overlay ('+login+')');
+ }
+});
