@@ -17,7 +17,8 @@ let currentQuestion = '';
 rl._writeToOutput = function (s) { if (currentQuestion && s.includes(currentQuestion)) process.stdout.write(currentQuestion); };
 const pendingLines = [];
 const waiters = [];
-rl.on('line', line => { const w = waiters.shift(); if (w) w(line); else pendingLines.push(line); });
+// بعض الطرفيات على الويب (مثل Console في Railway) ترسل سطراً فارغاً إضافياً بعد Enter؛ نتجاهله
+rl.on('line', line => { if (!String(line).trim()) return; const w = waiters.shift(); if (w) w(line); else pendingLines.push(line); });
 function askHidden(question) {
   currentQuestion = question;
   process.stdout.write(question);
