@@ -5386,7 +5386,7 @@ const Accounting = {
 
     if (!periodId) return;
     if (!password || !password.trim()) {
-      if (window.UI && UI.Toast) UI.Toast.error('يرجى إدخال كلمة مرور المدير لإقرار إقفال الفترة');
+      if (window.UI && UI.Toast) UI.Toast.error('يرجى إدخال كلمة مرور حسابك لتأكيد إقفال الفترة');
       return;
     }
 
@@ -5396,9 +5396,15 @@ const Accounting = {
       const res = await fetch(`/api/accounting/periods/${periodId}/close`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_password: password.trim(), notes: notes?.trim() })
+        body: JSON.stringify({ password: password.trim(), notes: notes?.trim() })
       });
-      const json = await res.json();
+      let json = await res.json();
+      // الفترة تتضمن نهاية السنة: يُرحَّل قيد الإقفال السنوي (الإيرادات والمصروفات إلى الأرباح المحتجزة) ثم يُعاد الإقفال
+      if (!json.success && json.code === 'YEAR_CLOSING_REQUIRED' && await UIDialog.confirm(`${json.message}\n\nترحيل قيد الإقفال السنوي لسنة ${json.fiscal_year} الآن ثم إقفال الفترة؟`)) {
+        const yc = await fetch(`/api/accounting/fiscal-years/${json.fiscal_year}/closing`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password.trim() }) }).then(r => r.json());
+        if (!yc.success) json = yc;
+        else json = await fetch(`/api/accounting/periods/${periodId}/close`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password.trim(), notes: notes?.trim() }) }).then(r => r.json());
+      }
 
       if (json.success) {
         if (window.UI && UI.Toast) UI.Toast.success(json.message);

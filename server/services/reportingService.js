@@ -176,7 +176,7 @@ class ReportingService {
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted'
-        AND je.date BETWEEN ? AND ?
+        AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
         ${costCenterClause}
         AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
@@ -193,7 +193,7 @@ class ReportingService {
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted'
-        AND je.date BETWEEN ? AND ?
+        AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
         ${costCenterClause}
         AND (a.type IN ('expense','cost','مصروفات','تكاليف') OR a.code LIKE '3%' OR a.code LIKE '5%') AND (a.type IN ('cost','تكاليف') OR a.code LIKE '31%' OR a.code LIKE '51%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
@@ -210,7 +210,7 @@ class ReportingService {
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
       WHERE je.status = 'posted'
-        AND je.date BETWEEN ? AND ?
+        AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
         ${costCenterClause}
         AND (a.type IN ('expense','cost','مصروفات','تكاليف') OR a.code LIKE '3%' OR a.code LIKE '5%') AND NOT (a.type IN ('cost','تكاليف') OR a.code LIKE '31%' OR a.code LIKE '51%')
         AND NOT EXISTS (SELECT 1 FROM accounts child WHERE child.parent_id = a.id)
@@ -645,7 +645,7 @@ class ReportingService {
         JOIN accounts a ON a.id = jel.account_id
         WHERE jel.project_id = ?
           AND je.status = 'posted'
-          AND je.date BETWEEN ? AND ?
+          AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
           AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
       `, [prj.id, fromDate, toDate]);
 
@@ -657,7 +657,7 @@ class ReportingService {
         JOIN accounts a ON a.id = jel.account_id
         WHERE jel.project_id = ?
           AND je.status = 'posted'
-          AND je.date BETWEEN ? AND ?
+          AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
           AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
       `, [prj.id, fromDate, toDate]);
 
@@ -773,7 +773,7 @@ class ReportingService {
         JOIN accounts a ON a.id = jel.account_id
         WHERE jel.cost_center_id = ?
           AND je.status = 'posted'
-          AND je.date BETWEEN ? AND ?
+          AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
           AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
       `, [cc.id, fromDate, toDate]);
 
@@ -785,7 +785,7 @@ class ReportingService {
         JOIN accounts a ON a.id = jel.account_id
         WHERE jel.cost_center_id = ?
           AND je.status = 'posted'
-          AND je.date BETWEEN ? AND ?
+          AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
           AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
       `, [cc.id, fromDate, toDate]);
 
@@ -826,7 +826,7 @@ class ReportingService {
       JOIN accounts a ON a.id = jel.account_id
       WHERE jel.cost_center_id IS NULL
         AND je.status = 'posted'
-        AND je.date BETWEEN ? AND ?
+        AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
         AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
     `, [fromDate, toDate]);
 
@@ -837,7 +837,7 @@ class ReportingService {
       JOIN accounts a ON a.id = jel.account_id
       WHERE jel.cost_center_id IS NULL
         AND je.status = 'posted'
-        AND je.date BETWEEN ? AND ?
+        AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
         AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
     `, [fromDate, toDate]);
 
@@ -850,7 +850,7 @@ class ReportingService {
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
-      WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
+      WHERE je.status = 'posted' AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
         AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
     `, [fromDate, toDate]);
 
@@ -859,7 +859,7 @@ class ReportingService {
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.entry_id
       JOIN accounts a ON a.id = jel.account_id
-      WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
+      WHERE je.status = 'posted' AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
         AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '5%' OR a.code LIKE '3%')
     `, [fromDate, toDate]);
 
@@ -1281,7 +1281,7 @@ class ReportingService {
         FROM journal_entry_lines jel
         JOIN journal_entries je ON je.id = jel.entry_id
         JOIN accounts a ON a.id = jel.account_id
-        WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
+        WHERE je.status = 'posted' AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
           AND (a.type IN ('revenue','إيرادات','ايرادات') OR a.code LIKE '4%')
       `, [mStart, mEnd]);
 
@@ -1290,7 +1290,7 @@ class ReportingService {
         FROM journal_entry_lines jel
         JOIN journal_entries je ON je.id = jel.entry_id
         JOIN accounts a ON a.id = jel.account_id
-        WHERE je.status = 'posted' AND je.date BETWEEN ? AND ?
+        WHERE je.status = 'posted' AND je.date BETWEEN ? AND ? AND COALESCE(je.reference_type, '') <> 'قيد إقفال سنوي'
           AND (a.type IN ('expense','cost','تكاليف','مصروفات') OR a.code LIKE '3%' OR a.code LIKE '5%')
       `, [mStart, mEnd]);
 

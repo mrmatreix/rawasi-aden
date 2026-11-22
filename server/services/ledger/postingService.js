@@ -59,7 +59,7 @@ async function resolveParty(h, type, id) {
  * Validates lines and returns them in fils. Each line: { accountId | account_id | role, debit, credit,
  * costCenterId | cost_center_id, projectId | project_id, partyType + partyId (client | supplier | employee), notes | description }.
  */
-async function prepareLines(h, lines) {
+async function prepareLines(h, lines, { costCenterRule = true } = {}) {
   if (!Array.isArray(lines) || lines.length < 2) throw postingError('يجب أن يحتوي القيد على سطرين على الأقل (طرف مدين وطرف دائن)');
   const out = [];
   let debit = 0; let credit = 0;
@@ -72,7 +72,8 @@ async function prepareLines(h, lines) {
     const accountRef = line.role ? (await SystemAccounts.resolve(line.role, h)).id : (line.accountId ?? line.account_id);
     if (!accountRef && !line.role) throw postingError(`السطر رقم ${i + 1}: يرجى تحديد الحساب المالي`);
     const account = await loadPostingAccount(h, accountRef);
-    const costCenterId = await resolveCostCenter(h, account, line.costCenterId ?? line.cost_center_id);
+    // costCenterRule=false: year-end closing lines carry no cost centre even on accounts that normally require one
+    const costCenterId = await resolveCostCenter(h, costCenterRule ? account : { ...account, cost_center_required: 0 }, line.costCenterId ?? line.cost_center_id);
     const party = await resolveParty(h, line.partyType ?? line.party_type, line.partyId ?? line.party_id);
     out.push({ account, account_id: account.id, cost_center_id: costCenterId, project_id: await resolveProject(h, line.projectId ?? line.project_id),
       party_type: party.type, party_id: party.id, debit: d, credit: c, notes: String(line.notes ?? line.description ?? '').trim() });
@@ -112,7 +113,7 @@ async function validUserId(h, id) {
  * or, with dedupe and an existing entry for the same source, { id, entry_no, already_existed: true }.
  */
 // syncCash=false: the caller writes its own cash-book row (vouchers record it under the voucher number).
-async function post(h, { date, description, source = {}, status = 'posted', series = 'JV', lines, user, documents, dedupe = false, checkPeriod = true, syncCash = true }) {
+async function post(h, { date, description, source = {}, status = 'posted', series = 'JV', lines, user, documents, dedupe = false, checkPeriod = true, syncCash = true, costCenterRule = true }) {
   if (!h || typeof h.run !== 'function') throw new Error('PostingService.post requires a transaction handle');
   if (!date || !description || !String(description).trim()) throw postingError('تاريخ القيد والبيان حقول إلزامية');
   if (!['posted', 'draft'].includes(status)) throw postingError('حالة القيد يجب أن تكون مسودة أو مرحّل');
@@ -121,7 +122,7 @@ async function post(h, { date, description, source = {}, status = 'posted', seri
     const existing = await findExisting(h, source);
     if (existing) return { id: existing.id, entry_no: existing.entry_no, status: existing.status, already_existed: true };
   }
-  const prepared = await prepareLines(h, lines);
+  const prepared = await prepareLines(h, lines, { costCenterRule });
   const entryNo = await Numbering.nextJournalNumber(h, { series, date });
   const who = actor(user);
   const userId = await validUserId(h, who.id);

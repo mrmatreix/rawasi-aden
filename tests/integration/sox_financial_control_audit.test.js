@@ -398,9 +398,16 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
     assert.strictEqual(resBlockedBill.status, 403, 'Must block bill in closed period');
 
     // 5.4 إعادة فتح الفترة رسمياً بطلب موثق في سجل التدقيق
-    const resReopen = await fetch(`${baseUrl}/api/accounting/periods/${periodId}/reopen`, {
+    // المرحلة 6 (H11): إعادة الفتح تحتاج صلاحية الإقفال المخصصة؛ صلاحية الاعتماد العامة للمدقق لا تكفي
+    const resReopenAuditor = await fetch(`${baseUrl}/api/accounting/periods/${periodId}/reopen`, {
       method: 'PUT',
       headers: checkerHeaders,
+      body: JSON.stringify({ reason: 'إعادة فتح استثنائية لتدقيق تسوية جردية معتمدة' })
+    });
+    assert.strictEqual(resReopenAuditor.status, 403);
+    const resReopen = await fetch(`${baseUrl}/api/accounting/periods/${periodId}/reopen`, {
+      method: 'PUT',
+      headers: getHeaders({ id: 1, username: 'admin', role: 'admin', permissions: ['*'] }),
       body: JSON.stringify({ reason: 'إعادة فتح استثنائية لتدقيق تسوية جردية معتمدة' })
     });
     assert.strictEqual(resReopen.status, 200);

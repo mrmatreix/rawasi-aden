@@ -13,6 +13,7 @@ files.push('tests/integration/payroll_posting.test.js');
 files.push('tests/integration/inventory_bank_posting.test.js');
 files.push('tests/integration/subledger.test.js');
 files.push('tests/integration/platform_errors_migrations.test.js');
+files.push('tests/integration/period_closing.test.js');
 files.push('tests/journal_posting_ui.test.js');
 files.push('tests/integration/cash_flow_projection.test.js');
 files.push('tests/cash_flow_ui.test.js');

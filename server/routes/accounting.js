@@ -1395,43 +1395,27 @@ router.get('/cash-movements', requirePermission('cash:view,accounting:view,expen
 // 🔒 إدارة الفترات المحاسبية وإغلاق الحسابات (Period Locking)
 // ============================================================
 
-// استعراض الفترات المحاسبية وحالتها
+// الفترات المحاسبية مع التداخلات القائمة (بيانات قديمة تحتاج مراجعة)
 router.get('/periods', requirePermission('accounting:view'), async (req, res) => {
   try {
+    const PeriodClose = require('../services/ledger/periodCloseService');
     const periods = await query('SELECT * FROM accounting_periods ORDER BY fiscal_year DESC, start_date DESC');
-    res.json({ success: true, data: periods });
+    res.json({ success: true, data: periods, overlaps: await PeriodClose.existingOverlaps() });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في جلب الفترات المحاسبية', error: err.message });
   }
 });
 
-// إنشاء فترة محاسبية جديدة
+// إنشاء فترة محاسبية جديدة (لا تداخل مع فترات قائمة)
 router.post('/periods', requirePermission('accounting:create'), async (req, res) => {
   try {
-    const { period_name, fiscal_year, start_date, end_date, notes } = req.body;
-    const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
-    if (!period_name || !validDate(start_date) || !validDate(end_date) || start_date > end_date) {
-      return res.status(400).json({ success: false, message: 'أدخل اسم الفترة وتاريخي بداية ونهاية صالحين ومرتّبين' });
-    }
-    const fYear = Number(fiscal_year) || new Date(start_date).getFullYear();
-
-    const result = await run(`
-      INSERT INTO accounting_periods (period_name, fiscal_year, start_date, end_date, status, notes)
-      VALUES (?, ?, ?, ?, 'open', ?)
-    `, [period_name.trim(), fYear, start_date, end_date, notes || '']);
-
-    const periodId = result.lastInsertRowid || result.insertId;
-
-    await logAudit(req, {
-      action: 'INSERT',
-      entity_type: 'period',
-      entity_id: periodId,
-      details: { period_name: period_name.trim(), fiscal_year: fYear, start_date, end_date }
-    });
-
-    res.json({ success: true, message: 'تم إنشاء الفترة المحاسبية بنجاح', id: periodId });
+    const PeriodClose = require('../services/ledger/periodCloseService');
+    const { id, fiscal_year } = await PeriodClose.createPeriod(req.body);
+    await logAudit(req, { action: 'INSERT', entity_type: 'period', entity_id: id,
+      details: { period_name: String(req.body.period_name).trim(), fiscal_year, start_date: req.body.start_date, end_date: req.body.end_date } });
+    res.json({ success: true, message: 'تم إنشاء الفترة المحاسبية بنجاح', id });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إنشاء الفترة المحاسبية: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message, code: err.code, overlaps: err.overlaps });
   }
 });
 
@@ -1659,119 +1643,55 @@ router.post('/periods/:id/post-all', requirePermission('accounting:post'), async
   }
 });
 
-// إغلاق فترة محاسبية رسمياً لمنع التعديل على أي تاريخ يقع داخلها (يتطلب تفويض وكلمة مرور المدير)
+// إقفال فترة محاسبية: صلاحية إقفال مخصصة + كلمة مرور المستخدم الحالي نفسه + لا مستندات غير مرحّلة (H11)
 router.put('/periods/:id/close', requirePermission('accounting:approve,accounting:close_period'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const { notes, manager_password } = req.body;
-
-    if (!manager_password || !String(manager_password).trim()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: '⛔ إقفال الفترة المحاسبية يتطلب إدخال كلمة مرور المدير المالي / المشرف للتفويض القانوني.' 
-      });
-    }
-
-    const period = await get('SELECT * FROM accounting_periods WHERE id = ?', [id]);
-    if (!period) {
-      return res.status(404).json({ success: false, message: 'الفترة المحاسبية غير موجودة' });
-    }
-
-    if (period.status === 'closed') {
-      return res.status(400).json({ success: false, message: 'الفترة المحاسبية مغلقة مسبقاً' });
-    }
-
-    // التحقق الأمني من صحة كلمة مرور المدير
-    let isAuthorized = false;
-    let authorizedUser = null;
-
-    // 1. فحص المستخدم الحالي المسجل
-    if (req.user && req.user.id) {
-      const currentUser = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
-      if (currentUser && currentUser.password_hash) {
-        if (bcrypt.compareSync(manager_password, currentUser.password_hash)) {
-          isAuthorized = true;
-          authorizedUser = currentUser;
-        }
-      }
-    }
-
-    // 2. إذا لم يتطابق، التحقق هل كلمة المرور تخص أحد حسابات المدراء (Admin / Manager)
-    if (!isAuthorized) {
-      const adminUsers = await query("SELECT * FROM users WHERE role IN ('admin', 'general_manager') OR username = 'admin'");
-      for (const admin of adminUsers) {
-        if (admin.password_hash && bcrypt.compareSync(manager_password, admin.password_hash)) {
-          isAuthorized = true;
-          authorizedUser = admin;
-          break;
-        }
-      }
-    }
-
-    if (!isAuthorized) {
-      return res.status(401).json({ 
-        success: false, 
-        message: '⛔ كلمة مرور المدير غير صحيحة! لا يمكن إقفال الفترة بدون تفويض مالي معتمد.' 
-      });
-    }
-
-    const username = authorizedUser?.full_name || authorizedUser?.username || req.user?.username || 'المدير العام';
-    await run(`
-      UPDATE accounting_periods 
-      SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = ?, notes = COALESCE(?, notes)
-      WHERE id = ?
-    `, [username, notes || null, id]);
-
-    await logAudit(req, {
-      action: 'CLOSE_PERIOD',
-      entity_type: 'period',
-      entity_id: id,
-      details: { period_name: period.period_name, closed_by: username, notes, authorized_user_id: authorizedUser?.id }
+    const PeriodClose = require('../services/ledger/periodCloseService');
+    const { period, closed_by } = await PeriodClose.closePeriod(req.params.id, {
+      user: req.user, password: req.body.password ?? req.body.manager_password, notes: req.body.notes
     });
-
-    res.json({ 
-      success: true, 
-      message: `🔒 تم إغلاق وتأمين الفترة المحاسبية (${period.period_name}) بنجاح بواسطة [${username}]، وتم قفل كافة المعاملات والقيود بين ${period.start_date} و ${period.end_date}.` 
-    });
+    await logAudit(req, { action: 'CLOSE_PERIOD', entity_type: 'period', entity_id: req.params.id,
+      details: { period_name: period.period_name, closed_by, notes: req.body.notes } });
+    res.json({ success: true, message: `🔒 تم إغلاق وتأمين الفترة المحاسبية (${period.period_name}) بواسطة [${closed_by}]، وتم قفل كافة المعاملات والقيود بين ${period.start_date} و ${period.end_date}.` });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إغلاق الفترة المحاسبية: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message, code: err.code, pending: err.pending, fiscal_year: err.fiscal_year });
   }
 });
 
-// إعادة فتح فترة محاسبية مغلقة (يتطلب سبباً مبرراً وتوثيقاً في سجل التدقيق)
-router.put('/periods/:id/reopen', requirePermission('accounting:approve'), async (req, res) => {
+// إعادة فتح فترة مغلقة: نفس صلاحية الإقفال + سبب موثّق في سجل التدقيق
+router.put('/periods/:id/reopen', requirePermission('accounting:approve,accounting:close_period'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const { reason } = req.body;
-    if (!reason || !reason.trim()) {
-      return res.status(400).json({ success: false, message: 'يجب ذكر سبب رسمي ومبرر إداري لإعادة فتح الفترة المحاسبية المغلقة' });
-    }
-
-    const period = await get('SELECT * FROM accounting_periods WHERE id = ?', [id]);
-    if (!period) {
-      return res.status(404).json({ success: false, message: 'الفترة المحاسبية غير موجودة' });
-    }
-
-    const username = req.user?.username || req.user?.full_name || 'المدير العام';
-    await run(`
-      UPDATE accounting_periods 
-      SET status = 'open', reopened_at = CURRENT_TIMESTAMP, reopened_by = ?, reopen_reason = ?
-      WHERE id = ?
-    `, [username, reason.trim(), id]);
-
-    await logAudit(req, {
-      action: 'REOPEN_PERIOD',
-      entity_type: 'period',
-      entity_id: id,
-      details: { period_name: period.period_name, reopened_by: username, reason: reason.trim() }
+    const PeriodClose = require('../services/ledger/periodCloseService');
+    const { period, reopened_by } = await PeriodClose.reopenPeriod(req.params.id, {
+      user: req.user, reason: req.body.reason
     });
-
-    res.json({ 
-      success: true, 
-      message: `تمت إعادة فتح الفترة المحاسبية (${period.period_name}) بنجاح وتوثيق سبب الإجراء في سجل الرقابة` 
-    });
+    await logAudit(req, { action: 'REOPEN_PERIOD', entity_type: 'period', entity_id: req.params.id,
+      details: { period_name: period.period_name, reopened_by, reason: String(req.body.reason).trim() } });
+    res.json({ success: true, message: `تمت إعادة فتح الفترة المحاسبية (${period.period_name}) وتوثيق السبب في سجل الرقابة` });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إعادة فتح الفترة: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message, code: err.code });
+  }
+});
+
+// حالة الإقفال السنوي: هل رُحّل قيد الإقفال، وصافي نتيجة السنة
+router.get('/fiscal-years/:year/closing', requirePermission('accounting:view'), async (req, res) => {
+  try {
+    const PeriodClose = require('../services/ledger/periodCloseService');
+    res.json({ success: true, data: await PeriodClose.yearClosingStatus(Number(req.params.year)) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+});
+
+// قيد الإقفال السنوي: الإيرادات والمصروفات إلى الأرباح المحتجزة (بتاريخ 31/12)
+router.post('/fiscal-years/:year/closing', requirePermission('accounting:approve,accounting:close_period'), async (req, res) => {
+  try {
+    const PeriodClose = require('../services/ledger/periodCloseService');
+    const { entry, net_result, accounts } = await PeriodClose.postYearClosing(Number(req.params.year), { user: req.user, password: req.body.password });
+    await logAudit(req, { action: 'YEAR_CLOSING', entity_type: 'fiscal_year', entity_id: req.params.year, details: { entry_no: entry.entry_no, net_result, accounts } });
+    res.json({ success: true, message: `تم ترحيل قيد الإقفال السنوي ${entry.entry_no} لسنة ${req.params.year} (صافي النتيجة ${net_result})`, entry_no: entry.entry_no, journal_entry_id: entry.id, net_result });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message, code: err.code });
   }
 });
 
