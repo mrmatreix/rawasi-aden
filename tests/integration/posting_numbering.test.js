@@ -93,3 +93,33 @@ test('posting service and numbering: unique per series and year, inside the tran
   const rev = await Control.reverseJournalEntry(manual.id, { user, reason: 'numbering test', reversal_date: '2093-04-01' });
   assert.match(rev.reversing_entry_no || (await db.get('SELECT entry_no FROM journal_entries WHERE id = ?', [rev.reversing_je_id])).entry_no, /^REV-2093-\d{4}$/);
 });
+
+test('document numbers (inventory, procurement, vouchers) never reuse an existing number', async () => {
+  const db = require('../../server/database/db');
+  await db.ready;
+  const Inventory = require('../../server/services/inventoryValuationService');
+  const year = new Date().getFullYear();
+  const wh = (await db.run("INSERT INTO warehouses (code, name, type, status) VALUES ('WH-NUM', 'مستودع الترقيم', 'central', 'active')")).lastInsertRowid;
+  const item = (await db.run("INSERT INTO items (code, name, unit, unit_price, current_quantity) VALUES ('ITM-NUM', 'صنف', 'حبة', 10, 5)")).lastInsertRowid;
+  await db.run('INSERT INTO warehouse_stocks (warehouse_id, item_id, quantity, last_cost, average_cost) VALUES (?, ?, 5, 10, 10)', [wh, item]);
+  // a legacy row already holds what COUNT(*)+1 would have produced
+  const count = (await db.get('SELECT COUNT(*) AS n FROM inventory_adjustments')).n;
+  const taken = `ADJ-${year}-${String(count + 1).padStart(4, '0')}`;
+  await db.run("INSERT INTO inventory_adjustments (adjustment_no, warehouse_id, item_id, system_qty, physical_qty, diff_qty, unit_cost, diff_amount, adjustment_type, date, reason, status) VALUES (?, ?, ?, 5, 5, 0, 10, 0, 'surplus', ?, 'legacy', 'posted')", [taken, wh, item, `${year}-01-01`]);
+  assert.ok(await db.get('SELECT id FROM inventory_adjustments WHERE adjustment_no = ?', [taken]), 'legacy row in place');
+  // inventory and surplus accounts for the adjustment entries (the synthetic fixture has none)
+  const SystemAccounts = require('../../server/services/systemAccountService');
+  const id = async code => (await db.get('SELECT id FROM accounts WHERE code = ?', [code]))?.id;
+  const add = async (code, type, parent) => (await id(code)) || (await db.run('INSERT INTO accounts (code, name, type, parent_id, level, is_posting, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [code, 'حساب ' + code, type, await id(parent), { 3: 3, 5: 4, 8: 5 }[code.length], code.length === 8 ? 1 : 0, 'active'])).lastInsertRowid;
+  await add('113', 'asset', '11'); await add('11301', 'asset', '113'); await SystemAccounts.setMapping('INVENTORY', await add('11301001', 'asset', '11301'));
+  await add('412', 'revenue', '41'); await add('41203', 'revenue', '412'); await SystemAccounts.setMapping('INVENTORY_SURPLUS_GAIN', await add('41203004', 'revenue', '41203'));
+  const user = { id: (await db.get("SELECT id FROM users WHERE username = 'admin'")).id, username: 'admin' };
+  await Inventory.processStocktakingAdjustment({ warehouse_id: wh, item_id: item, physical_qty: 6, reason: 'جرد', date: `${year}-06-01`, user });
+  await Inventory.processStocktakingAdjustment({ warehouse_id: wh, item_id: item, physical_qty: 7, reason: 'جرد', date: `${year}-06-02`, user });
+  const nos = (await db.query('SELECT adjustment_no FROM inventory_adjustments ORDER BY id')).map(r => r.adjustment_no);
+  assert.equal(new Set(nos).size, nos.length, 'all adjustment numbers are unique');
+  const issued = nos.slice(-2);
+  assert.ok(!issued.includes(taken), 'the COUNT+1 number already in use is skipped (it used to fail with UNIQUE)');
+  for (const no of issued) assert.match(no, new RegExp(`^ADJ-${year}-\\d{4}$`));
+});

@@ -4,6 +4,7 @@
  */
 
 const { get, query, run, transaction } = require('../database/db');
+const Numbering = require('./numberingService');
 const AccountingService = require('./accountingService');
 
 let checkPeriodOpen = async () => ({ isOpen: true });
@@ -248,10 +249,7 @@ const PaymentService = {
 
     // --- (7) توليد رقم المعاملة الفريد ---
     const currentYear = new Date(transaction_date).getFullYear();
-    const countRow = await get('SELECT COUNT(*) as cnt FROM payment_transactions WHERE direction = ?', [direction]);
-    const seq = (countRow?.cnt || 0) + 1;
-    const prefix = direction === 'IN' ? 'RCV' : 'PAY';
-    const txNo = `${prefix}-${currentYear}-${String(seq).padStart(5, '0')}`;
+    const txNo = await Numbering.next(require('../database/db'), direction === 'IN' ? 'RCV' : 'PAY', { table: 'payment_transactions', column: 'transaction_no', date: transaction_date, width: 5 });
 
     // حالة المقاصة والتصفية للأداة
     let clearingStatus = 'cleared';

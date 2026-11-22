@@ -1,4 +1,5 @@
 const express = require('express');
+const Numbering = require('../services/numberingService');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
@@ -128,8 +129,8 @@ router.post('/transactions', (req, res, next) => {
     const parsedQty = Number(quantity);
 
     const refPrefix = type === 'out' ? 'MAT-OUT' : 'MAT-IN';
-    const countRes = await get('SELECT COUNT(*) as cnt FROM inventory_transactions WHERE type = ?', [type]);
-    const reference_no = `${refPrefix}-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const reference_no = await Numbering.next(require('../database/db'), refPrefix, { table: 'inventory_transactions', column: 'reference_no', date: new Date().toISOString().slice(0, 10) });
 
     const txResult = await transaction(async (tx) => {
       const item = await tx.get('SELECT * FROM items WHERE id = ?', [item_id]);

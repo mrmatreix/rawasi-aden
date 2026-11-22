@@ -80,8 +80,8 @@ const MaterialManagementService = {
     if (!warehouse) throw new Error(`المستودع رقم (${warehouse_id}) غير موجود في النظام`);
 
     const userId = await resolveValidUserId(user?.id);
-    const countRes = await get("SELECT COUNT(*) as cnt FROM inventory_audits WHERE audit_type = 'periodic'");
-    const audit_no = `AUD-PER-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const audit_no = await Numbering.next(require('../database/db'), 'AUD-PER', { table: 'inventory_audits', column: 'audit_no', date: new Date().toISOString().slice(0, 10) });
 
     return await transaction(async (tx) => {
       // 1. أخذ لقطة تجميد رصيد المستودع الحالي (Frozen Stock Snapshot)
@@ -166,8 +166,8 @@ const MaterialManagementService = {
     if (!warehouse) throw new Error(`المستودع رقم (${warehouse_id}) غير موجود`);
 
     const userId = await resolveValidUserId(user?.id);
-    const countRes = await get("SELECT COUNT(*) as cnt FROM inventory_audits WHERE audit_type = 'spot_surprise'");
-    const audit_no = `AUD-SPT-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const audit_no = await Numbering.next(require('../database/db'), 'AUD-SPT', { table: 'inventory_audits', column: 'audit_no', date: new Date().toISOString().slice(0, 10) });
 
     return await transaction(async (tx) => {
       let sql = `
@@ -657,8 +657,8 @@ const MaterialManagementService = {
       const unitCost = Number(whStock?.average_cost || whStock?.last_cost || item.unit_price || 0);
       const totalLossAmount = parsedQty * unitCost;
 
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM material_quarantine_items');
-      const quarantine_no = `QRT-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const quarantine_no = await Numbering.next(tx, 'QRT', { table: 'material_quarantine_items', column: 'quarantine_no', date: new Date().toISOString().slice(0, 10) });
 
       // 1. خصم الكمية من رصيد المستودع الصالح للاستخدام
       await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
@@ -822,8 +822,8 @@ const MaterialManagementService = {
       const creditedAmount = totalAmount * pct;
       const scrapLossAmount = totalAmount - creditedAmount;
 
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM site_material_returns');
-      const return_no = `MRR-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const return_no = await Numbering.next(tx, 'MRR', { table: 'site_material_returns', column: 'return_no', date: new Date().toISOString().slice(0, 10) });
 
       let journalEntryId = null;
       let quarantineId = null;
@@ -965,8 +965,8 @@ const MaterialManagementService = {
     };
 
     const userId = await resolveValidUserId(user?.id);
-    const countRes = await get('SELECT COUNT(*) as cnt FROM inter_project_material_transfers');
-    const transfer_no = `IPT-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const transfer_no = await Numbering.next(require('../database/db'), 'IPT', { table: 'inter_project_material_transfers', column: 'transfer_no', date: new Date().toISOString().slice(0, 10) });
 
     const trfRes = await run(`
       INSERT INTO inter_project_material_transfers (

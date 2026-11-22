@@ -1,4 +1,5 @@
 const express = require('express');
+const Numbering = require('../services/numberingService');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
@@ -80,8 +81,8 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المورد والمبلغ الإجمالي' });
     }
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM purchases');
-    const invoice_no = `PO-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const invoice_no = await Numbering.next(require('../database/db'), 'PO', { table: 'purchases', column: 'invoice_no', date: new Date().toISOString().slice(0, 10) });
 
     const parsedTotal = Number(total_amount);
     const parsedPaid = Number(paid_amount);

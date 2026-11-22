@@ -567,32 +567,11 @@ router.get('/next-numbers', requirePermission('accounting:view,expenses:view,rev
   try {
     const currentYear = new Date().getFullYear();
 
-    // 1. سند قبض
-    const rcCount = await get("SELECT COUNT(*) as cnt FROM payments WHERE type = 'قبض'");
-    let rcSeq = ((rcCount ? rcCount.cnt : 0) || 0) + 1;
-    let nextRc = `RC-${currentYear}-${String(rcSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM payments WHERE receipt_no = ?', [nextRc])) {
-      rcSeq++;
-      nextRc = `RC-${currentYear}-${String(rcSeq).padStart(4, '0')}`;
-    }
-
-    // 2. سند صرف (payments)
-    const pvCount = await get("SELECT COUNT(*) as cnt FROM payments WHERE type = 'صرف'");
-    let pvSeq = ((pvCount ? pvCount.cnt : 0) || 0) + 1;
-    let nextPv = `PV-${currentYear}-${String(pvSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM payments WHERE receipt_no = ?', [nextPv])) {
-      pvSeq++;
-      nextPv = `PV-${currentYear}-${String(pvSeq).padStart(4, '0')}`;
-    }
-
-    // 3. سند صرف مصروفات (expenses)
-    const expCount = await get('SELECT COUNT(*) as cnt FROM expenses');
-    let expSeq = ((expCount ? expCount.cnt : 0) || 0) + 1;
-    let nextExp = `EP-${currentYear}-${String(expSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM expenses WHERE receipt_no = ?', [nextExp])) {
-      expSeq++;
-      nextExp = `EP-${currentYear}-${String(expSeq).padStart(4, '0')}`;
-    }
+    // معاينة فقط من خدمة الترقيم؛ الرقم الفعلي يصدر عند الحفظ
+    const peekDate = `${currentYear}-01-01`;
+    const nextRc = await Numbering.peek({ get, query }, 'RC', { table: 'payments', column: 'receipt_no', date: peekDate });
+    const nextPv = await Numbering.peek({ get, query }, 'PV', { table: 'payments', column: 'receipt_no', date: peekDate });
+    const nextExp = await Numbering.peek({ get, query }, 'EP', { table: 'expenses', column: 'receipt_no', date: peekDate });
 
     // 4. قيد يومية
     // معاينة فقط؛ الرقم الفعلي يصدر داخل معاملة الترحيل
@@ -1254,9 +1233,7 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       }
 
       // توليد رقم عملية التصفية
-      const countRes = await get('SELECT COUNT(*) as cnt FROM custodies');
-      const seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-      const custody_no = `STL-${currentYear}-${String(seq).padStart(4, '0')}`;
+      const custody_no = await Numbering.next(require('../database/db'), 'STL', { table: 'custodies', column: 'custody_no', date: `${currentYear}-01-01` });
 
       const txResult = await transaction(async (tx) => {
         // 1. تحديث رصيد العهدة الأصلية
@@ -1310,14 +1287,7 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       return res.status(400).json({ success: false, message: 'مبلغ العهدة يجب أن يكون أكبر من الصفر' });
     }
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM custodies');
-    let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-    const prefix = operation_type === 'نثرية' ? 'PET' : 'CST';
-    let custody_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM custodies WHERE custody_no = ?', [custody_no])) {
-      seq++;
-      custody_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
-    }
+    const custody_no = await Numbering.next(require('../database/db'), operation_type === 'نثرية' ? 'PET' : 'CST', { table: 'custodies', column: 'custody_no', date: `${currentYear}-01-01` });
 
     const remaining = Math.max(0, parsedAmount - parsedSpent);
 

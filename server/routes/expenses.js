@@ -1,4 +1,5 @@
 const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
+const Numbering = require('../services/numberingService');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
 const router = express.Router();
@@ -183,14 +184,8 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
     }
 
     // توليد رقم سند الصرف
-    const countRes = await get('SELECT COUNT(*) as cnt FROM expenses');
-    let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
     const currentYear = new Date().getFullYear();
-    let receipt_no = `EP-${currentYear}-${String(seq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM expenses WHERE receipt_no = ?', [receipt_no])) {
-      seq++;
-      receipt_no = `EP-${currentYear}-${String(seq).padStart(4, '0')}`;
-    }
+    const receipt_no = await Numbering.next(require('../database/db'), 'EP', { table: 'expenses', column: 'receipt_no', date: date || new Date().toISOString().slice(0, 10) });
 
     const parsedAmount = Number(amount);
     const selectedCurrency = currency || 'ر.ي';

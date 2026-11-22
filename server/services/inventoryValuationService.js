@@ -80,8 +80,8 @@ const InventoryValuationService = {
       const unitCost = Number(item.unit_price) || 0;
       const totalCost = parsedQty * unitCost;
 
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM inventory_transfers');
-      const transfer_no = `TRF-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const transfer_no = await Numbering.next(tx, 'TRF', { table: 'inventory_transfers', column: 'transfer_no', date: new Date().toISOString().slice(0, 10) });
 
       // 1. إنقاص رصيد المستودع المصدر
       await tx.run('UPDATE warehouse_stocks SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND item_id = ?', [parsedQty, from_warehouse_id, item_id]);
@@ -170,8 +170,8 @@ const InventoryValuationService = {
       const returnPrice = unit_price ? Number(unit_price) : Number(item.unit_price || 0);
       const totalAmount = parsedQty * returnPrice;
 
-      const countRes = await tx.get("SELECT COUNT(*) as cnt FROM inventory_returns WHERE return_type = 'purchase_return'");
-      const return_no = `RET-SUP-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const return_no = await Numbering.next(tx, 'RET-SUP', { table: 'inventory_returns', column: 'return_no', date: new Date().toISOString().slice(0, 10) });
 
       // 1. إنقاص رصيد المخزن
       await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);
@@ -254,8 +254,8 @@ const InventoryValuationService = {
       const returnPrice = unit_price ? Number(unit_price) : Number(item.unit_price || 0);
       const totalAmount = parsedQty * returnPrice;
 
-      const countRes = await tx.get("SELECT COUNT(*) as cnt FROM inventory_returns WHERE return_type = 'project_return'");
-      const return_no = `RET-PRJ-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const return_no = await Numbering.next(tx, 'RET-PRJ', { table: 'inventory_returns', column: 'return_no', date: new Date().toISOString().slice(0, 10) });
 
       // 1. زيادة رصيد المخزن
       await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [parsedQty, item_id]);
@@ -353,8 +353,8 @@ const InventoryValuationService = {
       const diffAmount = Math.abs(diffQty) * unitCost;
       const adjustmentType = diffQty < 0 ? 'deficit' : 'surplus'; // عجز أو فائض
 
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM inventory_adjustments');
-      const adjustment_no = `ADJ-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const adjustment_no = await Numbering.next(tx, 'ADJ', { table: 'inventory_adjustments', column: 'adjustment_no', date: new Date().toISOString().slice(0, 10) });
 
       // 1. تحديث الأرصدة بالمستودع والصنف لتتطابق مع الجرد الفعلي
       await tx.run('UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?', [diffQty, item_id]);
@@ -492,8 +492,8 @@ const InventoryValuationService = {
         }
       }
 
-      const countRes = await tx.get("SELECT COUNT(*) as cnt FROM inventory_transactions WHERE type = 'out'");
-      const reference_no = `MAT-BOQ-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const reference_no = await Numbering.next(tx, 'MAT-BOQ', { table: 'inventory_transactions', column: 'reference_no', date: new Date().toISOString().slice(0, 10) });
 
       // 1. إنقاص رصيد المخزن والمستودع
       await tx.run('UPDATE items SET current_quantity = current_quantity - ? WHERE id = ?', [parsedQty, item_id]);

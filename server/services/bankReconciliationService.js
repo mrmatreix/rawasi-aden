@@ -393,8 +393,8 @@ const BankReconciliationService = {
     const variance = adjustedBankBalance - adjustedBookBalance;
     const isBalanced = Math.abs(variance) < 0.01;
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM bank_reconciliations');
-    const reconciliation_no = `BRS-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const reconciliation_no = await Numbering.next(require('../database/db'), 'BRS', { table: 'bank_reconciliations', column: 'reconciliation_no', date: new Date().toISOString().slice(0, 10) });
 
     const userId = user ? await resolveValidUserId(user?.id) : null;
 

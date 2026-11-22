@@ -1,4 +1,5 @@
 const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
+const Numbering = require('../services/numberingService');
 const VoucherRules = require('../services/vouchers/voucherRules');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
@@ -436,15 +437,8 @@ router.post('/', (req, res, next) => {
       : Math.round(parsedAmount * finalExchangeRate * 100) / 100;
 
     // توليد رقم السند
-    const prefix = type === 'قبض' ? 'RC' : 'PV';
-    const currentYear = new Date().getFullYear();
-    const countRes = await get('SELECT COUNT(*) as cnt FROM payments WHERE type = ?', [type]);
-    let seq = (countRes ? countRes.cnt : 0) + 1;
-    let receipt_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM payments WHERE receipt_no = ?', [receipt_no])) {
-      seq++;
-      receipt_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
-    }
+    // رقم السند من خدمة الترقيم بسنة تاريخ السند
+    const receipt_no = await Numbering.next(require('../database/db'), type === 'قبض' ? 'RC' : 'PV', { table: 'payments', column: 'receipt_no', date });
 
     let bId = req.body.bill_id && req.body.bill_id !== '' ? Number(req.body.bill_id) : null;
     let cntId = req.body.contract_id && req.body.contract_id !== '' ? Number(req.body.contract_id) : null;
