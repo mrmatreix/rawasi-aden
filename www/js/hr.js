@@ -735,7 +735,7 @@ const HR = {
         </div>
         <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;">
           <div style="font-size:0.82rem;color:var(--text-secondary);">
-            سيتم إنشاء القيد في دفتر اليومية العامة وتحديث حالة كشف شهر (${month}) إلى مرحل ومسدد.
+            قيد استحقاق بتاريخ ${data.accrual_date || 'آخر يوم في الشهر'} للسجلات غير المرحّلة (${data.pending_count ?? data.employee_count}). صرف الرواتب خطوة مستقلة بعده.${(s.unmapped_roles || []).length ? ' ⚠ حسابات نظام غير مربوطة: ' + s.unmapped_roles.join('، ') : ''}
           </div>
           <div style="display:flex;gap:8px;">
             <button type="button" class="btn btn-secondary" onclick="App.closeModal('hrPayrollJournalPreviewModal')">إلغاء</button>
@@ -757,6 +757,21 @@ const HR = {
     App.openModal('hrPayrollJournalPreviewModal');
   },
 
+  // 3. صرف الرواتب المستحقة: مدين رواتب مستحقة / دائن الصندوق
+  async payPayroll() {
+    const month = document.getElementById('hrPayrollMonth')?.value;
+    if (!month) { App.showToast('يرجى اختيار شهر مسير الرواتب أولاً', 'error'); return; }
+    if (!(await UIDialog.confirm(`صرف صافي رواتب شهر ${month} المستحقة من الصندوق الرئيسي؟`))) return;
+    try {
+      const res = await fetch(`/api/hr/payroll/${month}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payment_method: 'نقدي' }) });
+      const data = await res.json();
+      App.showToast(data.message || (data.success ? 'تم صرف الرواتب' : 'تعذر صرف الرواتب'), data.success ? 'success' : 'error');
+      if (data.success) { await this.loadPayroll(); await this.loadDashboard(); }
+    } catch (e) {
+      App.showToast('حدث خطأ أثناء صرف الرواتب', 'error');
+    }
+  },
+
   async executePayrollPost(month) {
     const btn = document.getElementById('btnExecutePayrollPost');
     if (btn) {
@@ -772,7 +787,7 @@ const HR = {
       });
       const data = await res.json();
       if (data.success) {
-        App.showToast(`تم إنشاء وترحيل قيد اليومية بنجاح [${data.entry_no}]`, 'success');
+        App.showToast(data.message || `تم ترحيل قيد الاستحقاق [${data.entry_no}]`, 'success');
         App.closeModal('hrPayrollJournalPreviewModal');
         await this.loadPayroll();
         await this.loadDashboard();

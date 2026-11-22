@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Accounting = require('../js/accounting');
 
-test('expense selectors exclude revenue while receipt selectors retain it', () => {
+test('expense selectors exclude revenue; receipt selectors exclude cash and bank', () => {
   const accounts = [{ id: 1, code: '31001001', type: 'expense' },
     { id: 2, code: '41001001', type: 'revenue' }, { id: 3, code: '11201001', type: 'asset' },
     { id: 4, code: '11701001', type: 'asset', name: 'الإيـرادات المستحقة' },
@@ -11,7 +11,8 @@ test('expense selectors exclude revenue while receipt selectors retain it', () =
     { id: 8, code: '11101001', type: 'asset' }, { id: 9, code: '11102001', type: 'asset' }];
   const allAccounts = [{ id: 7, code: '11801', type: 'asset', name: 'إيرادات أخرى' }];
   assert.deepEqual(Accounting.voucherAccounts.call({ accounts, allAccounts }, 'expense').map(a => a.id), [1, 3, 8, 9]);
-  assert.deepEqual(Accounting.voucherAccounts.call({ accounts, allAccounts }, 'receipt').map(a => a.id), [2, 4, 5, 6, 8, 9]);
+  // سند القبض: أي حساب غير نقدي (الذمم 3 مسموحة)؛ الصندوق والبنك (8، 9) طرف التسوية فقط - M9
+  assert.deepEqual(Accounting.voucherAccounts.call({ accounts, allAccounts }, 'receipt').map(a => a.id), [1, 2, 3, 4, 5, 6]);
 });
 
 test('journal table displays the complete multiline general description safely', () => {

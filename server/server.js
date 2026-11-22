@@ -41,8 +41,10 @@ app.use('/api/client-portal', (req, res, next) => {
 
 // أرشفة الماسح الضوئي ترسل PDF/صورة بصيغة Base64 (حتى 25MB)،
 // لذلك نحتاج هامشاً فوق الحجم الأصلي بسبب زيادة Base64 بنحو الثلث.
-app.use(express.json({ limit: '40mb' }));
-app.use(express.text({ type: ['text/plain', 'application/json'], limit: '40mb' }));
+// إشعارات بوابات الدفع تُتحقق بتوقيع HMAC على البايتات الأصلية، لذا نحتفظ بها لذلك المسار فقط
+const keepWebhookRawBody = (req, _res, buf) => { if (req.originalUrl.startsWith('/api/payments/webhook/')) req.rawBody = buf; };
+app.use(express.json({ limit: '40mb', verify: keepWebhookRawBody }));
+app.use(express.text({ type: ['text/plain', 'application/json'], limit: '40mb', verify: keepWebhookRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '40mb' }));
 
 // أخطاء قراءة جسم الطلب: رد JSON واضح بدل صفحة HTML الافتراضية

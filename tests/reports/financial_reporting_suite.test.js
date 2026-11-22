@@ -62,10 +62,13 @@ async function createTestJournalEntry({ entry_no, date, lines, status = 'posted'
 // دالة مساعدة لحذف القيود التجريبية
 async function cleanupTestEntries(prefix = 'TEST_') {
   const entries = await query(`SELECT id FROM journal_entries WHERE entry_no LIKE ?`, [`${prefix}%`]);
+  // test data only: posted entries are locked, so the cleanup unlocks explicitly like the maintenance scripts
+  await run(`INSERT INTO ledger_maintenance_unlock (reason) VALUES ('reporting suite cleanup')`);
   for (const e of entries) {
     await run(`DELETE FROM journal_entry_lines WHERE entry_id = ?`, [e.id]);
     await run(`DELETE FROM journal_entries WHERE id = ?`, [e.id]);
   }
+  await run(`DELETE FROM ledger_maintenance_unlock`);
 }
 
 test('Setup & Account Discovery for Reporting Tests', async () => {

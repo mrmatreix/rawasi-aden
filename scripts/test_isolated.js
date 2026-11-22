@@ -3,6 +3,15 @@ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'rawasi-tests-'));const root=pat
 const env={...process.env,NODE_ENV:'development',DB_ENGINE:'sqlite',RAWASI_DB_PATH:path.join(temp,'fixture.db'),RAWASI_UPLOAD_DIR:path.join(temp,'uploads'),RAWASI_PROJECTS_DIR:path.join(temp,'projects'),RAWASI_BACKUP_DIR:path.join(temp,'backups'),RAWASI_SCRATCH_DIR:path.join(temp,'scratch'),ENABLE_SCHEDULERS:'false',BANK_ENCRYPTION_KEY:require('node:crypto').randomBytes(48).toString('hex'),JWT_SECRET:require('node:crypto').randomBytes(48).toString('hex'),CLIENT_JWT_SECRET:require('node:crypto').randomBytes(48).toString('hex')};
 const files=['project_budget_presentation','financial_presentation','report_filters','voucher_ui','financial_save_ui','account_cost_center','account_numbering','reporting_pending_ledger','pending_cash_movements','supporting_documents','sidebar_navigation'].map(n=>'tests/'+n+'.test.js');
 files.push(...['financial_report_filters','journal_reference_posting','party_registry','financial_save_delete','journal_posting_periods'].map(n=>'tests/integration/'+n+'.test.js'));
+files.push('tests/integration/ledger_integrity.test.js');
+files.push('tests/integration/chart_of_accounts_repair.test.js');
+files.push('tests/integration/posting_numbering.test.js');
+files.push('tests/integration/billing_lifecycle.test.js');
+files.push('tests/integration/voucher_rules.test.js');
+files.push('tests/integration/reversal_service.test.js');
+files.push('tests/integration/payroll_posting.test.js');
+files.push('tests/integration/inventory_bank_posting.test.js');
+files.push('tests/integration/subledger.test.js');
 files.push('tests/journal_posting_ui.test.js');
 files.push('tests/integration/cash_flow_projection.test.js');
 files.push('tests/cash_flow_ui.test.js');

@@ -16,6 +16,7 @@
 const { query, get } = require('./reportingLedger');
 const { shapeAccountRows, documentBaseAmount } = require('./reportFilterService');
 const CashFlowReportService = require('./cashFlowReportService');
+const { normalizeAccountType } = require('./chartOfAccountsRules');
 const ContractingAccountingService = require('./contractingAccountingService');
 
 class ReportingService {
@@ -472,21 +473,23 @@ class ReportingService {
     for (const r of rows) {
       const bal = Number(r.balance || 0);
       const code = String(r.code || '');
-      const type = String(r.type || '');
+      // التصنيف بنوع الحساب أولاً؛ البادئة احتياط فقط للحسابات بلا نوع معروف.
+      // (البادئات القديمة كانت تعرض الموردين 21 كحقوق ملكية ورأس المال 221 كالتزامات)
+      const type = normalizeAccountType(r.type) || (code.startsWith('1') ? 'asset' : code.startsWith('2') ? 'liability' : '');
 
-      if (code.startsWith('1') || type === 'asset' || type === 'أصول') {
+      if (type === 'asset') {
         const amt = bal; // الأصول طبيعتها مدينة
         if (amt !== 0) {
           assets.push({ id: r.id, code: r.code, name: r.name, type: r.type, balance: amt });
           totalAssets += amt;
         }
-      } else if (code.startsWith('21') || type === 'equity' || type === 'حقوق ملكية') {
+      } else if (type === 'equity') {
         const amt = -bal; // حقوق الملكية طبيعتها دائنة
         if (amt !== 0) {
           equity.push({ id: r.id, code: r.code, name: r.name, type: r.type, balance: amt });
           totalEquity += amt;
         }
-      } else if (code.startsWith('22') || (code.startsWith('2') && !code.startsWith('21')) || type === 'liability' || type === 'خصوم' || type === 'التزامات') {
+      } else if (type === 'liability') {
         const amt = -bal; // الخصوم طبيعتها دائنة
         if (amt !== 0) {
           liabilities.push({ id: r.id, code: r.code, name: r.name, type: r.type, balance: amt });
@@ -929,13 +932,26 @@ class ReportingService {
     const partyMap = await get("SELECT account_id FROM party_account_mappings WHERE party_type = 'client' AND party_id = ?", [client.id]);
     let arAccountId = partyMap?.account_id;
     if (!arAccountId) {
-      const defAr = await get("SELECT id FROM accounts WHERE code = '11201002' AND NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = accounts.id) LIMIT 1");
+      // حساب ذمم العملاء من حسابات النظام (كان كوداً ثابتاً 11201002 بينما المستخلصات تُرحّل على دور الذمم)
+      const defAr = await require('./systemAccountService').resolveOptional('ACCOUNTS_RECEIVABLE');
       arAccountId = defAr ? defAr.id : null;
     }
 
     // 2. الرصيد الافتتاحي في الأستاذ العام قبل from_date
     let openingBal = 0;
-    if (arAccountId) {
+    // الأستاذ المساعد (4.7): إن وُجدت سطور موسومة بالعميل فالرصيد الافتتاحي رصيده هو لا رصيد حساب الذمم كاملاً
+    // يُقرأ من القاعدة مباشرة: إسقاط التقارير (reportingLedger) لا يحمل أعمدة الطرف
+    const rawDb = require('../database/db');
+    const tagged = await rawDb.get("SELECT COUNT(*) AS n FROM journal_entry_lines WHERE party_type = 'client' AND party_id = ?", [client.id]);
+    if (Number(tagged?.n) > 0) {
+      const openRes = await rawDb.get(`
+        SELECT COALESCE(SUM(jel.debit - jel.credit), 0) as open_bal
+        FROM journal_entry_lines jel
+        JOIN journal_entries je ON je.id = jel.entry_id
+        WHERE jel.party_type = 'client' AND jel.party_id = ? AND je.status = 'posted' AND je.date < ?
+      `, [client.id, fromDate]);
+      openingBal = Number(openRes?.open_bal || 0) + Number(client.previous_balance || 0);
+    } else if (arAccountId) {
       const openRes = await get(`
         SELECT COALESCE(SUM(jel.debit - jel.credit), 0) as open_bal
         FROM journal_entry_lines jel

@@ -1218,7 +1218,7 @@ router.post('/:projectId/purchases/:id/pay', async (req, res) => {
       if (!purchase.supplier_id) {
         await tx.run('UPDATE project_purchases SET supplier_id = ? WHERE id = ?', [paySupplierId, purchase.id]);
       }
-      await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [payAmount, paySupplierId]);
+      await tx.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [payAmount, paySupplierId]);
       await ProjectCostService.createSettlementJournal(tx, {
         purchaseId: purchase.id, supplierId: paySupplierId,
         projectId, costCenterId: ccId, amount: payAmount, date: payDate,

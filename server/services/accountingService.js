@@ -1,35 +1,14 @@
-const { saveDocuments } = require('./supportingDocumentService');
 /**
  * خدمة الحسابات المالية العامة (Accounting Service)
  * تفصل منطق الأعمال والتحقق المالي عن مسارات الـ HTTP/Routes
  */
 
 const { get, query, run, transaction } = require('../database/db');
-const { checkPeriodOpen } = require('./periodService');
 const { logAudit } = require('./auditService');
-
-function journalPrefix(referenceType, year) {
-  if (referenceType === 'سند قبض') return `JV-RC-${year}-`;
-  if (referenceType === 'سند صرف') return `JV-PV-${year}-`;
-  return `JV-${year}-`;
-}
-
-async function nextJournalNumber(db, date, referenceType) {
-  const prefix = journalPrefix(referenceType, new Date(date).getFullYear());
-  const last = await db.get(
-    'SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1',
-    [`${prefix}%`]
-  );
-  let sequence = last?.entry_no?.startsWith(prefix)
-    ? (Number(last.entry_no.slice(prefix.length)) || 0) + 1
-    : 1;
-  let entryNo = `${prefix}${String(sequence).padStart(4, '0')}`;
-  while (await db.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-    sequence++;
-    entryNo = `${prefix}${String(sequence).padStart(4, '0')}`;
-  }
-  return entryNo;
-}
+const SystemAccounts = require('./systemAccountService');
+const { normalizeAccountType } = require('./chartOfAccountsRules');
+const PostingService = require('./ledger/postingService');
+const Money = require('./ledger/money');
 
 async function syncJournalCashMovements(db, entryId) {
   const entry = await db.get('SELECT * FROM journal_entries WHERE id = ?', [entryId]);
@@ -86,18 +65,11 @@ const AccountingService = {
   syncJournalCashMovements,
   async resolveOptionalCostCenter(value, db = { get }) {
     if (value === undefined || value === null || value === '') return null;
-    const id = Number(value);
-    if (!Number.isInteger(id) || id <= 0 || !await db.get('SELECT id FROM cost_centers WHERE id = ?', [id])) {
-      throw new Error('مركز التكلفة المحدد غير صالح');
-    }
-    return id;
+    return PostingService.resolveCostCenter(db, { cost_center_required: 0 }, value);
   },
 
   async resolveAccountOperationCenter(account, value, db = { get }) {
-    const supplied = value !== undefined && value !== null && value !== '';
-    const center = await this.resolveOptionalCostCenter(supplied ? value : account.default_cost_center_id, db);
-    if (Number(account.cost_center_required) === 1 && !center) throw Object.assign(new Error('مركز التكلفة إلزامي للحساب ' + account.code + ' - ' + account.name), { statusCode: 400 });
-    return center;
+    return PostingService.resolveCostCenter(db, account, value);
   },
 
   async assertVoucherAccount(voucherType, accountId) {
@@ -121,41 +93,16 @@ const AccountingService = {
    * التحقق الصارم من أن الحساب فرعي أخير (Leaf Account) ومؤهل لتسجيل القيود
    * يرفض أي حساب أب أو حساب تجميعي أو موقوف أو غير نشط
    */
-  async assertLeafAccount(accountId) {
-    if (!accountId) {
-      throw new Error('يرجى تحديد الحساب المالي');
-    }
-    const idNum = Number(accountId);
-    if (!idNum) {
-      throw new Error('معرف الحساب غير صالح');
-    }
-    const account = await get(`
-      SELECT a.*,
-             (SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) as children_count
-      FROM accounts a
-      WHERE a.id = ?
-    `, [idNum]);
-
-    if (!account) {
-      throw new Error('الحساب المالي غير موجود في دليل الحسابات');
-    }
-
-    if (account.status === 'restricted' || account.status === 'inactive' || account.is_active === 0) {
-      throw new Error(`الحساب [${account.code} - ${account.name}] موقوف ومقيد، ولا يمكن تسجيل قيود يومية عليه`);
-    }
-
-    const isLeaf = (account.is_posting === 1 || account.is_posting === true) && Number(account.children_count || 0) === 0;
-    if (!isLeaf) {
-      throw new Error('لا يمكن تسجيل العملية على هذا الحساب، يرجى اختيار الحساب الفرعي الأخير.');
-    }
-
-    return account;
+  async assertLeafAccount(accountId, db = { get }) {
+    return PostingService.loadPostingAccount(db, accountId);
   },
 
   /**
    * جلب وتأكيد حساب الصندوق الرئيسي (الفرعي الأخير)
    */
   async resolveCashAccount() {
+    const mapped = await SystemAccounts.resolveOptional('CASH_DEFAULT');
+    if (mapped) return mapped;
     const cashAccount = await get(`
       SELECT a.*,
              (SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) as children_count
@@ -178,14 +125,13 @@ const AccountingService = {
     const isBank = method === 'تحويل بنكي' || method === 'BANK_TRANSFER';
     if (!accountId) return isBank ? (await this.resolveBankAccount()).coaAccount : this.resolveCashAccount();
     const account = await this.assertLeafAccount(accountId);
-    const rootCode = isBank ? '11102' : '11101';
-    let current = account;
-    const visited = new Set();
-    while (current && !visited.has(current.id)) {
-      if (String(current.code) === rootCode) return account;
-      visited.add(current.id);
-      current = current.parent_id ? await get('SELECT id, code, parent_id FROM accounts WHERE id = ?', [current.parent_id]) : null;
-    }
+    // The settlement account must sit under the cash or bank group, follow the code sequence of that
+    // group, and be an asset: a broken parent link alone can no longer make furniture a cash box.
+    const groupRole = isBank ? 'BANK_GROUP' : 'CASH_GROUP';
+    const group = await SystemAccounts.resolveOptional(groupRole);
+    const rootCode = group ? String(group.code) : (isBank ? '11102' : '11101');
+    const underGroup = group ? await SystemAccounts.isUnderGroup(account.id, groupRole) : true;
+    if (underGroup && String(account.code).startsWith(rootCode) && normalizeAccountType(account.type) === 'asset') return account;
     throw new Error(isBank ? 'يرجى اختيار حساب بنكي فرعي من دليل الحسابات' : 'يرجى اختيار حساب صندوق فرعي من دليل الحسابات');
   },
 
@@ -209,6 +155,8 @@ const AccountingService = {
       }
     }
 
+    const mappedBank = await SystemAccounts.resolveOptional('BANK_DEFAULT');
+    if (mappedBank) return { bankRecord, coaAccount: mappedBank };
     const defaultBank = await get(`
       SELECT a.*,
              (SELECT COUNT(*) FROM accounts c WHERE c.parent_id = a.id) as children_count
@@ -232,169 +180,49 @@ const AccountingService = {
   /**
    * التحقق المالي الصارم من توازن وصحة سطور القيد اليومي ومراكز التكلفة
    */
+  /**
+   * التحقق من سطور القيد (معاينة بلا حفظ). المنطق الفعلي في PostingService.prepareLines.
+   */
   async validateJournalEntryLines(lines) {
-    if (!Array.isArray(lines) || lines.length < 2) {
-      throw new Error('يجب أن يحتوي القيد على سطرين على الأقل (طرف مدين وطرف دائن)');
-    }
-
-    let totalDebit = 0;
-    let totalCredit = 0;
-    const sanitizedLines = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const accountId = Number(line.account_id);
-      if (!accountId) {
-        throw new Error(`السطر رقم ${i + 1}: يرجى تحديد الحساب المالي`);
-      }
-
-      const debit = Math.round(Number(line.debit || 0) * 100) / 100;
-      const credit = Math.round(Number(line.credit || 0) * 100) / 100;
-
-      if (debit < 0 || credit < 0) {
-        throw new Error(`السطر رقم ${i + 1}: لا يمكن إدخال مبالغ سالبة`);
-      }
-      if (debit === 0 && credit === 0) {
-        continue; // تجاهل السطور الفارغة
-      }
-      if (debit > 0 && credit > 0) {
-        throw new Error(`السطر رقم ${i + 1}: لا يمكن تحديد مبلغ مدين ودائن معاً لنفس الحساب في نفس السطر`);
-      }
-
-      // التحقق الصارم من الحساب: يجب أن يكون فرعياً أخيراً ونشطاً
-      const account = await this.assertLeafAccount(accountId);
-
-      const costCenterId = await this.resolveAccountOperationCenter(account, line.cost_center_id);
-
-      totalDebit += debit;
-      totalCredit += credit;
-
-      sanitizedLines.push({
-        account_id: accountId,
-        cost_center_id: costCenterId,
-        debit,
-        credit,
-        description: (line.description || line.notes || '').trim()
-      });
-    }
-
-    totalDebit = Math.round(totalDebit * 100) / 100;
-    totalCredit = Math.round(totalCredit * 100) / 100;
-
-    if (sanitizedLines.length < 2) {
-      throw new Error('يجب إدخال قيمتين ماليتين موجبتين على الأقل لتكوين القيد');
-    }
-    if (totalDebit <= 0) {
-      throw new Error('إجمالي قيمة القيد يجب أن تكون أكبر من الصفر');
-    }
-
-    const diff = Math.abs(totalDebit - totalCredit);
-    if (diff > 0.001) {
-      throw new Error(`⛔ القيد غير متزن محاسبياً! إجمالي المدين (${totalDebit}) لا يساوي إجمالي الدائن (${totalCredit})، يوجد فرق قدره (${diff})`);
-    }
-
+    const prepared = await PostingService.prepareLines({ get, query, run }, lines);
+    const total = prepared.total / 100;
     return {
-      sanitizedLines,
-      totalDebit,
-      totalCredit
+      sanitizedLines: prepared.lines.map(l => ({ account_id: l.account_id, cost_center_id: l.cost_center_id, project_id: l.project_id,
+        debit: l.debit / 100, credit: l.credit / 100, description: l.notes })),
+      totalDebit: total,
+      totalCredit: total
     };
   },
 
   /**
-   * إنشاء قيد يومية جديد مع فحص الفترة المحاسبية وحفظ سطور القيد داخل Transaction ذرية
+   * إنشاء قيد يومية: غلاف رقيق حول PostingService (التحقق والترقيم والحفظ في معاملة واحدة)
    */
   async createJournalEntry(entryData, lines, req = null, externalTx = null) {
     const { date, description, reference_type = 'قيد يدوي', reference_id = null, reference_no = null } = entryData;
-
-    if (!date || !description) {
-      throw new Error('تاريخ القيد والبيان حقول إلزامية');
-    }
-
-    // 1. فحص إغلاق الفترة المحاسبية
-    const periodCheck = await checkPeriodOpen(date);
-    if (!periodCheck.isOpen) {
-      throw new Error(periodCheck.message);
-    }
-
-    // 2. التحقق المالي الصارم من التوازن ومراكز التكلفة
-    const { sanitizedLines, totalDebit, totalCredit } = await this.validateJournalEntryLines(lines);
-
-    // 3. توليد رقم القيد التسلسلي
-    const entryNo = await nextJournalNumber({ get }, date, reference_type);
-
-    // 4. الحفظ الذري مع توثيق المنشئ وحالة الترحيل
-    let validCreatorId = null;
-    const rawCreatorId = req?.user?.id || null;
-    if (rawCreatorId) {
-      try {
-        const u = await get('SELECT id FROM users WHERE id = ?', [Number(rawCreatorId)]);
-        if (u) validCreatorId = u.id;
-      } catch {}
-    }
-    const creatorName = req?.user?.username || req?.user?.full_name || 'المحاسب المالي';
     const status = entryData.status || 'posted';
+    const series = reference_type === 'سند قبض' ? 'JV-RC' : reference_type === 'سند صرف' ? 'JV-PV' : (entryData.series || 'JV');
+    const postIt = tx => PostingService.post(tx, {
+      date, description, status, series, lines, user: req?.user || entryData.user || null, documents: entryData.supporting_documents,
+      source: { type: reference_type, id: reference_id, no: reference_no }
+    });
+    const result = externalTx ? await postIt(externalTx) : await transaction(postIt);
 
-    let entryId = null;
-    const runInTx = async (tx) => {
-      const res = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id, reference_no,
-          total_debit, total_credit, status, 
-          created_by, created_by_name, posted_by, posted_by_name, posted_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        entryNo, date, description.trim(), reference_type, reference_id, reference_no ? String(reference_no).trim() : null,
-        totalDebit, totalCredit, status,
-        validCreatorId, creatorName, 
-        status === 'posted' ? validCreatorId : null,
-        status === 'posted' ? creatorName : null,
-        status === 'posted' ? new Date().toISOString() : null
-      ]);
-
-      entryId = res.lastInsertRowid || res.insertId;
-
-      for (const line of sanitizedLines) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `, [entryId, line.account_id, line.cost_center_id, line.debit, line.credit, line.description]);
-      }
-      await saveDocuments(tx, 'journal', entryId, entryData.supporting_documents);
-      if (status === 'posted') await syncJournalCashMovements(tx, entryId);
-    };
-
-    if (externalTx) {
-      await runInTx(externalTx);
-    } else {
-      await transaction(runInTx);
-    }
-
-    // 5. تسجيل التدقيق الرقابي مع بيانات القيمة والحالة
     if (req) {
       await logAudit(req, {
         action: status === 'draft' ? 'CREATE_DRAFT' : 'INSERT',
         entity_type: 'journal_entry',
-        entity_id: entryNo,
-        details: { entry_no: entryNo, date, total_debit: totalDebit, total_credit: totalCredit, lines_count: sanitizedLines.length, status },
-        new_values: { entry_no: entryNo, date, total_debit: totalDebit, total_credit: totalCredit, status, created_by: creatorName }
+        entity_id: result.entry_no,
+        details: { entry_no: result.entry_no, date, total_debit: result.total_debit, total_credit: result.total_credit, lines_count: result.lines.length, status },
+        new_values: { entry_no: result.entry_no, date, total_debit: result.total_debit, total_credit: result.total_credit, status, created_by: req?.user?.username || 'المحاسب المالي' }
       });
     }
-
-    return {
-      id: entryId,
-      entry_no: entryNo,
-      total_debit: totalDebit,
-      total_credit: totalCredit,
-      status
-    };
+    return { id: result.id, entry_no: result.entry_no, total_debit: result.total_debit, total_credit: result.total_credit, status };
   },
 
   /**
-   * إنشاء قيد يومية تلقائي متزن لسندات الصرف والقبض مع منع الترحيل المكرر
-   * يطبق بدقة القواعد المحاسبية:
-   * - في سند الصرف: Debit = Selected Account, Credit = Cash/Bank Leaf Account
-   * - في سند القبض: Debit = Cash/Bank Leaf Account, Credit = Selected Account
+   * قيد سند الصرف/القبض عبر PostingService مع منع الترحيل المكرر:
+   * - سند الصرف: مدين الحساب المختار / دائن الصندوق أو البنك
+   * - سند القبض: مدين الصندوق أو البنك / دائن الحساب المختار
    */
   async createVoucherJournalEntry({
     voucherType, // 'سند صرف' | 'سند قبض'
@@ -412,20 +240,22 @@ const AccountingService = {
     projectId = null,
     notes = '',
     user = null,
-    req = null
+    req = null,
+    // جدول المستند المصدر: سند الصرف قد يكون من expenses أو من payments (نوع صرف)
+    sourceTable = voucherType === 'سند صرف' ? 'expenses' : 'payments',
+    // الأستاذ المساعد: طرف السطر غير النقدي (عميل في القبض، مورد في الصرف)
+    partyType = null,
+    partyId = null
   }, externalTx = null) {
     if (!voucherId || !voucherType || !amount || Number(amount) <= 0) {
       throw new Error('بيانات السند غير مكتملة لإنشاء القيد المحاسبي');
     }
+    if (!['expenses', 'payments'].includes(sourceTable)) throw new Error('جدول مصدر السند غير صالح');
 
-    // 1. التحقق الصارم من الحساب المالي المختار أنه حساب فرعي أخير
     const selectedLeafAccount = await this.assertVoucherAccount(voucherType, accountId);
-
-    // 2. التحقق من طريقة الدفع وتحديد الحساب المقابل (صندوق أو بنك)
     const isBank = (paymentMethod === 'تحويل بنكي' || paymentMethod === 'شيك');
     let opposingAccount = null;
     let bankInfo = null;
-
     if (settlementAccountId) {
       opposingAccount = await this.resolveVoucherSettlementAccount(paymentMethod, settlementAccountId);
     } else if (isBank) {
@@ -437,104 +267,46 @@ const AccountingService = {
     }
 
     const runInTx = async (tx) => {
-      // 3. منع الترحيل المكرر: فحص وجود قيد سابق لنفس السند
-      const existingJe = await tx.get(
-        'SELECT id, entry_no FROM journal_entries WHERE reference_type = ? AND reference_id = ?',
-        [voucherType, voucherId]
-      );
-      if (existingJe) {
-        return {
-          id: existingJe.id,
-          entry_no: existingJe.entry_no,
-          already_existed: true
-        };
-      }
+      // منع الترحيل المكرر: الربط المباشر أولاً ثم نوع المرجع + رقمه + رقم السند
+      // (رقم المعرّف وحده لا يكفي لأن سندات الصرف في expenses و payments تتشارك نوع المرجع)
+      const sourceRow = await tx.get(`SELECT journal_entry_id FROM ${sourceTable} WHERE id = ?`, [voucherId]);
+      const linked = sourceRow?.journal_entry_id ? await tx.get('SELECT id, entry_no FROM journal_entries WHERE id = ?', [sourceRow.journal_entry_id]) : null;
+      if (linked) return { id: linked.id, entry_no: linked.entry_no, already_existed: true };
 
-      // 4. توليد رقم القيد اليومي التسلسلي
-      const entryNo = await nextJournalNumber(tx, date, voucherType);
-
-      const numAmount = Math.round(Number(amount) * 100) / 100;
-      const creatorId = user?.id || null;
-      const creatorName = user?.username || user?.full_name || 'مسؤول الحسابات';
-
+      const numAmount = Money.round2(amount);
       const methodLabel = isBank ? `(تحويل بنكي: ${bankInfo?.bank_name || opposingAccount.name})` : '(نقداً: الصندوق)';
-      const jeDesc = `${voucherType} رقم ${receiptNo} ${methodLabel} - ${notes || selectedLeafAccount.name}`;
+      let centerId = await PostingService.resolveCostCenter(tx, selectedLeafAccount, costCenterId);
+      centerId = await PostingService.resolveCostCenter(tx, opposingAccount, centerId);
+      const isPayment = voucherType === 'سند صرف';
+      const selectedLine = { accountId: selectedLeafAccount.id, costCenterId: centerId, projectId, partyType, partyId,
+        notes: `${selectedLeafAccount.name} - ${voucherType} ${receiptNo}`, [isPayment ? 'debit' : 'credit']: numAmount };
+      const settlementLine = { accountId: opposingAccount.id, costCenterId: centerId, projectId,
+        notes: `${opposingAccount.name} - ${isPayment ? 'سداد سند صرف' : 'تحصيل سند قبض'} ${receiptNo}`, [isPayment ? 'credit' : 'debit']: numAmount };
 
-      const jeRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id, reference_no,
-          total_debit, total_credit, status,
-          created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entryNo, date, jeDesc, voucherType, voucherId, referenceNo || receiptNo,
-        numAmount, numAmount,
-        creatorId, creatorName, creatorId, creatorName
-      ]);
-
-      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-
-      let finalCcId = await this.resolveAccountOperationCenter(selectedLeafAccount, costCenterId, tx);
-      finalCcId = await this.resolveAccountOperationCenter(opposingAccount, finalCcId, tx);
-
-      let validProjectId = null;
-      if (projectId) {
-        const prjExists = await tx.get('SELECT id FROM projects WHERE id = ?', [Number(projectId)]);
-        if (prjExists) validProjectId = prjExists.id;
+      const result = await PostingService.post(tx, {
+        date,
+        description: `${voucherType} رقم ${receiptNo} ${methodLabel} - ${notes || selectedLeafAccount.name}`,
+        series: isPayment ? 'JV-PV' : 'JV-RC',
+        source: { type: voucherType, id: voucherId, no: referenceNo || receiptNo },
+        lines: isPayment ? [selectedLine, settlementLine] : [settlementLine, selectedLine],
+        user, dedupe: true,
+        // مسارات السندات تكتب حركة الصندوق بنفسها برقم السند؛ لا حركة ثانية برقم القيد
+        syncCash: false
+      });
+      if (!result.already_existed) {
+        await tx.run(`UPDATE ${sourceTable} SET journal_entry_id = ?, bank_account_id = ? WHERE id = ?`, [result.id, bankInfo?.id || null, voucherId]);
       }
-
-      // 5. إنشاء سطور القيد حسب القواعد المحاسبية الصارمة:
-      if (voucherType === 'سند صرف') {
-        // مدين: الحساب المختار (المصروف أو الالتزام)
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, ?, 0, ?)
-        `, [jeId, selectedLeafAccount.id, finalCcId, validProjectId, numAmount, `${selectedLeafAccount.name} - سند صرف ${receiptNo}`]);
-
-        // دائن: الصندوق أو البنك
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?, ?)
-        `, [jeId, opposingAccount.id, finalCcId, validProjectId, numAmount, `${opposingAccount.name} - سداد سند صرف ${receiptNo}`]);
-
-        // ربط السند بمعرف القيد وحساب البنك
-        await tx.run('UPDATE expenses SET journal_entry_id = ?, bank_account_id = ? WHERE id = ?', [
-          jeId, bankInfo?.id || null, voucherId
-        ]);
-      } else {
-        // سند قبض:
-        // مدين: الصندوق أو البنك
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, ?, 0, ?)
-        `, [jeId, opposingAccount.id, finalCcId, validProjectId, numAmount, `${opposingAccount.name} - تحصيل سند قبض ${receiptNo}`]);
-
-        // دائن: الحساب المختار (الإيراد أو العميل)
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?, ?)
-        `, [jeId, selectedLeafAccount.id, finalCcId, validProjectId, numAmount, `${selectedLeafAccount.name} - سند قبض ${receiptNo}`]);
-
-        // ربط السند بمعرف القيد وحساب البنك
-        await tx.run('UPDATE payments SET journal_entry_id = ?, bank_account_id = ? WHERE id = ?', [
-          jeId, bankInfo?.id || null, voucherId
-        ]);
-      }
-
+      if (result.already_existed) return { id: result.id, entry_no: result.entry_no, already_existed: true };
       return {
-        id: jeId,
-        entry_no: entryNo,
-        debit_account_id: voucherType === 'سند صرف' ? selectedLeafAccount.id : opposingAccount.id,
-        credit_account_id: voucherType === 'سند صرف' ? opposingAccount.id : selectedLeafAccount.id,
+        id: result.id,
+        entry_no: result.entry_no,
+        debit_account_id: isPayment ? selectedLeafAccount.id : opposingAccount.id,
+        credit_account_id: isPayment ? opposingAccount.id : selectedLeafAccount.id,
         amount: numAmount
       };
     };
 
-    if (externalTx) {
-      return await runInTx(externalTx);
-    } else {
-      return await transaction(runInTx);
-    }
+    return externalTx ? runInTx(externalTx) : transaction(runInTx);
   }
 };
 

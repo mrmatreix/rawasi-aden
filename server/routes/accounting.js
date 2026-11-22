@@ -1,4 +1,5 @@
 const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
+const Numbering = require('../services/numberingService');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const analyticalTypes = new Set(['general','cash','bank','employee_receivables','customers','suppliers']);
 function analyticalType(value = 'general') { if (!analyticalTypes.has(value)) { const e = new Error('نوع الحساب التحليلي غير صالح'); e.statusCode = 400; throw e; } return value; }
@@ -201,6 +202,43 @@ router.put('/accounts/:id', requirePermission('accounting:edit,settings:company'
     res.json({ success: true, message: `تم تحديث بيانات الحساب [${cleanCode} - ${name.trim()}] بنجاح` });
   } catch (err) {
     res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في تحديث الحساب: ' + err.message, suggested_code: err.suggested_code });
+  }
+});
+
+// ربط أدوار حسابات النظام (الذمم، المحتجزات، الدفعات المقدمة، الضرائب...) بحسابات الدليل
+router.get('/system-accounts', requirePermission('accounting:view'), async (req, res) => {
+  try {
+    res.json({ success: true, data: await require('../services/systemAccountService').list() });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+});
+
+router.put('/system-accounts/:role', requirePermission('accounting:edit,settings:company'), async (req, res) => {
+  try {
+    const SystemAccounts = require('../services/systemAccountService');
+    const before = (await SystemAccounts.list()).find(r => r.role === req.params.role);
+    const data = await SystemAccounts.setMapping(req.params.role, req.body.account_id, req.user?.username);
+    await logAudit(req, { action: 'UPDATE', entity_type: 'system_account_mapping', entity_id: req.params.role,
+      details: { role: req.params.role, from: before ? before.code : null, to: data.code } });
+    res.json({ success: true, message: `تم ربط ${req.params.role} بالحساب [${data.code} - ${data.name}]`, data });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+});
+
+// الأستاذ المساعد من الأستاذ العام: رصيد الطرف وكشفه ومطابقته مع الرصيد المخزّن (M1)
+router.get('/party-ledger/:type/:id', requirePermission('accounting:view,clients:view,suppliers:view,reports:view'), async (req, res) => {
+  try {
+    const Subledger = require('../services/ledger/subledgerService');
+    const { type, id } = req.params;
+    const [reconciliation, statement] = await Promise.all([
+      Subledger.reconcileParty(type, id),
+      Subledger.partyStatement(type, id, { from: req.query.from_date || null, to: req.query.to_date || null })
+    ]);
+    res.json({ success: true, data: { ...reconciliation, statement } });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -557,16 +595,8 @@ router.get('/next-numbers', requirePermission('accounting:view,expenses:view,rev
     }
 
     // 4. قيد يومية
-    const lastJe = await get(
-      'SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1',
-      [`JV-${currentYear}-%`]
-    );
-    let jeSeq = lastJe?.entry_no ? (Number(lastJe.entry_no.slice(`JV-${currentYear}-`.length)) || 0) + 1 : 1;
-    let nextJe = `JV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM journal_entries WHERE entry_no = ?', [nextJe])) {
-      jeSeq++;
-      nextJe = `JV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
-    }
+    // معاينة فقط؛ الرقم الفعلي يصدر داخل معاملة الترحيل
+    const nextJe = await Numbering.peek({ get, query }, 'JV', { date: `${currentYear}-01-01` });
 
     res.json({
       success: true,
@@ -1347,7 +1377,7 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
 });
 
 // حركة الصندوق والبنك مع الفلترة حسب نوع الحركة (نقدي / بنك / الكل) والتاريخ
-router.get('/cash-movements', async (req, res) => {
+router.get('/cash-movements', requirePermission('cash:view,accounting:view,expenses:view,revenues:view'), async (req, res) => {
   try {
     const { getCashAccountActivity } = require('../services/cashAccountActivity');
     const ledger = require('../services/reportingLedger');
@@ -1507,15 +1537,7 @@ router.post('/periods/:id/post-all', requirePermission('accounting:post'), async
 
       for (const exp of unpostedExpenses) {
         const parsedAmount = Number(exp.amount) || 0;
-        const entryYear = new Date(exp.date).getFullYear();
-        const prefix = `JV-PV-${entryYear}-`;
-        const lastEntry = await tx.get('SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1', [`${prefix}%`]);
-        let jeSeq = lastEntry?.entry_no ? (Number(lastEntry.entry_no.slice(prefix.length)) || 0) + 1 : 1;
-        let entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
-        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-          jeSeq++;
-          entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
-        }
+        const entryNo = await Numbering.nextJournalNumber(tx, { series: 'JV-PV', date: exp.date });
         const jeRes = await tx.run(`
           INSERT INTO journal_entries (
             entry_no, date, description, reference_type, reference_id, 
@@ -1558,16 +1580,8 @@ router.post('/periods/:id/post-all', requirePermission('accounting:post'), async
 
       for (const pay of unpostedPayments) {
         const parsedAmount = Number(pay.amount) || 0;
-        const entryYear = new Date(pay.date).getFullYear();
         const isReceipt = pay.type === 'قبض';
-        const prefix = isReceipt ? `JV-RC-${entryYear}-` : `JV-PV-${entryYear}-`;
-        const lastEntry = await tx.get('SELECT entry_no FROM journal_entries WHERE entry_no LIKE ? ORDER BY entry_no DESC LIMIT 1', [`${prefix}%`]);
-        let jeSeq = lastEntry?.entry_no ? (Number(lastEntry.entry_no.slice(prefix.length)) || 0) + 1 : 1;
-        let entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
-        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-          jeSeq++;
-          entryNo = `${prefix}${String(jeSeq).padStart(4, '0')}`;
-        }
+        const entryNo = await Numbering.nextJournalNumber(tx, { series: isReceipt ? 'JV-RC' : 'JV-PV', date: pay.date });
         const jeRes = await tx.run(`
           INSERT INTO journal_entries (
             entry_no, date, description, reference_type, reference_id, 

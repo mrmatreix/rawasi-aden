@@ -1900,6 +1900,121 @@ CREATE TABLE IF NOT EXISTS supporting_documents (
  content_base64 TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- =========================================================================
+-- حماية دفتر الأستاذ على مستوى القاعدة (تعمل مهما كان المسار الذي يكتب القيد)
+-- القيد المرحّل لا يُعدَّل ولا يُحذف؛ التصحيح بقيد عكسي فقط.
+-- سكربتات الصيانة المعتمدة فقط تضيف صفاً هنا داخل معاملتها ثم تحذفه.
+-- =========================================================================
+-- تسلسل أرقام المستندات والقيود (numberingService): يُزاد داخل معاملة الترحيل نفسها
+CREATE TABLE IF NOT EXISTS document_sequences (
+    series TEXT NOT NULL,
+    period_year INTEGER NOT NULL,
+    last_no INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (series, period_year)
+);
+
+CREATE TABLE IF NOT EXISTS ledger_maintenance_unlock (
+    reason TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- لا ترحيل على حساب طرفي معلَّم غير قابل للترحيل (is_posting = 0)؛ الحساب الأب يرفضه trg_journal_line_leaf_*
+DROP TRIGGER IF EXISTS trg_journal_line_posting_account_insert;
+CREATE TRIGGER trg_journal_line_posting_account_insert
+BEFORE INSERT ON journal_entry_lines
+FOR EACH ROW
+WHEN EXISTS (SELECT 1 FROM accounts a WHERE a.id = NEW.account_id AND a.is_posting = 0
+              AND NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = a.id))
+BEGIN
+    SELECT RAISE(ABORT, 'لا يمكن تسجيل العملية على حساب غير قابل للترحيل. يجب اختيار الحساب الفرعي الأخير.');
+END;
+
+DROP TRIGGER IF EXISTS trg_journal_line_posting_account_update;
+CREATE TRIGGER trg_journal_line_posting_account_update
+BEFORE UPDATE OF account_id ON journal_entry_lines
+FOR EACH ROW
+WHEN EXISTS (SELECT 1 FROM accounts a WHERE a.id = NEW.account_id AND a.is_posting = 0
+              AND NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = a.id))
+BEGIN
+    SELECT RAISE(ABORT, 'لا يمكن تسجيل العملية على حساب غير قابل للترحيل. يجب اختيار الحساب الفرعي الأخير.');
+END;
+
+-- سطور القيد المرحّل أو المعكوس لا تُعدَّل ولا تُحذف
+CREATE TRIGGER IF NOT EXISTS trg_journal_line_locked_update
+BEFORE UPDATE ON journal_entry_lines
+FOR EACH ROW
+WHEN NOT EXISTS (SELECT 1 FROM ledger_maintenance_unlock)
+  AND EXISTS (SELECT 1 FROM journal_entries je WHERE je.id = OLD.entry_id AND je.status IN ('posted', 'closed', 'reversed'))
+BEGIN
+    SELECT RAISE(ABORT, 'لا يمكن تعديل سطور قيد مرحّل. التصحيح يتم بقيد عكسي.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_journal_line_locked_delete
+BEFORE DELETE ON journal_entry_lines
+FOR EACH ROW
+WHEN NOT EXISTS (SELECT 1 FROM ledger_maintenance_unlock)
+  AND EXISTS (SELECT 1 FROM journal_entries je WHERE je.id = OLD.entry_id AND je.status IN ('posted', 'closed', 'reversed'))
+BEGIN
+    SELECT RAISE(ABORT, 'لا يمكن حذف سطور قيد مرحّل. التصحيح يتم بقيد عكسي.');
+END;
+
+-- القيد المرحّل لا يُحذف ولا تتغير مبالغه أو تاريخه أو رقمه، ولا يعود إلى مسودة
+CREATE TRIGGER IF NOT EXISTS trg_journal_entry_locked_delete
+BEFORE DELETE ON journal_entries
+FOR EACH ROW
+WHEN NOT EXISTS (SELECT 1 FROM ledger_maintenance_unlock)
+  AND OLD.status IN ('posted', 'closed', 'reversed')
+BEGIN
+    SELECT RAISE(ABORT, 'لا يمكن حذف قيد مرحّل. التصحيح يتم بقيد عكسي.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_journal_entry_locked_update
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW
+WHEN NOT EXISTS (SELECT 1 FROM ledger_maintenance_unlock)
+  AND OLD.status IN ('posted', 'closed', 'reversed')
+  AND (NEW.entry_no IS NOT OLD.entry_no OR NEW.date IS NOT OLD.date
+       OR NEW.total_debit IS NOT OLD.total_debit OR NEW.total_credit IS NOT OLD.total_credit
+       OR (OLD.status = 'reversed' AND NEW.status IS NOT 'reversed')
+       OR NEW.status NOT IN ('posted', 'closed', 'reversed'))
+BEGIN
+    SELECT RAISE(ABORT, 'لا يمكن تعديل قيد مرحّل أو إعادته إلى مسودة. التصحيح يتم بقيد عكسي.');
+END;
+
+-- الترحيل من مسودة يتطلب سطرين على الأقل متوازنين ومطابقين لإجمالي الرأس
+CREATE TRIGGER IF NOT EXISTS trg_journal_entry_post_requires_balanced_lines
+BEFORE UPDATE OF status ON journal_entries
+FOR EACH ROW
+WHEN NEW.status = 'posted' AND OLD.status IS NOT 'posted'
+  AND (
+    (SELECT COUNT(*) FROM journal_entry_lines l WHERE l.entry_id = NEW.id) < 2
+    OR abs((SELECT COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) FROM journal_entry_lines l WHERE l.entry_id = NEW.id)) > 0.005
+    OR abs((SELECT COALESCE(SUM(debit), 0) FROM journal_entry_lines l WHERE l.entry_id = NEW.id) - NEW.total_debit) > 0.005
+  )
+BEGIN
+    SELECT RAISE(ABORT, '⛔ لا يمكن ترحيل القيد: سطوره غير متزنة أو لا تطابق إجمالي القيد.');
+END;
+
+-- لا قيد مرحّل بتاريخ يقع في فترة محاسبية مغلقة
+CREATE TRIGGER IF NOT EXISTS trg_journal_entry_closed_period_insert
+BEFORE INSERT ON journal_entries
+FOR EACH ROW
+WHEN NEW.status IN ('posted', 'closed')
+  AND EXISTS (SELECT 1 FROM accounting_periods p WHERE p.status = 'closed' AND substr(NEW.date, 1, 10) BETWEEN p.start_date AND p.end_date)
+BEGIN
+    SELECT RAISE(ABORT, '⛔ لا يمكن ترحيل قيد بتاريخ يقع في فترة محاسبية مغلقة.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_journal_entry_closed_period_post
+BEFORE UPDATE OF status ON journal_entries
+FOR EACH ROW
+WHEN NEW.status = 'posted' AND OLD.status IS NOT 'posted'
+  AND EXISTS (SELECT 1 FROM accounting_periods p WHERE p.status = 'closed' AND substr(NEW.date, 1, 10) BETWEEN p.start_date AND p.end_date)
+BEGIN
+    SELECT RAISE(ABORT, '⛔ لا يمكن ترحيل قيد بتاريخ يقع في فترة محاسبية مغلقة.');
+END;
+
 
 
 -- Indexes follow all table declarations for clean installations.

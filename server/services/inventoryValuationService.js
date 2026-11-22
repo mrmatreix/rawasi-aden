@@ -15,40 +15,13 @@
  */
 
 const { query, get, run, transaction } = require('../database/db');
+const PostingService = require('./ledger/postingService');
+const { projectCostCenter } = require('./ledger/costCenters');
+const Numbering = require('./numberingService');
 const { logAudit } = require('./auditService');
 const { assertPeriodOpen, resolveValidUserId } = require('./financialControlService');
 
-async function getInventoryAccounts(dbRunner = null) {
-  const runner = dbRunner || { get };
-  const invAsset = await runner.get("SELECT id FROM accounts WHERE code = '11301001' AND is_posting = 1 LIMIT 1");
-  const suppPay = await runner.get("SELECT id FROM accounts WHERE code = '21101001' AND is_posting = 1 LIMIT 1");
-  const projExp = await runner.get("SELECT id FROM accounts WHERE code = '32102005' AND is_posting = 1 LIMIT 1")
-    || await runner.get("SELECT id FROM accounts WHERE (code LIKE '3%' OR code LIKE '5%') AND is_posting = 1 LIMIT 1");
-  const lossShrink = await runner.get("SELECT id FROM accounts WHERE code = '32102005' AND is_posting = 1 LIMIT 1")
-    || projExp;
-  const gainSurplus = await runner.get("SELECT id FROM accounts WHERE code = '41101001' AND is_posting = 1 LIMIT 1")
-    || await runner.get("SELECT id FROM accounts WHERE code LIKE '4%' AND is_posting = 1 LIMIT 1");
-
-  return {
-    INVENTORY_ASSET: invAsset?.id,
-    SUPPLIER_PAYABLES: suppPay?.id,
-    PROJECT_EXPENSES: projExp?.id,
-    INVENTORY_LOSS_SHRINKAGE: lossShrink?.id,
-    INVENTORY_GAIN_SURPLUS: gainSurplus?.id
-  };
-}
-
-const INVENTORY_ACCOUNTS = {
-  INVENTORY_ASSET: 109,               // حـ/ المخزون العام للمواد
-  SUPPLIER_PAYABLES: 120,             // حـ/ الموردين (ذمم دائنة)
-  PROJECT_EXPENSES: 147,              // حـ/ تكاليف ومصروفات المشاريع
-  INVENTORY_LOSS_SHRINKAGE: 147,      // خسائر عجز وتسويات المخزون
-  INVENTORY_GAIN_SURPLUS: 152         // أرباح وفائض تسويات المخزون
-};
-
 const InventoryValuationService = {
-  INVENTORY_ACCOUNTS,
-  getInventoryAccounts,
 
   /**
    * صمام الأمان: منع الرصيد السالب قطعياً
@@ -208,34 +181,17 @@ const InventoryValuationService = {
       await tx.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [totalAmount, supplier_id]);
 
       // 3. إنشاء قيد محاسبي متزن: من حـ/ الموردين إلى حـ/ المخزون
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'مرتجع مشتريات', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, date, `قيد مرتجع مشتريات إلى المورد (${return_no}) - ${reason}`,
-        totalAmount, totalAmount, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      const accounts = await getInventoryAccounts(tx);
-
-      // سطر مدين: تخفيض التزام المورد
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [entryId, accounts.SUPPLIER_PAYABLES, totalAmount, `مدين: تخفيض ذمة المورد بموجب ${return_no}`]);
-
-      // سطر دائن: تخفيض أصل المخزون
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, 0, ?, ?)
-      `, [entryId, accounts.INVENTORY_ASSET, totalAmount, `دائن: تخفيض رصيد المخزون بموجب ${return_no}`]);
+      // قيد عبر PostingService: مدين الموردين / دائن المخزون (أدوار حسابات النظام)
+      const posted = await PostingService.post(tx, {
+        date, series: 'JV', user, source: { type: 'مرتجع مشتريات', no: return_no },
+        description: `قيد مرتجع مشتريات إلى المورد (${return_no}) - ${reason}`,
+        lines: [
+          { role: 'SUPPLIERS_PAYABLE', debit: totalAmount, partyType: 'supplier', partyId: supplier_id, notes: `مدين: تخفيض ذمة المورد بموجب ${return_no}` },
+          { role: 'INVENTORY', credit: totalAmount, notes: `دائن: تخفيض رصيد المخزون بموجب ${return_no}` }
+        ]
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
 
       // 4. تسجيل حركة المرتجع
       const retRes = await tx.run(`
@@ -315,34 +271,18 @@ const InventoryValuationService = {
       await tx.run('UPDATE projects SET actual_cost = MAX(0, actual_cost - ?) WHERE id = ?', [totalAmount, project_id]);
 
       // 3. إنشاء قيد محاسبي متزن: من حـ/ المخزون إلى حـ/ تكاليف ومصروفات المشاريع
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'مرتجع موقع', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, date, `قيد مرتجع مواد فائضة من الموقع (${return_no}) للمشروع ${project_id}`,
-        totalAmount, totalAmount, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      const accounts = await getInventoryAccounts(tx);
-
-      // سطر مدين: زيادة المخزون
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [entryId, accounts.INVENTORY_ASSET, totalAmount, `مدين: استعادة مواد للمخزن بموجب ${return_no}`]);
-
-      // سطر دائن: تخفيض تكلفة المشروع
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?, ?)
-      `, [entryId, accounts.PROJECT_EXPENSES, project_id, totalAmount, `دائن: تخفيض تكلفة المشروع بموجب ${return_no}`]);
+      // مدين المخزون / دائن تكلفة مواد المشروع (لا مصروفات إدارية)
+      const projectCenter = await projectCostCenter(tx, project_id);
+      const posted = await PostingService.post(tx, {
+        date, series: 'JV', user, source: { type: 'مرتجع موقع', id: Number(project_id), no: return_no },
+        description: `قيد مرتجع مواد فائضة من الموقع (${return_no}) للمشروع ${project_id}`,
+        lines: [
+          { role: 'INVENTORY', debit: totalAmount, notes: `مدين: استعادة مواد للمخزن بموجب ${return_no}` },
+          { role: 'PROJECT_MATERIAL_COST', credit: totalAmount, projectId: project_id, costCenterId: projectCenter, notes: `دائن: تخفيض تكلفة المشروع بموجب ${return_no}` }
+        ]
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
 
       // 4. تسجيل حركة المرتجع
       const retRes = await tx.run(`
@@ -427,46 +367,21 @@ const InventoryValuationService = {
       `, [warehouse_id, item_id, diffQty, unitCost, unitCost]);
 
       // 2. توليد قيد التسوية المحاسبي المتزن
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'تسوية مخزنية', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, date, `قيد تسوية مخزنية (${adjustment_no}) - ${adjustmentType === 'deficit' ? 'عجز مخزني' : 'فائض مخزني'} للصنف [${item.name}]`,
-        diffAmount, diffAmount, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      const accounts = await getInventoryAccounts(tx);
-
-      if (adjustmentType === 'deficit') {
-        // حالة العجز: من حـ/ خسائر وعجز المخزون (5105) إلى حـ/ المخزون
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?)
-        `, [entryId, accounts.INVENTORY_LOSS_SHRINKAGE, diffAmount, `مدين: إثبات خسائر عجز مخزني بموجب ${adjustment_no}`]);
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, 0, ?, ?)
-        `, [entryId, accounts.INVENTORY_ASSET, diffAmount, `دائن: تخفيض قيمة المخزون الدفتري بموجب ${adjustment_no}`]);
-      } else {
-        // حالة الفائض: من حـ/ المخزون إلى حـ/ أرباح وفائض المخزون (4205)
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?)
-        `, [entryId, accounts.INVENTORY_ASSET, diffAmount, `مدين: زيادة قيمة المخزون الدفتري بموجب ${adjustment_no}`]);
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, 0, ?, ?)
-        `, [entryId, accounts.INVENTORY_GAIN_SURPLUS, diffAmount, `دائن: إثبات أرباح فائض مخزني بموجب ${adjustment_no}`]);
-      }
+      // العجز: مدين عجز وتلف المخزون / دائن المخزون. الفائض: مدين المخزون / دائن فائض الجرد (وليس إيراد المشاريع)
+      const deficit = adjustmentType === 'deficit';
+      const posted = await PostingService.post(tx, {
+        date, series: 'JV', user, source: { type: 'تسوية مخزنية', no: adjustment_no },
+        description: `قيد تسوية مخزنية (${adjustment_no}) - ${deficit ? 'عجز مخزني' : 'فائض مخزني'} للصنف [${item.name}]`,
+        lines: deficit ? [
+          { role: 'INVENTORY_SHRINKAGE_LOSS', debit: diffAmount, notes: `مدين: إثبات خسائر عجز مخزني بموجب ${adjustment_no}` },
+          { role: 'INVENTORY', credit: diffAmount, notes: `دائن: تخفيض قيمة المخزون الدفتري بموجب ${adjustment_no}` }
+        ] : [
+          { role: 'INVENTORY', debit: diffAmount, notes: `مدين: زيادة قيمة المخزون الدفتري بموجب ${adjustment_no}` },
+          { role: 'INVENTORY_SURPLUS_GAIN', credit: diffAmount, notes: `دائن: فائض جرد المخزون بموجب ${adjustment_no}` }
+        ]
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
 
       // 3. تسجيل مستند التسوية
       const adjRes = await tx.run(`

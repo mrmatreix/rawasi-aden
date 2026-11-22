@@ -6,7 +6,7 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { openPeriodCondition } = require('../services/operationVisibility');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, hasUserPermission } = require('../middleware/security');
 const AccountingService = require('../services/accountingService');
 const ProjectCostService = require('../services/projectCostService');
 const CashBoxService = require('../services/cashBoxService');
@@ -240,7 +240,9 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
     const creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
-    const finalStatus = (requestedStatus === 'draft') ? 'draft' : 'posted';
+    // H5: الترحيل (عند الإنشاء أو لاحقاً) يحتاج صلاحية الترحيل؛ بدونها يُحفظ السند مسودة لمن يملكها
+    const postingDeferred = requestedStatus !== 'draft' && !hasUserPermission(req.user, 'accounting:post');
+    const finalStatus = (requestedStatus === 'draft' || postingDeferred) ? 'draft' : 'posted';
     let createdJe = null;
 
     const txResult = await transaction(async (tx) => {
@@ -312,7 +314,7 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
             'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
             [newPaid, newStatus, settlePurchase.id]
           );
-          await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [finalLocalAmount, settlePurchase.supplier_id]);
+          await tx.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [finalLocalAmount, settlePurchase.supplier_id]);
         } else {
           if (linkedLaborRow) {
             const newPaid = (Number(linkedLaborRow.paid_amount) || 0) + finalLocalAmount;
@@ -367,6 +369,8 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
           bankName: cleanBankName || resolvedBank?.bankRecord?.bank_name || null,
           costCenterId: finalCcId,
           projectId: pId,
+          partyType: sId ? 'supplier' : null,
+          partyId: sId || null,
           notes: notes || finalExpenseType,
           user: req.user,
           req
@@ -387,7 +391,10 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
 
     res.json({
       success: true,
-      message: finalStatus === 'draft' 
+      requires_posting: postingDeferred,
+      message: postingDeferred
+        ? `تم حفظ سند الصرف برقم ${receipt_no} كمسودة: ترحيل السندات يحتاج صلاحية الترحيل (المحاسب أو المدقق)`
+        : finalStatus === 'draft'
         ? `تم حفظ مسودة سند الصرف بنجاح برقم ${receipt_no} وهي جاهزة للمراجعة والاعتماد`
         : `تم حفظ وترحيل سند الصرف بنجاح برقم ${receipt_no} وتحديث الحسابات ومراكز التكلفة داخل معاملة ذرية آمنة`,
       receipt_no,
@@ -487,7 +494,7 @@ router.post('/:id/approve', requirePermission('expenses:approve'), async (req, r
 });
 
 // ترحيل سند الصرف لدفتر الأستاذ والصندوق (Post to GL)
-router.post('/:id/post', requirePermission('expenses:post,accounting:post'), async (req, res) => {
+router.post('/:id/post', requirePermission('accounting:post'), async (req, res) => {
   try {
     const { id } = req.params;
     const exp = await get('SELECT * FROM expenses WHERE id = ?', [id]);
@@ -525,7 +532,7 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         if (exp.supplier_id && Number(exp.supplier_id) !== Number(purchase.supplier_id)) throw new Error('المورد لا يطابق مورد الفاتورة المرتبطة');
         const paid = (Number(purchase.paid_amount) || 0) + parsedAmount;
         await tx.run('UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?', [paid, Number(purchase.total_amount) - paid <= 0.005 ? 'مدفوع' : 'جزئي', purchase.id]);
-        await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [parsedAmount, purchase.supplier_id]);
+        await tx.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [parsedAmount, purchase.supplier_id]);
       } else {
         let wageAccrual = null;
         if (labor) {
@@ -566,6 +573,8 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         bankName: exp.bank_name || null,
         costCenterId: exp.cost_center_id,
         projectId: exp.project_id,
+        partyType: exp.supplier_id ? 'supplier' : null,
+        partyId: exp.supplier_id || null,
         notes: exp.notes || exp.expense_type,
         user: req.user,
         req

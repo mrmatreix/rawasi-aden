@@ -15,6 +15,8 @@
  */
 
 const { query, get, run, transaction } = require('../database/db');
+const REVENUE_RECOGNITION_POLICY = 'billing'; // 'billing' | 'poc' — قرار الإدارة 2026-11-22
+const Numbering = require('./numberingService');
 const { logAudit } = require('./auditService');
 const { checkPeriodOpen } = require('./periodService');
 
@@ -463,6 +465,11 @@ const ContractingAccountingService = {
    * @param {Object} params 
    */
   async recognizeProjectRevenue({ projectId, periodDate, notes, user, req = null }) {
+    // سياسة الشركة (2026-11-22): الإيراد يُثبت عند ترحيل المستخلص المعتمد فقط.
+    // قيد نسبة الإنجاز كان يضيف إيراداً ثانياً لنفس الأعمال؛ يبقى الاحتساب للعرض في مصفوفة المقاولات.
+    if (REVENUE_RECOGNITION_POLICY === 'billing') {
+      throw Object.assign(new Error('سياسة الإيراد المعتمدة هي الإثبات عند ترحيل المستخلص المعتمد؛ لا يُرحّل قيد إيراد بنسبة الإنجاز حتى لا يتكرر الإيراد. نسبة الإنجاز متاحة للعرض في مصفوفة المقاولات.'), { statusCode: 409, code: 'REVENUE_POLICY' });
+    }
     const pId = Number(projectId);
     const date = periodDate || new Date().toISOString().split('T')[0];
 
@@ -502,13 +509,7 @@ const ContractingAccountingService = {
       // 2. توليد قيد اليومية العام لإثبات الإيراد المعترف به
       // الطرف المدين: 1128 - أصول تعاقدية / أعمال منجزة غير مفوترة (Contract Asset / WIP)
       // الطرف الدائن: 4101 - إيرادات عقود المقاولات المعترف بها (Contract Revenue)
-      const jeCountRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((jeCountRes ? jeCountRes.cnt : 0) || 0) + 1;
-      entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-        jeSeq++;
-        entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      }
+      entryNo = await Numbering.nextJournalNumber(tx, { series: 'JE', date });
 
       const jeDesc = `إثبات إيراد مقاولات دوري مشروع (${metrics.project_name}) - نسبة إنجاز ${metrics.cost_to_cost_poc_pct}% (IFRS 15)`;
       const jeRes = await tx.run(`

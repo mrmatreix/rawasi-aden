@@ -20,9 +20,11 @@
  */
 
 const crypto = require('crypto');
+const PostingService = require('./ledger/postingService');
+const { projectCostCenter } = require('./ledger/costCenters');
+const Numbering = require('./numberingService');
 const { query, get, run, transaction } = require('../database/db');
 const { assertPeriodOpen, resolveValidUserId, assertMakerChecker } = require('./financialControlService');
-const { INVENTORY_ACCOUNTS, getInventoryAccounts } = require('./inventoryValuationService');
 const materialDomainEventBus = require('./materialDomainEventBus');
 const { logAudit } = require('./auditService');
 
@@ -555,53 +557,20 @@ const MaterialManagementService = {
       const totalAdjustmentDebit = totalShortageAmount + totalOverageAmount;
 
       if (totalAdjustmentDebit > 0.0001) {
-        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-        entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-        const jvRes = await tx.run(`
-          INSERT INTO journal_entries (
-            entry_no, date, description, reference_type, total_debit, total_credit,
-            status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-          ) VALUES (?, ?, ?, 'تسوية جرد', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [
-          entry_no, todayDate,
-          `قيد تسوية محضر الجرد (${audit.audit_no}) لمستودع [${audit.warehouse_name}]`,
-          totalAdjustmentDebit, totalAdjustmentDebit,
-          userId, user?.username || 'مدير الحسابات',
-          userId, user?.username || 'مدير الحسابات'
-        ]);
-
-        journalEntryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-        const accounts = getInventoryAccounts ? await getInventoryAccounts(tx) : INVENTORY_ACCOUNTS;
-
-        // سطر العجز: مدين بحساب خسائر وعجز المخزون (5105)
-        if (totalShortageAmount > 0) {
-          await tx.run(`
-            INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-            VALUES (?, ?, ?, 0, ?)
-          `, [journalEntryId, accounts.INVENTORY_LOSS_SHRINKAGE, totalShortageAmount, `مدين: إثبات خسائر وعجز الجرد بموجب محضر ${audit.audit_no}`]);
-
-          // دائن بحساب المخزون لتخفيض الأصل
-          await tx.run(`
-            INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-            VALUES (?, ?, 0, ?, ?)
-          `, [journalEntryId, accounts.INVENTORY_ASSET, totalShortageAmount, `دائن: تخفيض رصيد أصل المخزون بالعجز المثبت في ${audit.audit_no}`]);
-        }
-
-        // سطر الفائض: مدين بحساب المخزون لزيادة الأصل
-        if (totalOverageAmount > 0) {
-          await tx.run(`
-            INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-            VALUES (?, ?, ?, 0, ?)
-          `, [journalEntryId, accounts.INVENTORY_ASSET, totalOverageAmount, `مدين: زيادة رصيد أصل المخزون بالفائض المثبت في ${audit.audit_no}`]);
-
-          // دائن بحساب أرباح وفائض المخزون (4205)
-          await tx.run(`
-            INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-            VALUES (?, ?, 0, ?, ?)
-          `, [journalEntryId, accounts.INVENTORY_GAIN_SURPLUS, totalOverageAmount, `دائن: إثبات إيرادات وفائض الجرد بموجب ${audit.audit_no}`]);
-        }
+        // عجز: مدين عجز وتلف المخزون / دائن المخزون. فائض: مدين المخزون / دائن فائض الجرد
+        const lines = [];
+        if (totalShortageAmount > 0) lines.push(
+          { role: 'INVENTORY_SHRINKAGE_LOSS', debit: totalShortageAmount, notes: `مدين: إثبات خسائر وعجز الجرد بموجب محضر ${audit.audit_no}` },
+          { role: 'INVENTORY', credit: totalShortageAmount, notes: `دائن: تخفيض رصيد أصل المخزون بالعجز المثبت في ${audit.audit_no}` });
+        if (totalOverageAmount > 0) lines.push(
+          { role: 'INVENTORY', debit: totalOverageAmount, notes: `مدين: زيادة رصيد أصل المخزون بالفائض المثبت في ${audit.audit_no}` },
+          { role: 'INVENTORY_SURPLUS_GAIN', credit: totalOverageAmount, notes: `دائن: فائض جرد المخزون بموجب ${audit.audit_no}` });
+        const posted = await PostingService.post(tx, {
+          date: todayDate, series: 'JV', user, source: { type: 'تسوية جرد', id: Number(audit_id), no: audit.audit_no },
+          description: `قيد تسوية محضر الجرد (${audit.audit_no}) لمستودع [${audit.warehouse_name}]`, lines
+        });
+        entry_no = posted.entry_no;
+        journalEntryId = posted.id;
       }
 
       // 3. تحديث حالة محضر الجرد إلى مُرحل ومُسوى (Reconciled)
@@ -696,35 +665,18 @@ const MaterialManagementService = {
       await tx.run('UPDATE warehouse_stocks SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND item_id = ?', [parsedQty, warehouse_id, item_id]);
 
       // 2. إنشاء القيد المحاسبي لخسائر التلف: من حـ/ خسائر عجز وتلف المخزون (5105) إلى حـ/ أصل المخزون (11)
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'تلف مخزني', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, date, `قيد إثبات تلف وعزل مواد (${quarantine_no}) للصنف [${item.name}] - ${reason}`,
-        totalLossAmount, totalLossAmount,
-        userId, user?.username || 'المحاسب',
-        userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      const quarantineAccounts = await getInventoryAccounts(tx);
-      if (!quarantineAccounts.INVENTORY_LOSS_SHRINKAGE || !quarantineAccounts.INVENTORY_ASSET) throw new Error('حسابات المخزون أو خسائر التلف غير مهيأة');
-
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [entryId, quarantineAccounts.INVENTORY_LOSS_SHRINKAGE, totalLossAmount, `مدين: خسائر تلف مخزني بموجب مستند ${quarantine_no}`]);
-
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, 0, ?, ?)
-      `, [entryId, quarantineAccounts.INVENTORY_ASSET, totalLossAmount, `دائن: تخفيض أصل المخزون بالعزل للتلف ${quarantine_no}`]);
+      // مدين عجز وتلف المخزون (على المشروع إن وُجد) / دائن المخزون
+      const lossCenter = await projectCostCenter(tx, project_id);
+      const posted = await PostingService.post(tx, {
+        date, series: 'JV', user, source: { type: 'تلف مخزني', no: quarantine_no },
+        description: `قيد إثبات تلف وعزل مواد (${quarantine_no}) للصنف [${item.name}] - ${reason}`,
+        lines: [
+          { role: 'INVENTORY_SHRINKAGE_LOSS', debit: totalLossAmount, projectId: project_id, costCenterId: lossCenter, notes: `مدين: خسائر تلف مخزني بموجب مستند ${quarantine_no}` },
+          { role: 'INVENTORY', credit: totalLossAmount, notes: `دائن: تخفيض أصل المخزون بالعزل للتلف ${quarantine_no}` }
+        ]
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
 
       // 3. إدراج سجل الحجر والتوالف
       const qrtRes = await tx.run(`
@@ -891,36 +843,18 @@ const MaterialManagementService = {
         await tx.run('UPDATE projects SET actual_cost = MAX(0, actual_cost - ?) WHERE id = ?', [creditedAmount, project_id]);
 
         // قيد محاسبي: من حـ/ المخزون إلى حـ/ تكاليف المشروع
-        const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-        const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-        const jvRes = await tx.run(`
-          INSERT INTO journal_entries (
-            entry_no, date, description, reference_type, total_debit, total_credit,
-            status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-          ) VALUES (?, ?, ?, 'مرتجع موقع معتمد QC', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [
-          entry_no, date,
-          `قيد مرتجع مواد بموجب محضر فحص الجودة (${return_no}) لمشروع [${project.name}]`,
-          creditedAmount, creditedAmount,
-          userId, user?.username || 'المحاسب',
-          userId, user?.username || 'المحاسب'
-        ]);
-
-        journalEntryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-        const returnAccounts = await getInventoryAccounts(tx);
-        if (!returnAccounts.INVENTORY_ASSET || !returnAccounts.PROJECT_EXPENSES) throw new Error('حسابات المخزون وتكلفة المشروع غير مهيأة');
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?)
-        `, [journalEntryId, returnAccounts.INVENTORY_ASSET, creditedAmount, `مدين: استعادة أصل المخزون بموجب ${return_no}`]);
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?, ?)
-        `, [journalEntryId, returnAccounts.PROJECT_EXPENSES, project_id, creditedAmount, `دائن: تخفيض تكلفة المشروع [${project.name}] بموجب ${return_no}`]);
+        // مدين المخزون / دائن تكلفة مواد المشروع
+        const returnCenter = await projectCostCenter(tx, project_id);
+        const posted = await PostingService.post(tx, {
+          date, series: 'JV', user, source: { type: 'مرتجع موقع معتمد QC', id: Number(project_id), no: return_no },
+          description: `قيد مرتجع مواد بموجب محضر فحص الجودة (${return_no}) لمشروع [${project.name}]`,
+          lines: [
+            { role: 'INVENTORY', debit: creditedAmount, notes: `مدين: استعادة أصل المخزون بموجب ${return_no}` },
+            { role: 'PROJECT_MATERIAL_COST', credit: creditedAmount, projectId: project_id, costCenterId: returnCenter, notes: `دائن: تخفيض تكلفة المشروع [${project.name}] بموجب ${return_no}` }
+          ]
+        });
+        const entry_no = posted.entry_no;
+        journalEntryId = posted.id;
       } else {
         // ب. إذا كانت تالفة/خردة (damaged_scrap): تحول مباشرة إلى حجر التوالف
         const qrtRes = await MaterialManagementService.quarantineDamagedMaterial({
@@ -1140,37 +1074,17 @@ const MaterialManagementService = {
       await tx.run('UPDATE projects SET actual_cost = actual_cost + ? WHERE id = ?', [totalAmount, transfer.to_project_id]);
 
       // 3. إنشاء قيد محاسبي متزن لإعادة توجيه التكلفة في دفتر الأستاذ العام
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'تحويل مواد بين مشاريع', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, todayDate,
-        `قيد تحويل تكلفة مواد (${transfer.transfer_no}) من مشروع [${transfer.from_project_name}] إلى [${transfer.to_project_name}]`,
-        totalAmount, totalAmount,
-        userId, user?.username || 'المدير المالي',
-        userId, user?.username || 'المدير المالي'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      // مدين: تكاليف ومصروفات المشروع المستلم
-      const transferAccounts = await getInventoryAccounts(tx);
-      if (!transferAccounts.PROJECT_EXPENSES) throw new Error('حساب تكلفة المشروع غير مهيأ');
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, ?, 0, ?)
-      `, [entryId, transferAccounts.PROJECT_EXPENSES, transfer.to_project_id, totalAmount, `مدين: تكلفة مواد محولة من مشروع ${transfer.from_project_name}`]);
-
-      // دائن: تخفيض تكاليف ومصروفات المشروع المصدر
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?, ?)
-      `, [entryId, transferAccounts.PROJECT_EXPENSES, transfer.from_project_id, totalAmount, `دائن: تخفيض تكلفة مواد محولة إلى مشروع ${transfer.to_project_name}`]);
+      // مدين تكلفة مواد المشروع المستلم / دائن تكلفة مواد المشروع المرسل (كل طرف على مشروعه ومركزه)
+      const posted = await PostingService.post(tx, {
+        date: todayDate, series: 'JV', user, source: { type: 'تحويل مواد بين مشاريع', id: Number(transfer_id), no: transfer.transfer_no },
+        description: `قيد تحويل تكلفة مواد (${transfer.transfer_no}) من مشروع [${transfer.from_project_name}] إلى [${transfer.to_project_name}]`,
+        lines: [
+          { role: 'PROJECT_MATERIAL_COST', debit: totalAmount, projectId: transfer.to_project_id, costCenterId: await projectCostCenter(tx, transfer.to_project_id), notes: `مدين: تكلفة مواد محولة من مشروع ${transfer.from_project_name}` },
+          { role: 'PROJECT_MATERIAL_COST', credit: totalAmount, projectId: transfer.from_project_id, costCenterId: await projectCostCenter(tx, transfer.from_project_id), notes: `دائن: تخفيض تكلفة مواد محولة إلى مشروع ${transfer.to_project_name}` }
+        ]
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
 
       // 4. تحديث حالة طلب التحويل
       await tx.run(`

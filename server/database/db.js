@@ -851,6 +851,31 @@ function initSqlite() {
       sqliteDb.exec('UPDATE accounts SET cost_center_required = 1 WHERE default_cost_center_id IS NOT NULL;');
     }
     if (!accountCenterCols.includes('analytical_type')) sqliteDb.exec("ALTER TABLE accounts ADD COLUMN analytical_type TEXT NOT NULL DEFAULT 'general';");
+    initializeChartOfAccountsColumns(sqliteDb, accountCenterCols);
+    // الأستاذ المساعد (المرحلة 4.7): طرف سطر القيد (عميل/مورد/موظف) لاشتقاق أرصدة الأطراف من الأستاذ العام
+    const lineCols = sqliteDb.prepare('PRAGMA table_info(journal_entry_lines)').all().map(c => c.name);
+    if (!lineCols.includes('party_type')) sqliteDb.exec('ALTER TABLE journal_entry_lines ADD COLUMN party_type TEXT;');
+    if (!lineCols.includes('party_id')) sqliteDb.exec('ALTER TABLE journal_entry_lines ADD COLUMN party_id INTEGER;');
+    sqliteDb.exec('CREATE INDEX IF NOT EXISTS idx_jel_party ON journal_entry_lines(party_type, party_id);');
+    // الرواتب (المرحلة 4.5): قيد الاستحقاق في journal_entry_id وقيد الصرف منفصل
+    const payrollCols = sqliteDb.prepare('PRAGMA table_info(payroll)').all().map(c => c.name);
+    if (payrollCols.length && !payrollCols.includes('payment_journal_entry_id')) sqliteDb.exec('ALTER TABLE payroll ADD COLUMN payment_journal_entry_id INTEGER REFERENCES journal_entries(id);');
+    // أعمدة كشف الراتب الشامل كانت تُضاف فقط بسكربت migrate_comprehensive_payroll.js؛ بدونها يفشل إعداد المسير في قاعدة جديدة
+    const ensureCols = (table, defs) => {
+      const have = sqliteDb.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+      if (!have.length) return;
+      for (const [name, def] of defs) if (!have.includes(name)) sqliteDb.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def};`);
+    };
+    ensureCols('payroll', [['allowances', 'REAL DEFAULT 0'], ['overtime_amount', 'REAL DEFAULT 0'], ['earned_basic', 'REAL DEFAULT 0'], ['transport_allowance', 'REAL DEFAULT 0'], ['appearance_allowance', 'REAL DEFAULT 0'],
+      ['nature_of_work_allowance', 'REAL DEFAULT 0'], ['living_allowance', 'REAL DEFAULT 0'], ['health_insurance_allowance', 'REAL DEFAULT 0'],
+      ['gross_salary', 'REAL DEFAULT 0'], ['insurance_employee', 'REAL DEFAULT 0'], ['insurance_employer', 'REAL DEFAULT 0'],
+      ['absence_penalty_deductions', 'REAL DEFAULT 0'], ['loan_installments', 'REAL DEFAULT 0'], ['taxable_base', 'REAL DEFAULT 0'],
+      ['tax_amount', 'REAL DEFAULT 0'], ['skills_fund', 'REAL DEFAULT 0'], ['unpaid_leave_deduction', 'REAL DEFAULT 0'],
+      ['total_net_salary', 'REAL DEFAULT 0'], ['working_days', 'INTEGER DEFAULT 31'], ['month_days', 'INTEGER DEFAULT 31'],
+      ['cost_center', "TEXT DEFAULT 'الإدارة العامة'"], ['bank_account', "TEXT DEFAULT ''"]]);
+    ensureCols('employees', [['transport_pct', 'REAL DEFAULT 20'], ['appearance_pct', 'REAL DEFAULT 25'], ['nature_of_work_pct', 'REAL DEFAULT 30'],
+      ['living_allowance', 'REAL DEFAULT 90000'], ['health_insurance_allowance', 'REAL DEFAULT 30000'], ['cost_center', "TEXT DEFAULT 'الإدارة العامة'"],
+      ['bank_account', "TEXT DEFAULT ''"]]);
     sqliteDb.exec(`CREATE TABLE IF NOT EXISTS supporting_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
       file_name TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
@@ -2937,6 +2962,53 @@ async function exec(sql) {
   return sqliteCoordinator.execute(() => sqliteDb.exec(targetSql));
 }
 
+// قبل إتمام أي معاملة: كل قيد مرحّل أُنشئ داخلها يجب أن يملك سطرين على الأقل،
+// ومجموع مدينه يساوي دائنه ويساوي إجمالي الرأس. القواعد (triggers) لا تستطيع فحص ذلك
+// لأن الرأس يُدرج قبل سطوره، لذلك يُفحص هنا مرة واحدة قبل COMMIT.
+const UNBALANCED_NEW_ENTRIES_SQL = `
+  SELECT je.entry_no FROM journal_entries je
+  LEFT JOIN journal_entry_lines l ON l.entry_id = je.id
+  WHERE je.id > ? AND je.status IN ('posted', 'closed')
+  GROUP BY je.id, je.entry_no, je.total_debit
+  HAVING COUNT(l.id) < 2
+      OR ABS(COALESCE(SUM(l.debit), 0) - COALESCE(SUM(l.credit), 0)) > 0.005
+      OR ABS(COALESCE(SUM(l.debit), 0) - je.total_debit) > 0.005
+  LIMIT 1`;
+
+// Chart-of-accounts columns, normal-balance maintenance and the system-account role table (stage 2).
+// Mappings are only seeded when missing; the repair script and the settings API own later changes.
+function initializeChartOfAccountsColumns(sqliteDb, existingCols) {
+  const cols = new Set(existingCols);
+  const add = { parent_code: 'TEXT', is_contra: 'INTEGER DEFAULT 0', is_active: 'INTEGER DEFAULT 1', normal_balance: 'TEXT', updated_at: 'DATETIME' };
+  for (const [c, def] of Object.entries(add)) if (!cols.has(c)) sqliteDb.exec(`ALTER TABLE accounts ADD COLUMN ${c} ${def};`);
+  const debitTypes = "('asset','assets','أصول','اصول','أصل','اصل','أصول ثابتة','أصول متداولة','expense','expenses','cost','مصروفات','مصاريف','مصروف','تكاليف')";
+  const normal = `CASE WHEN LOWER(TRIM(NEW.type)) IN ${debitTypes} THEN (CASE WHEN COALESCE(NEW.is_contra,0)=1 THEN 'credit' ELSE 'debit' END)
+    ELSE (CASE WHEN COALESCE(NEW.is_contra,0)=1 THEN 'debit' ELSE 'credit' END) END`;
+  sqliteDb.exec(`
+    DROP TRIGGER IF EXISTS trg_accounts_normal_balance_insert;
+    CREATE TRIGGER trg_accounts_normal_balance_insert AFTER INSERT ON accounts
+    BEGIN UPDATE accounts SET normal_balance = ${normal} WHERE id = NEW.id; END;
+    DROP TRIGGER IF EXISTS trg_accounts_normal_balance_update;
+    CREATE TRIGGER trg_accounts_normal_balance_update AFTER UPDATE OF type, is_contra ON accounts
+    BEGIN UPDATE accounts SET normal_balance = ${normal} WHERE id = NEW.id; END;
+  `);
+  sqliteDb.exec(`UPDATE accounts SET normal_balance = CASE WHEN LOWER(TRIM(type)) IN ${debitTypes}
+    THEN (CASE WHEN COALESCE(is_contra,0)=1 THEN 'credit' ELSE 'debit' END) ELSE (CASE WHEN COALESCE(is_contra,0)=1 THEN 'debit' ELSE 'credit' END) END
+    WHERE normal_balance IS NULL`);
+  const { MAPPINGS_DDL } = require('./chartOfAccountsRepair');
+  sqliteDb.exec(MAPPINGS_DDL);
+  const { SYSTEM_ACCOUNT_ROLES } = require('../services/chartOfAccountsRules');
+  const seed = sqliteDb.prepare(`INSERT OR IGNORE INTO system_account_mappings (role, account_id, updated_by)
+    SELECT ?, a.id, 'system-default' FROM accounts a
+    WHERE a.code = ? AND COALESCE(a.status,'active') = 'active' AND COALESCE(a.is_active,1) = 1
+      AND (? = 1 OR (a.is_posting = 1 AND NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = a.id)))`);
+  for (const [role, def] of Object.entries(SYSTEM_ACCOUNT_ROLES)) for (const code of def.codes) seed.run(role, code, def.group ? 1 : 0);
+}
+
+function unbalancedLedgerError(entryNo) {
+  return Object.assign(new Error(`⛔ القيد ${entryNo} غير متزن أو بلا سطور كافية؛ تم إلغاء العملية بالكامل`), { statusCode: 400, code: 'LEDGER_UNBALANCED' });
+}
+
 /**
  * تنفيذ معاملة مالية ذرية (Atomic Transaction) تدعم كلاً من MySQL و SQLite
  */
@@ -2946,6 +3018,7 @@ async function transaction(callback) {
     const connection = await mysqlPool.getConnection();
     await connection.beginTransaction();
     try {
+      const [[ledgerStart]] = await connection.query('SELECT COALESCE(MAX(id), 0) AS id FROM journal_entries');
       // توفير دوال تنفيذ محلية تابعة لنفس الاتصال المعزول
       const tx = {
         query: async (sql, params = []) => {
@@ -2968,6 +3041,8 @@ async function transaction(callback) {
       };
 
       const result = await callback(tx);
+      const [unbalanced] = await connection.query(UNBALANCED_NEW_ENTRIES_SQL, [ledgerStart.id]);
+      if (unbalanced.length) throw unbalancedLedgerError(unbalanced[0].entry_no);
       await connection.commit();
       return result;
     } catch (err) {
@@ -2983,6 +3058,7 @@ async function transaction(callback) {
   return sqliteCoordinator.execute(async () => {
   sqliteDb.exec('BEGIN TRANSACTION;');
   try {
+    const ledgerStartId = sqliteDb.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM journal_entries').get().id;
     const tx = {
       query: async (sql, params = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).all(...params),
       get: async (sql, params = []) => sqliteDb.prepare(normalizeSql(sql, 'sqlite')).get(...params) || null,
@@ -2997,6 +3073,8 @@ async function transaction(callback) {
       }
     };
     const result = await callback(tx);
+    const unbalanced = sqliteDb.prepare(UNBALANCED_NEW_ENTRIES_SQL).get(ledgerStartId);
+    if (unbalanced) throw unbalancedLedgerError(unbalanced.entry_no);
     sqliteDb.exec('COMMIT;');
     return result;
   } catch (err) {

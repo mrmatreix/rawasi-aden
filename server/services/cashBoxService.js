@@ -88,13 +88,15 @@ async function appendMovement(conn, {
  */
 async function getBoxesSummary() {
   await ensureSchema();
+  // رصيد الصندوق = رصيد أول حركة فيه + مجموع حركاته (لا "آخر صف حسب المعرّف": حركة بتاريخ سابق لا تفسد الأرصدة اللاحقة)
   const boxes = await query(`
-    SELECT m.project_id, p.code as project_code, p.name as project_name,
-           m.current_balance, m.date as last_date
-    FROM cash_movements m
-    LEFT JOIN projects p ON p.id = m.project_id
-    WHERE m.id IN (SELECT MAX(id) FROM cash_movements GROUP BY IFNULL(project_id, 0))
-    ORDER BY m.project_id IS NULL DESC, m.project_id ASC
+    SELECT b.project_id, p.code as project_code, p.name as project_name, b.last_date,
+           COALESCE((SELECT f.previous_balance FROM cash_movements f WHERE IFNULL(f.project_id, 0) = IFNULL(b.project_id, 0) ORDER BY f.date ASC, f.id ASC LIMIT 1), 0)
+             + b.net AS current_balance
+    FROM (SELECT project_id, MAX(date) AS last_date, SUM(COALESCE(cash_in, 0) - COALESCE(cash_out, 0) - COALESCE(withdrawals, 0)) AS net
+          FROM cash_movements GROUP BY IFNULL(project_id, 0)) b
+    LEFT JOIN projects p ON p.id = b.project_id
+    ORDER BY b.project_id IS NULL DESC, b.project_id ASC
   `);
   const totals = await get(`
     SELECT COALESCE(SUM(cash_in), 0) as total_in,
@@ -135,9 +137,9 @@ async function getTotalBalanceAsOf({ asOf = null, before = null } = {}) {
   if (asOf) { cond = 'WHERE m2.date <= ?'; params.push(asOf); }
   if (before) { cond = 'WHERE m2.date < ?'; params.push(before); }
   const rows = await query(`
-    SELECT m.current_balance
-    FROM cash_movements m
-    WHERE m.id IN (SELECT MAX(m2.id) FROM cash_movements m2 ${cond} GROUP BY IFNULL(m2.project_id, 0))
+    SELECT COALESCE((SELECT f.previous_balance FROM cash_movements f WHERE IFNULL(f.project_id, 0) = IFNULL(b.project_id, 0) ORDER BY f.date ASC, f.id ASC LIMIT 1), 0) + b.net AS current_balance
+    FROM (SELECT m2.project_id, SUM(COALESCE(m2.cash_in, 0) - COALESCE(m2.cash_out, 0) - COALESCE(m2.withdrawals, 0)) AS net
+          FROM cash_movements m2 ${cond} GROUP BY IFNULL(m2.project_id, 0)) b
   `, params);
   return (rows || []).reduce((s, r) => s + (Number(r.current_balance) || 0), 0);
 }

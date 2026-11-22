@@ -2387,13 +2387,7 @@ const App = {
                                     <td style="color: var(--accent-green);">${this.formatNumber(paid)}</td>
                                     <td style="font-weight: 700; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${this.formatNumber(rem)}</td>
                                     <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor}; font-size: 0.7rem;">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
-                                    <td style="text-align: center;">
-                                      ${!isFullyPaid ? `
-                                        <button class="btn btn-primary btn-xs" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${p.id}, ${rem}, '${b.bill_no}')" style="background: var(--accent-green); border-color: var(--accent-green);">
-                                          قبض دفعة
-                                        </button>
-                                      ` : '<span style="color: var(--accent-green); font-size: 0.72rem;">✓ تم السداد</span>'}
-                                    </td>
+                                    <td style="text-align: center;">${this.billActionsHtml(b, clientId, p.id, rem, isFullyPaid)}</td>
                                   </tr>
                                 `;
                               }).join('')}
@@ -2465,13 +2459,7 @@ const App = {
           <td style="color: var(--accent-green);">${this.formatNumber(paid)}</td>
           <td style="font-weight: 800; color: ${rem > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${this.formatNumber(rem)}</td>
           <td><span class="badge" style="color: ${statusColor}; border: 1px solid ${statusColor};">${b.status || (isFullyPaid ? 'محصل كامل' : 'معتمد')}</span></td>
-          <td style="text-align: center;">
-            ${!isFullyPaid ? `
-              <button class="btn btn-primary btn-xs" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${b.project_id}, ${rem}, '${b.bill_no}')">
-                قبض دفعة
-              </button>
-            ` : '<span style="color: var(--accent-green); font-size: 0.78rem;">✓ تم التحصيل</span>'}
-          </td>
+          <td style="text-align: center;">${this.billActionsHtml(b, clientId, b.project_id, rem, isFullyPaid)}</td>
         </tr>
       `;
     }).join('');
@@ -2627,6 +2615,40 @@ const App = {
         await Reports.fetchFullClientStatement(clientId);
       }
     }
+  },
+
+  // دورة المستخلص: مسودة ← اعتماد (مستخدم غير المنشئ) ← ترحيل ← تحصيل
+  billActionsHtml(b, clientId, projectId, rem, isFullyPaid) {
+    const postedStatuses = ['posted', 'معتمد', 'محصل جزئي', 'محصل كامل', 'closed'];
+    if (b.status === 'draft' || b.status === 'under_review') {
+      return `<button class="btn btn-secondary btn-xs" onclick="App.approveBill(${b.id}, ${clientId})">اعتماد</button>`;
+    }
+    if (b.status === 'approved') {
+      return `<button class="btn btn-primary btn-xs" onclick="App.postBill(${b.id}, ${clientId})">ترحيل للأستاذ</button>`;
+    }
+    if (!postedStatuses.includes(b.status)) return '<span style="color: var(--text-secondary); font-size: 0.72rem;">-</span>';
+    if (isFullyPaid) return '<span style="color: var(--accent-green); font-size: 0.72rem;">✓ تم التحصيل</span>';
+    return `<button class="btn btn-primary btn-xs" onclick="App.quickCollectForBill(${b.id}, ${clientId}, ${projectId}, ${rem}, '${b.bill_no}')" style="background: var(--accent-green); border-color: var(--accent-green);">قبض دفعة</button>`;
+  },
+
+  async billWorkflowAction(billId, clientId, action, confirmText) {
+    if (confirmText && !(await UIDialog.confirm(confirmText))) return;
+    try {
+      const res = await fetch(`/api/billing/${billId}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const json = await res.json();
+      this.showToast(json.message || (json.success ? 'تم' : 'تعذر تنفيذ العملية'), json.success ? 'success' : 'error');
+      if (json.success && clientId) this.openClientChainModal(clientId);
+    } catch (err) {
+      this.showToast('خطأ في الاتصال بالخادم', 'error');
+    }
+  },
+
+  approveBill(billId, clientId) {
+    return this.billWorkflowAction(billId, clientId, 'approve', 'اعتماد المستخلص؟ لا يجوز لمنشئ المستخلص اعتماده بنفسه.');
+  },
+
+  postBill(billId, clientId) {
+    return this.billWorkflowAction(billId, clientId, 'post', 'ترحيل المستخلص إلى دفتر الأستاذ؟ بعد الترحيل لا يُعدَّل إلا بقيد عكسي.');
   },
 
   async quickCollectForBill(billId, clientId, projectId, remainingAmount, billNo) {
@@ -2900,7 +2922,7 @@ const App = {
 
       const json = await res.json();
       if (json.success) {
-        this.showToast(isInvoice ? `تم حفظ الفاتورة كمسودة (${json.bill_no || autoNo})` : `تم إصدار المستخلص بنجاح (${autoNo}) وتحديث رصيد العميل ونسبة الإنجاز آلياً 📑`, 'success');
+        this.showToast(json.message || `تم حفظ المستخلص كمسودة (${json.bill_no || autoNo}) بانتظار الاعتماد`, 'success');
         this.closeModal('newClientBillModal');
         this.loadClientsTable();
 

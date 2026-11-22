@@ -134,6 +134,9 @@ class ClientChainService {
 
     const bill = await executor.get('SELECT id, net_amount, paid_amount, status FROM bills WHERE id = ?', [billId]);
     if (!bill) return null;
+    if (!['posted', 'معتمد', 'محصل جزئي', 'محصل كامل', 'closed'].includes(String(bill.status))) {
+      throw Object.assign(new Error(`لا يمكن تحصيل مستخلص غير مرحّل (الحالة: ${bill.status}). يجب اعتماد المستخلص وترحيله أولاً.`), { statusCode: 400 });
+    }
 
     const currentPaid = Number(bill.paid_amount) || 0;
     const netAmount = Number(bill.net_amount) || 0;

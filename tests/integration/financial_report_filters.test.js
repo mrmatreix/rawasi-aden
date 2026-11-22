@@ -33,7 +33,8 @@ test('financial reports show expense accounts and share posting, hierarchy, cent
   await db.run("UPDATE accounting_periods SET status='open' WHERE start_date<=? AND end_date>=?",[date,date]);
   const voucher=await api('/api/expenses',{date,amount:25,account_id:op,settlement_account_id:cash,payment_method:'نقدي',expense_type:'مصروف عام',status:'draft',cost_center_id:cc}); assert.equal(voucher.status,200,JSON.stringify(voucher.body));
   const query='?from_date='+date+'&to_date='+date;
-  const report=async (name,opts='')=> { const out=await api('/api/reports/'+name+query+opts); assert.equal(out.status,200,JSON.stringify(out.body)); assert.equal(out.body.success,true,JSON.stringify(out.body)); return out.body; };
+  // The scenarios below were written for the combined view; the server default is now posted-only (checked explicitly further down).
+  const report=async (name,opts='')=> { const out=await api('/api/reports/'+name+query+opts+(opts.includes('posting_status=')?'':'&posting_status=all')); assert.equal(out.status,200,JSON.stringify(out.body)); assert.equal(out.body.success,true,JSON.stringify(out.body)); return out.body; };
   const all=await report('income-statement'); assert.equal(all.data.total_expenses,230); assert.equal(all.data.total_revenues,350); assert.equal(all.data.net_profit,120);
   assert.equal(all.data.expenses.reduce((sum,row)=>sum+row.amount,0),230); assert.ok(all.data.expenses.some(row=>row.code==='77770001')); assert.equal(all.data.total_direct_costs,100);
   const withZero = await report('trial-balance','&hide_zero=false');
@@ -64,9 +65,9 @@ test('financial reports show expense accounts and share posting, hierarchy, cent
   }
   const mainMovement=await report('account-movement','&account_id='+(await acct('3'))+'&display_level=main'); assert.equal(mainMovement.data.totals.total_debit,230);
   const result=await api('/api/expenses/'+voucher.body.id+'/post',{}); assert.equal(result.status,200,JSON.stringify(result.body));
-  assert.equal((await report('income-statement')).data.total_expenses,230); assert.equal((await report('income-statement','&posting_status=posted')).data.total_expenses,130); assert.equal((await report('income-statement','&posting_status=unposted')).data.total_expenses,100);
+  assert.equal((await api('/api/reports/income-statement'+query)).body.data.total_expenses,130,'server default is posted only'); assert.equal((await api('/api/reports/income-statement'+query)).body.meta.posting_status,'posted'); assert.equal((await report('income-statement','&posting_status=all')).data.total_expenses,230); assert.equal((await report('income-statement','&posting_status=posted')).data.total_expenses,130); assert.equal((await report('income-statement','&posting_status=unposted')).data.total_expenses,100);
   const budgetProject=(await db.run("INSERT INTO projects(code,name,estimated_cost,currency,status) VALUES ('RF-BUDGET','موازنة تجريبية',1000,'ر.ي','جاري')")).lastInsertRowid;
-  await db.run("UPDATE journal_entry_lines SET project_id = ? WHERE entry_id IN (SELECT id FROM journal_entries WHERE entry_no LIKE 'REPORT-FILTER-%')",[budgetProject]);
+  await db.run("INSERT INTO ledger_maintenance_unlock (reason) VALUES ('test fixture: tag posted lines with a project')"); await db.run("UPDATE journal_entry_lines SET project_id = ? WHERE entry_id IN (SELECT id FROM journal_entries WHERE entry_no LIKE 'REPORT-FILTER-%')",[budgetProject]); await db.run('DELETE FROM ledger_maintenance_unlock');
   await db.run("INSERT INTO project_budgets(project_id,category,planned_cost,actual_cost) VALUES (?,'مواد',80,99999),(?,'أجور',70,99999)",[budgetProject,budgetProject]);
   const budget=await report('project-budget','&project_id='+budgetProject);
   assert.equal(budget.data.projects[0].planned_cost,150);

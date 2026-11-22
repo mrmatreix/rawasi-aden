@@ -265,10 +265,10 @@ test('Supplier Payables - Accrual on Credit, Settlement, Unwind on Delete, Expos
   assert.strictEqual(r.status, 200, 'حذف الفاتورة: ' + JSON.stringify(r.data));
   deadPurchaseIds.push(purchaseId);
   assert.ok(/استحقاق/.test(r.data.message || ''), 'الرسالة تعلن فك الاستحقاق');
-  const apRev = await db.get('SELECT status FROM journal_entries WHERE id = ?', [apJe.id]);
-  assert.strictEqual(apRev.status, 'reversed', 'قيد الاستحقاق معكوس');
-  const setRev = await db.get('SELECT status FROM journal_entries WHERE id = ?', [setJe.id]);
-  assert.strictEqual(setRev.status, 'reversed', 'قيد التسوية معكوس');
+  const apRev = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [apJe.id]);
+  assert.strictEqual(apRev.status, 'posted', 'الأصل يبقى مرحّلاً ليتقابل مع قيده العكسي'); assert.ok(apRev.reversal_ref_id, 'قيد الاستحقاق معكوس');
+  const setRev = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [setJe.id]);
+  assert.strictEqual(setRev.status, 'posted', 'الأصل يبقى مرحّلاً ليتقابل مع قيده العكسي'); assert.ok(setRev.reversal_ref_id, 'قيد التسوية معكوس');
   const revCount = await db.get(
     `SELECT COUNT(*) c FROM journal_entries WHERE reference_id = ? AND reference_type = 'قيد عكسي' AND description LIKE '%ذمم الموردين%'`,
     [purchaseId]

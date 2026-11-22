@@ -754,3 +754,8 @@ CREATE TABLE IF NOT EXISTS supporting_documents (
  content_base64 LONGTEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
  INDEX idx_supporting_entity (entity_type, entity_id)
 );
+
+CREATE TABLE IF NOT EXISTS document_sequences (
+ series VARCHAR(150) NOT NULL, period_year INT NOT NULL, last_no INT NOT NULL DEFAULT 0,
+ updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (series, period_year)
+);
