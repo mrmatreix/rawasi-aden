@@ -160,9 +160,4 @@ function runMigrations(db, list = MIGRATIONS) {
   return ran;
 }
 
-function appliedMigrations(db) {
-  ensureTable(db);
-  return db.prepare('SELECT id, description, applied_at FROM schema_migrations ORDER BY id').all();
-}
-
-module.exports = { MIGRATIONS, runMigrations, appliedMigrations };
+module.exports = { MIGRATIONS, runMigrations };

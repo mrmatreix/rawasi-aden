@@ -95,25 +95,6 @@ async function getBoxesSummary() {
   };
 }
 
-/** إجمالي النقدية عبر الصناديق (للوحة التحكم). */
-async function getTotalBalance() {
-  const summary = await getBoxesSummary();
-  return summary.current_balance;
-}
-
-/** إجمالي النقدية عبر الصناديق بتاريخ محدد (شامل asOf أو قبل before — للتدفقات). */
-async function getTotalBalanceAsOf({ asOf = null, before = null } = {}) {
-  await ensureSchema();
-  let cond = '';
-  const params = [];
-  if (asOf) { cond = 'WHERE m2.date <= ?'; params.push(asOf); }
-  if (before) { cond = 'WHERE m2.date < ?'; params.push(before); }
-  const rows = await query(`
-    SELECT COALESCE((SELECT f.previous_balance FROM cash_movements f WHERE IFNULL(f.project_id, 0) = IFNULL(b.project_id, 0) ORDER BY f.date ASC, f.id ASC LIMIT 1), 0) + b.net AS current_balance
-    FROM (SELECT m2.project_id, SUM(COALESCE(m2.cash_in, 0) - COALESCE(m2.cash_out, 0) - COALESCE(m2.withdrawals, 0)) AS net
-          FROM cash_movements m2 ${cond} GROUP BY IFNULL(m2.project_id, 0)) b
-  `, params);
-  return (rows || []).reduce((s, r) => s + (Number(r.current_balance) || 0), 0);
-}
-
-module.exports = { ensureSchema, appendMovement, getBoxesSummary, getTotalBalance, getTotalBalanceAsOf };
+// Dashboard and cash-flow totals read the general ledger (reportingService); the cash-book totals that used to
+// live here had no caller left.
+module.exports = { ensureSchema, appendMovement, getBoxesSummary };

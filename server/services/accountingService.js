@@ -63,10 +63,6 @@ async function syncJournalCashMovements(db, entryId) {
 
 const AccountingService = {
   syncJournalCashMovements,
-  async resolveOptionalCostCenter(value, db = { get }) {
-    if (value === undefined || value === null || value === '') return null;
-    return PostingService.resolveCostCenter(db, { cost_center_required: 0 }, value);
-  },
 
   async resolveAccountOperationCenter(account, value, db = { get }) {
     return PostingService.resolveCostCenter(db, account, value);

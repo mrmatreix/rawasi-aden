@@ -1561,7 +1561,10 @@ router.delete('/:projectId/labor/:id', async (req, res) => {
 router.get('/:projectId/invoices', async (req, res) => {
   try {
     const projectId = req.params.projectId;
-    const project = await get('SELECT name, code, currency, client_name, contract_value FROM projects WHERE id = ?', [projectId]) || {};
+    // projects keep client_id, not the client's name (the old query asked for a missing column: every call failed)
+    const project = await get(`SELECT p.name, p.code, p.currency, c.name AS client_name, p.contract_value
+      FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ?`, [projectId]);
+    if (!project) return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
     const invoices = await query(`
       SELECT pi.*, c.name as client_name, c.phone as client_phone
       FROM project_invoices pi

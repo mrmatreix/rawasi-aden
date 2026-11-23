@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const {
   query, run, get, backupDatabase, restoreDatabase, listBackups,
-  createLogoutBackup, listLogoutBackups, connectionManager,
+  createLogoutBackup, listLogoutBackups,
   getActiveEngine, dbPath, initializeDatabase
 } = require('../database/db');
 const { requirePermission } = require('../middleware/security');

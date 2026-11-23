@@ -7,7 +7,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const { DatabaseSync, backup } = require('node:sqlite');
-const connectionManager = require('./connectionManager');
 
 const configPath = path.join(__dirname, 'config.json');
 
@@ -2681,6 +2680,5 @@ module.exports = {
   createLogoutBackup,
   listLogoutBackups,
   getActiveEngine,
-  connectionManager,
   dbPath: sqlitePath
 };

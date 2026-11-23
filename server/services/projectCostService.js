@@ -211,17 +211,6 @@ async function linkSubRecordToExpense(table, subId, expenseId, projectId, tx = n
   return { linked: true, expense_id: eId, sub_id: sId, note };
 }
 
-/** فك ربط بند فرعي عن سنده (يعود للاحتساب الكامل). */
-async function unlinkSubRecord(table, subId, tx = null) {
-  if (!['project_labor_expenses', 'project_purchases'].includes(table)) {
-    throw new Error('جدول المصدر غير صالح');
-  }
-  if (!tx) await ensureSchema();
-  const conn = pickConn(tx);
-  await conn.run(`UPDATE ${table} SET linked_expense_id = NULL WHERE id = ?`, [Number(subId)]);
-  return { unlinked: true };
-}
-
 /** تنظيف الروابط المعلقة عند حذف مسودة سند (حتى لا تشير لغير موجود). */
 async function clearLinksToExpense(expenseId, tx = null) {
   if (!tx) await ensureSchema();
@@ -1018,7 +1007,6 @@ module.exports = {
   backfillMirrorLinks,
   deleteLinkedMirrors,
   linkSubRecordToExpense,
-  unlinkSubRecord,
   clearLinksToExpense,
   detectPossibleDuplicates,
   createMirrorJournal,

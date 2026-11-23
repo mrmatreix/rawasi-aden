@@ -62,6 +62,12 @@ const refId = () => crypto.randomBytes(4).toString('hex').toUpperCase();
 function safeErrorResponses(req, res, next) {
   const json = res.json.bind(res);
   res.json = body => {
+    // a missing record is not a server failure: many routes send every caught error as 500, including the
+    // services' plain "... غير موجود" (not found) messages. Report those as 404 so clients and monitoring can tell.
+    if (body && typeof body === 'object' && body.success === false && res.statusCode === 500
+      && typeof body.message === 'string' && /غير موجود/.test(body.message) && !isTechnical(body.message)) {
+      res.status(404);
+    }
     if (body && typeof body === 'object' && body.success === false && res.statusCode >= 400) {
       const technical = ['message', 'error', 'details'].filter(k => isTechnical(typeof body[k] === 'string' ? body[k] : ''));
       if (technical.length) {

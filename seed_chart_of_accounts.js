@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * نظام شركة رواسي عدن للهندسة والمقاولات
- * سكريبت Node.js الشامل لاستيراد دليل الحسابات من ملف Excel إلى SQLite / MySQL
+ * سكريبت Node.js الشامل لاستيراد دليل الحسابات من ملف Excel إلى SQLite
  * ============================================================================
  *
  * الأعمدة المقروءة من ملف الإكسل (8 أعمدة):
@@ -196,104 +196,55 @@ async function ensureAccountsSchema(tx) {
   const engine = getActiveEngine();
   console.log(`🔧 [Schema Setup] ضبط مخطط جدول الحسابات accounts على محرك [${engine}]...`);
 
-  if (engine === 'mysql') {
-    await tx.run(`
-      CREATE TABLE IF NOT EXISTS accounts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        code VARCHAR(20) NOT NULL UNIQUE,
-        name VARCHAR(200) NOT NULL,
-        type VARCHAR(30) NOT NULL,
-        parent_code VARCHAR(20) NULL,
-        parent_id INT NULL,
-        level INT NOT NULL,
-        is_posting TINYINT(1) NOT NULL DEFAULT 0,
-        currencies TEXT NULL,
-        report_type VARCHAR(50) NOT NULL,
-        inclusion TEXT NULL,
-        is_contra TINYINT(1) NOT NULL DEFAULT 0,
-        is_active TINYINT(1) NOT NULL DEFAULT 1,
-        balance DECIMAL(18, 4) DEFAULT 0.0000,
-        status VARCHAR(20) DEFAULT 'active',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_accounts_parent_code (parent_code),
-        INDEX idx_accounts_parent_id (parent_id),
-        INDEX idx_accounts_type (type),
-        INDEX idx_accounts_is_posting (is_posting),
-        INDEX idx_accounts_level (level),
-        INDEX idx_accounts_report_type (report_type)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
+  // محرك SQLite
+  await tx.run(`
+    CREATE TABLE IF NOT EXISTS accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      parent_code TEXT NULL,
+      parent_id INTEGER NULL REFERENCES accounts(id),
+      level INTEGER NOT NULL,
+      is_posting INTEGER NOT NULL DEFAULT 0,
+      currencies TEXT DEFAULT 'YER',
+      report_type TEXT NOT NULL,
+      inclusion TEXT NULL DEFAULT '=',
+      is_contra INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      balance REAL DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 
-    const cols = await tx.query("SHOW COLUMNS FROM accounts");
-    const colNames = cols.map(c => c.Field);
-    const addCol = async (col, def) => {
-      if (!colNames.includes(col)) {
-        await tx.run(`ALTER TABLE accounts ADD COLUMN ${col} ${def}`);
-      }
-    };
-    await addCol('parent_code', 'VARCHAR(20) NULL');
-    await addCol('parent_id', 'INT NULL');
-    await addCol('is_posting', 'TINYINT(1) NOT NULL DEFAULT 0');
-    await addCol('currencies', 'TEXT NULL');
-    await addCol('report_type', "VARCHAR(50) NOT NULL DEFAULT 'balance_sheet'");
-    await addCol('inclusion', 'TEXT NULL');
-    await addCol('is_contra', 'TINYINT(1) NOT NULL DEFAULT 0');
-    await addCol('is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
-    await addCol('status', "VARCHAR(20) DEFAULT 'active'");
-    await addCol('level', 'INT DEFAULT 1');
-    await addCol('updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
-  } else {
-    // محرك SQLite
-    await tx.run(`
-      CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        parent_code TEXT NULL,
-        parent_id INTEGER NULL REFERENCES accounts(id),
-        level INTEGER NOT NULL,
-        is_posting INTEGER NOT NULL DEFAULT 0,
-        currencies TEXT DEFAULT 'YER',
-        report_type TEXT NOT NULL,
-        inclusion TEXT NULL DEFAULT '=',
-        is_contra INTEGER NOT NULL DEFAULT 0,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        balance REAL DEFAULT 0,
-        status TEXT DEFAULT 'active',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+  const cols = await tx.query("PRAGMA table_info(accounts)");
+  const colNames = cols.map(c => c.name);
+  const addCol = async (col, def) => {
+    if (!colNames.includes(col)) {
+      await tx.run(`ALTER TABLE accounts ADD COLUMN ${col} ${def}`);
+    }
+  };
+  await addCol('parent_code', 'TEXT');
+  await addCol('parent_id', 'INTEGER REFERENCES accounts(id)');
+  await addCol('is_posting', 'INTEGER DEFAULT 0');
+  await addCol('currencies', "TEXT DEFAULT 'YER'");
+  await addCol('report_type', "TEXT DEFAULT 'balance_sheet'");
+  await addCol('inclusion', "TEXT DEFAULT '='");
+  await addCol('is_contra', 'INTEGER DEFAULT 0');
+  await addCol('is_active', 'INTEGER DEFAULT 1');
+  await addCol('status', "TEXT DEFAULT 'active'");
+  await addCol('level', 'INTEGER DEFAULT 1');
+  await addCol('updated_at', 'DATETIME');
 
-    const cols = await tx.query("PRAGMA table_info(accounts)");
-    const colNames = cols.map(c => c.name);
-    const addCol = async (col, def) => {
-      if (!colNames.includes(col)) {
-        await tx.run(`ALTER TABLE accounts ADD COLUMN ${col} ${def}`);
-      }
-    };
-    await addCol('parent_code', 'TEXT');
-    await addCol('parent_id', 'INTEGER REFERENCES accounts(id)');
-    await addCol('is_posting', 'INTEGER DEFAULT 0');
-    await addCol('currencies', "TEXT DEFAULT 'YER'");
-    await addCol('report_type', "TEXT DEFAULT 'balance_sheet'");
-    await addCol('inclusion', "TEXT DEFAULT '='");
-    await addCol('is_contra', 'INTEGER DEFAULT 0');
-    await addCol('is_active', 'INTEGER DEFAULT 1');
-    await addCol('status', "TEXT DEFAULT 'active'");
-    await addCol('level', 'INTEGER DEFAULT 1');
-    await addCol('updated_at', 'DATETIME');
-
-    // إنشاء الفهارس
-    await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_parent_code ON accounts(parent_code);');
-    await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_parent_id ON accounts(parent_id);');
-    await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(type);');
-    await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_is_posting ON accounts(is_posting);');
-    await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_level ON accounts(level);');
-    await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_report_type ON accounts(report_type);');
-  }
+  // إنشاء الفهارس
+  await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_parent_code ON accounts(parent_code);');
+  await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_parent_id ON accounts(parent_id);');
+  await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(type);');
+  await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_is_posting ON accounts(is_posting);');
+  await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_level ON accounts(level);');
+  await tx.run('CREATE INDEX IF NOT EXISTS idx_accounts_report_type ON accounts(report_type);');
 }
 
 /**

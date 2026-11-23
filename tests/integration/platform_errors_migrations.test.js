@@ -28,6 +28,7 @@ test('failed responses never expose SQL or runtime errors; business messages pas
   app.use(errors.safeErrorResponses);
   app.get('/sql', (_q, res) => res.status(500).json({ success: false, message: 'خطأ في جلب المستخلصات: no such column: b.foo', error: 'no such column: b.foo' }));
   app.get('/biz', (_q, res) => res.status(400).json({ success: false, message: 'لا يمكن عكس مسودة' }));
+  app.get('/missing', (_q, res) => res.status(500).json({ success: false, message: 'المشروع رقم (1) غير موجود في النظام' }));
   app.get('/throw', () => { throw Object.assign(new Error('UNIQUE constraint failed: bills.bill_no'), { code: 'ERR_SQLITE_ERROR' }); });
   app.use(errors.errorHandler);
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
@@ -40,6 +41,9 @@ test('failed responses never expose SQL or runtime errors; business messages pas
     assert.match(sql.body.message, /^خطأ في جلب المستخلصات: حدث خطأ داخلي غير متوقع \(رقم المرجع [0-9A-F]{8}\)$/);
     assert.match(sql.body.error_ref, /^[0-9A-F]{8}$/);
     assert.deepEqual((await get('/biz')).body, { success: false, message: 'لا يمكن عكس مسودة' });
+    const missing = await get('/missing');
+    assert.equal(missing.status, 404, 'a not-found business message sent as 500 is reported as 404');
+    assert.equal(missing.body.message, 'المشروع رقم (1) غير موجود في النظام');
     const thrown = await get('/throw');
     assert.equal(thrown.status, 409); assert.equal(thrown.body.code, 'DUPLICATE'); assert.doesNotMatch(thrown.body.message, /bill_no/);
   } finally { console.error = errLog; server.close(); }

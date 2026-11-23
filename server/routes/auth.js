@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { get, query, run, connectionManager } = require('../database/db');
+const { get, query, run } = require('../database/db');
 const {
   loginRateLimiter,
   recordFailedLogin,
@@ -468,7 +468,9 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
     WHERE id = ?
   `, [sessionId, JSON.stringify(activeSessions), nowIsoDb, nowIsoDb, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
 
-  let dbStatus = connectionManager ? connectionManager.getStatus() : { isOnline: false, mode: 'offline' };
+  // the login itself just read and wrote the database: report the same status as /api/settings/db-status
+  // (the old connection manager always answered "offline", so the badge flickered offline -> online after login)
+  const dbStatus = { isOnline: true, mode: 'online', activeDb: 'sqlite', statusMessage: 'متصل بخادم النظام وقاعدة البيانات تعمل بشكل طبيعي' };
 
   // نجاح الدخول - تصفير محاولات Rate Limit
   resetLoginAttempts(req);
