@@ -26,8 +26,13 @@ test('RBAC & Scoped Security - Strict Server Enforcement (Deny by Default & SoD)
     VALUES (902, 'PRJ-TEST-02', 'مشروع مجمع الساحل 2', 1, 'active', 8000000, 200000)`);
 
   // Helper to generate auth headers
-  function getAuthHeaders(userObj) {
-    const token = jwt.sign(userObj, secret, { expiresIn: '1h' });
+  // requireAuth reloads the user and its permissions from the database (a forged token alone is 401),
+  // so every test identity is a real active user row carrying the permissions under test
+  async function getAuthHeaders(userObj) {
+    await db.run(`INSERT OR REPLACE INTO users (id, username, password_hash, role, full_name, status, permissions, allowed_projects)
+      VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`, [userObj.id, userObj.username, bcrypt.hashSync('x-' + userObj.id, 4), userObj.role, userObj.username,
+      JSON.stringify(userObj.permissions || []), (userObj.scope?.allowed_projects || userObj.allowed_projects) ? JSON.stringify(userObj.scope?.allowed_projects || userObj.allowed_projects) : null]);
+    const token = jwt.sign(userObj, require('../../server/middleware/security').JWT_SECRET || secret, { expiresIn: '1h' });
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
@@ -38,7 +43,7 @@ test('RBAC & Scoped Security - Strict Server Enforcement (Deny by Default & SoD)
 
   // 1. اختبار Deny by Default: مستخدم بدون أي صلاحيات (permissions: [])
   await t.test('1. Deny by Default - Blocks unauthorized user with 403 Forbidden', async () => {
-    const noPermHeaders = getAuthHeaders({
+    const noPermHeaders = await getAuthHeaders({
       id: 8001,
       username: 'guest_user',
       role: 'custom',
@@ -64,7 +69,7 @@ test('RBAC & Scoped Security - Strict Server Enforcement (Deny by Default & SoD)
 
   // 2. اختبار فصل المهام (Separation of Duties): المحاسب لا يمكنه إغلاق/اعتماد الفترات المالية
   await t.test('2. SoD - Accountant can create expense but CANNOT approve period closing', async () => {
-    const accountantHeaders = getAuthHeaders({
+    const accountantHeaders = await getAuthHeaders({
       id: 8002,
       username: 'test_accountant',
       role: 'accountant',
@@ -95,12 +100,13 @@ test('RBAC & Scoped Security - Strict Server Enforcement (Deny by Default & SoD)
     });
     assert.strictEqual(resClose.status, 403, 'Accountant must be blocked from period closing (approve)');
     const closeJson = await resClose.json();
-    assert.strictEqual(closeJson.permissionDenied, true);
+    // rejected either by the route gate or by the period-close service's dedicated accounting:close_period check
+    assert.ok(closeJson.permissionDenied === true || /صلاحية الإقفال/.test(closeJson.message), JSON.stringify(closeJson));
   });
 
   // 3. اختبار فصل المهام (Separation of Duties): المراجع المالي (Auditor) يراجع ويعتمد لكن لا يصرف
   await t.test('3. SoD - Auditor can view & audit but CANNOT create direct vouchers', async () => {
-    const auditorHeaders = getAuthHeaders({
+    const auditorHeaders = await getAuthHeaders({
       id: 8003,
       username: 'test_auditor',
       role: 'auditor',
@@ -137,7 +143,7 @@ test('RBAC & Scoped Security - Strict Server Enforcement (Deny by Default & SoD)
   // 4. اختبار نطاق المشاريع (Project Scope Enforcement): مدير المشاريع مقيد بمشروعه فقط
   await t.test('4. Scoped Permissions - Project Manager blocked from unauthorized projects', async () => {
     // مدير المشروع مسموح له فقط بالمشروع 901
-    const pmHeaders = getAuthHeaders({
+    const pmHeaders = await getAuthHeaders({
       id: 8004,
       username: 'test_pm_aden',
       role: 'project_manager',

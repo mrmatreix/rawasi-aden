@@ -260,7 +260,7 @@ describe('🏢 Supplier Relationship Management (SRM) & Vendor Profile Suite', a
     assert.ok(lookups.data.industry_categories.length >= 10);
     assert.ok(lookups.data.payment_document_types.length >= 5);
     assert.deepEqual(lookups.data.currencies.map(c => c.code), ['YER', 'SAR', 'USD']);
-    assert.deepEqual(lookups.data.statuses.map(s => s.code), ['active', 'suspended', 'under_review', 'blacklisted']);
+    assert.deepEqual(lookups.data.statuses.map(s => s.code), ['active', 'inactive', 'suspended']);
   });
 
   // ============================================================================

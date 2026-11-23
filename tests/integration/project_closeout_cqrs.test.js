@@ -22,6 +22,7 @@ describe('🏗️ CQRS Project Closeout & BoQ Analytics Suite', async () => {
   let adminUser = { id: 1, username: 'admin_audit', role: 'admin' };
 
   before(async () => {
+    await require('../fixtures/roleAccounts').ensureInventoryBasics(require('../../server/database/db'));
     // إنشاء مشروع تجريبي مخصص للاختبار برمز فريد
     const uniqueCode = 'PRJ-CQRS-' + Date.now();
     const pRes = await run(`
