@@ -598,7 +598,7 @@ class ContractAlertsService {
         const user=client.rawasiUser;
         const security=require('../middleware/security');
         const projects=security.parseScopeArray(user?.allowed_projects);
-        const scoped=(user?.role==='admin'||user?.username==='admin'||projects.includes('*')||projects.map(String).includes(String(alertData.project_id)));
+        const scoped=(user?.role==='admin'||projects.includes('*')||projects.map(String).includes(String(alertData.project_id)));
         if (client.writable && scoped) {
           try { client.write(frame); } catch {}
         }

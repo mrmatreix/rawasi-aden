@@ -3,7 +3,10 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, recordScopeParam } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam('bills'));
+
 
 // جلب الفواتير والمستخلصات مع تطبيق النطاق الصلاحي
 router.get('/', requirePermission('billing:view,revenues:view'), async (req, res) => {
@@ -21,7 +24,7 @@ router.get('/', requirePermission('billing:view,revenues:view'), async (req, res
     const conditions = [];
 
     // تطبيق نطاق المشاريع المصرح بها
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       const allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
       if (!allowedProjects.includes('*') && !allowedProjects.includes('all')) {
         if (allowedProjects.length === 0) {
@@ -234,7 +237,7 @@ const ContractingAccountingService = require('../services/contractingAccountingS
 router.get('/contracting-matrix', requirePermission('billing:view,revenues:view,reports:view'), async (req, res) => {
   try {
     let allowedProjects = ['*'];
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
     }
 

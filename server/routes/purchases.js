@@ -4,7 +4,10 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, recordScopeParam } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam('purchases'));
+
 
 // جلب فواتير المشتريات
 router.get('/', requirePermission('purchases:view'), async (req, res) => {

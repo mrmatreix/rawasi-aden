@@ -18,7 +18,7 @@ router.get('/', requirePermission('projects:view,projects,accounting:view,accoun
     const conditions = [];
 
     // فلترة نطاق المشاريع المصرح بها للمستخدم (Project Scoping)
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       const allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
       if (!allowedProjects.includes('*') && !allowedProjects.includes('all')) {
         if (allowedProjects.length === 0) {

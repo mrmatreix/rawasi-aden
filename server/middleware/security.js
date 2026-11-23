@@ -584,6 +584,32 @@ const requirePermission = (permissionKey, scopeOptions = null) => {
 };
 
 /**
+ * router.param('id', recordScopeParam(table)): يفحص مشروع السجل المخزَّن نفسه قبل أي مسار يحمل :id
+ * (عرض، تعديل، حذف، اعتماد، ترحيل، عكس). بدونه كان المستخدم المقيّد بمشروع يعدّل أو يحذف سجل مشروع آخر برقمه،
+ * لأن requirePermission لا يرى إلا project_id المرسل في الطلب.
+ * table: اسم جدول ثابت من الكود (لا يأتي من الطلب)، أو دالة (req) => اسم الجدول أو null لتخطي الفحص.
+ * السجل غير الموجود يُترك لمعالج المسار (404)، والسجل العام بلا مشروع يبقى كما هو الآن (مرحلة لاحقة).
+ */
+function recordScopeParam(table) {
+  return async (req, res, next, id) => {
+    try {
+      if (!req.user || req.user.role === 'admin') return next();
+      const tableName = typeof table === 'function' ? table(req) : table;
+      if (!tableName) return next();
+      if (!/^[a-z_]+$/.test(tableName)) throw new Error('invalid scope table');
+      const allowed = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
+      if (allowed.includes('*') || allowed.includes('all')) return next();
+      const row = await require('../database/db').get(`SELECT project_id FROM ${tableName} WHERE id = ?`, [id]);
+      if (!row || row.project_id === null || row.project_id === undefined || row.project_id === '') return next();
+      if (allowed.some(p => Number(p) === Number(row.project_id))) return next();
+      return res.status(403).json({ success: false, scopeDenied: true, scopeType: 'project', message: '⛔ السجل غير موجود أو خارج نطاق صلاحياتك.' });
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
  * وسيط التحقق من النطاق فقط (مشاريع / فروع / أقسام)
  */
 const requireScope = (options = {}) => {
@@ -632,6 +658,7 @@ module.exports = {
   requireAuth,
   requirePermission,
   requireScope,
+  recordScopeParam,
   hasUserPermission,
   isScopedRequestSupervisor,
   canAssignServiceRequests,

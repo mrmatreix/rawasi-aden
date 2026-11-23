@@ -8,7 +8,10 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { openPeriodCondition } = require('../services/operationVisibility');
-const { requirePermission, parseScopeArray, hasUserPermission } = require('../middleware/security');
+const { requirePermission, parseScopeArray, hasUserPermission, recordScopeParam } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam(req => (req.path.startsWith('/transactions/') ? 'payment_transactions' : 'payments')));
+
 const AccountingService = require('../services/accountingService');
 const PaymentService = require('../services/paymentService');
 const { verifyWebhookSignature } = require('../services/webhookSignatureService');
@@ -283,7 +286,7 @@ router.get('/', requirePermission('revenues:view,expenses:view,accounting:view')
     const conditions = [openPeriodCondition('p.date', req.query.include_closed)];
 
     // تطبيق نطاق المشاريع المصرح بها
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       const allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
       if (!allowedProjects.includes('*') && !allowedProjects.includes('all')) {
         if (allowedProjects.length === 0) {
