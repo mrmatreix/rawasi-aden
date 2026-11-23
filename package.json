@@ -37,7 +37,6 @@
     "docx": "^9.7.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.24.4",
     "pdf-lib": "^1.17.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },

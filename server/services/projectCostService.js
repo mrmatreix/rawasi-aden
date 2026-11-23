@@ -28,13 +28,12 @@ const Numbering = require('./numberingService');
 const CashBoxService = require('./cashBoxService');
 const { checkPeriodOpen } = require('./periodService');
 
-const { query, get, run, transaction, getActiveEngine } = db;
+const { query, get, run, transaction } = db;
 
 // الحالات التي تُحتسب ضمن التكلفة (المرحلة + المعتمدة الملتزم بها)
 const COUNTED_EXPENSE_STATUSES = ['posted', 'approved'];
 
 // حماية من تكرار فحص المخطط (تُضبط فقط عند النجاح ليُعاد الفحص عند الفشل)
-let schemaEnsured = false;
 
 /**
  * التأكد من أعمدة الربط (idempotent). يُستدعى خارج المعاملات.
@@ -45,44 +44,8 @@ let schemaEnsured = false;
  * - accounts.215 (الأجور المستحقة — خصوم تحت 2)
  */
 async function ensureSchema() {
-  if (schemaEnsured) return true;
-  const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
-  // SQLite: migration 0006 adds the columns and backfills paid_amount once at boot — no DDL inside a request
-  if (engine !== 'mysql') { schemaEnsured = true; return true; }
-
-  const ensureColumn = async (table, column, sqliteDef, mysqlDef) => {
-    if (engine === 'mysql') {
-      const cols = await query(`SHOW COLUMNS FROM ${table}`);
-      const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
-      if (!names.includes(column)) {
-        await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${mysqlDef}`);
-      }
-    } else {
-      const cols = await query(`PRAGMA table_info(${table})`);
-      const names = (cols || []).map(c => c.name);
-      if (!names.includes(column)) {
-        await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqliteDef}`);
-      }
-    }
-  };
-
-  try {
-    await ensureColumn('expenses', 'source_table', 'TEXT', 'VARCHAR(60) NULL');
-    await ensureColumn('expenses', 'source_id', 'INTEGER', 'INT NULL');
-    await ensureColumn('project_labor_expenses', 'linked_expense_id', 'INTEGER', 'INT NULL');
-    await ensureColumn('project_purchases', 'linked_expense_id', 'INTEGER', 'INT NULL');
-    // SUGGESTION-8: تتبع المسدد للأجور الموقعية + تعبئة القديم حسب حالته
-    await ensureColumn('project_labor_expenses', 'paid_amount', 'REAL DEFAULT NULL', 'REAL DEFAULT NULL');
-    await run(`UPDATE project_labor_expenses SET paid_amount = total_amount WHERE paid_amount IS NULL AND payment_status = 'مدفوع'`);
-    await run(`UPDATE project_labor_expenses SET paid_amount = 0 WHERE paid_amount IS NULL`);
-    // No chart writes here: wages payable resolve through the SALARIES_PAYABLE role (21401001). The old code
-    // inserted a non-standard '215' account directly under '2' on the first request after every start.
-    schemaEnsured = true;
-    return true;
-  } catch (err) {
-    console.warn('⚠️ [ProjectCost] تعذر التأكد من مخطط الربط:', err.message);
-    throw err;
-  }
+  // the cost-link columns and the paid_amount backfill come from migration 0006 at boot (SQLite is the only engine)
+  return true;
 }
 
 /** تنفيذ قراءة عبر tx أو الاتصال العام */

@@ -1,13 +1,12 @@
 /**
  * وحدة إدارة قاعدة البيانات لنظام رواسي عدن للهندسة والمقاولات
- * تدعم محرك MySQL الأساسي عالي الأداء مع برك الاتصال (Connection Pooling)
- * وتدعم الـ Transactions الذرية والتبديل التلقائي الذكي إلى SQLite عند الحاجة
+ * محرك واحد: SQLite (node:sqlite) مع معاملات ذرية عبر SqliteCoordinator.
+ * أُزيل دعم MySQL (2026-11-23): لم يكن يشغّل الترحيلات المرقّمة ولا قواعد الدفتر ولا تغطيه الاختبارات.
  */
 
 const path = require('node:path');
 const fs = require('node:fs');
 const { DatabaseSync, backup } = require('node:sqlite');
-const mysql = require('mysql2/promise');
 const connectionManager = require('./connectionManager');
 
 const configPath = path.join(__dirname, 'config.json');
@@ -34,8 +33,7 @@ function resolveSqlitePath() {
 }
 
 let sqlitePath = resolveSqlitePath();
-let activeEngine = null; // سيتم تحديده عند التهيئة: 'mysql' أو 'sqlite'
-let mysqlPool = null;
+let activeEngine = null; // 'sqlite' once initialised (the only supported engine)
 let sqliteDb = null;
 
 // التأكد من وجود مجلد SQLite
@@ -58,474 +56,17 @@ function initSqliteInstance() {
 }
 
 /**
- * معالج ذكي لمواءمة استعلامات SQL بين MySQL و SQLite
+ * مواءمة صيغ SQL القديمة المكتوبة بلهجة MySQL لتعمل على SQLite
  */
 function normalizeSql(sql, targetEngine) {
   if (!sql || typeof sql !== 'string') return sql;
   let normalized = sql;
 
-  if (targetEngine === 'mysql') {
-    // 1. استبدال INSERT OR IGNORE بـ INSERT IGNORE
-    normalized = normalized.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT IGNORE INTO');
-    // 2. استبدال INSERT OR REPLACE بـ REPLACE INTO
-    normalized = normalized.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'REPLACE INTO');
-    // 3. استبدال ON CONFLICT(key) بـ ON DUPLICATE KEY UPDATE
-    normalized = normalized.replace(/ON\s+CONFLICT\s*\(\s*`?key`?\s*\)\s*DO\s+UPDATE\s+SET\s+value\s*=\s*excluded\.value/gi,
-      'ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)');
-    // 4. استبدال MAX(0, expr) بـ GREATEST(0, expr)
-    normalized = normalized.replace(/MAX\s*\(\s*0\s*,\s*([^)]+)\)/gi, 'GREATEST(0, $1)');
-    // 5. تغليف حقل key المحجوز بـ backticks إذا كان في جدول settings
-    normalized = normalized.replace(/\bsettings\s*\(\s*key\s*,/gi, 'settings (`key`,');
-    normalized = normalized.replace(/\bWHERE\s+key\s*=/gi, 'WHERE `key` =');
-  } else {
-    // في حالة SQLite
-    normalized = normalized.replace(/GREATEST\s*\(\s*0\s*,\s*([^)]+)\)/gi, 'MAX(0, $1)');
-    normalized = normalized.replace(/INSERT\s+IGNORE\s+INTO/gi, 'INSERT OR IGNORE INTO');
-  }
+  // queries written in MySQL dialect by older code still run on SQLite
+  normalized = normalized.replace(/GREATEST\s*\(\s*0\s*,\s*([^)]+)\)/gi, 'MAX(0, $1)');
+  normalized = normalized.replace(/INSERT\s+IGNORE\s+INTO/gi, 'INSERT OR IGNORE INTO');
 
   return normalized;
-}
-
-/**
- * الاتصال بمحرك MySQL مع إنشاء قاعدة البيانات والجداول تلقائياً إن لم تكن موجودة
- */
-async function initMysql() {
-  const mysqlCfg = appConfig.mysql;
-  console.log(`📡 [Rawasi DB] Checking MySQL connection on ${mysqlCfg.host}:${mysqlCfg.port}...`);
-
-  // 1. الاتصال بدون تحديد اسم قاعدة البيانات لضمان إنشائها أولاً
-  let initConn;
-  try {
-    initConn = await mysql.createConnection({
-      host: mysqlCfg.host,
-      port: mysqlCfg.port,
-      user: mysqlCfg.user,
-      password: mysqlCfg.password,
-      connectTimeout: 4000
-    });
-
-    if (!runtime.isProd) await initConn.query(`CREATE DATABASE IF NOT EXISTS \`${mysqlCfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
-    await initConn.end();
-  } catch (err) {
-    throw new Error(`MySQL connection failed: ${err.message}`);
-  }
-
-  // 2. إنشاء بركة الاتصال (Connection Pool)
-  mysqlPool = mysql.createPool({
-    host: mysqlCfg.host,
-    port: mysqlCfg.port,
-    user: mysqlCfg.user,
-    password: mysqlCfg.password,
-    database: mysqlCfg.database,
-    waitForConnections: mysqlCfg.waitForConnections !== false,
-    connectionLimit: mysqlCfg.connectionLimit || 20,
-    queueLimit: mysqlCfg.queueLimit || 0,
-    multipleStatements: true,
-    charset: 'utf8mb4_unicode_ci'
-  });
-
-  // فحص الاتصال بالبركة
-  const testConn = await mysqlPool.getConnection();
-  testConn.release();
-
-  // 3. التحقق من وجود الجداول وتطبيق schema_mysql.sql إن كانت جديدة
-  const [rows] = await mysqlPool.query("SHOW TABLES LIKE 'users'");
-  if (!rows || rows.length === 0) {
-    if (!runtime.isDev) throw new Error('Existing MySQL schema required; run approved migrations separately');
-    console.log('🌱 [Rawasi DB] New MySQL database detected - Initializing 31 tables...');
-    const schemaMysqlPath = path.join(__dirname, 'schema_mysql.sql');
-    if (fs.existsSync(schemaMysqlPath)) {
-      const schemaSql = fs.readFileSync(schemaMysqlPath, 'utf8');
-      await mysqlPool.query(schemaSql);
-    }
-  }
-
-  // 4. التحقق من وجود المستخدم الرئيسي الافتراضي في MySQL
-  const [userCountRows] = await mysqlPool.query("SELECT count(*) as count FROM users");
-  if ((!userCountRows || userCountRows[0].count === 0) && runtime.isDev && process.env.ALLOW_DEMO_SEED === 'true') {
-    console.log('👤 تهيئة حسابات الإدارة الافتراضية في MySQL...');
-    const bcrypt = require('bcryptjs');
-    const salt = bcrypt.genSaltSync(10);
-    const adminHash = bcrypt.hashSync('admin123', salt);
-    const accountantHash = bcrypt.hashSync('account123', salt);
-
-    await mysqlPool.query(`
-      INSERT IGNORE INTO roles (id, name, display_name, permissions) VALUES 
-      (1, 'admin', 'المدير العام', 'all'),
-      (2, 'accountant', 'المحاسب المالي', 'accounting,reports,payments,billing,expenses,revenues,custody,clients,suppliers,cash'),
-      (3, 'project_manager', 'مدير المشاريع', 'projects,inventory,expenses'),
-      (4, 'storekeeper', 'أمين المخزن', 'inventory,items'),
-      (5, 'auditor', 'المراجع والمدقق المالي', 'accounting:view,accounting:approve,accounting:post,accounting:export,reports:view,reports:export,expenses:view,expenses:approve,revenues:view,revenues:approve,billing:view,billing:approve,custody:view,custody:approve,projects:view,projects:export,inventory:view,purchases:view,purchases:approve,hr:view,hr:approve,cash:view');
-    `);
-
-    await mysqlPool.query(`
-      INSERT INTO users (username, password_hash, full_name, role_id, role, email, phone, status)
-      VALUES 
-      ('admin', ?, 'المدير العام', 1, 'admin', 'aalwi@engineer.com', '772332164', 'active'),
-      ('accountant', ?, 'المحاسب المالي', 2, 'accountant', 'accountant@rawasiaden.com', '781278157', 'active');
-    `, [adminHash, accountantHash]);
-
-    await mysqlPool.query(`
-      INSERT INTO settings (\`key\`, \`value\`, description) VALUES 
-      ('company_name', 'رواسي عدن للهندسة والمقاولات', 'اسم الشركة بالعربي'),
-      ('company_name_en', 'Rawasi Aden for Engineering & Contracting', 'اسم الشركة بالإنجليزي'),
-      ('slogan', 'نبني الحاضر لنستثمر المستقبل', 'شعار الشركة اللفظي'),
-      ('phone1', '772332164', 'رقم الهاتف الرئيسي'),
-      ('phone2', '781278157', 'رقم الهاتف الإضافي'),
-      ('email', 'aalwi@engineer.com', 'البريد الإلكتروني'),
-      ('address', 'عدن - إنماء الجديدة - خلف القطيبي', 'عنوان المركز الرئيسي'),
-      ('currency', 'ر.ي', 'العملة الافتراضية')
-      ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`);
-    `);
-  }
-
-  // فحص حقل active_sessions و security_settings في جدول users في MySQL
-  try {
-    const [cols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'active_sessions'");
-    if (!cols || cols.length === 0) {
-      await mysqlPool.query("ALTER TABLE users ADD COLUMN active_sessions TEXT NULL");
-    }
-  } catch {}
-  try {
-    const [secCols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'security_settings'");
-    if (!secCols || secCols.length === 0) {
-      await mysqlPool.query("ALTER TABLE users ADD COLUMN security_settings TEXT NULL");
-    }
-  } catch {}
-  try {
-    const [pinCols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'two_factor_pin'");
-    if (!pinCols || pinCols.length === 0) {
-      await mysqlPool.query("ALTER TABLE users ADD COLUMN two_factor_pin VARCHAR(20) DEFAULT '123456'");
-    }
-  } catch {}
-  try {
-    const [tfaCols] = await mysqlPool.query("SHOW COLUMNS FROM users LIKE 'two_factor_enabled'");
-    if (!tfaCols || tfaCols.length === 0) {
-      await mysqlPool.query("ALTER TABLE users ADD COLUMN two_factor_enabled TINYINT(1) DEFAULT 1");
-    }
-  } catch {}
-
-  // ترقية جداول MySQL التلقائية لمراكز التكلفة والشيكات والعهد
-  try {
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS cost_centers (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        code VARCHAR(50) UNIQUE NOT NULL,
-        name VARCHAR(200) NOT NULL,
-        type VARCHAR(100) DEFAULT 'مشروع',
-        project_id INT NULL,
-        status VARCHAR(50) DEFAULT 'active',
-        notes TEXT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    const [ccCount] = await mysqlPool.query("SELECT count(*) as count FROM cost_centers");
-    if (!ccCount || ccCount[0].count === 0) {
-      await mysqlPool.query(`
-        INSERT IGNORE INTO cost_centers (code, name, type, notes) VALUES
-        ('CC-100', 'الإدارة العامة والمصروفات المشتركة', 'إدارة عامة', 'مركز تكلفة الإدارة الرئيسية والمصروفات العمومية'),
-        ('CC-200', 'المعدات والآليات والتشغيل الميداني', 'معدات وآليات', 'مركز تكلفة المحروقات وصيانة المعدات');
-      `);
-      await mysqlPool.query(`
-        INSERT IGNORE INTO cost_centers (code, name, type, project_id, notes)
-        SELECT CONCAT('CC-', LPAD(id, 3, '0')), name, 'مشروع', id, 'مركز تكلفة خاص بالمشروع'
-        FROM projects;
-      `);
-    }
-
-    const checkAndAddCol = async (table, col, def) => {
-      const [cols] = await mysqlPool.query(`SHOW COLUMNS FROM \`${table}\` LIKE '${col}'`);
-      if (!cols || cols.length === 0) {
-        await mysqlPool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${def}`);
-      }
-    };
-
-    await require('../services/partyRegistryService').initializePartyRegistry({query: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0], run: async (sql,params=[]) => (await mysqlPool.query(sql,params))[0]}, true);
-    await checkAndAddCol('clients', 'account_id', 'INT NULL');
-    await checkAndAddCol('accounts', 'default_cost_center_id', 'INT NULL');
-    const [centerPolicyCols] = await mysqlPool.query("SHOW COLUMNS FROM accounts LIKE 'cost_center_required'");
-    if (!centerPolicyCols.length) {
-      await mysqlPool.query('ALTER TABLE accounts ADD COLUMN cost_center_required INT NOT NULL DEFAULT 0');
-      await mysqlPool.query('UPDATE accounts SET cost_center_required = 1 WHERE default_cost_center_id IS NOT NULL');
-    }
-    await checkAndAddCol('accounts', 'analytical_type', "VARCHAR(30) NOT NULL DEFAULT 'general'");
-    await mysqlPool.query(`CREATE TABLE IF NOT EXISTS supporting_documents (
-      id INT AUTO_INCREMENT PRIMARY KEY, entity_type VARCHAR(20) NOT NULL, entity_id INT NOT NULL,
-      file_name VARCHAR(200) NOT NULL, mime_type VARCHAR(150) NOT NULL, size_bytes INT NOT NULL,
-      content_base64 LONGTEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_supporting_entity (entity_type, entity_id))`);
-    await checkAndAddCol('suppliers', 'account_id', 'INT NULL');
-    await mysqlPool.query(`
-      UPDATE clients c
-      JOIN accounts a ON a.code = '12301001'
-      SET c.account_id = a.id
-      WHERE c.account_id IS NULL
-    `);
-    await mysqlPool.query(`
-      UPDATE suppliers s
-      JOIN accounts a ON a.code = '22101001'
-      SET s.account_id = a.id
-      WHERE s.account_id IS NULL
-    `);
-
-    await checkAndAddCol('expenses', 'account_id', 'INT NULL');
-    await checkAndAddCol('expenses', 'reference_no', 'VARCHAR(255) NULL');
-    await checkAndAddCol('expenses', 'settlement_account_id', 'INT NULL');
-    await checkAndAddCol('expenses', 'cost_center_id', 'INT NULL');
-    await checkAndAddCol('expenses', 'check_no', 'VARCHAR(100) NULL');
-    await checkAndAddCol('expenses', 'bank_name', 'VARCHAR(150) NULL');
-
-    await checkAndAddCol('payments', 'account_id', 'INT NULL');
-    await checkAndAddCol('payments', 'settlement_account_id', 'INT NULL');
-    await checkAndAddCol('payments', 'cost_center_id', 'INT NULL');
-    await checkAndAddCol('payments', 'check_no', 'VARCHAR(100) NULL');
-    await checkAndAddCol('payments', 'bank_name', 'VARCHAR(150) NULL');
-
-    await checkAndAddCol('journal_entry_lines', 'cost_center_id', 'INT NULL');
-    await checkAndAddCol('journal_entries', 'reference_no', 'VARCHAR(255) NULL');
-
-    await checkAndAddCol('custodies', 'custody_no', 'VARCHAR(100) NULL');
-    await checkAndAddCol('custodies', 'employee_id', 'INT NULL');
-    await checkAndAddCol('custodies', 'employee_no', 'VARCHAR(50) NULL');
-    await checkAndAddCol('custodies', 'related_custody_id', 'INT NULL');
-    await checkAndAddCol('custodies', 'related_custody_no', 'VARCHAR(100) NULL');
-    await checkAndAddCol('custodies', 'status', 'VARCHAR(50) DEFAULT \'مفتوحة\'');
-    await checkAndAddCol('custodies', 'project_id', 'INT NULL');
-    await checkAndAddCol('custodies', 'account_id', 'INT NULL');
-    await checkAndAddCol('custodies', 'account_code', 'VARCHAR(50) NULL');
-    await checkAndAddCol('custodies', 'account_name', 'VARCHAR(255) NULL');
-    await checkAndAddCol('custodies', 'payment_method', 'VARCHAR(50) DEFAULT \'نقدي\'');
-
-    await checkAndAddCol('payroll', 'journal_entry_id', 'INT NULL');
-
-    // مواءمة أعمدة القيود والسندات والمشاريع والعقود والموارد البشرية في MySQL
-    await checkAndAddCol('journal_entries', 'status', "VARCHAR(50) DEFAULT 'posted'");
-    await checkAndAddCol('journal_entries', 'created_by', 'INT NULL');
-    await checkAndAddCol('journal_entries', 'created_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('journal_entries', 'reviewed_by', 'INT NULL');
-    await checkAndAddCol('journal_entries', 'reviewed_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('journal_entries', 'reviewed_at', 'DATETIME NULL');
-    await checkAndAddCol('journal_entries', 'review_notes', 'TEXT NULL');
-    await checkAndAddCol('journal_entries', 'approved_by', 'INT NULL');
-    await checkAndAddCol('journal_entries', 'approved_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('journal_entries', 'approved_at', 'DATETIME NULL');
-    await checkAndAddCol('journal_entries', 'approval_notes', 'TEXT NULL');
-    await checkAndAddCol('journal_entries', 'posted_by', 'INT NULL');
-    await checkAndAddCol('journal_entries', 'posted_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('journal_entries', 'posted_at', 'DATETIME NULL');
-    await checkAndAddCol('journal_entries', 'reversed_by', 'INT NULL');
-    await checkAndAddCol('journal_entries', 'reversed_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('journal_entries', 'reversed_at', 'DATETIME NULL');
-    await checkAndAddCol('journal_entries', 'reversal_reason', 'TEXT NULL');
-    await checkAndAddCol('journal_entries', 'reversal_ref_id', 'INT NULL');
-
-    await checkAndAddCol('payments', 'status', "VARCHAR(50) DEFAULT 'posted'");
-    await checkAndAddCol('payments', 'contract_id', 'INT NULL');
-    await checkAndAddCol('payments', 'bill_id', 'INT NULL');
-    await checkAndAddCol('payments', 'receipt_category', "VARCHAR(50) DEFAULT 'general'");
-    await checkAndAddCol('payments', 'exchange_rate', 'DECIMAL(12,4) DEFAULT 1.0');
-    await checkAndAddCol('payments', 'local_amount', 'DECIMAL(15,2) DEFAULT 0');
-    await checkAndAddCol('payments', 'payment_no', 'VARCHAR(100) NULL');
-    await checkAndAddCol('payments', 'payment_method_id', 'INT NULL');
-    await checkAndAddCol('payments', 'financial_account_id', 'INT NULL');
-    await checkAndAddCol('payments', 'idempotency_key', 'VARCHAR(255) NULL');
-    await checkAndAddCol('payments', 'external_transaction_id', 'VARCHAR(255) NULL');
-    await checkAndAddCol('payments', 'gateway_name', 'VARCHAR(100) NULL');
-    await checkAndAddCol('payments', 'fee_amount', 'DECIMAL(15,2) DEFAULT 0');
-    await checkAndAddCol('payments', 'net_amount', 'DECIMAL(15,2) DEFAULT 0');
-    await checkAndAddCol('payments', 'source_type', "VARCHAR(50) DEFAULT 'RECEIPT_VOUCHER'");
-    await checkAndAddCol('payments', 'source_id', 'INT NULL');
-    await checkAndAddCol('payments', 'refunded_amount', 'DECIMAL(15,2) DEFAULT 0');
-    await checkAndAddCol('payments', 'supplier_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('payments', 'created_by', 'INT NULL');
-    await checkAndAddCol('payments', 'created_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('payments', 'reviewed_by', 'INT NULL');
-    await checkAndAddCol('payments', 'reviewed_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('payments', 'reviewed_at', 'DATETIME NULL');
-    await checkAndAddCol('payments', 'review_notes', 'TEXT NULL');
-    await checkAndAddCol('payments', 'approved_by', 'INT NULL');
-    await checkAndAddCol('payments', 'approved_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('payments', 'approved_at', 'DATETIME NULL');
-    await checkAndAddCol('payments', 'approval_notes', 'TEXT NULL');
-    await checkAndAddCol('payments', 'posted_by', 'INT NULL');
-    await checkAndAddCol('payments', 'posted_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('payments', 'posted_at', 'DATETIME NULL');
-    await checkAndAddCol('payments', 'reversed_by', 'INT NULL');
-    await checkAndAddCol('payments', 'reversed_by_name', 'VARCHAR(150) NULL');
-    await checkAndAddCol('payments', 'reversed_at', 'DATETIME NULL');
-    await checkAndAddCol('payments', 'reversal_reason', 'TEXT NULL');
-    await checkAndAddCol('payments', 'reversal_ref_id', 'INT NULL');
-
-    await checkAndAddCol('project_contracts', 'signing_date', 'VARCHAR(50) NULL');
-    await checkAndAddCol('projects', 'location', 'VARCHAR(255) NULL');
-    await checkAndAddCol('projects', 'description', 'TEXT NULL');
-    await checkAndAddCol('leave_types', 'days_per_year', 'INT DEFAULT 30');
-    await checkAndAddCol('leave_types', 'description', 'TEXT NULL');
-    await checkAndAddCol('employee_advances', 'request_date', 'DATE NULL');
-    await checkAndAddCol('employee_advances', 'reason', 'TEXT NULL');
-    await checkAndAddCol('employee_evaluations', 'bonuses', 'DECIMAL(15,2) DEFAULT 0');
-    await checkAndAddCol('employee_evaluations', 'deductions', 'DECIMAL(15,2) DEFAULT 0');
-    await checkAndAddCol('employee_evaluations', 'evaluator', 'VARCHAR(150) NULL');
-    await checkAndAddCol('employee_evaluations', 'comments', 'TEXT NULL');
-    await checkAndAddCol('project_labor_expenses', 'paid_amount', 'DECIMAL(15,2) DEFAULT 0');
-
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS currencies (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        code VARCHAR(10) NOT NULL UNIQUE,
-        name VARCHAR(100) NOT NULL,
-        symbol VARCHAR(20) NOT NULL,
-        rate_to_base DECIMAL(12,4) DEFAULT 1.0,
-        is_base TINYINT(1) DEFAULT 0,
-        status VARCHAR(50) DEFAULT 'active',
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    await mysqlPool.query(`
-      INSERT IGNORE INTO currencies (code, name, symbol, rate_to_base, is_base, status) VALUES
-      ('YER', 'ريال يمني', 'ر.ي', 1.0, 1, 'active'),
-      ('SAR', 'ريال سعودي', 'ر.س', 535.0, 0, 'active'),
-      ('USD', 'دولار أمريكي', '$', 2040.0, 0, 'active');
-    `);
-
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS leave_types (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL UNIQUE,
-        days_allowed INT DEFAULT 30,
-        is_paid TINYINT(1) DEFAULT 1,
-        notes TEXT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    await mysqlPool.query(`
-      INSERT IGNORE INTO leave_types (name, days_allowed, is_paid, notes) VALUES
-      ('إجازة سنوية اعتيادية', 30, 1, 'رصيد سنوي مدفوع الأجر بالكامل'),
-      ('إجازة مرضية', 15, 1, 'بتقرير طبي معتمد مدفوعة الأجر'),
-      ('إجازة طارئة وعارضة', 6, 1, 'إجازة ظروف طارئة مقتطعة من الرصيد'),
-      ('إجازة بدون راتب', 90, 0, 'إجازة خاصة غير مدفوعة'),
-      ('إجازة حج وعمرة', 15, 1, 'تمنح لمرة واحدة طوال الخدمة');
-    `);
-
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS employee_evaluations (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        employee_id INT NOT NULL,
-        evaluator_name VARCHAR(150) NULL,
-        period VARCHAR(100) NOT NULL,
-        evaluation_date DATE NOT NULL,
-        score DECIMAL(5,2) DEFAULT 100,
-        rating VARCHAR(50) DEFAULT 'ممتاز',
-        strengths TEXT NULL,
-        improvements TEXT NULL,
-        recommendations TEXT NULL,
-        notes TEXT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    // جداول بوابة وتطبيق العملاء في MySQL
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS client_users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        client_id INT NOT NULL,
-        email VARCHAR(191) NOT NULL UNIQUE,
-        phone VARCHAR(50) NULL,
-        password_hash TEXT NOT NULL,
-        full_name VARCHAR(150) NOT NULL,
-        role VARCHAR(30) DEFAULT 'viewer',
-        permissions TEXT NULL,
-        status VARCHAR(20) DEFAULT 'active',
-        two_factor_enabled TINYINT(1) DEFAULT 1,
-        two_factor_pin VARCHAR(20) DEFAULT '123456',
-        otp_code VARCHAR(10) NULL,
-        otp_expires_at DATETIME NULL,
-        last_login_at DATETIME NULL,
-        last_login_ip VARCHAR(50) NULL,
-        device_token TEXT NULL,
-        device_platform VARCHAR(20) NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS client_project_access (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        client_user_id INT NOT NULL,
-        project_id INT NOT NULL,
-        can_view_progress TINYINT(1) DEFAULT 1,
-        can_view_invoices TINYINT(1) DEFAULT 1,
-        can_view_payments TINYINT(1) DEFAULT 1,
-        can_view_reports TINYINT(1) DEFAULT 1,
-        can_view_drawings TINYINT(1) DEFAULT 1,
-        can_view_correspondence TINYINT(1) DEFAULT 1,
-        can_approve_invoices TINYINT(1) DEFAULT 0,
-        can_send_messages TINYINT(1) DEFAULT 1,
-        granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        granted_by INT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_client_proj (client_user_id, project_id),
-        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS client_notifications (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        client_user_id INT NOT NULL,
-        project_id INT NULL,
-        type VARCHAR(50) NOT NULL,
-        title VARCHAR(200) NOT NULL,
-        body TEXT NOT NULL,
-        reference_type VARCHAR(50) NULL,
-        reference_id INT NULL,
-        is_read TINYINT(1) DEFAULT 0,
-        sent_via_push TINYINT(1) DEFAULT 0,
-        sent_at DATETIME NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    await mysqlPool.query(`
-      CREATE TABLE IF NOT EXISTS client_messages (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        client_user_id INT NOT NULL,
-        project_id INT NULL,
-        direction VARCHAR(20) DEFAULT 'outgoing',
-        subject VARCHAR(200) NOT NULL,
-        body TEXT NOT NULL,
-        attachment_url TEXT NULL,
-        priority VARCHAR(20) DEFAULT 'normal',
-        status VARCHAR(20) DEFAULT 'open',
-        replied_by INT NULL,
-        reply_body TEXT NULL,
-        replied_at DATETIME NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE,
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-
-    await checkAndAddCol('bills', 'client_approval_status', "VARCHAR(30) DEFAULT 'pending'");
-    await checkAndAddCol('bills', 'client_approved_at', 'DATETIME NULL');
-    await checkAndAddCol('bills', 'client_approval_notes', 'TEXT NULL');
-    await checkAndAddCol('bills', 'client_approved_by_id', 'INT NULL');
-  } catch (err) {
-    console.warn('Accounting migration note (MySQL):', err.message);
-  }
-
-  activeEngine = 'mysql';
-  console.log(`🐬 [Rawasi DB] MySQL engine active! Connected to [${mysqlCfg.database}] on ${mysqlCfg.host}:${mysqlCfg.port}`);
 }
 
 /**
@@ -2721,24 +2262,19 @@ function initSqlite() {
 // أعمدة أمان حسابات العملاء المضافة بعد إنشاء الجدول الأصلي:
 // session_version لإلغاء الجلسات، و otp_failed_count / otp_locked_until لقفل التحقق الدائم (لا يُمسح بإعادة التشغيل)
 const CLIENT_SECURITY_COLUMNS = [
-  { name: 'session_version', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
-  { name: 'otp_failed_count', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
-  { name: 'otp_locked_until', mysql: 'VARCHAR(40) NULL', sqlite: 'TEXT' }
+  { name: 'session_version', sqlite: 'INTEGER DEFAULT 0' },
+  { name: 'otp_failed_count', sqlite: 'INTEGER DEFAULT 0' },
+  { name: 'otp_locked_until', sqlite: 'TEXT' }
 ].map(col => ({ ...col, table: 'client_users' })).concat([
   // قفل دخول الموظفين على مستوى الحساب (كلمة المرور + رمز 2FA + فك القفل) محفوظ في القاعدة
-  { table: 'users', name: 'failed_login_count', mysql: 'INT DEFAULT 0', sqlite: 'INTEGER DEFAULT 0' },
-  { table: 'users', name: 'login_locked_until', mysql: 'VARCHAR(40) NULL', sqlite: 'TEXT' }
+  { table: 'users', name: 'failed_login_count', sqlite: 'INTEGER DEFAULT 0' },
+  { table: 'users', name: 'login_locked_until', sqlite: 'TEXT' }
 ]);
 
 async function ensureClientSessionColumn() {
   for (const col of CLIENT_SECURITY_COLUMNS) {
     try {
-      if (activeEngine === 'mysql' && mysqlPool) {
-        const [cols] = await mysqlPool.query(`SHOW COLUMNS FROM ${col.table} LIKE ?`, [col.name]);
-        if (!cols || cols.length === 0) {
-          await mysqlPool.query(`ALTER TABLE ${col.table} ADD COLUMN ${col.name} ${col.mysql}`);
-        }
-      } else if (sqliteDb) {
+      if (sqliteDb) {
         const cols = sqliteDb.prepare(`PRAGMA table_info(${col.table})`).all().map(c => c.name);
         if (cols.length && !cols.includes(col.name)) {
           sqliteDb.exec(`ALTER TABLE ${col.table} ADD COLUMN ${col.name} ${col.sqlite};`);
@@ -2762,52 +2298,24 @@ async function initializeDatabase() {
     databaseState = 'starting';
     appConfig = loadConfig();
     try {
-      if (appConfig.dbEngine === 'mysql') await initMysql();
-      else initSqlite();
-      if (activeEngine === 'mysql') {
-        await mysqlPool.query(`CREATE TABLE IF NOT EXISTS service_request_quotes (
-          id INTEGER PRIMARY KEY AUTO_INCREMENT, request_id INTEGER NOT NULL,
-          version INTEGER NOT NULL, details TEXT NOT NULL, duration VARCHAR(200) NOT NULL,
-          amount DECIMAL(15,2) NOT NULL, currency VARCHAR(10) NOT NULL, state VARCHAR(30) NOT NULL,
-          created_by INTEGER NOT NULL, approved_by INTEGER, approved_at DATETIME,
-          client_response TEXT, client_responded_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE KEY request_version (request_id, version)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-        await mysqlPool.query(`CREATE TABLE IF NOT EXISTS service_request_events (
-          id INTEGER PRIMARY KEY AUTO_INCREMENT, request_id INTEGER NOT NULL,
-          actor_type VARCHAR(30) NOT NULL, actor_id INTEGER, event_type VARCHAR(50) NOT NULL,
-          message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, INDEX(request_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+      if (appConfig.dbEngine && appConfig.dbEngine !== 'sqlite') {
+        throw Object.assign(new Error(`محرك قاعدة البيانات "${appConfig.dbEngine}" غير مدعوم: النظام يعمل على SQLite فقط. احذف DB_ENGINE أو اضبطه على sqlite.`), { code: 'UNSUPPORTED_DB_ENGINE' });
       }
+      initSqlite();
       // Cash-flow screens must work on both new and existing databases.
       const cashFlowSchema = fs.readFileSync(path.join(__dirname, 'migration_cash_flow.sql'), 'utf8');
-      if (activeEngine === 'sqlite') sqliteDb.exec(cashFlowSchema);
-      else {
-        const tables = cashFlowSchema.replace(/--[^\n]*/g, '').split(';').filter(sql => /^\s*CREATE TABLE/i.test(sql));
-        for (const sql of tables) await mysqlPool.query(sql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'INTEGER PRIMARY KEY AUTO_INCREMENT'));
-      }
+      sqliteDb.exec(cashFlowSchema);
       const projectSetupSchema = fs.readFileSync(path.join(__dirname, 'migration_project_setup.sql'), 'utf8');
-      if (activeEngine === 'sqlite') {
-        sqliteDb.exec(projectSetupSchema);
-        if (!sqliteDb.prepare('PRAGMA table_info(project_boq)').all().some(column => column.name === 'work_item_id')) sqliteDb.exec('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
-      } else {
-        await mysqlPool.query(projectSetupSchema.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'INTEGER PRIMARY KEY AUTO_INCREMENT'));
-        const [columns] = await mysqlPool.query("SHOW COLUMNS FROM project_boq LIKE 'work_item_id'");
-        if (!columns.length) await mysqlPool.query('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
-      }
-      if (activeEngine === 'sqlite') {
-        const ran = require('./migrations').runMigrations(sqliteDb);
-        if (ran.length) console.log(`✅ [Rawasi DB] Schema migrations applied: ${ran.join(', ')}`);
-        seedSystemAccountMappings(sqliteDb);
-        assertCleanBoot();
-      } else {
-        console.warn('⚠️ [Rawasi DB] MySQL engine is not supported since the ledger hardening (stages 1-4): triggers, roles, party columns and migrations exist only for SQLite.');
-      }
+      sqliteDb.exec(projectSetupSchema);
+      if (!sqliteDb.prepare('PRAGMA table_info(project_boq)').all().some(column => column.name === 'work_item_id')) sqliteDb.exec('ALTER TABLE project_boq ADD COLUMN work_item_id INTEGER');
+      const ran = require('./migrations').runMigrations(sqliteDb);
+      if (ran.length) console.log(`✅ [Rawasi DB] Schema migrations applied: ${ran.join(', ')}`);
+      seedSystemAccountMappings(sqliteDb);
+      assertCleanBoot();
       await ensureClientSessionColumn();
       databaseState = 'ready'; databaseError = null;
     } catch (error) {
       databaseState = 'failed'; databaseError = error;
-      if (mysqlPool) { await mysqlPool.end().catch(() => {}); mysqlPool = null; }
       activeEngine = null;
       throw error;
     }
@@ -2847,7 +2355,6 @@ async function ensureReady() {
 async function closeDatabase() {
   databaseState = 'closing';
   await sqliteCoordinator.drain();
-  if (mysqlPool) { await mysqlPool.end(); mysqlPool = null; }
   if (sqliteDb) { sqliteDb.close(); sqliteDb = null; }
   databaseState = 'closed'; activeEngine = null;
 }
@@ -2862,15 +2369,6 @@ async function query(sql, params = []) {
   await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
 
-  if (activeEngine === 'mysql' && mysqlPool) {
-    try {
-      const [rows] = await mysqlPool.query(targetSql, params);
-      return rows;
-    } catch (err) {
-      throw err;
-    }
-  }
-
   initSqliteInstance();
   return sqliteCoordinator.execute(() => sqliteDb.prepare(targetSql).all(...params));
 }
@@ -2881,15 +2379,6 @@ async function query(sql, params = []) {
 async function get(sql, params = []) {
   await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
-
-  if (activeEngine === 'mysql' && mysqlPool) {
-    try {
-      const [rows] = await mysqlPool.query(targetSql, params);
-      return (rows && rows.length > 0) ? rows[0] : null;
-    } catch (err) {
-      throw err;
-    }
-  }
 
   initSqliteInstance();
   return sqliteCoordinator.execute(() => sqliteDb.prepare(targetSql).get(...params) || null);
@@ -2902,21 +2391,6 @@ async function get(sql, params = []) {
 async function run(sql, params = []) {
   await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
-
-  if (activeEngine === 'mysql' && mysqlPool) {
-    try {
-      const [result] = await mysqlPool.query(targetSql, params);
-      return {
-        lastInsertRowid: result.insertId,
-        insertId: result.insertId,
-        lastID: result.insertId,
-        changes: result.affectedRows,
-        affectedRows: result.affectedRows
-      };
-    } catch (err) {
-      throw err;
-    }
-  }
 
   initSqliteInstance();
   return sqliteCoordinator.execute(() => {
@@ -2938,9 +2412,6 @@ async function run(sql, params = []) {
 async function exec(sql) {
   await ensureReady();
   const targetSql = normalizeSql(sql, activeEngine);
-  if (activeEngine === 'mysql' && mysqlPool) {
-    return mysqlPool.query(targetSql);
-  }
   initSqliteInstance();
   return sqliteCoordinator.execute(() => sqliteDb.exec(targetSql));
 }
@@ -2996,49 +2467,10 @@ function unbalancedLedgerError(entryNo) {
 }
 
 /**
- * تنفيذ معاملة مالية ذرية (Atomic Transaction) تدعم كلاً من MySQL و SQLite
+ * تنفيذ معاملة مالية ذرية (Atomic Transaction) على SQLite
  */
 async function transaction(callback) {
   await ensureReady();
-  if (activeEngine === 'mysql' && mysqlPool) {
-    const connection = await mysqlPool.getConnection();
-    await connection.beginTransaction();
-    try {
-      const [[ledgerStart]] = await connection.query('SELECT COALESCE(MAX(id), 0) AS id FROM journal_entries');
-      // توفير دوال تنفيذ محلية تابعة لنفس الاتصال المعزول
-      const tx = {
-        query: async (sql, params = []) => {
-          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), params);
-          return rows;
-        },
-        get: async (sql, params = []) => {
-          const [rows] = await connection.query(normalizeSql(sql, 'mysql'), params);
-          return (rows && rows.length > 0) ? rows[0] : null;
-        },
-        run: async (sql, params = []) => {
-          const [res] = await connection.query(normalizeSql(sql, 'mysql'), params);
-          return {
-            lastInsertRowid: res.insertId,
-            insertId: res.insertId,
-            changes: res.affectedRows,
-            affectedRows: res.affectedRows
-          };
-        }
-      };
-
-      const result = await callback(tx);
-      const [unbalanced] = await connection.query(UNBALANCED_NEW_ENTRIES_SQL, [ledgerStart.id]);
-      if (unbalanced.length) throw unbalancedLedgerError(unbalanced[0].entry_no);
-      await connection.commit();
-      return result;
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
-  }
-
   // في حالة SQLite
   initSqliteInstance();
   return sqliteCoordinator.execute(async () => {
@@ -3234,13 +2666,8 @@ function getActiveEngine() {
   return activeEngine;
 }
 
-function getMysqlConfig() {
-  return appConfig.mysql;
-}
-
 module.exports = {
   get db() { return sqliteDb; },
-  get mysqlPool() { return mysqlPool; },
   ready, closeDatabase, getDatabaseState, getBootIssues,
   query,
   get,
@@ -3254,7 +2681,6 @@ module.exports = {
   createLogoutBackup,
   listLogoutBackups,
   getActiveEngine,
-  getMysqlConfig,
   connectionManager,
   dbPath: sqlitePath
 };

@@ -11,45 +11,15 @@
 
 const db = require('../database/db');
 
-const { query, get, run, getActiveEngine } = db;
+const { query, get, run } = db;
 
-let schemaEnsured = false;
 
 /**
  * التأكد من عمود التقسيم (idempotent). يُستدعى خارج المعاملات وعند الإقلاع.
  */
 async function ensureSchema() {
-  if (schemaEnsured) return true;
-  const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
-  // SQLite: migration 0006 creates the column and index at boot — no DDL inside a request
-  if (engine !== 'mysql') { schemaEnsured = true; return true; }
-
-  try {
-    if (engine === 'mysql') {
-      const cols = await query('SHOW COLUMNS FROM cash_movements');
-      const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
-      if (!names.includes('project_id')) {
-        await run('ALTER TABLE cash_movements ADD COLUMN project_id INT NULL');
-      }
-      try {
-        await run('CREATE INDEX idx_cash_box ON cash_movements (project_id, id)');
-      } catch {}
-    } else {
-      const cols = await query('PRAGMA table_info(cash_movements)');
-      const names = (cols || []).map(c => c.name);
-      if (!names.includes('project_id')) {
-        await run('ALTER TABLE cash_movements ADD COLUMN project_id INTEGER');
-      }
-      try {
-        await run('CREATE INDEX IF NOT EXISTS idx_cash_box ON cash_movements (project_id, id)');
-      } catch {}
-    }
-    schemaEnsured = true;
-    return true;
-  } catch (err) {
-    console.warn('⚠️ [CashBox] تعذر التأكد من مخطط الصناديق:', err.message);
-    throw err;
-  }
+  // cash_movements.project_id and idx_cash_box come from migration 0006 at boot (SQLite is the only engine)
+  return true;
 }
 
 /** الشرط المحمول للمطابقة مع NULL على المحركين (IFNULL مدعوم في SQLite وMySQL).
