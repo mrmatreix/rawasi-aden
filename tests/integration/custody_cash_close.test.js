@@ -54,6 +54,7 @@ test('Employee funds - custody disbursement, settlement and advances post balanc
   assert.equal(r.status, 200, 'disbursement: ' + JSON.stringify(r.data));
   assert.ok(r.data.journal_entry_id && r.data.entry_no, 'the disbursement returns its entry');
   const custodyId = r.data.id; const custodyNo = r.data.custody_no;
+  assert.equal(custodyNo, 'CST-2031-0001', 'the number takes the year of the document date, not of today');
   assert.equal((await db.get('SELECT status FROM journal_entries WHERE id = ?', [r.data.journal_entry_id])).status, 'posted');
   assert.deepEqual((await lines(r.data.journal_entry_id)).map(l => ({ ...l })), [
     { account_id: acc.EMPLOYEE_CUSTODY, debit: 30000, credit: 0, project_id: project, party_type: 'employee', party_id: emp.id },
@@ -73,6 +74,7 @@ test('Employee funds - custody disbursement, settlement and advances post balanc
   r = await api('POST', '/api/accounting/custodies', { operation_type: 'تصفية عهدة', related_custody_id: custodyId, employee_id: emp.id, expense_account_id: acc.PROJECT_MATERIAL_COST, spent_amount: 12000, date: '2031-01-15' });
   assert.equal(r.status, 200, 'settlement: ' + JSON.stringify(r.data));
   assert.ok(r.data.journal_entry_id);
+  assert.equal(r.data.custody_no, 'STL-2031-0001', 'the three refused attempts gave their numbers back (no gap)');
   const settleLines = await lines(r.data.journal_entry_id);
   assert.ok(settleLines.find(l => l.account_id === acc.PROJECT_MATERIAL_COST && Number(l.debit) === 12000 && l.project_id === project), 'Dr the expense on the custody project');
   assert.ok(settleLines.find(l => l.account_id === acc.EMPLOYEE_CUSTODY && Number(l.credit) === 12000 && l.party_id === emp.id), 'Cr the employee custody');

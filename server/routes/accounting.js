@@ -1206,8 +1206,6 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       }
     }
 
-    const currentYear = new Date().getFullYear();
-
     // ================== معالجة تصفية عهدة سابقة ==================
     if (operation_type === 'تصفية عهدة') {
       if (!related_custody_id) {
@@ -1233,10 +1231,10 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
         });
       }
 
-      // توليد رقم عملية التصفية
-      const custody_no = await Numbering.next(require('../database/db'), 'STL', { table: 'custodies', column: 'custody_no', date: `${currentYear}-01-01` });
-
+      // رقم التصفية يُحجز داخل المعاملة وبسنة تاريخ المستند: التصفية المرفوضة تُعيد رقمها فلا تظهر فجوات
+      let custody_no;
       const txResult = await transaction(async (tx) => {
+        custody_no = await Numbering.next(tx, 'STL', { table: 'custodies', column: 'custody_no', date });
         // 1. تحديث رصيد العهدة الأصلية
         const newSpent = Number(origCustody.spent_amount || 0) + settleAmount;
         const newRemaining = remainingInOrig - settleAmount;
@@ -1298,12 +1296,13 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       return res.status(400).json({ success: false, message: 'مبلغ العهدة يجب أن يكون أكبر من الصفر' });
     }
 
-    const custody_no = await Numbering.next(require('../database/db'), operation_type === 'نثرية' ? 'PET' : 'CST', { table: 'custodies', column: 'custody_no', date: `${currentYear}-01-01` });
-
     const remaining = Math.max(0, parsedAmount - parsedSpent);
 
-    // الصرف قيد متزن (مدين عهد الموظفين / دائن الصندوق أو البنك) + حركة صندوق بنفس الرقم، في معاملة واحدة
+    // الصرف قيد متزن (مدين عهد الموظفين / دائن الصندوق أو البنك) + حركة صندوق بنفس الرقم، في معاملة واحدة.
+    // الرقم يُحجز داخلها وبسنة تاريخ المستند: الصرف المرفوض (صندوق غير صالح، فترة مغلقة) يُعيد رقمه
+    let custody_no;
     const { result, posting } = await transaction(async (tx) => {
+      custody_no = await Numbering.next(tx, operation_type === 'نثرية' ? 'PET' : 'CST', { table: 'custodies', column: 'custody_no', date });
       const result = await tx.run(`
         INSERT INTO custodies (
           custody_no, operation_type, employee_id, employee_no, employee_name, project_id,
