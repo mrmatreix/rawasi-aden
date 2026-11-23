@@ -87,6 +87,22 @@ const MIGRATIONS = [
         db.exec(sql);
       }
     }
+  },
+  {
+    id: '0005_tax_configs_seed',
+    description: 'Yemeni tax reference rates (WHT contracting 3%, WHT supplies 1%, VAT 0%) on databases that have none of them',
+    up(db) {
+      if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tax_configs'").get()) return;
+      // INSERT OR IGNORE on the unique tax_code: a rate production already holds (or edited) is never touched
+      const law = 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته';
+      const note = 'النسبة قابلة للتعديل حسب اللائحة التنفيذية وتوجيهات مصلحة الضرائب والمحاسب القانوني';
+      const insert = db.prepare(`INSERT OR IGNORE INTO tax_configs (tax_code, tax_name, rate_percentage, type, law_reference, is_active, legal_disclaimer)
+        VALUES (?, ?, ?, ?, ?, 1, ?)`);
+      insert.run('WHT-CONT-3', 'ضريبة أرباح تجارية وصناعية - مقاولات (3%)', 3.0, 'wht_contracting', law, note);
+      insert.run('WHT-SUPP-1', 'ضريبة خصم من المنبع - توريدات ومشتريات (1%)', 1.0, 'wht_supplies', law, note);
+      insert.run('VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية',
+        'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
+    }
   }
 ];
 

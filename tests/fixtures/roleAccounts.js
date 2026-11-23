@@ -63,13 +63,4 @@ async function ensureBankAccount(db) {
   await db.run("INSERT OR IGNORE INTO bank_accounts (id, bank_name, account_number, account_id, current_balance) VALUES (1, 'بنك الاختبار', 'ACC-TEST-1', ?, 0)", [BANK_DEFAULT]);
 }
 
-// Production carries these tax rates; a fresh database seeds none (the seed left with the demo data).
-async function ensureTaxConfigs(db) {
-  const law = 'قانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته';
-  await db.run(`INSERT OR IGNORE INTO tax_configs (tax_code, tax_name, rate_percentage, type, law_reference, is_active) VALUES
-    ('WHT-CONT-3', 'ضريبة أرباح تجارية وصناعية - مقاولات (3%)', 3.0, 'wht_contracting', ?, 1),
-    ('WHT-SUPP-1', 'ضريبة خصم من المنبع - توريدات ومشتريات (1%)', 1.0, 'wht_supplies', ?, 1),
-    ('VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية', 1)`, [law, law]);
-}
-
-module.exports = { ensureRoleAccounts, ensureInventoryBasics, ensureBankAccount, ensureTaxConfigs, ROLE_PATHS };
+module.exports = { ensureRoleAccounts, ensureInventoryBasics, ensureBankAccount, ROLE_PATHS };

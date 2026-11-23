@@ -77,4 +77,6 @@ test('a fresh database boots with every migration applied and no swallowed schem
   const applied = (await db.query('SELECT id FROM schema_migrations ORDER BY id')).map(r => r.id);
   assert.deepEqual(applied, MIGRATIONS.map(m => m.id));
   assert.ok((await db.get("SELECT COUNT(*) AS n FROM system_account_mappings WHERE role = 'CASH_DEFAULT'")).n === 1, 'role mappings seeded after migrations');
+  const rates = await db.query("SELECT type, rate_percentage FROM tax_configs WHERE is_active = 1 ORDER BY tax_code");
+  assert.deepEqual(rates.map(r => [r.type, Number(r.rate_percentage)]), [['vat', 0], ['wht_contracting', 3], ['wht_supplies', 1]], 'tax reference rates seeded');
 });

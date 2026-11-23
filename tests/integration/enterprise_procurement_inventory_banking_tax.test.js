@@ -22,9 +22,7 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     const db = require('../../server/database/db');
     await fixtures.ensureRoleAccounts(db);
     await fixtures.ensureInventoryBasics(db);
-    await fixtures.ensureBankAccount(db);
-    await fixtures.ensureTaxConfigs(db);
-    // 1. عميل ومورد
+    await fixtures.ensureBankAccount(db);    // 1. عميل ومورد
     const clientRes = await run(`
       INSERT INTO clients (name, company, phone, current_balance, tax_number)
       VALUES (?, 'مجموعة الأفق', '770000001', 0, ?)
