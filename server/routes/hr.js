@@ -150,17 +150,31 @@ router.get('/advances', requirePermission('hr:view'), async (_req, res) => {
 
 router.post('/advances', requirePermission('hr:create'), async (req, res) => {
   try {
-    const { employee_id, amount, request_date = today(), installment_amount, reason } = req.body;
-    await run('INSERT INTO employee_advances (employee_id,amount,request_date,date,installment_amount,reason,notes) VALUES (?,?,?,?,?,?,?)',
-      [employee_id, number(amount), request_date, request_date, number(installment_amount), reason, reason]);
+    const { employee_id, amount, request_date = today(), installment_amount, reason, payment_method = 'نقدي', settlement_account_id } = req.body;
+    const employee = employee_id ? await get('SELECT id, full_name FROM employees WHERE id = ?', [employee_id]) : null;
+    if (!employee) return res.status(400).json({ success: false, message: 'يرجى اختيار الموظف' });
+    if (!(number(amount) > 0)) return res.status(400).json({ success: false, message: 'مبلغ السلفة يجب أن يكون أكبر من الصفر' });
+    if (number(installment_amount) < 0 || number(installment_amount) > number(amount)) return res.status(400).json({ success: false, message: 'القسط الشهري يجب أن يكون بين الصفر ومبلغ السلفة' });
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
+    // السلفة المصروفة قيد (مدين سلف الموظفين / دائن الصندوق أو البنك) + حركة صندوق؛ المسير يستردها دائناً لاحقاً
+    const { id, entry } = await transaction(async tx => {
+      const ins = await tx.run('INSERT INTO employee_advances (employee_id,amount,request_date,date,installment_amount,reason,notes) VALUES (?,?,?,?,?,?,?)',
+        [employee.id, number(amount), request_date, request_date, number(installment_amount), reason, reason]);
+      const advanceId = ins.lastInsertRowid || ins.insertId;
+      const { entry } = await require('../services/ledger/employeeFundsService').postAdvance(tx, {
+        advanceId, date: request_date, amount: number(amount), employeeId: employee.id, employeeName: employee.full_name,
+        paymentMethod: payment_method, settlementAccountId: settlement_account_id || null, user: req.user
+      });
+      return { id: advanceId, entry };
+    });
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'advance',
       entity_id: employee_id,
-      details: { amount, installment_amount, reason }
+      details: { amount, installment_amount, reason, entry_no: entry.entry_no }
     });
-    res.json({ success: true, message: 'تم تسجيل السلفة' });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+    res.json({ success: true, message: 'تم تسجيل السلفة وترحيل قيد صرفها', id, journal_entry_id: entry.id, entry_no: entry.entry_no });
+  } catch (err) { res.status(err.statusCode || 500).json({ success: false, message: err.message }); }
 });
 
 router.get('/payroll', requirePermission('hr:view,hr:payroll'), async (req, res) => {

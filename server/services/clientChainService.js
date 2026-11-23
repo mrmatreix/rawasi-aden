@@ -45,6 +45,9 @@ class ClientChainService {
       WHERE client_id = ? 
         AND type = 'قبض' 
         AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+        -- an advance is a contract liability, amortised through the bills' net (advance_deduction): counting the
+        -- receipt here as well deducted the amortised part twice and showed the liability as a negative receivable
+        AND COALESCE(receipt_category, 'general') <> 'advance_payment'
     `, [clientId]);
     const totalPaid = Number(payRes ? payRes.total_paid : 0) || 0;
 

@@ -16,6 +16,7 @@ const FinancialControlService = require('../services/financialControlService');
 const { requirePermission } = require('../middleware/security');
 const { loadVoucherSources, journalDisplay } = require('../services/voucherDisplayService');
 const { resolveAccountCostCenter } = require('../services/accountCostCenterService');
+const EmployeeFunds = require('../services/ledger/employeeFundsService');
 
 // دليل الحسابات الشجري مع دعم الهرمية، الرتب، والحسابات التحليلية الطرفية
 router.get('/accounts', requirePermission('accounting:view,accounting,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
@@ -1262,7 +1263,14 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
           accId || origCustody.account_id, accCode || origCustody.account_code, accName || origCustody.account_name, payment_method || 'نقدي'
         ]);
 
-        return { result, newRemaining, newStatus };
+        // التصفية قيد مصروف (مدين المصروف / دائن العهدة) على مشروع العهدة الأصلية؛ لا حركة نقدية (النقد خرج عند الصرف)
+        const expenseAccountId = req.body.expense_account_id || accId;
+        const posting = await EmployeeFunds.postCustodySettlement(tx, {
+          settlementId: result.lastInsertRowid || result.insertId, settlementNo: custody_no, original: origCustody, date,
+          amount: settleAmount, expenseAccountId, projectId: validProjectId || origCustody.project_id || null, user: req.user
+        });
+
+        return { result, newRemaining, newStatus, posting };
       });
 
       // توثيق التصفية في سجل التدقيق والرقابة
@@ -1277,6 +1285,9 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
         success: true,
         message: `تم تسجيل تصفية العهدة بنجاح برقم ${custody_no}. الرصيد المتبقي في العهدة الأصلية: ${txResult.newRemaining.toLocaleString()} ${selectedCurrency}`,
         custody_no,
+        id: txResult.result.lastInsertRowid || txResult.result.insertId,
+        journal_entry_id: txResult.posting.entry.id,
+        entry_no: txResult.posting.entry.entry_no,
         settle_amount: settleAmount,
         remaining_in_original: txResult.newRemaining
       });
@@ -1291,41 +1302,30 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
 
     const remaining = Math.max(0, parsedAmount - parsedSpent);
 
-    const result = await run(`
-      INSERT INTO custodies (
-        custody_no, operation_type, employee_id, employee_no, employee_name, project_id,
-        total_amount, spent_amount, remaining_amount, currency, status, date, notes,
-        account_id, account_code, account_name, payment_method
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?, ?, ?, ?, ?)
-    `, [
-      custody_no, operation_type, empId, empNo, empName, validProjectId,
-      parsedAmount, parsedSpent, remaining, selectedCurrency, date, notes || '',
-      accId, accCode, accName, payment_method || 'نقدي'
-    ]);
-
-    // تسجيل حركة صرف العهدة في حركة الصندوق والبنك
-    const moveType = (payment_method === 'شيك' || payment_method === 'تحويل بنكي' || payment_method === 'بنك') ? 'بنك' : 'نقدي';
-    const lastCash = await get('SELECT current_balance FROM cash_movements WHERE account_id = ? ORDER BY date DESC, id DESC LIMIT 1', [accId]);
-    const prevBal = (lastCash && lastCash.current_balance != null) ? Number(lastCash.current_balance) : 0;
-    const currentBal = prevBal - parsedAmount;
-
-    await run(`
-      INSERT INTO cash_movements (
-        date, cash_in, cash_out, previous_balance, current_balance, notes,
-        movement_type, payment_method, reference_no, account_id
-      )
-      VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      date,
-      parsedAmount,
-      prevBal,
-      currentBal,
-      `${operation_type}: ${custody_no} للموظف (${empName})${accName ? ' - حساب: ' + accName : ''}`,
-      moveType,
-      payment_method || 'نقدي',
-      custody_no,
-      accId
-    ]);
+    // الصرف قيد متزن (مدين عهد الموظفين / دائن الصندوق أو البنك) + حركة صندوق بنفس الرقم، في معاملة واحدة
+    const { result, posting } = await transaction(async (tx) => {
+      const result = await tx.run(`
+        INSERT INTO custodies (
+          custody_no, operation_type, employee_id, employee_no, employee_name, project_id,
+          total_amount, spent_amount, remaining_amount, currency, status, date, notes,
+          account_id, account_code, account_name, payment_method
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'مفتوحة', ?, ?, ?, ?, ?, ?)
+      `, [
+        custody_no, operation_type, empId, empNo, empName, validProjectId,
+        parsedAmount, parsedSpent, remaining, selectedCurrency, date, notes || '',
+        accId, accCode, accName, payment_method || 'نقدي'
+      ]);
+      const custodyId = result.lastInsertRowid || result.insertId;
+      const posting = await EmployeeFunds.postCustodyDisbursement(tx, {
+        custodyId, custodyNo: custody_no, date, amount: parsedAmount, employeeId: empId, employeeName: empName,
+        projectId: validProjectId, paymentMethod: payment_method || 'نقدي', chosenAccountId: accId,
+        settlementAccountId: req.body.settlement_account_id || null, user: req.user
+      });
+      // the custody row keeps the custody (debit) account, so its settlement credits the same account
+      const custodyAcc = await tx.get('SELECT id, code, name FROM accounts WHERE id = ?', [posting.custodyAccountId]);
+      await tx.run('UPDATE custodies SET account_id = ?, account_code = ?, account_name = ? WHERE id = ?', [custodyAcc.id, custodyAcc.code, custodyAcc.name, custodyId]);
+      return { result, posting };
+    });
 
     await logAudit(req, {
       action: 'INSERT',
@@ -1339,10 +1339,13 @@ router.post('/custodies', requirePermission('custody:create'), async (req, res) 
       message: `تم تسجيل ${operation_type} بنجاح برقم ${custody_no} وإدراج حركة الصرف في حركة الصندوق والبنك`,
       custody_no,
       id: result.lastInsertRowid || result.insertId,
+      journal_entry_id: posting.entry.id,
+      entry_no: posting.entry.entry_no,
       remaining
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في تسجيل العهدة: ' + err.message, error: err.message });
+    // business rules (missing expense account, closed period, leaf account) keep their status and message
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في تسجيل العهدة: ' + err.message, error: err.message });
   }
 });
 

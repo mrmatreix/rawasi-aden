@@ -20,6 +20,16 @@ const Numbering = require('./numberingService');
 const { logAudit } = require('./auditService');
 const { checkPeriodOpen } = require('./periodService');
 
+// Revenue the general ledger recognised for a project (posted lines on revenue accounts; storno reversals net out).
+async function ledgerProjectRevenue(projectId) {
+  const { normalizeAccountType } = require('./chartOfAccountsRules');
+  const rows = await query(`SELECT a.type, COALESCE(SUM(l.credit - l.debit), 0) AS amount FROM journal_entry_lines l
+    JOIN journal_entries je ON je.id = l.entry_id JOIN accounts a ON a.id = l.account_id
+    WHERE je.status = 'posted' AND l.project_id = ? GROUP BY a.type`, [projectId]);
+  const total = rows.filter(r => normalizeAccountType(r.type) === 'revenue').reduce((s, r) => s + Number(r.amount), 0);
+  return Math.round(total * 100) / 100;
+}
+
 // معرفات الحسابات المعيارية لعقود المقاولات في دليل الحسابات
 const CONTRACT_ACCOUNTS = {
   CASH_AND_BANKS: 3,         // 111 - الصندوق الرئيسي والبنك
@@ -126,9 +136,14 @@ const ContractingAccountingService = {
     }
 
     // 5. الإيراد المعترف به تراكمياً وفق نسبة الإنجاز والمعيار الدولي IFRS 15
-    const cumulativeRecognizedRevenue = (costToCostPOC !== null && revisedContractValue > 0)
+    const pocRevenueEstimate = (costToCostPOC !== null && revisedContractValue > 0)
       ? Math.round(revisedContractValue * (costToCostPOC / 100))
       : 0;
+    // سياسة الإيراد عند الفوترة: الإيراد المعترف به هو ما رحّله الأستاذ العام للمشروع (المستخلصات المرحّلة)،
+    // وتقدير نسبة الإنجاز يبقى للعرض فقط حتى لا تُظهر المصفوفة واللوحة إيراداً غير موجود في الدفاتر.
+    const cumulativeRecognizedRevenue = REVENUE_RECOGNITION_POLICY === 'billing'
+      ? await ledgerProjectRevenue(pId)
+      : pocRevenueEstimate;
 
     // فحص الإيرادات المثبتة دفترياً من جدول القيود السابقة
     const lastRecognition = await get(`
@@ -276,8 +291,12 @@ const ContractingAccountingService = {
       recognized_revenue: {
         cumulative: cumulativeRecognizedRevenue,
         previously_posted: previouslyPostedRevenue,
-        unposted_period: unpostedPeriodRevenue,
-        basis: `طريقة التكلفة للتكلفة POC (${costToCostPOC}%) من قيمة العقد المنقحة`
+        unposted_period: REVENUE_RECOGNITION_POLICY === 'billing' ? 0 : unpostedPeriodRevenue,
+        policy: REVENUE_RECOGNITION_POLICY,
+        poc_estimate: pocRevenueEstimate,
+        basis: REVENUE_RECOGNITION_POLICY === 'billing'
+          ? 'الإيراد المرحّل في الأستاذ العام من المستخلصات المعتمدة (تقدير نسبة الإنجاز للعرض فقط)'
+          : `طريقة التكلفة للتكلفة POC (${costToCostPOC}%) من قيمة العقد المنقحة`
       },
 
       // 3. المستخلصات المعتمدة (مطالبات رسمية)

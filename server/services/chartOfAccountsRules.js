@@ -89,6 +89,7 @@ const SYSTEM_ACCOUNT_ROLES = Object.freeze({
   SOCIAL_INSURANCE_PAYABLE: { label: 'التأمينات الاجتماعية مستحقة الدفع', type: 'liability', codes: ['21202002'] },
   SKILLS_FUND_PAYABLE: { label: 'صندوق تنمية المهارات مستحق الدفع', type: 'liability', codes: ['21202003'] },
   EMPLOYEE_ADVANCES: { label: 'سلف الموظفين', type: 'asset', codes: ['11501003'] },
+  EMPLOYEE_CUSTODY: { label: 'عهد المواقع لدى الموظفين', type: 'asset', codes: ['11501001', '11501002'] },
   PAYROLL_PENALTY_INCOME: { label: 'إيراد الجزاءات والغياب', type: 'revenue', codes: ['41203003'] },
   DEPRECIATION_EXPENSE: { label: 'مصروف الإهلاك', type: 'expense', codes: ['32104001'] }
 });

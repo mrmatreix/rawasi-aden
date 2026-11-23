@@ -8,6 +8,8 @@ const ROLE_PATHS = {
   ACCOUNTS_RECEIVABLE: ['112', '11201', '11201001', 'asset', '11'],
   RETENTION_RECEIVABLE: ['112', '11202', '11202001', 'asset', '11'],
   GUARANTEE_CASH_MARGIN: ['119', '11901', '11901001', 'asset', '11'],
+  EMPLOYEE_CUSTODY: ['115', '11501', '11501001', 'asset', '11'],
+  EMPLOYEE_ADVANCES: ['115', '11501', '11501003', 'asset', '11'],
   WHT_RECEIVABLE: ['118', '11801', '11801001', 'asset', '11'],
   VAT_INPUT: ['118', '11801', '11801002', 'asset', '11'],
   SUPPLIERS_PAYABLE: ['21', '211', '21101', '21101001', 'liability', '2'],
