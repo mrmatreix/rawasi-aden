@@ -30,6 +30,17 @@ async function ledgerProjectRevenue(projectId) {
   return Math.round(total * 100) / 100;
 }
 
+// Cost the general ledger booked on a project (posted lines on expense / cost accounts). A labor line settled by
+// a linked voucher counts once (the voucher debits the payable, not the expense) and custody settlements count.
+async function ledgerProjectCost(projectId) {
+  const { normalizeAccountType } = require('./chartOfAccountsRules');
+  const rows = await query(`SELECT a.type, COALESCE(SUM(l.debit - l.credit), 0) AS amount FROM journal_entry_lines l
+    JOIN journal_entries je ON je.id = l.entry_id JOIN accounts a ON a.id = l.account_id
+    WHERE je.status = 'posted' AND l.project_id = ? GROUP BY a.type`, [projectId]);
+  const total = rows.filter(r => normalizeAccountType(r.type) === 'expense').reduce((s, r) => s + Number(r.amount), 0);
+  return Math.round(total * 100) / 100;
+}
+
 // معرفات الحسابات المعيارية لعقود المقاولات في دليل الحسابات
 const CONTRACT_ACCOUNTS = {
   CASH_AND_BANKS: 3,         // 111 - الصندوق الرئيسي والبنك
@@ -113,7 +124,10 @@ const ContractingAccountingService = {
                                   (purchasesRow ? Number(purchasesRow.total) : 0) +
                                   (laborRow ? Number(laborRow.total) : 0);
 
-    const cumulativeActualCost = Math.max(Number(proj.actual_cost) || 0, directCostFromRecords);
+    // Ledger first (same source as recognised revenue): adding vouchers, labor lines and purchases counted a labor
+    // line twice once a voucher settled it, and missed custody settlements. The operational sum stays as
+    // records_cost for comparison only.
+    const cumulativeActualCost = await ledgerProjectCost(pId);
 
     // تقدير التكلفة الإجمالية المنقحة (Revised Estimated Total Cost)
     // بدون أي نسب افتراضية مصطنعة (Zero Magic Numbers)
@@ -272,6 +286,7 @@ const ContractingAccountingService = {
       revised_contract_value: revisedContractValue,
       revised_estimated_cost: revisedEstimatedCost,
       cumulative_actual_cost: cumulativeActualCost,
+      records_cost: Math.round(directCostFromRecords * 100) / 100, // operational sum, for comparison only
 
       // نسب الإنجاز المقارنة
       engineering_progress_pct: engineeringProgress,
