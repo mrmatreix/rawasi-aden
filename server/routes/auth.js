@@ -234,7 +234,6 @@ router.get('/2fa-status', verifyAdmin, async (req, res) => {
     const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
     const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
     const isEnabled = row2fa ? (row2fa.value === '1' || row2fa.value === 'true') : true;
-    const pin = rowPin && rowPin.value ? rowPin.value : '123456';
     res.json({ success: true, enabled: isEnabled, pinConfigured:Boolean(rowPin?.value) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
