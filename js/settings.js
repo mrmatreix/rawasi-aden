@@ -2285,8 +2285,81 @@ const Settings = {
       `;
     }
   },
+  // ================== طلبات «نسيت كلمة المرور» ==================
+  async loadPasswordResetRequests() {
+    const panel = document.getElementById('staffResetRequestsPanel');
+    const tbody = document.getElementById('staffResetRequestsBody');
+    if (!panel || !tbody) return;
+    try {
+      const res = await fetch('/api/staff-password-resets');
+      const json = await res.json().catch(() => ({}));
+      const rows = res.ok && json.success ? (json.data || []) : [];
+      const count = document.getElementById('staffResetRequestsCount');
+      if (count) count.textContent = String(rows.filter(r => r.status === 'pending').length);
+      panel.style.display = rows.length ? 'block' : 'none';
+      const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const fmt = v => { const d = new Date(v); return isNaN(d) ? esc(v) : esc(d.toLocaleString('ar-EG')); };
+      const statusLabel = r => r.status === 'pending'
+        ? '<span style="color: var(--color-warning, #fbbf24); font-weight: 700;">بانتظار الاعتماد</span>'
+        : `<span style="color: var(--color-success, #34d399); font-weight: 700;">معتمد — صالح حتى ${fmt(r.code_expires_at)}</span>${Number(r.reset_pin) ? '<br><small>مع إعادة ضبط PIN</small>' : ''}`;
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td dir="ltr" style="font-family: monospace; font-weight: 800; color: var(--text-gold); white-space: nowrap;">${esc(r.public_ref)}</td>
+          <td><strong>${esc(r.full_name || r.username)}</strong><br><small style="color: var(--text-muted);">${esc(r.username)}</small></td>
+          <td style="font-size: 0.8rem;">${fmt(r.requested_at)}</td>
+          <td style="font-size: 0.75rem; max-width: 220px; word-break: break-word;" dir="ltr">${esc(r.requested_ip)}<br><span style="color: var(--text-muted);">${esc(String(r.requested_user_agent || '').slice(0, 90))}</span></td>
+          <td style="font-size: 0.82rem; max-width: 200px; word-break: break-word;">${esc(r.requester_note || '—')}</td>
+          <td style="font-size: 0.8rem;">${statusLabel(r)}</td>
+          <td style="white-space: nowrap;">
+            ${r.is_self ? '<small style="color: var(--text-muted);">طلبك أنت — يعتمده مدير آخر</small>' : `
+            <button type="button" class="btn btn-sm btn-success" data-reset-action="approve" data-id="${Number(r.id)}" data-name="${esc(r.full_name || r.username)}" data-ref="${esc(r.public_ref)}">${r.status === 'approved' ? 'إصدار رمز جديد' : 'اعتماد'}</button>`}
+            ${r.status === 'approved' ? `<button type="button" class="btn btn-sm btn-secondary" data-reset-action="revoke" data-id="${Number(r.id)}">إلغاء الرمز</button>` : ''}
+            <button type="button" class="btn btn-sm btn-soft-danger" data-reset-action="reject" data-id="${Number(r.id)}">رفض</button>
+          </td>
+        </tr>`).join('');
+      tbody.querySelectorAll('[data-reset-action]').forEach(btn => btn.addEventListener('click', () => {
+        const { resetAction, id, name, ref } = btn.dataset;
+        if (resetAction === 'approve') this.approvePasswordReset(id, name, ref);
+        else this.closePasswordReset(id, resetAction);
+      }));
+    } catch (e) {
+      panel.style.display = 'none';
+    }
+  },
+
+  async approvePasswordReset(id, name, ref) {
+    if (!(await UIDialog.confirm(`تأكد من هوية (${name}) بالهاتف أو حضورياً، وطابِق رقم المرجع (${ref}) الذي يقرؤه لك قبل الاعتماد. هل تريد المتابعة؟`))) return;
+    const resetPin = await UIDialog.confirm('هل تريد إعادة ضبط رمز التحقق بخطوتين (PIN) أيضاً؟ اختر «إلغاء» للإبقاء على رمز الـ PIN الحالي للموظف.');
+    try {
+      const res = await fetch(`/api/staff-password-resets/${encodeURIComponent(id)}/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset_pin: !!resetPin })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) return App.showToast(data.message || 'تعذر اعتماد الطلب', 'error');
+      const until = new Date(data.expires_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      await UIDialog.alert(`رمز إعادة التعيين للمستخدم (${name}):\n\n🔑   ${data.code}   🔑\n\nصالح حتى ${until} ولمرة واحدة${data.reset_pin ? '، وسيُطلب من الموظف تعيين PIN جديد' : ''}. سلّمه للموظف شخصياً أو هاتفياً، ولا ترسله في مجموعة. لن يُعرض الرمز مرة أخرى.`);
+      await this.loadPasswordResetRequests();
+    } catch (e) {
+      App.showToast('خطأ في الاتصال بالخادم', 'error');
+    }
+  },
+
+  async closePasswordReset(id, action) {
+    const question = action === 'revoke' ? 'إلغاء الرمز المعتمد؟ لن يتمكن الموظف من استعماله.' : 'رفض طلب إعادة التعيين؟';
+    if (!(await UIDialog.confirm(question))) return;
+    try {
+      const res = await fetch(`/api/staff-password-resets/${encodeURIComponent(id)}/${action === 'revoke' ? 'revoke' : 'reject'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json().catch(() => ({}));
+      App.showToast(data.message || (res.ok ? 'تم' : 'تعذر تنفيذ الإجراء'), res.ok && data.success ? 'success' : 'error');
+      await this.loadPasswordResetRequests();
+    } catch (e) {
+      App.showToast('خطأ في الاتصال بالخادم', 'error');
+    }
+  },
+
   // ================== إدارة المستخدمين والصلاحيات ==================
   async loadUsers() {
+    this.loadPasswordResetRequests();
     try {
       const res = await fetch('/api/users');
       const json = await res.json();

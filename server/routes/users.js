@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { query, get, run } = require('../database/db');
 const { verifyAdmin, getSecuritySettings } = require('./auth');
-const { requirePermission } = require('../middleware/security');
+const { requirePermission, revokeAllStaffSessions } = require('../middleware/security');
 
 // جلب بيانات الفروع والأقسام والمشاريع لنطاق الصلاحيات
 router.get('/scopes-meta', requirePermission('settings:users'), async (req, res) => {
@@ -285,7 +285,7 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
             permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?,
             branch_id = ?, branch = ?, department_id = ?, department = ?, 
             allowed_projects = ?, allowed_branches = ?, allowed_departments = ?,
-            failed_login_count = 0, login_locked_until = NULL
+            failed_login_count = 0, login_locked_until = NULL, password_changed_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -309,6 +309,8 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
         allowedDepartmentsStr,
         userId
       ]);
+      // تغيير كلمة المرور ينهي كل جلسات الحساب المفتوحة (ويُبقي جلسة المدير الحالية إن غيّر كلمته بنفسه)
+      await revokeAllStaffSessions(userId, { keepSessionId: Number(req.user.id) === Number(userId) ? (req.user.sessionId || null) : null });
     } else {
       await run(`
         UPDATE users
@@ -464,7 +466,8 @@ router.post('/:id/disconnect', requirePermission('settings:users'), async (req, 
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
-    await run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE id = ?", [userId]);
+    // تفريغ active_sessions أيضاً، وإلا يظل requireAuth يقبل الجلسة المسجّلة فيها
+    await revokeAllStaffSessions(userId);
     res.json({
       success: true,
       message: `تم إنهاء جلسة المستخدم (${user.full_name || user.username}) وفصله عن النظام بنجاح.`

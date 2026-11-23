@@ -128,6 +128,37 @@ const MIGRATIONS = [
         db.exec('UPDATE project_labor_expenses SET paid_amount = 0 WHERE paid_amount IS NULL');
       }
     }
+  },
+  {
+    id: '0007_staff_password_resets',
+    description: 'Staff forgot-password requests approved by an administrator (one-time hashed code); users.password_changed_at / must_change_password',
+    up(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS staff_password_resets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        public_ref TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','used','rejected','expired','revoked')),
+        requester_note TEXT,
+        requested_at TEXT NOT NULL,
+        requested_ip TEXT,
+        requested_user_agent TEXT,
+        approved_by INTEGER,
+        approved_at TEXT,
+        code_hash TEXT,
+        code_expires_at TEXT,
+        reset_pin INTEGER NOT NULL DEFAULT 0,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        used_at TEXT,
+        used_ip TEXT,
+        closed_by INTEGER,
+        closed_at TEXT,
+        close_reason TEXT
+      )`);
+      // one open (pending or approved) request per account
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_staff_reset_open ON staff_password_resets(user_id) WHERE status IN ('pending','approved')`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_staff_reset_status ON staff_password_resets(status, requested_at)');
+      addColumns(db, 'users', [['password_changed_at', 'TEXT'], ['must_change_password', 'INTEGER DEFAULT 0']]);
+    }
   }
 ];
 

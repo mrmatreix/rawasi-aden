@@ -411,6 +411,7 @@ const Auth = {
     const conflictBox = document.getElementById('loginConflictBox');
     const conflictText = document.getElementById('loginConflictText');
     const submitBtn = document.getElementById('btnLoginSubmit');
+    this._showBox('loginSuccessMsg', '');
 
     const username = (this._pendingCredentials && force) ? this._pendingCredentials.username : usernameInput?.value?.trim();
     const password = (this._pendingCredentials && force) ? this._pendingCredentials.password : passwordInput?.value;
@@ -649,6 +650,130 @@ const Auth = {
   },
 
   // تطبيع وتوحيد مدخلات رمز التحقق بخطوتين (تحويل الأرقام العربية إلى إنجليزية ومنع الرموز)
+  // ================== نسيت كلمة المرور ==================
+  _showBox(id, text) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.textContent = text || '';
+    box.style.display = text ? 'block' : 'none';
+  },
+
+  openForgotPassword() {
+    const modal = document.getElementById('forgotPasswordModal');
+    if (!modal) return;
+    const typed = document.getElementById('loginUsername')?.value || '';
+    const input = document.getElementById('forgotUsername');
+    if (input && !input.value) input.value = typed.trim();
+    this._showBox('forgotPasswordErrorMsg', '');
+    const result = document.getElementById('forgotPasswordResult');
+    if (result) result.style.display = 'none';
+    modal.style.display = 'flex';
+    setTimeout(() => input?.focus(), 50);
+  },
+
+  closeForgotPassword() {
+    const modal = document.getElementById('forgotPasswordModal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  async submitForgotPassword(event) {
+    if (event) event.preventDefault();
+    const username = (document.getElementById('forgotUsername')?.value || '').trim();
+    const note = (document.getElementById('forgotNote')?.value || '').trim();
+    const btn = document.getElementById('btnSubmitForgot');
+    this._showBox('forgotPasswordErrorMsg', '');
+    if (!username) return this._showBox('forgotPasswordErrorMsg', 'يرجى إدخال اسم المستخدم');
+    if (btn) { btn.disabled = true; btn.textContent = 'جاري الإرسال...'; }
+    try {
+      const res = await fetch('/api/auth/password-reset/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, note })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) return this._showBox('forgotPasswordErrorMsg', data.message || 'تعذر إرسال الطلب حالياً');
+      const result = document.getElementById('forgotPasswordResult');
+      const text = document.getElementById('forgotPasswordResultText');
+      const ref = document.getElementById('forgotPasswordRef');
+      if (text) text.textContent = data.message || '';
+      if (ref) ref.textContent = data.ref || '';
+      if (result) result.style.display = 'block';
+    } catch (e) {
+      this._showBox('forgotPasswordErrorMsg', 'خطأ في الاتصال بالخادم');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'إرسال الطلب'; }
+    }
+  },
+
+  openResetWithCode() {
+    const forgot = document.getElementById('forgotUsername')?.value || document.getElementById('loginUsername')?.value || '';
+    this.closeForgotPassword();
+    const modal = document.getElementById('resetWithCodeModal');
+    if (!modal) return;
+    const user = document.getElementById('resetUsername');
+    if (user && !user.value) user.value = forgot.trim();
+    this._showBox('resetWithCodeErrorMsg', '');
+    modal.style.display = 'flex';
+    setTimeout(() => (user && user.value ? document.getElementById('resetCode') : user)?.focus(), 50);
+  },
+
+  closeResetWithCode() {
+    const modal = document.getElementById('resetWithCodeModal');
+    if (modal) modal.style.display = 'none';
+    ['resetCode', 'resetCurrentPin', 'resetNewPin', 'resetNewPassword', 'resetNewPasswordConfirm'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const pinGroup = document.getElementById('resetNewPinGroup');
+    if (pinGroup) pinGroup.style.display = 'none';
+  },
+
+  async submitResetWithCode(event) {
+    if (event) event.preventDefault();
+    const val = id => document.getElementById(id)?.value || '';
+    const payload = {
+      username: val('resetUsername').trim(),
+      code: val('resetCode'),
+      current_pin: val('resetCurrentPin'),
+      new_pin: val('resetNewPin'),
+      new_password: val('resetNewPassword'),
+      new_password_confirm: val('resetNewPasswordConfirm')
+    };
+    this._showBox('resetWithCodeErrorMsg', '');
+    if (payload.new_password.length < 8) return this._showBox('resetWithCodeErrorMsg', 'كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل.');
+    if (payload.new_password !== payload.new_password_confirm) return this._showBox('resetWithCodeErrorMsg', 'كلمة المرور وتأكيدها غير متطابقين.');
+    const btn = document.getElementById('btnSubmitResetWithCode');
+    if (btn) { btn.disabled = true; btn.textContent = 'جاري التحقق...'; }
+    try {
+      const res = await fetch('/api/auth/password-reset/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        if (data.requiresNewPin) {
+          const pinGroup = document.getElementById('resetNewPinGroup');
+          if (pinGroup) pinGroup.style.display = 'block';
+          document.getElementById('resetNewPin')?.focus();
+        }
+        return this._showBox('resetWithCodeErrorMsg', data.message || 'تعذر تغيير كلمة المرور');
+      }
+      const username = payload.username;
+      this.closeResetWithCode();
+      const loginUser = document.getElementById('loginUsername');
+      const loginPass = document.getElementById('loginPassword');
+      if (loginUser) loginUser.value = username;
+      if (loginPass) { loginPass.value = ''; loginPass.focus(); }
+      this._showBox('loginErrorMsg', '');
+      if (document.getElementById('loginSuccessMsg')) this._showBox('loginSuccessMsg', data.message);
+      else if (window.App?.showToast) App.showToast(data.message, 'success');
+    } catch (e) {
+      this._showBox('resetWithCodeErrorMsg', 'خطأ في الاتصال بالخادم');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'تغيير كلمة المرور'; }
+    }
+  },
+
   normalize2FaInput(input) {
     if (!input) return;
     let val = String(input.value || '')

@@ -118,6 +118,24 @@ function clearLoginAttemptsFor(username) {
 async function clearStaffFailures(userId) {
   await require('../database/db').run('UPDATE users SET failed_login_count = 0, login_locked_until = NULL WHERE id = ?', [userId]);
 }
+/**
+ * ينهي جلسات الموظف فعلياً: requireAuth يقبل الجلسة فقط إن كان sessionId في active_sessions أو يساوي session_token،
+ * فيجب تفريغ الاثنين معاً. keepSessionId يُبقي جلسة واحدة (مثلاً المدير الذي غيّر كلمة مروره بنفسه).
+ * dbh اختياري لاستعماله داخل transaction.
+ */
+async function revokeAllStaffSessions(userId, { keepSessionId = null, dbh = null } = {}) {
+  const db = dbh || require('../database/db');
+  if (keepSessionId) {
+    const row = await db.get('SELECT active_sessions FROM users WHERE id = ?', [userId]);
+    let sessions = [];
+    try { sessions = JSON.parse(row?.active_sessions || '[]'); } catch {}
+    const kept = (Array.isArray(sessions) ? sessions : []).filter(s => s && s.sessionId === keepSessionId);
+    const keep = kept.length ? kept : [{ sessionId: keepSessionId, lastHeartbeat: new Date().toISOString(), lastHeartbeatMs: Date.now() }];
+    await db.run('UPDATE users SET active_sessions = ?, session_token = ? WHERE id = ?', [JSON.stringify(keep), keepSessionId, userId]);
+    return;
+  }
+  await db.run("UPDATE users SET is_logged_in = 0, session_token = NULL, active_sessions = '[]', last_heartbeat = NULL WHERE id = ?", [userId]);
+}
 function staffLockedResponse(res, remainingMs) {
   const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
   return res.status(429).json({ success: false, rateLimited: true, accountLocked: true, lockoutSeconds: Math.ceil(remainingMs / 1000), remainingAttempts: 0, message: `⛔ تم قفل الحساب مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد ${minutes} دقيقة أو اطلب من المدير فك القفل.` });
@@ -210,6 +228,7 @@ const verifyCsrfToken = (req, res, next) => {
     '/api/auth/csrf-token',
     '/api/auth/verify-2fa',
     '/api/auth/unlock',
+    '/api/auth/password-reset',
     '/api/health',
     '/api/client-portal',
     '/api/admin',
@@ -605,6 +624,7 @@ module.exports = {
   getStaffLockRemainingMs,
   registerStaffFailure,
   clearStaffFailures,
+  revokeAllStaffSessions,
   clearLoginAttemptsFor,
   staffLockedResponse,
   generateCsrfToken,

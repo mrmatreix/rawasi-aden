@@ -106,7 +106,9 @@ app.get('/api/settings/db-status', async (_req, res) => {
 });
 
 // مسارات واجهات برمجة التطبيقات (API Routes) مع التحقق الأمني
+app.use('/api/auth/password-reset', require('./routes/staff_password_reset').publicRouter);
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/staff-password-resets', requireAuth, require('./routes/staff_password_reset').adminRouter);
 app.use('/api/users', requireAuth, require('./routes/users'));
 app.use('/api/projects', requireAuth, require('./routes/projects'));
 app.use('/api/inventory', requireAuth, require('./routes/inventory'));
