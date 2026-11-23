@@ -21,6 +21,8 @@ let schemaEnsured = false;
 async function ensureSchema() {
   if (schemaEnsured) return true;
   const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
+  // SQLite: migration 0006 creates the column and index at boot — no DDL inside a request
+  if (engine !== 'mysql') { schemaEnsured = true; return true; }
 
   try {
     if (engine === 'mysql') {

@@ -3,6 +3,8 @@ const db = require('../database/db');
 let schema;
 
 function ensureSchema() {
+  // SQLite: migration 0006 creates the table at boot — no DDL inside the first financial request
+  if (!schema && typeof db.getActiveEngine === 'function' && db.getActiveEngine() !== 'mysql') schema = Promise.resolve();
   if (!schema) schema = db.run(`CREATE TABLE IF NOT EXISTS financial_save_requests (
     request_id VARCHAR(64) PRIMARY KEY,
     fingerprint VARCHAR(64) NOT NULL,

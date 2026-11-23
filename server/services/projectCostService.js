@@ -47,6 +47,8 @@ let schemaEnsured = false;
 async function ensureSchema() {
   if (schemaEnsured) return true;
   const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
+  // SQLite: migration 0006 adds the columns and backfills paid_amount once at boot — no DDL inside a request
+  if (engine !== 'mysql') { schemaEnsured = true; return true; }
 
   const ensureColumn = async (table, column, sqliteDef, mysqlDef) => {
     if (engine === 'mysql') {
@@ -73,13 +75,8 @@ async function ensureSchema() {
     await ensureColumn('project_labor_expenses', 'paid_amount', 'REAL DEFAULT NULL', 'REAL DEFAULT NULL');
     await run(`UPDATE project_labor_expenses SET paid_amount = total_amount WHERE paid_amount IS NULL AND payment_status = 'مدفوع'`);
     await run(`UPDATE project_labor_expenses SET paid_amount = 0 WHERE paid_amount IS NULL`);
-    // SUGGESTION-8: حساب الأجور المستحقة (215) — خصوم تحت 2
-    const wageAcc = await get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
-    if (!wageAcc) {
-      const parent = await get("SELECT id FROM accounts WHERE code = '2' LIMIT 1");
-      await run('INSERT INTO accounts (code, name, type, parent_id, balance) VALUES (?, ?, ?, ?, 0)',
-        ['215', 'أجور مستحقة الدفع (عمال وطواقم المواقع)', 'خصوم', parent ? parent.id : null]);
-    }
+    // No chart writes here: wages payable resolve through the SALARIES_PAYABLE role (21401001). The old code
+    // inserted a non-standard '215' account directly under '2' on the first request after every start.
     schemaEnsured = true;
     return true;
   } catch (err) {

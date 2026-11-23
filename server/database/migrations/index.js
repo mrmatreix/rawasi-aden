@@ -103,6 +103,31 @@ const MIGRATIONS = [
       insert.run('VAT-0', 'ضريبة المبيعات / القيمة المضافة (0% افتراضية للمقاولات)', 0.0, 'vat', 'قانون الضريبة العامة على المبيعات ولائحته التنفيذية',
         'معفاة أو خاضعة لنسبة محددة وفق طبيعة العقد والتوريد');
     }
+  },
+  {
+    id: '0006_request_time_schema',
+    description: 'Schema that services created lazily inside the first request (idempotency table, cash-box index, cost-link columns) now exists at boot',
+    up(db) {
+      // financialSave used CREATE TABLE inside the first idempotent financial request
+      db.exec(`CREATE TABLE IF NOT EXISTS financial_save_requests (
+        request_id VARCHAR(64) PRIMARY KEY,
+        fingerprint VARCHAR(64) NOT NULL,
+        status_code INTEGER,
+        response_json TEXT
+      )`);
+      // cashBoxService added the column and index on its first call
+      addColumns(db, 'cash_movements', [['project_id', 'INTEGER']]);
+      if (columns(db, 'cash_movements').length) db.exec('CREATE INDEX IF NOT EXISTS idx_cash_box ON cash_movements (project_id, id)');
+      // ProjectCostService.ensureSchema ran on expense / project-hub requests
+      addColumns(db, 'expenses', [['source_table', 'TEXT'], ['source_id', 'INTEGER']]);
+      addColumns(db, 'project_labor_expenses', [['linked_expense_id', 'INTEGER'], ['paid_amount', 'REAL DEFAULT NULL']]);
+      addColumns(db, 'project_purchases', [['linked_expense_id', 'INTEGER']]);
+      // the one-time paid_amount backfill ProjectCostService repeated after every start
+      if (columns(db, 'project_labor_expenses').includes('paid_amount')) {
+        db.exec("UPDATE project_labor_expenses SET paid_amount = total_amount WHERE paid_amount IS NULL AND payment_status = 'مدفوع'");
+        db.exec('UPDATE project_labor_expenses SET paid_amount = 0 WHERE paid_amount IS NULL');
+      }
+    }
   }
 ];
 
