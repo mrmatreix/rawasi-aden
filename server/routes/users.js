@@ -4,6 +4,67 @@ const bcrypt = require('bcryptjs');
 const { query, get, run } = require('../database/db');
 const { verifyAdmin, getSecuritySettings } = require('./auth');
 const { requirePermission, revokeAllStaffSessions } = require('../middleware/security');
+const scopeService = require('../services/scopeService');
+
+// يحفظ نطاق الوصول ويسجّل التغيير في التدقيق (قبل/بعد)
+async function saveScopeAudited(req, userId, plan, before) {
+  await scopeService.savePlan(userId, plan, req.user?.id);
+  const after = await scopeService.describe(userId);
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    await require('../services/auditService').logAudit(req, {
+      action: 'USER_SCOPE_CHANGE', entity_type: 'user', entity_id: userId,
+      old_values: before, new_values: after
+    });
+  }
+  return after;
+}
+
+// نطاق وصول مستخدم: الخطة المحفوظة + عدد المشاريع الفعلية
+router.get('/:id/scope', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const scope = await scopeService.describe(Number.parseInt(req.params.id, 10));
+    if (!scope) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    res.json({ success: true, data: scope });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب نطاق المستخدم' });
+  }
+});
+
+// تعديل نطاق الوصول وحده: { mode: 'all' | 'limited', branches, departments, projects, general, allow_empty }
+router.put('/:id/scope', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const userId = Number.parseInt(req.params.id, 10);
+    const before = await scopeService.describe(userId);
+    if (!before) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    const plan = scopeService.planFromBody({ scope: req.body || {} });
+    if (!plan || plan.error) return res.status(400).json({ success: false, message: plan?.error || 'نطاق غير صالح' });
+    const check = await scopeService.validatePlan(plan, req.user);
+    if (check.error) return res.status(check.status).json({ success: false, emptyScope: check.emptyScope, message: check.error });
+    const after = await saveScopeAudited(req, userId, plan, before);
+    res.json({ success: true, message: 'تم حفظ نطاق الوصول.', data: after });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حفظ نطاق المستخدم' });
+  }
+});
+
+// معاينة حية: كم مشروعاً سيصل إليه المستخدم بهذه الخطة، وعبر أي منح
+router.post('/scope-preview', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const plan = scopeService.planFromBody({ scope: req.body || {} });
+    if (!plan || plan.error) return res.status(400).json({ success: false, message: plan?.error || 'نطاق غير صالح' });
+    const resolved = await scopeService.resolvePlan(plan);
+    if (resolved.all) return res.json({ success: true, data: { all: true, general: true, project_count: null, projects: [] } });
+    const ids = resolved.projectIds;
+    const rows = ids.length ? await query(`SELECT id, name, branch_id, department_id FROM projects WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY name`, ids) : [];
+    const projects = rows.map(p => ({
+      id: p.id, name: p.name,
+      via: plan.projects.includes(Number(p.id)) ? 'project' : plan.branches.includes(Number(p.branch_id)) ? 'branch' : 'department'
+    }));
+    res.json({ success: true, data: { all: false, general: resolved.general, project_count: projects.length, projects } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في معاينة النطاق' });
+  }
+});
 
 // جلب بيانات الفروع والأقسام والمشاريع لنطاق الصلاحيات
 router.get('/scopes-meta', requirePermission('settings:users'), async (req, res) => {
@@ -99,6 +160,9 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
       };
     });
 
+    // ملخص نطاق الوصول لكل مستخدم (للعمود «النطاق» في الجدول)
+    for (const u of parsedUsers) u.scope = await scopeService.describe(u.id);
+
     const roles = await query('SELECT * FROM roles ORDER BY id ASC');
     res.json({ success: true, data: parsedUsers, roles });
   } catch (err) {
@@ -158,6 +222,12 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'يتطلب التحقق بخطوتين رمز PIN خاصاً من 6 أرقام.' });
     }
 
+    // نطاق الوصول: بلا scope ولا allowed_projects = «كل المؤسسة» كما كان سابقاً، ويخضع لقاعدة عدم منح أوسع من نطاق المانح
+    const scopePlan = scopeService.planFromBody(req.body) || { mode: 'all' };
+    if (scopePlan.error) return res.status(400).json({ success: false, message: scopePlan.error });
+    const scopeCheck = await scopeService.validatePlan(scopePlan, req.user);
+    if (scopeCheck.error) return res.status(scopeCheck.status).json({ success: false, emptyScope: scopeCheck.emptyScope, message: scopeCheck.error });
+
     const result = await run(`
       INSERT INTO users (
         username, password_hash, full_name, role_id, role, email, phone, status, 
@@ -180,6 +250,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
     }
 
     const newId = result.insertId || result.lastInsertRowid;
+    await saveScopeAudited(req, Number(newId), scopePlan, null);
     const insertedUser = await get(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
              u.branch_id, u.branch, u.department_id, u.department, u.allowed_projects, u.allowed_branches, u.allowed_departments,
@@ -276,6 +347,15 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'لا يمكن تفعيل التحقق بخطوتين قبل تعيين رمز PIN خاص من 6 أرقام.' });
     }
 
+    // نطاق الوصول (scope الجديد أو allowed_projects القديم): يُتحقق منه قبل أي حفظ
+    const scopePlan = scopeService.planFromBody(req.body);
+    if (scopePlan?.error) return res.status(400).json({ success: false, message: scopePlan.error });
+    const scopeBefore = scopePlan ? await scopeService.describe(userId) : null;
+    if (scopePlan) {
+      const check = await scopeService.validatePlan(scopePlan, req.user);
+      if (check.error) return res.status(check.status).json({ success: false, emptyScope: check.emptyScope, message: check.error });
+    }
+
     if (password && password.trim().length > 0) {
       const salt = bcrypt.genSaltSync(10);
       const password_hash = bcrypt.hashSync(password, salt);
@@ -348,6 +428,8 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
         await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_enabled', ?)", [String(tfaEnabled)]);
       } catch (e) {}
     }
+
+    if (scopePlan) await saveScopeAudited(req, userId, scopePlan, scopeBefore);
 
     const updatedUser = await get(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,

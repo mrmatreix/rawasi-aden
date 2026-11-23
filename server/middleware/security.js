@@ -287,7 +287,7 @@ const requireAuth = async (req, res, next) => {
     req.authSource = source;
     if (decoded.purpose === 'realtime' && !/^\/(?:api\/contracts\/(?:alerts\/)?stream|ws(?:\/(?:alerts|contracts))?|alerts\/ws)(?:\?|$)/.test(req.originalUrl||req.url||'')) return res.status(401).json({success:false,message:'رمز مخصص للتنبيهات فقط'});
     if (!decoded.id || decoded.type === 'client') return res.status(401).json({success:false,message:'جلسة غير مصرح بها'});
-    const current = await require('../database/db').get('SELECT id,username,full_name,role,status,permissions,allowed_projects,allowed_branches,allowed_departments,branch_id,department_id,session_token,active_sessions,(SELECT permissions FROM roles WHERE name=users.role LIMIT 1) AS role_permissions FROM users WHERE id = ?', [decoded.id]);
+    const current = await require('../database/db').get('SELECT id,username,full_name,role,status,permissions,allowed_projects,allowed_branches,allowed_departments,scope_mode,branch_id,department_id,session_token,active_sessions,(SELECT permissions FROM roles WHERE name=users.role LIMIT 1) AS role_permissions FROM users WHERE id = ?', [decoded.id]);
     if (!current || current.status !== 'active') return res.status(401).json({success:false,message:'الحساب غير متاح'});
     if (decoded.sessionId) {
       let sessions=[];try{sessions=JSON.parse(current.active_sessions || '[]');}catch{}
@@ -305,17 +305,10 @@ const requireAuth = async (req, res, next) => {
       if(!allowed)return res.status(403).json({success:false,message:'هذا الحساب مخصص لمساحة المشرف في التطبيق'});
       if(!/^\/api\/auth\/(?:me|logout)(?:\/|$)/.test(pathname) && !hasUserPermission(req.user,'client_app:staff_login'))return res.status(403).json({success:false,message:'حسابك لا يملك صلاحية دخول فريق العمل في التطبيق'});
     }
-    req.user.scope = null;
-    // ضمان توفر كائن النطاق الصلاحي (Scope Context)
-    if (!req.user.scope) {
-      req.user.scope = {
-        allowed_projects: req.user.allowed_projects || '*',
-        allowed_branches: req.user.allowed_branches || '*',
-        allowed_departments: req.user.allowed_departments || '*',
-        branch_id: req.user.branch_id || 1,
-        department_id: req.user.department_id || 1
-      };
-    }
+    // نطاق الوصول الفعلي من منح المستخدم (فروع/أقسام/مشاريع/سجلات عامة)، يُحسب في كل طلب فيسري التغيير فوراً
+    const scopeService = require('../services/scopeService');
+    req.user.scopeResolved = await scopeService.resolveScope(current);
+    req.user.scope = scopeService.toRequestScope(req.user.scopeResolved, current);
     next();
   } catch (err) {
     return res.status(401).json({
@@ -600,13 +593,32 @@ function recordScopeParam(table) {
       const allowed = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
       if (allowed.includes('*') || allowed.includes('all')) return next();
       const row = await require('../database/db').get(`SELECT project_id FROM ${tableName} WHERE id = ?`, [id]);
-      if (!row || row.project_id === null || row.project_id === undefined || row.project_id === '') return next();
-      if (allowed.some(p => Number(p) === Number(row.project_id))) return next();
+      if (!row) return next();
+      const general = row.project_id === null || row.project_id === undefined || row.project_id === '';
+      // السجل العام (بلا مشروع) لا يصله المقيّد إلا بمنح «السجلات العامة»
+      if (general ? req.user.scope?.general !== false : allowed.some(p => Number(p) === Number(row.project_id))) return next();
       return res.status(403).json({ success: false, scopeDenied: true, scopeType: 'project', message: '⛔ السجل غير موجود أو خارج نطاق صلاحياتك.' });
     } catch (err) {
       next(err);
     }
   };
+}
+
+/**
+ * شرط SQL لفلترة قائمة بحسب نطاق المستخدم على عمود project_id.
+ * null = بلا قيد (المدير أو «كل المؤسسة»). القائمة الفارغة لا تعني «بلا قيد» أبداً: تعطي '1 = 0'.
+ * السجلات بلا مشروع تظهر فقط مع منح «السجلات العامة».
+ */
+function projectScopeSql(user, column) {
+  if (!user || user.role === 'admin') return null;
+  const allowed = parseScopeArray(user.scope?.allowed_projects ?? user.allowed_projects);
+  if (allowed.includes('*') || allowed.includes('all')) return null;
+  const ids = allowed.map(Number).filter(n => Number.isInteger(n) && n > 0);
+  const parts = [], params = [];
+  if (ids.length) { parts.push(`${column} IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
+  if (user.scope?.general !== false) parts.push(`${column} IS NULL`);
+  if (!parts.length) return { sql: '1 = 0', params: [] };
+  return { sql: parts.length > 1 ? `(${parts.join(' OR ')})` : parts[0], params };
 }
 
 /**
@@ -659,6 +671,7 @@ module.exports = {
   requirePermission,
   requireScope,
   recordScopeParam,
+  projectScopeSql,
   hasUserPermission,
   isScopedRequestSupervisor,
   canAssignServiceRequests,

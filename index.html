@@ -7338,47 +7338,75 @@
           </div>
         </div>
 
-        <!-- نطاق الصلاحيات الجغرافي والإداري (المشروع، الفرع، القسم) -->
+        <!-- نطاق الوصول: كل المؤسسة أو منح محددة (فروع / أقسام / مشاريع / السجلات العامة) -->
         <div class="user-scope-card" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.06), rgba(15, 23, 42, 0.75)); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-sm); padding: 12px 16px; margin: 12px 0 16px 0;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
             <span style="font-size: 1.25rem;">🌐</span>
             <div>
-              <h4 style="margin: 0; font-size: 0.92rem; color: var(--color-info, #38bdf8); font-weight: 700;">نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects Scope)</h4>
+              <h4 style="margin: 0; font-size: 0.92rem; color: var(--color-info, #38bdf8); font-weight: 700;">نطاق الوصول (الفروع / الأقسام / المشاريع)</h4>
               <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
-                تحديد الفرع، القسم، والمشاريع المصرح للمستخدم بالوصول إليها. منع الوصول افتراضياً Deny by Default لأي مشروع خارج النطاق.
+                يحدد المشاريع التي يرى المستخدم بياناتها. الصلاحيات تحدد ماذا يفعل، والنطاق يحدد أين.
               </div>
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 4px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">🏢 الفرع الجغرافي المصرح به:</label>
+              <label for="userBranchVal" style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">🏢 الفرع الأساسي</label>
               <select id="userBranchVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
-                <option value="">كافة الفروع (غير مقيد)</option>
+                <option value="">— غير محدد —</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">📑 القسم الإداري:</label>
+              <label for="userDepartmentVal" style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">📑 القسم الأساسي</label>
               <select id="userDepartmentVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
-                <option value="">كافة الأقسام (غير مقيد)</option>
+                <option value="">— غير محدد —</option>
               </select>
             </div>
           </div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 12px;">الفرع والقسم الأساسيان للتعريف والتقارير فقط، ولا يحددان ما يراه المستخدم.</div>
 
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 0;">🏗️ نطاق المشاريع المعتمدة (Project Scope):</label>
-              <label style="display: flex; align-items: center; gap: 4px; font-size: 0.74rem; cursor: pointer; color: var(--text-gold);">
-                <input type="checkbox" id="userAllProjectsScopeChk" checked onchange="Settings.onAllProjectsScopeToggle(this.checked)" style="accent-color: var(--gold-primary);">
-                <span>الوصول لكافة المشاريع الحالية والمستقبلية (*)</span>
-              </label>
-            </div>
-            <div id="userProjectsScopeContainer" style="display: none; max-height: 120px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px;">
-              <div id="userProjectsCheckList" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                <!-- تُعبأ المشاريع برمجياً بواسطة JS -->
+          <div role="radiogroup" aria-label="نوع النطاق" style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; font-size: 0.82rem;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="userScopeMode" id="userScopeModeAll" value="all" checked onchange="Settings.onScopeModeChange()" style="accent-color: #38bdf8;">
+              <span><strong>كل المؤسسة</strong> — كل الفروع والأقسام والمشاريع</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="userScopeMode" id="userScopeModeLimited" value="limited" onchange="Settings.onScopeModeChange()" style="accent-color: #38bdf8;">
+              <span><strong>نطاق محدد</strong></span>
+            </label>
+          </div>
+
+          <div id="userScopeLimitedBox" style="display: none;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 10px;">
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 4px;">الفروع المسموحة</div>
+                <div id="userScopeBranchesList" style="max-height: 120px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 6px 10px; display: grid; gap: 4px;"></div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">يشمل كل مشاريع الفرع الحالية والمستقبلية.</div>
+              </div>
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 4px;">الأقسام المسموحة</div>
+                <div id="userScopeDeptsList" style="max-height: 120px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 6px 10px; display: grid; gap: 4px;"></div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">يشمل كل مشاريع القسم في أي فرع.</div>
               </div>
             </div>
+
+            <div style="margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
+                <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">مشاريع إضافية محددة</span>
+                <input type="search" id="userScopeProjectSearch" class="form-control" placeholder="بحث عن مشروع..." oninput="Settings.filterScopeProjects(this.value)" style="font-size: 0.78rem; height: 32px; max-width: 220px;">
+              </div>
+              <div id="userProjectsCheckList" style="max-height: 140px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px;"></div>
+            </div>
+
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; margin-bottom: 10px;">
+              <input type="checkbox" id="userScopeGeneralChk" onchange="Settings.updateScopePreview()" style="accent-color: #38bdf8;">
+              <span>السجلات العامة غير المرتبطة بمشروع (مصروفات وسندات وفواتير عامة)</span>
+            </label>
           </div>
+
+          <div id="userScopePreview" role="status" style="font-size: 0.8rem; line-height: 1.6; padding: 8px 12px; border-radius: var(--radius-sm); background: rgba(56, 189, 248, 0.08); color: var(--color-info, #38bdf8);">يرى هذا المستخدم كل المؤسسة.</div>
+          <div id="userScopeWarning" style="display: none; font-size: 0.78rem; line-height: 1.6; padding: 8px 12px; margin-top: 6px; border-radius: var(--radius-sm); background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.35); color: var(--color-warning, #fbbf24);"></div>
         </div>
 
         <!-- التحقق بخطوتين (2FA) - رمز الأمان (PIN) للمدير العام والمستخدمين -->
@@ -10044,7 +10072,7 @@
   <script src="js/journal-posting.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/inventory.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/hr.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/settings.js?v=staff-password-reset-20261123"></script>
+  <script src="js/settings.js?v=user-scope-20261124"></script>
   <script src="js/print-designer.js"></script>
   <script src="js/contracts_cashflow.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/sidebar.js?v=1.0.0.20261025-djqd"></script>

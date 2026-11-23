@@ -159,6 +159,52 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_staff_reset_status ON staff_password_resets(status, requested_at)');
       addColumns(db, 'users', [['password_changed_at', 'TEXT'], ['must_change_password', 'INTEGER DEFAULT 0']]);
     }
+  },
+  {
+    id: '0008_user_scope_grants',
+    description: 'User access scope as grants (branch / department / project / general records) with users.scope_mode; backfilled from allowed_* so nobody gains or loses access',
+    up(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS user_scope_grants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        scope_type TEXT NOT NULL CHECK (scope_type IN ('branch','department','project','general')),
+        scope_id INTEGER NOT NULL DEFAULT 0,
+        granted_by INTEGER,
+        granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (user_id, scope_type, scope_id)
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_user_scope_grants_user ON user_scope_grants(user_id)');
+      if (!columns(db, 'users').length) return;
+      // 'all' = whole organisation, 'limited' = only the grants, NULL = legacy allowed_projects (rows inserted outside the API)
+      addColumns(db, 'users', [['scope_mode', 'TEXT']]);
+      const projectCols = columns(db, 'projects');
+      if (projectCols.includes('branch_id') && projectCols.includes('department_id')) db.exec('CREATE INDEX IF NOT EXISTS idx_projects_branch_dept ON projects(branch_id, department_id)');
+      const knownProjects = new Set(projectCols.length ? db.prepare('SELECT id FROM projects').all().map(r => Number(r.id)) : []);
+      // نفس تفسير parseScopeArray القديم: فارغ/'*' = الكل؛ JSON صالح أو قائمة بفواصل = تلك العناصر (التالف يصبح عنصراً لا يطابق مشروعاً)
+      const ids = value => {
+        if (value === null || value === undefined) return '*';
+        const text = String(value).trim();
+        if (!text || text === '*' || text === 'all') return '*';
+        let list = null;
+        if (text.startsWith('[') || text.startsWith('{')) { try { const parsed = JSON.parse(text); if (Array.isArray(parsed)) list = parsed; } catch {} }
+        if (!list) list = text.split(',').map(s => s.trim()).filter(Boolean);
+        if (list.some(v => String(v).trim() === '*' || String(v).trim() === 'all')) return '*';
+        return { entries: list.length, projects: list.map(v => Number(String(v).trim())).filter(n => Number.isInteger(n) && n > 0) };
+      };
+      const userCols = columns(db, 'users');
+      const pick = c => (userCols.includes(c) ? c : 'NULL AS ' + c);
+      const users = db.prepare(`SELECT id, role, ${pick('allowed_projects')}, ${pick('allowed_branches')}, ${pick('allowed_departments')} FROM users WHERE scope_mode IS NULL`).all();
+      const grant = db.prepare('INSERT OR IGNORE INTO user_scope_grants (user_id, scope_type, scope_id) VALUES (?, ?, ?)');
+      const setMode = db.prepare('UPDATE users SET scope_mode = ? WHERE id = ?');
+      for (const u of users) {
+        const parsed = ids(u.allowed_projects);
+        // what each account could see before: '*' or empty value = everything; [] = nothing; any non-empty list = those projects + records without a project
+        if (u.role === 'admin' || parsed === '*') { setMode.run('all', u.id); continue; }
+        setMode.run('limited', u.id);
+        if (parsed.entries > 0) grant.run(u.id, 'general', 0);
+        for (const id of parsed.projects) if (knownProjects.has(id)) grant.run(u.id, 'project', id);
+      }
+    }
   }
 ];
 

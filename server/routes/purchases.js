@@ -4,7 +4,7 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
-const { requirePermission, parseScopeArray, recordScopeParam } = require('../middleware/security');
+const { requirePermission, parseScopeArray, recordScopeParam, projectScopeSql } = require('../middleware/security');
 // كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
 router.param('id', recordScopeParam('purchases'));
 
@@ -25,12 +25,7 @@ router.get('/', requirePermission('purchases:view'), async (req, res) => {
     const conditions = [];
 
     // التحقق من نطاق المشاريع المصرح بها للمستخدم
-    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
-    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-      const placeholders = allowedProjects.map(() => '?').join(',');
-      conditions.push(`(pu.project_id IS NULL OR pu.project_id IN (${placeholders}))`);
-      params.push(...allowedProjects);
-    }
+    { const scopeSql = projectScopeSql(req.user, 'pu.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (supplier_id) {
       conditions.push('pu.supplier_id = ?');

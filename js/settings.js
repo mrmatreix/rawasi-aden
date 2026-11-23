@@ -2408,10 +2408,17 @@ const Settings = {
           // Scope summary
           let scopeHtml = '';
           const scopeParts = [];
-          if (u.branch) scopeParts.push(`🏢 ${u.branch}`);
-          if (u.department) scopeParts.push(`📑 ${u.department}`);
-          if (u.allowed_projects && u.allowed_projects !== 'all' && u.allowed_projects !== '*' && u.allowed_projects !== '[]') {
-            scopeParts.push(`🏗️ مشاريع محددة`);
+          // نطاق الوصول الفعلي (من الخادم): كل المؤسسة، أو ملخص المنح
+          const sc = u.scope;
+          if (!sc || sc.mode === 'all' || u.role === 'admin') {
+            scopeParts.push('🌐 كل المؤسسة');
+          } else {
+            const bits = [];
+            if (sc.branches.length) bits.push(`${sc.branches.length} فرع`);
+            if (sc.departments.length) bits.push(`${sc.departments.length} قسم`);
+            if (sc.projects.length) bits.push(`${sc.projects.length} مشروع محدد`);
+            if (sc.general) bits.push('عام');
+            scopeParts.push(bits.length ? `🎯 ${bits.join(' + ')} (${this.projectsLabel(sc.effective_project_count)})` : '⛔ نطاق فارغ');
           }
           if (scopeParts.length > 0) {
             scopeHtml = `<div style="font-size: 0.72rem; color: var(--color-info, #38bdf8); margin-top: 2px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
@@ -2547,60 +2554,113 @@ const Settings = {
 
   async renderScopesControls(user = null) {
     const meta = await this.fetchScopesMeta();
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const branchSelect = document.getElementById('userBranchVal');
     const deptSelect = document.getElementById('userDepartmentVal');
-    const projectsList = document.getElementById('userProjectsCheckList');
-    const allProjChk = document.getElementById('userAllProjectsScopeChk');
-    const projContainer = document.getElementById('userProjectsScopeContainer');
+    // النطاق المحفوظ (من /api/users)، أو «كل المؤسسة» لمستخدم جديد
+    const scope = user?.scope || { mode: 'all', branches: [], departments: [], projects: [], general: true };
+    const has = (list, id) => (list || []).some(x => String(x) === String(id));
 
     if (branchSelect) {
-      const currentBranchId = user ? (user.branch_id || '') : '';
-      branchSelect.innerHTML = `<option value="">كافة الفروع (غير مقيد)</option>` +
-        (meta?.branches || []).map(b => `<option value="${b.id}" ${String(b.id) === String(currentBranchId) ? 'selected' : ''}>🏢 ${b.name} (${b.city || ''})</option>`).join('');
+      const current = user ? (user.branch_id || '') : '';
+      branchSelect.innerHTML = `<option value="">— غير محدد —</option>` +
+        (meta?.branches || []).map(b => `<option value="${Number(b.id)}" ${String(b.id) === String(current) ? 'selected' : ''}>🏢 ${esc(b.name)}</option>`).join('');
     }
-
     if (deptSelect) {
-      const currentDeptId = user ? (user.department_id || '') : '';
-      deptSelect.innerHTML = `<option value="">كافة الأقسام (غير مقيد)</option>` +
-        (meta?.departments || []).map(d => `<option value="${d.id}" ${String(d.id) === String(currentDeptId) ? 'selected' : ''}>📑 ${d.name}</option>`).join('');
+      const current = user ? (user.department_id || '') : '';
+      deptSelect.innerHTML = `<option value="">— غير محدد —</option>` +
+        (meta?.departments || []).map(d => `<option value="${Number(d.id)}" ${String(d.id) === String(current) ? 'selected' : ''}>📑 ${esc(d.name)}</option>`).join('');
     }
 
-    if (projectsList) {
-      let allowedProjIds = [];
-      if (user && user.allowed_projects) {
-        try {
-          allowedProjIds = typeof user.allowed_projects === 'string' && (user.allowed_projects.startsWith('[') || user.allowed_projects.startsWith('{'))
-            ? JSON.parse(user.allowed_projects)
-            : String(user.allowed_projects).split(',').map(s => s.trim());
-        } catch (e) {
-          allowedProjIds = [String(user.allowed_projects)];
-        }
-      }
-
-      const isAll = !user || allowedProjIds.length === 0 || allowedProjIds.includes('*') || allowedProjIds.includes('all');
-      if (allProjChk) allProjChk.checked = isAll;
-      if (projContainer) projContainer.style.display = isAll ? 'none' : 'block';
-
-      projectsList.innerHTML = (meta?.projects || []).map(p => {
-        const checked = !isAll && allowedProjIds.some(id => String(id) === String(p.id));
-        return `
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text-primary, #f1f5f9); cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;">
-            <input type="checkbox" class="user-proj-scope-chk" value="${p.id}" ${checked ? 'checked' : ''} style="accent-color: #38bdf8;">
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</span>
-          </label>
-        `;
-      }).join('');
-    }
+    const checkbox = (cls, id, label, checked) => `
+      <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text-primary, #f1f5f9); cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;" data-scope-label="${esc(label).toLowerCase()}">
+        <input type="checkbox" class="${cls}" value="${Number(id)}" ${checked ? 'checked' : ''} onchange="Settings.updateScopePreview()" style="accent-color: #38bdf8;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(label)}</span>
+      </label>`;
+    const limited = scope.mode === 'limited';
+    const branchesBox = document.getElementById('userScopeBranchesList');
+    if (branchesBox) branchesBox.innerHTML = (meta?.branches || []).map(b => checkbox('user-scope-branch-chk', b.id, b.name, limited && has(scope.branches, b.id))).join('') || '<span style="font-size:0.74rem;color:var(--text-muted);">لا توجد فروع</span>';
+    const deptsBox = document.getElementById('userScopeDeptsList');
+    if (deptsBox) deptsBox.innerHTML = (meta?.departments || []).map(d => checkbox('user-scope-dept-chk', d.id, d.name, limited && has(scope.departments, d.id))).join('') || '<span style="font-size:0.74rem;color:var(--text-muted);">لا توجد أقسام</span>';
+    const projectsBox = document.getElementById('userProjectsCheckList');
+    if (projectsBox) projectsBox.innerHTML = (meta?.projects || []).map(p => checkbox('user-proj-scope-chk', p.id, p.name, limited && has(scope.projects, p.id))).join('') || '<span style="font-size:0.74rem;color:var(--text-muted);">لا توجد مشاريع</span>';
+    const search = document.getElementById('userScopeProjectSearch');
+    if (search) search.value = '';
+    const general = document.getElementById('userScopeGeneralChk');
+    if (general) general.checked = limited ? Boolean(scope.general) : false;
+    const radio = document.getElementById(limited ? 'userScopeModeLimited' : 'userScopeModeAll');
+    if (radio) radio.checked = true;
+    this.onScopeModeChange();
   },
 
-  onAllProjectsScopeToggle(isAll) {
-    const projContainer = document.getElementById('userProjectsScopeContainer');
-    if (projContainer) {
-      projContainer.style.display = isAll ? 'none' : 'block';
-    }
-    if (isAll) {
-      document.querySelectorAll('.user-proj-scope-chk').forEach(c => c.checked = false);
-    }
+  /** الخطة الحالية من عناصر النافذة بنفس شكل واجهة /api/users/:id/scope */
+  readScopeForm() {
+    const ids = sel => Array.from(document.querySelectorAll(sel + ':checked')).map(c => Number(c.value));
+    if (!document.getElementById('userScopeModeLimited')?.checked) return { mode: 'all' };
+    return {
+      mode: 'limited',
+      branches: ids('.user-scope-branch-chk'),
+      departments: ids('.user-scope-dept-chk'),
+      projects: ids('.user-proj-scope-chk'),
+      general: Boolean(document.getElementById('userScopeGeneralChk')?.checked)
+    };
+  },
+
+  /** عدد المشاريع بصيغة عربية صحيحة */
+  projectsLabel(n) {
+    n = Number(n) || 0;
+    if (n === 0) return 'لا مشاريع';
+    if (n === 1) return 'مشروع واحد';
+    if (n === 2) return 'مشروعان';
+    if (n <= 10) return `${n} مشاريع`;
+    return `${n} مشروعاً`;
+  },
+
+  isScopeEmpty(scope) {
+    return scope.mode === 'limited' && !scope.branches.length && !scope.departments.length && !scope.projects.length && !scope.general;
+  },
+
+  onScopeModeChange() {
+    const limited = Boolean(document.getElementById('userScopeModeLimited')?.checked);
+    const box = document.getElementById('userScopeLimitedBox');
+    if (box) box.style.display = limited ? 'block' : 'none';
+    this.updateScopePreview();
+  },
+
+  filterScopeProjects(term) {
+    const q = String(term || '').trim().toLowerCase();
+    document.querySelectorAll('#userProjectsCheckList [data-scope-label]').forEach(el => {
+      el.style.display = !q || el.dataset.scopeLabel.includes(q) ? '' : 'none';
+    });
+  },
+
+  // معاينة حية من الخادم: عدد المشاريع التي سيصل إليها المستخدم وعبر أي منح
+  updateScopePreview() {
+    clearTimeout(this._scopePreviewTimer);
+    this._scopePreviewTimer = setTimeout(async () => {
+      const preview = document.getElementById('userScopePreview');
+      const warning = document.getElementById('userScopeWarning');
+      if (!preview) return;
+      const scope = this.readScopeForm();
+      const setWarning = text => { if (warning) { warning.textContent = text || ''; warning.style.display = text ? 'block' : 'none'; } };
+      if (scope.mode === 'all') { preview.textContent = 'يرى هذا المستخدم كل المؤسسة: كل الفروع والأقسام والمشاريع الحالية والمستقبلية.'; setWarning(''); return; }
+      if (this.isScopeEmpty(scope)) { preview.textContent = 'لم يُحدَّد أي فرع أو قسم أو مشروع.'; setWarning('⚠️ لن يرى هذا المستخدم أي مشروع ولا أي سجل.'); return; }
+      try {
+        const res = await fetch('/api/users/scope-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scope) });
+        const json = await res.json();
+        if (!res.ok || !json.success) { preview.textContent = json.message || 'تعذرت المعاينة'; return; }
+        const d = json.data;
+        const count = via => d.projects.filter(p => p.via === via).length;
+        const parts = [];
+        if (count('branch')) parts.push(`${count('branch')} عبر الفروع`);
+        if (count('department')) parts.push(`${count('department')} عبر الأقسام`);
+        if (count('project')) parts.push(`${count('project')} محددة بالاسم`);
+        preview.textContent = `سيصل هذا المستخدم إلى: ${this.projectsLabel(d.project_count)}${parts.length ? ' (' + parts.join('، ') + ')' : ''}${d.general ? '، والسجلات العامة غير المرتبطة بمشروع' : ''}.`;
+        setWarning(d.project_count === 0 && !d.general ? '⚠️ الفروع والأقسام المحددة لا تحتوي أي مشروع حالياً.' : '');
+      } catch (e) {
+        preview.textContent = 'تعذرت المعاينة (خطأ في الاتصال).';
+      }
+    }, 250);
   },
 
   // ================== نافذة إضافة مستخدم جديد ==================
@@ -3268,11 +3328,17 @@ const Settings = {
     // قراءة وتحديد نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects)
     const branch_id = document.getElementById('userBranchVal')?.value || null;
     const department_id = document.getElementById('userDepartmentVal')?.value || null;
-    const allProjScope = document.getElementById('userAllProjectsScopeChk')?.checked;
-    let allowed_projects = 'all';
-    if (!allProjScope) {
-      const selectedProjIds = Array.from(document.querySelectorAll('.user-proj-scope-chk:checked')).map(c => Number(c.value));
-      allowed_projects = selectedProjIds;
+    const scope = this.readScopeForm();
+    if (this.isScopeEmpty(scope)) {
+      if (!(await UIDialog.confirm('النطاق المحدد فارغ: لن يرى هذا المستخدم أي مشروع ولا أي سجل. هل تريد الحفظ هكذا؟'))) return;
+      scope.allow_empty = true;
+    }
+    if (scope.mode === 'limited') {
+      const ledgerPerms = ['*', 'all', 'accounting:view', 'accounting:*', 'accounting', 'cash:view', 'cash:*', 'cash'];
+      const permsList = Array.isArray(finalPerms) ? finalPerms : String(finalPerms || '').split(',');
+      if (finalRole === 'accountant' || permsList.some(p => ledgerPerms.includes(String(p).trim()))) {
+        if (!(await UIDialog.confirm('تنبيه: صلاحيات الدفاتر والصناديق (القيود، الحسابات، الصندوق) تعرض بيانات كل المؤسسة بغض النظر عن النطاق المحدد. هل تريد المتابعة؟'))) return;
+      }
     }
 
     const payload = {
@@ -3286,7 +3352,7 @@ const Settings = {
       two_factor_enabled: twoFactorEnabled,
       branch_id: branch_id ? Number(branch_id) : null,
       department_id: department_id ? Number(department_id) : null,
-      allowed_projects
+      scope
     };
 
     // On edit, omit a blank PIN so the database keeps the existing secret.

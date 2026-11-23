@@ -5,7 +5,7 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const PayrollService = require('../services/payrollService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, projectScopeSql } = require('../middleware/security');
 
 const today = () => new Date().toISOString().slice(0, 10);
 const number = value => Number(value) || 0;
@@ -33,12 +33,7 @@ router.get('/employees', requirePermission('hr:view'), async (req, res) => {
     const params = [];
     const conditions = [];
 
-    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
-    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-      const placeholders = allowedProjects.map(() => '?').join(',');
-      conditions.push(`(e.project_id IS NULL OR e.project_id IN (${placeholders}))`);
-      params.push(...allowedProjects);
-    }
+    { const scopeSql = projectScopeSql(req.user, 'e.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ');

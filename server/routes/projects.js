@@ -195,6 +195,16 @@ router.post('/', requirePermission('projects:create'), async (req, res) => {
 
     const newId = result.lastInsertRowid || result.insertId;
 
+    // مستخدم بنطاق محدد أنشأ مشروعاً خارج فروعه/أقسامه الممنوحة: يُمنح المشروع صراحةً حتى يراه (ويُسجَّل في التدقيق)
+    if (req.user && req.user.role !== 'admin' && req.user.scope_mode === 'limited') {
+      const scopeService = require('../services/scopeService');
+      const now = await scopeService.resolveScope(req.user);
+      if (!now.all && !now.projectIds.includes(Number(newId))) {
+        await run("INSERT OR IGNORE INTO user_scope_grants (user_id, scope_type, scope_id, granted_by) VALUES (?, 'project', ?, ?)", [req.user.id, newId, req.user.id]);
+        await require('../services/auditService').logAudit(req, { action: 'USER_SCOPE_CHANGE', entity_type: 'user', entity_id: req.user.id, details: { reason: 'project_creator_grant', project_id: Number(newId) } });
+      }
+    }
+
     // ربط العميل بالعقد والمشروع تلقائياً وإنشاء العقد الأولي
     if (client_id || Number(contract_value) > 0) {
       const contractCount = await get('SELECT COUNT(*) as cnt FROM project_contracts');
