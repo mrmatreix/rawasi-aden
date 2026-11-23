@@ -122,7 +122,7 @@ router.put('/:id', requirePermission('suppliers:edit'), async (req, res) => {
 // 8. حذف مورد
 // DELETE /api/suppliers/:id
 // ============================================================================
-router.delete('/:id', requirePermission('suppliers:delete,admin'), async (req, res) => {
+router.delete('/:id', requirePermission('suppliers:cancel,suppliers:delete'), async (req, res) => {
   try {
     const result = await VendorService.deleteVendor(req.params.id, req.user);
     res.json(result);

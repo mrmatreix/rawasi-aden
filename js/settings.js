@@ -11,6 +11,7 @@ const Settings = {
   populateAdditionalRoles() {
     const select=document.getElementById('userRoleVal');
     for(const [id,role] of Object.entries(SystemCatalog.roles))if(![...select.options].some(option=>option.value===id))select.add(new Option(role.label,id),select.querySelector('option[value="custom"]'));
+    const adminOption=select.querySelector('option[value="admin"]');if(adminOption)adminOption.disabled=Auth.currentUser?.role!=='admin';
   },
   escapeText(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));},
   operationTitles(){return Object.fromEntries(SystemCatalog.operations.map(operation=>[operation.id,document.getElementById('operationTitle_'+operation.id)?.value||'']));},
@@ -2740,8 +2741,31 @@ const Settings = {
     }, 250);
   },
 
+  // ================== مصفوفة العمليات والصلاحيات (من الكتالوج الموحّد) ==================
+  ensurePermissionMatrix() {
+    const box = document.getElementById('permMatrixGrid');
+    if (!box || box.dataset.ready === '1' || typeof SystemCatalog === 'undefined' || !SystemCatalog.modules) return;
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const acts = SystemCatalog.actions;
+    const head = `<tr><th style="text-align: right; min-width: 180px;">الوحدة</th>${acts.map(a => `<th style="text-align: center;"><button type="button" class="perm-quick-btn" data-perm-col="${a.id}" title="تحديد/إلغاء ${esc(a.label)} في كل الوحدات">${esc(a.label)}</button></th>`).join('')}<th style="text-align: right; min-width: 180px;">عمليات إضافية</th></tr>`;
+    const rows = SystemCatalog.modules.map(m => {
+      const cells = acts.map(a => m.actions.includes(a.id)
+        ? `<td style="text-align: center;"><input type="checkbox" class="perm-chk" name="userPerm" value="${esc(m.key + ':' + a.id)}" aria-label="${esc(m.label + ' — ' + a.label)}" style="accent-color: var(--gold-primary); width: 16px; height: 16px;"></td>`
+        : `<td style="text-align: center; color: var(--text-muted);" title="لا تنطبق على هذه الوحدة">—</td>`).join('');
+      const extras = Object.entries(m.extra || {}).map(([k, label]) => `<label style="display: flex; align-items: center; gap: 4px; font-size: 0.74rem; white-space: nowrap;"><input type="checkbox" class="perm-chk" name="userPerm" value="${esc(m.key + ':' + k)}" style="accent-color: var(--gold-primary);"> ${esc(label)}</label>`).join('');
+      return `<tr><td><button type="button" class="perm-quick-btn" data-perm-row="${esc(m.key)}" title="تحديد/إلغاء كل عمليات الوحدة" style="font-weight: 700; text-align: right;">${esc(m.label)}</button></td>${cells}<td><div style="display: grid; gap: 4px;">${extras || '<span style="color: var(--text-muted);">—</span>'}</div></td></tr>`;
+    }).join('');
+    box.innerHTML = `<table class="custom-table" style="font-size: 0.8rem; min-width: 760px;"><thead>${head}</thead><tbody>${rows}</tbody></table>
+      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">«—» العملية لا تنطبق على الوحدة. الترحيل المحاسبي للسندات يتم بصلاحية «المحاسبة: ترحيل». التصدير يتحكم في أزرار التصدير إلى Excel.</div>`;
+    const toggle = boxes => { const list = [...boxes]; const on = list.some(b => !b.checked); list.forEach(b => { b.checked = on; }); };
+    box.querySelectorAll('[data-perm-col]').forEach(btn => btn.addEventListener('click', () => toggle(box.querySelectorAll(`.perm-chk[value$=":${btn.dataset.permCol}"]`))));
+    box.querySelectorAll('[data-perm-row]').forEach(btn => btn.addEventListener('click', () => toggle(btn.closest('tr').querySelectorAll('.perm-chk'))));
+    box.dataset.ready = '1';
+  },
+
   // ================== نافذة إضافة مستخدم جديد ==================
   async openNewUserModal() {
+    this.ensurePermissionMatrix();
     this.populateAdditionalRoles();
     document.getElementById('userPasswordConfirm').value='';
     document.getElementById('userPasswordConfirm').required=true;
@@ -2802,6 +2826,7 @@ const Settings = {
 
   // ================== نافذة تعديل مستخدم ==================
   async openEditUserModal(userId, focus2Fa = false) {
+    this.ensurePermissionMatrix();
     const user = this._cachedUsers.find(u => u.id === userId);
     if (!user) {
       App.showToast('لم يتم العثور على بيانات المستخدم', 'error');
@@ -3159,75 +3184,16 @@ const Settings = {
     }
   },
 
+  // قالب الدور من الكتالوج الموحّد (نفس ما يطبّقه الخادم عند خلو صلاحيات المستخدم)
   applyRolePermissionsPreset(role) {
+    this.ensurePermissionMatrix();
     this.selectAllPermissions(false);
-    if (SystemCatalog.roles[role]) {
-      for (const permission of SystemCatalog.roles[role].permissions) { const box=document.querySelector(`.perm-chk[value="${permission}"]`); if(box)box.checked=true; }
-      return;
+    const template = (typeof SystemCatalog !== 'undefined' && SystemCatalog.roles[role]) ? SystemCatalog.roles[role].permissions : [];
+    if (template.includes('*')) { this.selectAllPermissions(true); return; }
+    for (const permission of template) {
+      const box = document.querySelector(`.perm-chk[value="${permission}"]`);
+      if (box) box.checked = true;
     }
-
-    let permsToSelect = [];
-
-    switch (role) {
-      case 'admin':
-        this.selectAllPermissions(true);
-        return;
-      case 'accountant':
-        permsToSelect = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-          'custody:view', 'custody:create', 'custody:export',
-          'clients:view', 'clients:create', 'clients:export',
-          'suppliers:view', 'suppliers:create', 'suppliers:export',
-          'cash:view',
-          'hr:view',
-          'reports:view', 'reports:export'
-        ];
-        break;
-      case 'auditor':
-        permsToSelect = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-          'expenses:view', 'expenses:approve', 'expenses:export',
-          'revenues:view', 'revenues:approve', 'revenues:export',
-          'billing:view', 'billing:approve', 'billing:export',
-          'custody:view', 'custody:approve', 'custody:export',
-          'projects:view', 'projects:export',
-          'inventory:view', 'inventory:export',
-          'purchases:view', 'purchases:approve', 'purchases:export',
-          'hr:view', 'hr:approve', 'hr:export',
-          'reports:view', 'reports:export',
-          'cash:view'
-        ];
-        break;
-      case 'project_manager':
-        permsToSelect = [
-          'dashboard:view',
-          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export',
-          'expenses:view', 'expenses:create',
-          'custody:view',
-          'inventory:view', 'inventory:issue',
-          'reports:view'
-        ];
-        break;
-      case 'storekeeper':
-        permsToSelect = [
-          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export',
-          'purchases:view',
-          'projects:view'
-        ];
-        break;
-      default:
-        return;
-    }
-
-    permsToSelect.forEach(val => {
-      const chk = document.querySelector(`.perm-chk[value="${val}"]`);
-      if (chk) chk.checked = true;
-    });
   },
 
   selectAllPermissions(select) {

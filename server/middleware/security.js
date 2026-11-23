@@ -293,7 +293,9 @@ const requireAuth = async (req, res, next) => {
       let sessions=[];try{sessions=JSON.parse(current.active_sessions || '[]');}catch{}
       if (!(sessions.some(session=>session.sessionId===decoded.sessionId) || current.session_token===decoded.sessionId)) return res.status(401).json({success:false,message:'الجلسة ملغاة'});
     }
-    const permissionValue=current.permissions || current.role_permissions || '[]';
+    // صلاحيات المستخدم المحفوظة؛ وإن لم تُحفظ أي صلاحية فقالب دوره من الكتالوج الموحّد، ثم جدول الأدوار للأدوار المخصّصة
+    const roleTemplate=require('../../js/system-catalog').roles[current.role]?.permissions;
+    const permissionValue=current.permissions || roleTemplate || current.role_permissions || '[]';
     let permissions=[];
     if(Array.isArray(permissionValue))permissions=permissionValue;
     else {try{const parsed=JSON.parse(permissionValue);if(Array.isArray(parsed))permissions=parsed;}catch{permissions=String(permissionValue).split(',').map(p=>p.trim()).filter(Boolean);}}
@@ -379,21 +381,8 @@ function hasUserPermission(user, requiredPerm) {
     return true;
   }
 
-  // المحاسب المالي يملك صلاحيات العمليات المالية والمحاسبية والسندات والمشاريع والتقارير
-  if (user.role === 'accountant') {
-    const isFinancialReq = requiredPerm.split(',').some(p => {
-      const trimmed = p.trim();
-      return trimmed.startsWith('accounting:') || trimmed.startsWith('expenses:') || 
-             trimmed.startsWith('revenues:') || trimmed.startsWith('billing:') || 
-             trimmed.startsWith('reports:') || trimmed.startsWith('custody:') || 
-             trimmed.startsWith('cash:') || trimmed.startsWith('clients:') || 
-             trimmed.startsWith('suppliers:') || trimmed.startsWith('projects:') ||
-             trimmed === 'accounting' || trimmed === 'expenses' || trimmed === 'revenues' || 
-             trimmed === 'payments' || trimmed === 'billing' || trimmed === 'projects';
-    });
-    if (isFinancialReq) return true;
-  }
-
+  // لا استثناءات حسب الدور غير المدير العام: المحاسب وغيره يملكون ما في صلاحياتهم (أو قالب دورهم) فقط.
+  // (كان المحاسب يُمنح كل العمليات المالية ضمنياً، بما فيها الاعتماد والترحيل، خلافاً لفصل المُنشئ عن المعتمِد.)
   const userPerms = Array.isArray(user.permissions) ? user.permissions : [];
   if (userPerms.length === 0) {
     return false; // Deny by Default

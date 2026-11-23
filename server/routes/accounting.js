@@ -19,7 +19,7 @@ const { resolveAccountCostCenter } = require('../services/accountCostCenterServi
 const EmployeeFunds = require('../services/ledger/employeeFundsService');
 
 // دليل الحسابات الشجري مع دعم الهرمية، الرتب، والحسابات التحليلية الطرفية
-router.get('/accounts', requirePermission('accounting:view,accounting,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
+router.get('/accounts', requirePermission('accounting:view,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
   try {
     const { leaf_only, usable_only, active_only } = req.query;
     let sql = `
@@ -274,7 +274,7 @@ router.patch('/accounts/:id/toggle-status', requirePermission('accounting:edit')
 });
 
 // حذف حساب من دليل الحسابات مع الفحص المحاسبي الصارم
-router.delete('/accounts/:id', requirePermission('accounting:delete,settings:company'), async (req, res) => {
+router.delete('/accounts/:id', requirePermission('accounting:cancel,accounting:delete,settings:company'), async (req, res) => {
   try {
     const { id } = req.params;
     const account = await get('SELECT * FROM accounts WHERE id = ?', [id]);
@@ -423,7 +423,7 @@ router.put('/currencies/:id', requirePermission('accounting:edit,settings:compan
 });
 
 // جلب قائمة مراكز التكلفة
-router.get('/cost-centers', requirePermission('accounting:view,accounting,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
+router.get('/cost-centers', requirePermission('accounting:view,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,custody:view,cash:view'), async (req, res) => {
   try {
     const centers = await query(`
       SELECT cc.*, p.name as project_name 
@@ -513,7 +513,7 @@ router.put('/cost-centers/:id', requirePermission('accounting:edit'), async (req
 });
 
 // حذف مركز تكلفة مع فحص العمليات المرتبطة
-router.delete('/cost-centers/:id', requirePermission('accounting:delete'), async (req, res) => {
+router.delete('/cost-centers/:id', requirePermission('accounting:cancel,accounting:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const cc = await get('SELECT * FROM cost_centers WHERE id = ?', [id]);

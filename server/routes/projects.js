@@ -6,7 +6,7 @@ const ProjectCostService = require('../services/projectCostService');
 const { requirePermission, parseScopeArray } = require('../middleware/security');
 
 // جلب جميع المشاريع مع اسم العميل وتطبيق نطاق الصلاحيات
-router.get('/', requirePermission('projects:view,projects,accounting:view,accounting,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,cash:view'), async (req, res) => {
+router.get('/', requirePermission('projects:view,accounting:view,expenses:view,expenses:create,revenues:view,revenues:create,billing:view,cash:view'), async (req, res) => {
   try {
     const { status } = req.query;
     let sql = `
@@ -48,7 +48,7 @@ router.get('/', requirePermission('projects:view,projects,accounting:view,accoun
 });
 
 // جلب عقود مشروع محدد
-router.get('/:id/contracts', requirePermission('projects:view,projects,clients:view,billing:view,revenues:view'), async (req, res) => {
+router.get('/:id/contracts', requirePermission('projects:view,clients:view,billing:view,revenues:view'), async (req, res) => {
   try {
     const contracts = await query(`
       SELECT pc.*, p.name AS project_name, c.name AS client_name

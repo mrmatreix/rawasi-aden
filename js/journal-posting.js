@@ -138,6 +138,7 @@ Object.assign(Accounting, {
   },
 
   async exportVoucherRegister(kind, format) {
+    if (typeof Auth !== 'undefined' && !Auth.hasPermission(kind === 'receipt' ? 'revenues:export,accounting:export' : 'expenses:export,accounting:export')) return App.showToast('⛔ لا تملك صلاحية التصدير', 'error');
     this._voucherExportBusy ||= new Set();
     const key = kind + ':' + format;
     if (this._voucherExportBusy.has(key)) return;

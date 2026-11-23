@@ -1120,7 +1120,7 @@ const Auth = {
     if (!this.currentUser) return false;
 
     // مدير النظام الرئيسي (Super Admin) يملك كافة الصلاحيات دائماً
-    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') {
+    if (this.currentUser.role === 'admin') {
       return true;
     }
 
@@ -1133,58 +1133,10 @@ const Auth = {
       }
     }
 
-    // إذا كانت الصلاحيات فارغة تماماً ولم تُخصص، نطبق الصلاحيات الافتراضية حسب الدور
+    // صلاحيات فارغة: قالب الدور من الكتالوج الموحّد (نفس ما يطبّقه الخادم)
     if (!perms || perms.length === 0) {
-      if (this.currentUser.role === 'admin') {
-        return true;
-      }
-      if (this.currentUser.role === 'accountant') {
-        perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-          'custody:view', 'custody:create', 'custody:manage', 'custody:export',
-          'clients:view', 'clients:create', 'clients:manage', 'clients:statement',
-          'suppliers:view', 'suppliers:create', 'suppliers:manage', 'suppliers:statement',
-          'cash:view',
-          'hr:view', 'hr:payroll',
-          'reports:view', 'reports:export'
-        ];
-      } else if (this.currentUser.role === 'auditor') {
-        perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-          'expenses:view', 'expenses:approve', 'expenses:export',
-          'revenues:view', 'revenues:approve', 'revenues:export',
-          'billing:view', 'billing:approve', 'billing:export',
-          'custody:view', 'custody:approve', 'custody:export',
-          'projects:view', 'projects:export',
-          'inventory:view', 'inventory:export',
-          'purchases:view', 'purchases:approve', 'purchases:export',
-          'hr:view', 'hr:approve', 'hr:export',
-          'reports:view', 'reports:export',
-          'cash:view'
-        ];
-      } else if (this.currentUser.role === 'project_manager') {
-        perms = [
-          'dashboard:view',
-          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export', 'projects:manage', 'projects:print',
-          'expenses:view', 'expenses:create',
-          'custody:view',
-          'inventory:view', 'inventory:issue',
-          'reports:view'
-        ];
-      } else if (this.currentUser.role === 'storekeeper') {
-        perms = [
-          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export', 'inventory:manage',
-          'purchases:view',
-          'projects:view'
-        ];
-      } else {
-        perms = ['dashboard:view'];
-      }
+      const template = typeof SystemCatalog !== 'undefined' && SystemCatalog.roles?.[this.currentUser.role];
+      perms = template ? template.permissions : ['dashboard:view'];
     }
 
     if (Array.isArray(perms) && (perms.includes('*') || perms.includes('all'))) {
@@ -1212,11 +1164,9 @@ const Auth = {
   },
 
   // التحقق الأمني من صلاحية المستخدم للوصول لشاشة معينة لمنع التلاعب بالـ DOM
-  canAccessView(viewId) {
-    if (!this.currentUser) return false;
-    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') return true;
-
-    const viewPermMap = {
+  // صلاحية العرض المطلوبة لكل شاشة (مصدر واحد للعرض والتصدير)
+  viewPermissions() {
+    return {
       'dashboard': 'dashboard:view',
       'projects': 'projects:view',
       'projectHub': 'projects:view',
@@ -1243,6 +1193,24 @@ const Auth = {
       'settings': 'settings:users,settings:company,settings:backup',
       'clientApp': 'client_app:view'
     };
+  },
+
+  // التصدير إلى Excel يتطلب صلاحية «تصدير» للوحدة التي تُعرض شاشتها حالياً
+  canExportCurrentView() {
+    if (!this.currentUser) return false;
+    if (this.currentUser.role === 'admin') return true;
+    const view = (typeof App !== 'undefined' && App.activeView) || 'dashboard';
+    const viewPerm = this.viewPermissions()[view];
+    if (!viewPerm) return true;
+    const exportPerm = viewPerm.split(',').map(p => p.trim().split(':')[0] + ':export').join(',');
+    return this.hasPermission(exportPerm);
+  },
+
+  canAccessView(viewId) {
+    if (!this.currentUser) return false;
+    if (this.currentUser.role === 'admin') return true;
+
+    const viewPermMap = this.viewPermissions();
 
     const perm = viewPermMap[viewId];
     if (!perm) return true;

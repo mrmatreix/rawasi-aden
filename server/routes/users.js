@@ -3,8 +3,39 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { query, get, run } = require('../database/db');
 const { verifyAdmin, getSecuritySettings } = require('./auth');
-const { requirePermission, revokeAllStaffSessions } = require('../middleware/security');
+const { requirePermission, revokeAllStaffSessions, hasUserPermission } = require('../middleware/security');
 const scopeService = require('../services/scopeService');
+
+// الصلاحيات المقبولة = مفاتيح الكتالوج الموحّد فقط (و'*' للمدير العام)؛ أي مفتاح آخر يُسقط ويُبلَّغ عنه
+const catalog = require('../../js/system-catalog');
+const KNOWN_PERMISSIONS = new Set(catalog.permissionKeys);
+function normalizePermissions(value) {
+  let list = [];
+  if (Array.isArray(value)) list = value;
+  else if (typeof value === 'string' && value.trim()) {
+    try { const parsed = JSON.parse(value); list = Array.isArray(parsed) ? parsed : value.split(','); } catch { list = value.split(','); }
+  }
+  const clean = [], dropped = [];
+  for (const raw of list) {
+    const p = String(raw).trim();
+    if (!p) continue;
+    if (p === '*' || p === 'all') clean.push('*');
+    else if (KNOWN_PERMISSIONS.has(p)) clean.push(p);
+    else dropped.push(p);
+  }
+  return { list: [...new Set(clean)], dropped };
+}
+
+/** لا يمنح أحد غير المدير العام دور المدير العام أو '*' أو صلاحية لا يملكها هو، ولا يعدّل حساب مدير عام */
+function escalationError(granter, { role, permissions, target }) {
+  if (granter.role === 'admin') return null;
+  if (target && (target.role === 'admin' || target.username === 'admin')) return '⛔ تعديل حساب المدير العام للمدير العام فقط.';
+  if (role === 'admin') return '⛔ منح دور المدير العام للمدير العام فقط.';
+  const effective = permissions && permissions.length ? permissions : (catalog.roles[role]?.permissions || []);
+  if (effective.includes('*')) return '⛔ منح كل الصلاحيات (*) للمدير العام فقط.';
+  const missing = effective.filter(p => !hasUserPermission(granter, p));
+  return missing.length ? `⛔ لا يمكنك منح صلاحيات لا تملكها: ${missing.slice(0, 8).join('، ')}${missing.length > 8 ? '…' : ''}` : null;
+}
 
 // أسماء الفرع والقسم من جداولهما (للحقلين النصيين branch/department)، مع رفض رقم غير موجود
 async function orgNames(branchId, departmentId) {
@@ -34,6 +65,18 @@ async function saveScopeAudited(req, userId, plan, before) {
   }
   return after;
 }
+
+// أي تعديل على حساب مدير عام (حالة، حذف، فصل، فك قفل، نطاق، أمان...) للمدير العام فقط
+router.param('id', async (req, res, next, id) => {
+  try {
+    if (req.user?.role === 'admin' || req.method === 'GET') return next();
+    const target = await get('SELECT role, username FROM users WHERE id = ?', [id]);
+    if (target && (target.role === 'admin' || target.username === 'admin')) {
+      return res.status(403).json({ success: false, message: '⛔ تعديل حساب المدير العام للمدير العام فقط.' });
+    }
+    next();
+  } catch (err) { next(err); }
+});
 
 // نطاق وصول مستخدم: الخطة المحفوظة + عدد المشاريع الفعلية
 router.get('/:id/scope', requirePermission('settings:users'), async (req, res) => {
@@ -219,7 +262,10 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       if (roleObj) roleIdVal = roleObj.id;
     }
 
-    const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions || '');
+    const permsNorm = normalizePermissions(permissions);
+    const escalation = escalationError(req.user, { role: roleName, permissions: permsNorm.list });
+    if (escalation) return res.status(403).json({ success: false, message: escalation });
+    const permsString = permissions === undefined || permissions === null || permissions === '' ? '' : JSON.stringify(permsNorm.list);
     const secString = security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null;
 
     const allowedProjectsStr = Array.isArray(allowed_projects) 
@@ -335,7 +381,13 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
       if (roleObj) roleName = roleObj.name;
     }
 
-    const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions !== undefined ? permissions : user.permissions);
+    const permsNorm = permissions !== undefined ? normalizePermissions(permissions) : null;
+    const roleChanged = roleName !== user.role;
+    if (permsNorm || roleChanged || req.user.role !== 'admin') {
+      const escalation = escalationError(req.user, { role: roleName, permissions: permsNorm ? permsNorm.list : normalizePermissions(user.permissions).list, target: user });
+      if (escalation) return res.status(403).json({ success: false, message: escalation });
+    }
+    const permsString = permsNorm ? JSON.stringify(permsNorm.list) : user.permissions;
 
     const secString = security_settings !== undefined
       ? (security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null)
