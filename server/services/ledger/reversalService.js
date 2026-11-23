@@ -6,7 +6,6 @@ const { get, query, run, transaction } = require('../../database/db');
 const { checkPeriodOpen } = require('../periodService');
 const { logAudit } = require('../auditService');
 const PostingService = require('./postingService');
-const SystemAccounts = require('../systemAccountService');
 
 const DOCUMENT_STATUSES = { DRAFT: 'draft', POSTED: 'posted', CLOSED: 'closed', REVERSED: 'reversed' };
 
@@ -125,13 +124,19 @@ const ReversalService = {
 
       // تحديد البند الفرعي المسدَّد (ذمة مورد أو أجور مستحقة) من الطرف المدين للقيد الأصلي
       const debitAccountId = Number(source.lines.find(line => Number(line.debit) > 0)?.account_id);
-      const apAcc = await SystemAccounts.resolveOptional('SUPPLIERS_PAYABLE', tx);
-      const wpAcc = await SystemAccounts.resolveOptional('SALARIES_PAYABLE', tx);
+      // same resolvers the accruals and the settling voucher use (role first, legacy chart fallback)
+      const ProjectCost = require('../projectCostService');
+      const apId = await ProjectCost.resolvePayableAccounts(tx).then(a => a.apAccId).catch(() => null);
+      const wpId = await ProjectCost.resolveWageAccounts(tx).then(a => a.wagesPayableAccId).catch(() => null);
+      const apAcc = apId ? { id: apId } : null;
+      const wpAcc = wpId ? { id: wpId } : null;
+      // the two payables may share one account on a small chart, so the linked record decides, not the first match
       let settleInfo = null;
       if (apAcc && debitAccountId === Number(apAcc.id)) {
         const pur = await tx.get('SELECT * FROM project_purchases WHERE linked_expense_id = ?', [exp.id]);
         if (pur && pur.supplier_id) settleInfo = { kind: 'purchase', purchase: pur };
-      } else if (wpAcc && debitAccountId === Number(wpAcc.id)) {
+      }
+      if (!settleInfo && wpAcc && debitAccountId === Number(wpAcc.id)) {
         const lab = await tx.get('SELECT * FROM project_labor_expenses WHERE linked_expense_id = ?', [exp.id]);
         if (lab) settleInfo = { kind: 'labor', labor: lab };
       }

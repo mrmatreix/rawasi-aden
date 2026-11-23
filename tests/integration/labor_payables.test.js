@@ -19,6 +19,12 @@ const db = require('../../server/database/db');
 const app = require('../../server/server');
 const ProjectCostService = require('../../server/services/projectCostService');
 
+// test cleanup deletes posted entries: allowed only inside an explicit ledger maintenance unlock (stage 1 guards)
+async function withLedgerUnlock(db, fn) {
+  await db.run("INSERT INTO ledger_maintenance_unlock (reason) VALUES ('test cleanup')");
+  try { return await fn(); } finally { await db.run('DELETE FROM ledger_maintenance_unlock'); }
+}
+
 test('Labor Payables - Accrual on Credit, Settlement, Settle-Voucher, Unwind, Exposure Report', async (t) => {
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, resolve));
@@ -65,8 +71,8 @@ test('Labor Payables - Accrual on Credit, Settlement, Settle-Voucher, Unwind, Ex
     // أولاً: قيود النطاق المؤرخ (سطورها تشير للمشروع وتمنع حذفه FK — قبل حذف المشروع)
     // عكوس الأجور بتاريخ اليوم تُنظف عبر deadLaborIds داخل الحلقة (بلا كنس شامل يهدد التوازي)
     await db.run("UPDATE expenses SET journal_entry_id = NULL, reversal_ref_id = NULL WHERE date LIKE '2034%'");
-    await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2034%')`);
-    await db.run(`DELETE FROM journal_entries WHERE date LIKE '2034%'`);
+    await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2034%')`));
+    await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE date LIKE '2034%'`));
     const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
     for (const p of projs) {
       await db.run('DELETE FROM cash_movements WHERE project_id = ?', [p.id]);
@@ -83,8 +89,8 @@ test('Labor Payables - Accrual on Credit, Settlement, Settle-Voucher, Unwind, Ex
         const jeIds = jes.map(j => j.id);
         if (jeIds.length > 0) {
           const jph = jeIds.map(() => '?').join(',');
-          await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds);
-          await db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds);
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds));
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds));
         }
       }
       const exps = await db.query('SELECT id FROM expenses WHERE project_id = ?', [p.id]);
@@ -95,21 +101,21 @@ test('Labor Payables - Accrual on Credit, Settlement, Settle-Voucher, Unwind, Ex
         const jeIds = jes.map(j => j.id);
         if (jeIds.length > 0) {
           const jph = jeIds.map(() => '?').join(',');
-          await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds);
-          await db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds);
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds));
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds));
         }
         await db.run(`DELETE FROM expenses WHERE id IN (${ph})`, expIds);
       }
       await db.run('DELETE FROM project_contracts WHERE project_id = ?', [p.id]);
-      await db.run('DELETE FROM journal_entry_lines WHERE project_id = ?', [p.id]);
+      await withLedgerUnlock(db, () => db.run('DELETE FROM journal_entry_lines WHERE project_id = ?', [p.id]));
       await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
       await db.run('DELETE FROM projects WHERE id = ?', [p.id]);
     }
     await db.run(`DELETE FROM accounting_periods WHERE fiscal_year = 2034`);
     await db.run('DELETE FROM suppliers WHERE name = ?', [SUPPLIER_NAME]);
     await db.run("UPDATE expenses SET journal_entry_id = NULL, reversal_ref_id = NULL WHERE created_by = ?", [testerId]);
-    await db.run("DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE created_by = ?)", [testerId]);
-    await db.run("DELETE FROM journal_entries WHERE created_by = ?", [testerId]);
+    await withLedgerUnlock(db, () => db.run("DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE created_by = ?)", [testerId]));
+    await withLedgerUnlock(db, () => db.run("DELETE FROM journal_entries WHERE created_by = ?", [testerId]));
     await db.run("DELETE FROM expenses WHERE created_by = ?", [testerId]);
     await db.run('DELETE FROM users WHERE id = ?', [testerId]);
   };
@@ -269,10 +275,11 @@ test('Labor Payables - Accrual on Credit, Settlement, Settle-Voucher, Unwind, Ex
   assert.strictEqual(r.status, 200, 'حذف السجل: ' + JSON.stringify(r.data));
   deadLaborIds.push(laborId);
   assert.ok(/استحقاق/.test(r.data.message || ''), 'الرسالة تعلن فك الاستحقاق');
-  const accRev = await db.get('SELECT status FROM journal_entries WHERE id = ?', [accJe.id]);
-  assert.strictEqual(accRev.status, 'reversed', 'قيد الاستحقاق معكوس');
-  const setRev = await db.get('SELECT status FROM journal_entries WHERE id = ?', [setJe.id]);
-  assert.strictEqual(setRev.status, 'reversed', 'قيد التسوية معكوس');
+  // المرحلة 1: الأصل يبقى مرحّلاً ويُعلَّم بمرجع العكس (الأصل + العكس = صفر في كل التقارير)
+  const accRev = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [accJe.id]);
+  assert.ok(accRev.reversal_ref_id && accRev.status === 'posted', 'قيد الاستحقاق معكوس');
+  const setRev = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [setJe.id]);
+  assert.ok(setRev.reversal_ref_id && setRev.status === 'posted', 'قيد التسوية معكوس');
   const revCount = await db.get(
     `SELECT COUNT(*) c FROM journal_entries WHERE reference_id = ? AND reference_type = 'قيد عكسي' AND description LIKE '%لمستحقات الأجور%'`,
     [laborId]

@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     party_no TEXT,
     account_id INTEGER REFERENCES accounts(id),
     name TEXT NOT NULL,
-    company_name TEXT NOT NULL,
+    company_name TEXT, -- nullable as in production (boot fills it from name)
     industry_category TEXT NOT NULL DEFAULT 'مواد بناء',
     contact_person TEXT,
     phone TEXT,

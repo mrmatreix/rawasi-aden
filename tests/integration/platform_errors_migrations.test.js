@@ -52,8 +52,10 @@ test('numbered migrations: applied once, recorded, and a failing migration stops
     db.exec(`CREATE TABLE accounts (id INTEGER PRIMARY KEY, code TEXT, name TEXT, type TEXT, parent_id INTEGER, is_posting INTEGER, status TEXT);
       CREATE TABLE journal_entries (id INTEGER PRIMARY KEY); CREATE TABLE journal_entry_lines (id INTEGER PRIMARY KEY, entry_id INTEGER, account_id INTEGER);
       CREATE TABLE payroll (id INTEGER PRIMARY KEY); CREATE TABLE employees (id INTEGER PRIMARY KEY);`);
-    assert.deepEqual(runMigrations(db), MIGRATIONS.map(m => m.id));
-    assert.deepEqual(runMigrations(db), [], 'nothing runs twice');
+    // the schema-only migrations; 0004 needs the full application tables and is covered by the boot test below
+    const core = MIGRATIONS.filter(m => m.id < '0004');
+    assert.deepEqual(runMigrations(db, core), core.map(m => m.id));
+    assert.deepEqual(runMigrations(db, core), [], 'nothing runs twice');
     assert.ok(db.prepare('PRAGMA table_info(journal_entry_lines)').all().some(c => c.name === 'party_id'));
     db.prepare("INSERT INTO accounts (code, name, type, is_posting, status) VALUES ('1', 'x', 'asset', 0, 'active')").run();
     assert.equal(db.prepare("SELECT normal_balance FROM accounts WHERE code = '1'").get().normal_balance, 'debit', 'normal-balance trigger installed');

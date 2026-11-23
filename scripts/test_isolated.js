@@ -1,6 +1,7 @@
 const fs=require('node:fs');const os=require('node:os');const path=require('node:path');const {spawnSync}=require('node:child_process');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'rawasi-tests-'));const root=path.resolve(__dirname,'..');
-const env={...process.env,NODE_ENV:'development',DB_ENGINE:'sqlite',RAWASI_DB_PATH:path.join(temp,'fixture.db'),RAWASI_UPLOAD_DIR:path.join(temp,'uploads'),RAWASI_PROJECTS_DIR:path.join(temp,'projects'),RAWASI_BACKUP_DIR:path.join(temp,'backups'),RAWASI_SCRATCH_DIR:path.join(temp,'scratch'),ENABLE_SCHEDULERS:'false',BANK_ENCRYPTION_KEY:require('node:crypto').randomBytes(48).toString('hex'),JWT_SECRET:require('node:crypto').randomBytes(48).toString('hex'),CLIENT_JWT_SECRET:require('node:crypto').randomBytes(48).toString('hex')};
+const envFor=dir=>({...process.env,NODE_ENV:'development',DB_ENGINE:'sqlite',RAWASI_DB_PATH:path.join(dir,'fixture.db'),RAWASI_UPLOAD_DIR:path.join(dir,'uploads'),RAWASI_PROJECTS_DIR:path.join(dir,'projects'),RAWASI_BACKUP_DIR:path.join(dir,'backups'),RAWASI_SCRATCH_DIR:path.join(dir,'scratch'),ENABLE_SCHEDULERS:'false',BANK_ENCRYPTION_KEY:require('node:crypto').randomBytes(48).toString('hex'),JWT_SECRET:require('node:crypto').randomBytes(48).toString('hex'),CLIENT_JWT_SECRET:require('node:crypto').randomBytes(48).toString('hex')});
+const env=envFor(temp);
 const files=['project_budget_presentation','financial_presentation','report_filters','voucher_ui','financial_save_ui','account_cost_center','account_numbering','reporting_pending_ledger','pending_cash_movements','supporting_documents','sidebar_navigation'].map(n=>'tests/'+n+'.test.js');
 files.push(...['financial_report_filters','journal_reference_posting','party_registry','financial_save_delete','journal_posting_periods'].map(n=>'tests/integration/'+n+'.test.js'));
 files.push('tests/integration/ledger_integrity.test.js');
@@ -31,8 +32,18 @@ files.push('tests/integration/global_search.test.js');
 files.push('tests/security/staff_login_lock.test.js');
 files.push('tests/security/staff_cookie_session.test.js');
 if(fs.existsSync(path.join(root,'tests/security/hardening.test.js')))files.push('tests/security/hardening.test.js');
+// Safety net: suites that used to sit outside npm test. They write to the fixture database directly, so each one
+// runs on its own fresh fixture instead of the shared one the suites above copy from.
+const ownFixture=[...['accounting_rules','chart_of_accounts_vouchers','date_validation_and_api_errors','payroll_statutory','period_locking','tafqeet'].map(n=>'tests/unit/'+n+'.test.js'),
+ 'tests/client_portal.test.js','tests/disaster_recovery_engine.test.js',
+ ...['client_lifecycle_chain','financial_control_lifecycle','period_closing_auth','project_control','project_cost_unification','supplier_payables','mirror_journals','labor_payables','project_cost_dedup'].map(n=>'tests/integration/'+n+'.test.js')];
+const runOn=(e,list)=>{let result=spawnSync(process.execPath,['tests/create_fixture.js'],{cwd:root,env:e,stdio:'inherit',windowsHide:true});
+ if(result.status===0){e.TEST_SOURCE_DB_PATH=e.RAWASI_DB_PATH;result=spawnSync(process.execPath,['--test','--test-concurrency=1',...list],{cwd:root,env:e,stdio:'inherit',windowsHide:true});}
+ return result.status??1;};
 try{
- let result=spawnSync(process.execPath,['tests/create_fixture.js'],{cwd:root,env,stdio:'inherit',windowsHide:true});
- if(result.status===0){env.TEST_SOURCE_DB_PATH=env.RAWASI_DB_PATH;result=spawnSync(process.execPath,['--test','--test-concurrency=1',...files],{cwd:root,env,stdio:'inherit',windowsHide:true});}
- process.exitCode=result.status??1;
+ let status=runOn(env,files);const failed=[];
+ for(const file of ownFixture){const dir=fs.mkdtempSync(path.join(temp,'own-'));if(runOn(envFor(dir),[file])!==0)failed.push(file);}
+ if(failed.length){console.error('\n✖ safety-net suites failed: '+failed.join(', '));status=status||1;}
+ else console.log('\n✔ safety-net suites passed: '+ownFixture.length);
+ process.exitCode=status;
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

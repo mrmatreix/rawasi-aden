@@ -58,6 +58,35 @@ const MIGRATIONS = [
       addColumns(db, 'journal_entry_lines', [['party_type', 'TEXT'], ['party_id', 'INTEGER']]);
       db.exec('CREATE INDEX IF NOT EXISTS idx_jel_party ON journal_entry_lines(party_type, party_id)');
     }
+  },
+  {
+    id: '0004_production_parity',
+    description: 'Columns and tables production has but a fresh database lacked (payment wizard, profitability, contract lifecycle, legacy columns)',
+    up(db) {
+      // columns that production received from one-off scripts over time
+      addColumns(db, 'items', [['currency', "TEXT DEFAULT 'ر.ي'"]]);
+      addColumns(db, 'purchases', [['currency', "TEXT DEFAULT 'ر.ي'"]]);
+      addColumns(db, 'bills', [['currency', "TEXT DEFAULT 'ر.ي'"]]);
+      addColumns(db, 'expenses', [['source_table', 'TEXT'], ['source_id', 'INTEGER']]);
+      addColumns(db, 'accounts', [['currencies', "TEXT DEFAULT 'YER'"], ['report_type', "TEXT DEFAULT 'balance_sheet'"], ['inclusion', "TEXT DEFAULT '='"]]);
+      addColumns(db, 'project_contracts', [['retention_due_date', 'DATE'], ['ipc_cycle_days', 'INTEGER DEFAULT 30'], ['supervision_monthly_fee', 'DECIMAL(15,2) DEFAULT 0.00']]);
+      addColumns(db, 'project_labor_expenses', [['paid_amount', 'REAL DEFAULT 0']]);
+      addColumns(db, 'employee_advances', [['request_date', 'DATE'], ['reason', 'TEXT']]);
+      addColumns(db, 'leave_types', [['days_per_year', 'INTEGER DEFAULT 30'], ['description', 'TEXT']]);
+      addColumns(db, 'employee_evaluations', [['bonuses', 'REAL DEFAULT 0'], ['deductions', 'REAL DEFAULT 0'], ['evaluator', 'TEXT'], ['comments', 'TEXT']]);
+      // tables that only existed through SQL files nothing ran: applied ONLY when missing, because the payment file
+      // uses INSERT OR REPLACE for its reference data and must never overwrite what production edited
+      const fs = require('node:fs'); const path = require('node:path');
+      const hasTable = name => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
+      for (const [table, file] of [['payment_transactions', 'migration_payment_layers.sql'], ['project_profitability_view', 'migration_profitability.sql'], ['contract_lifecycle', 'migration_contract_lifecycle.sql']]) {
+        if (hasTable(table)) continue;
+        let sql = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+        // payment channels carry hard-coded account ids (1, 2, 3) that do not exist on a fresh chart:
+        // seed them unlinked; the channel's ledger account is chosen in the settings screen
+        if (file === 'migration_payment_layers.sql') sql = sql.replace(/,\s*(\d+),\s*'(YER|USD|SAR|EUR)',\s*(\d)\)/g, ", NULL, '$2', $3)");
+        db.exec(sql);
+      }
+    }
   }
 ];
 

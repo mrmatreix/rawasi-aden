@@ -141,12 +141,13 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
 
     let account_id = rawAccountId && rawAccountId !== '' ? Number(rawAccountId) : null;
     if (!account_id) {
+      // linked settlements debit the same payable the accrual credited (system account roles, legacy fallback)
       if (link_purchase_id) {
-        const apRow = await get("SELECT id FROM accounts WHERE code = '21101001' AND is_posting = 1 LIMIT 1");
-        account_id = apRow ? apRow.id : null;
+        account_id = await ProjectCostService.resolvePayableAccounts(require('../database/db'))
+          .then(a => a.apAccId).catch(() => null);
       } else if (link_labor_id) {
-        const wpRow = await get("SELECT id FROM accounts WHERE code = '21401001' AND is_posting = 1 LIMIT 1");
-        account_id = wpRow ? wpRow.id : null;
+        account_id = await ProjectCostService.resolveWageAccounts(require('../database/db'))
+          .then(a => a.wagesPayableAccId).catch(() => null);
       } else {
         const defRow = await get("SELECT id FROM accounts WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '32102005' OR (type = 'expense' AND is_posting = 1) ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC LIMIT 1");
         account_id = defRow ? defRow.id : null;
@@ -619,13 +620,14 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
     const newAmount = amount !== undefined ? Number(amount) : Number(exp.amount);
     const method = req.body.payment_method ?? exp.payment_method;
     const accountId = Number(req.body.account_id ?? exp.account_id);
-    const settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id);
+    // a draft saved without a settlement account must not become account 0 (FK failure): resolve the default below
+    let settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id) || null;
     const costCenterId = await AccountingService.resolveAccountOperationCenter(await AccountingService.assertLeafAccount(accountId),
       req.body.cost_center_id !== undefined ? req.body.cost_center_id : exp.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {
       await AccountingService.assertVoucherAccount('سند صرف', accountId);
-      await AccountingService.resolveVoucherSettlementAccount(method, settlementId);
+      settlementId = Number((await AccountingService.resolveVoucherSettlementAccount(method, settlementId))?.id) || null;
       if (accountId === settlementId) throw new Error('يجب أن يختلف حساب السند عن حساب الصندوق أو البنك');
     } catch (err) { return res.status(400).json({ success: false, message: err.message }); }
 
