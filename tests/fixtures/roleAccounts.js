@@ -13,6 +13,7 @@ const ROLE_PATHS = {
   SUPPLIERS_PAYABLE: ['21', '211', '21101', '21101001', 'liability', '2'],
   SUBCONTRACTORS_PAYABLE: ['21', '211', '21101', '21101002', 'liability', '2'],
   SALARIES_PAYABLE: ['21', '214', '21401', '21401001', 'liability', '2'],
+  CUSTOMER_ADVANCES: ['21', '214', '21402', '21402001', 'liability', '2'],
   WHT_PAYABLE: ['21', '215', '21501', '21501001', 'liability', '2'],
   VAT_OUTPUT: ['21', '215', '21501', '21501002', 'liability', '2'],
   CONTRACT_REVENUE: ['411', '41101', '41101001', 'revenue', '41'],

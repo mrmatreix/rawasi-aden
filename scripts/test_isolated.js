@@ -37,7 +37,8 @@ if(fs.existsSync(path.join(root,'tests/security/hardening.test.js')))files.push(
 const ownFixture=[...['accounting_rules','chart_of_accounts_vouchers','date_validation_and_api_errors','payroll_statutory','period_locking','tafqeet'].map(n=>'tests/unit/'+n+'.test.js'),
  'tests/client_portal.test.js','tests/disaster_recovery_engine.test.js',
  ...['client_lifecycle_chain','financial_control_lifecycle','period_closing_auth','project_control','project_cost_unification','supplier_payables','mirror_journals','labor_payables','project_cost_dedup',
-  'api','vendor_srm_profile','material_management_ddd','enterprise_procurement_inventory_banking_tax','project_closeout_cqrs','rbac_security','two_factor_auth_pin'].map(n=>'tests/integration/'+n+'.test.js')];
+  'api','vendor_srm_profile','material_management_ddd','enterprise_procurement_inventory_banking_tax','project_closeout_cqrs','rbac_security','two_factor_auth_pin',
+  'sox_financial_control_audit','auto_backup_scheduler','encrypted_cloud_backup'].map(n=>'tests/integration/'+n+'.test.js')];
 const runOn=(e,list)=>{let result=spawnSync(process.execPath,['tests/create_fixture.js'],{cwd:root,env:e,stdio:'inherit',windowsHide:true});
  if(result.status===0){e.TEST_SOURCE_DB_PATH=e.RAWASI_DB_PATH;result=spawnSync(process.execPath,['--test','--test-concurrency=1',...list],{cwd:root,env:e,stdio:'inherit',windowsHide:true});}
  return result.status??1;};

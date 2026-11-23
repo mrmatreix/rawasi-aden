@@ -59,6 +59,9 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
     VALUES (?, 'مشروع برج الأمان المالي', ?, 1000000, 800000, 0, 0, 'in_progress')
   `, [testProjectId, testClientId]);
 
+  // postings resolve system account roles; the minimal fixture chart lacks them
+  const roleAcc = await require('../fixtures/roleAccounts').ensureRoleAccounts(db);
+
   const getHeaders = (user, extraClaims = {}) => {
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, permissions: user.permissions, ...extraClaims },
@@ -200,8 +203,8 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
       method: 'POST',
       headers: checkerHeaders
     });
-    assert.strictEqual(resPost.status, 200);
     const postJson = await resPost.json();
+    assert.strictEqual(resPost.status, 200, JSON.stringify(postJson));
     assert.strictEqual(postJson.status, 'posted');
     assert.ok(postJson.journal_entry_no, 'Posting bill must generate journal entry');
 
@@ -279,14 +282,14 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
         description: 'مسودة قيد تسوية مخصصات الصيانة',
         status: 'draft',
         lines: [
-          { account_id: 10, cost_center_id: 1, debit: 75000, credit: 0, description: 'مصروفات صيانة' },
-          { account_id: 3, cost_center_id: 1, debit: 0, credit: 75000, description: 'البنك / الصندوق' }
+          { account_id: roleAcc.BANK_CHARGES, cost_center_id: 1, debit: 75000, credit: 0, description: 'مصروفات صيانة' },
+          { account_id: roleAcc.CASH_DEFAULT, cost_center_id: 1, debit: 0, credit: 75000, description: 'البنك / الصندوق' }
         ]
       })
     });
 
-    assert.strictEqual(resDraftJe.status, 200);
     const draftJeJson = await resDraftJe.json();
+    assert.strictEqual(resDraftJe.status, 200, JSON.stringify(draftJeJson));
     assert.strictEqual(draftJeJson.success, true);
     assert.strictEqual(draftJeJson.status, 'draft');
     const jeId = draftJeJson.id;
@@ -355,7 +358,9 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
     assert.ok(revJeResult.reversing_entry_no);
 
     const reversedJeRecord = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [jeId]);
-    assert.strictEqual(reversedJeRecord.status, 'reversed');
+    // storno: the original stays posted (history intact) and points at its reversing entry
+    assert.strictEqual(reversedJeRecord.status, 'posted');
+    assert.ok(reversedJeRecord.reversal_ref_id, 'linked to the reversing entry');
   });
 
   // =========================================================================
