@@ -35,6 +35,7 @@ files.push('tests/security/staff_password_reset.test.js');
 files.push('tests/security/staff_password_reset_hardening.test.js');
 files.push('tests/security/record_scope.test.js');
 files.push('tests/security/user_scope.test.js');
+files.push('tests/security/org_units.test.js');
 if(fs.existsSync(path.join(root,'tests/security/hardening.test.js')))files.push('tests/security/hardening.test.js');
 // Safety net: suites that used to sit outside npm test. They write to the fixture database directly, so each one
 // runs on its own fresh fixture instead of the shared one the suites above copy from.

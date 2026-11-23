@@ -6,6 +6,22 @@ const { verifyAdmin, getSecuritySettings } = require('./auth');
 const { requirePermission, revokeAllStaffSessions } = require('../middleware/security');
 const scopeService = require('../services/scopeService');
 
+// أسماء الفرع والقسم من جداولهما (للحقلين النصيين branch/department)، مع رفض رقم غير موجود
+async function orgNames(branchId, departmentId) {
+  const out = {};
+  if (branchId) {
+    const b = await get('SELECT name FROM branches WHERE id = ?', [branchId]);
+    if (!b) return { error: 'الفرع المحدد غير موجود.' };
+    out.branch = b.name;
+  }
+  if (departmentId) {
+    const d = await get('SELECT name FROM departments WHERE id = ?', [departmentId]);
+    if (!d) return { error: 'القسم المحدد غير موجود.' };
+    out.department = d.name;
+  }
+  return out;
+}
+
 // يحفظ نطاق الوصول ويسجّل التغيير في التدقيق (قبل/بعد)
 async function saveScopeAudited(req, userId, plan, before) {
   await scopeService.savePlan(userId, plan, req.user?.id);
@@ -223,6 +239,13 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
     }
 
     // نطاق الوصول: بلا scope ولا allowed_projects = «كل المؤسسة» كما كان سابقاً، ويخضع لقاعدة عدم منح أوسع من نطاق المانح
+    // الفرع الأساسي لمستخدم جديد: المدير العام يختار أي فرع؛ غيره يُنشئ في فرعه هو فقط
+    if (branch_id && req.user.role !== 'admin' && Number(branch_id) !== Number(req.user.branch_id || 0)) {
+      return res.status(403).json({ success: false, message: '⛔ تعيين الفرع الأساسي لفرع آخر للمدير العام فقط.' });
+    }
+    const orgCreate = await orgNames(branch_id, department_id);
+    if (orgCreate.error) return res.status(400).json({ success: false, message: orgCreate.error });
+
     const scopePlan = scopeService.planFromBody(req.body) || { mode: 'all' };
     if (scopePlan.error) return res.status(400).json({ success: false, message: scopePlan.error });
     const scopeCheck = await scopeService.validatePlan(scopePlan, req.user);
@@ -238,7 +261,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
     `, [
       cleanUsername, password_hash, full_name.trim(), roleIdVal || null, roleName, email || '', phone || '', status,
       permsString, secString, cleanPin, tfaEnabled,
-      branch_id || 1, branch || 'المركز الرئيسي', department_id || 1, department || 'الإدارة العامة',
+      branch_id || 1, orgCreate.branch || branch || 'المركز الرئيسي', department_id || 1, orgCreate.department || department || 'الإدارة العامة',
       allowedProjectsStr, allowedBranchesStr, allowedDepartmentsStr
     ]);
 
@@ -328,10 +351,16 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
       ? (Array.isArray(allowed_departments) ? JSON.stringify(allowed_departments) : allowed_departments)
       : user.allowed_departments;
 
+    // الفرع الأساسي يغيّره المدير العام فقط؛ والاسم النصي يتبع الفرع/القسم المختار
+    if (branch_id !== undefined && req.user.role !== 'admin' && Number(branch_id || 0) !== Number(user.branch_id || 0)) {
+      return res.status(403).json({ success: false, message: '⛔ تغيير الفرع الأساسي للمستخدم للمدير العام فقط.' });
+    }
+    const org = await orgNames(branch_id, department_id);
+    if (org.error) return res.status(400).json({ success: false, message: org.error });
     const branchIdVal = branch_id !== undefined ? branch_id : (user.branch_id || 1);
-    const branchVal = branch !== undefined ? branch : (user.branch || 'المركز الرئيسي');
+    const branchVal = branch_id !== undefined && org.branch ? org.branch : (branch !== undefined ? branch : (user.branch || 'المركز الرئيسي'));
     const deptIdVal = department_id !== undefined ? department_id : (user.department_id || 1);
-    const deptVal = department !== undefined ? department : (user.department || 'الإدارة العامة');
+    const deptVal = department_id !== undefined && org.department ? org.department : (department !== undefined ? department : (user.department || 'الإدارة العامة'));
 
     // A blank PIN on edit means "keep the existing PIN".  It must never be
     // silently converted to a public default.

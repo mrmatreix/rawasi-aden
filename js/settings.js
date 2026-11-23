@@ -2357,9 +2357,80 @@ const Settings = {
     }
   },
 
+  // ================== إدارة الفروع والأقسام (المدير العام فقط) ==================
+  _orgEsc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
+
+  async openOrgUnitsManager() {
+    App.showDynamicModal('🏢 إدارة الفروع والأقسام', '<div id="orgUnitsManager" style="display: grid; gap: 16px;">جاري التحميل...</div>');
+    await this.renderOrgUnits();
+  },
+
+  async renderOrgUnits() {
+    const box = document.getElementById('orgUnitsManager');
+    if (!box) return;
+    const esc = v => this._orgEsc(v);
+    const load = kind => fetch('/api/org/' + kind).then(r => r.json()).catch(() => ({}));
+    const [branches, departments] = await Promise.all([load('branches'), load('departments')]);
+    if (!branches.success || !departments.success) { box.textContent = branches.message || departments.message || 'تعذر التحميل'; return; }
+    const section = (kind, label, extraLabel, extraKey, rows) => `
+      <section>
+        <h4 style="margin: 0 0 8px; color: var(--text-gold);">${label}</h4>
+        <div class="table-responsive"><table class="custom-table"><thead><tr><th>الرمز</th><th>الاسم</th><th>${extraLabel}</th><th>الحالة</th><th>الاستخدام</th><th>الإجراءات</th></tr></thead><tbody>
+        ${rows.map(r => {
+          const u = r.usage || {};
+          const locked = u.financialCount > 0;
+          const usage = [u.projects ? `${u.projects} مشروع` : '', u.financialCount ? `${u.financialCount} حركة مالية` : '', u.users ? `${u.users} مستخدم` : ''].filter(Boolean).join(' · ') || '<span style="color: var(--text-muted);">غير مستخدم</span>';
+          return `<tr data-org-row="${kind}:${Number(r.id)}">
+            <td><input class="form-control" data-f="code" value="${esc(r.code)}" ${locked ? 'disabled title="عليه حركات مالية: الاسم فقط قابل للتعديل"' : ''} style="height: 32px; font-size: 0.8rem; max-width: 110px;" dir="ltr"></td>
+            <td><input class="form-control" data-f="name" value="${esc(r.name)}" style="height: 32px; font-size: 0.8rem;"></td>
+            <td><input class="form-control" data-f="${extraKey}" value="${esc(r[extraKey])}" ${locked ? 'disabled' : ''} style="height: 32px; font-size: 0.8rem;"></td>
+            <td><select class="form-control" data-f="status" ${locked ? 'disabled' : ''} style="height: 32px; font-size: 0.8rem;"><option value="active" ${r.status === 'active' ? 'selected' : ''}>نشط</option><option value="inactive" ${r.status !== 'active' ? 'selected' : ''}>موقوف</option></select></td>
+            <td style="font-size: 0.78rem;">${usage}${locked ? '<div style="font-size: 0.7rem; color: var(--color-warning, #fbbf24);">🔒 الاسم فقط قابل للتعديل</div>' : ''}</td>
+            <td style="white-space: nowrap;">
+              <button type="button" class="btn btn-sm btn-success" data-org-save="${kind}:${Number(r.id)}">حفظ</button>
+              <button type="button" class="btn btn-sm btn-soft-danger" data-org-delete="${kind}:${Number(r.id)}">حذف</button>
+            </td></tr>`;
+        }).join('')}
+        <tr data-org-new="${kind}">
+          <td><input class="form-control" data-f="code" placeholder="مثال: ADN" style="height: 32px; font-size: 0.8rem; max-width: 110px;" dir="ltr"></td>
+          <td><input class="form-control" data-f="name" placeholder="اسم ${label === 'الفروع' ? 'الفرع' : 'القسم'} الجديد" style="height: 32px; font-size: 0.8rem;"></td>
+          <td><input class="form-control" data-f="${extraKey}" placeholder="${extraLabel}" style="height: 32px; font-size: 0.8rem;"></td>
+          <td colspan="2" style="font-size: 0.74rem; color: var(--text-muted);">إضافة جديد</td>
+          <td><button type="button" class="btn btn-sm btn-primary" data-org-add="${kind}">+ إضافة</button></td>
+        </tr></tbody></table></div>
+      </section>`;
+    box.innerHTML = section('branches', 'الفروع', 'العنوان', 'address', branches.data) + section('departments', 'الأقسام', 'المسؤول', 'manager_name', departments.data)
+      + '<p style="margin: 0; font-size: 0.76rem; color: var(--text-muted);">لا يُحذف فرع أو قسم عليه مشاريع أو مستخدمون أو حركات مالية. عند وجود حركات مالية يُعدَّل الاسم فقط.</p>';
+    const fields = row => Object.fromEntries([...row.querySelectorAll('[data-f]')].map(el => [el.dataset.f, el.value]));
+    const send = async (method, url, body) => {
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) { await UIDialog.alert(json.message || 'تعذر تنفيذ العملية'); return false; }
+      App.showToast(json.message, 'success');
+      this._scopesMeta = null;
+      await this.renderOrgUnits();
+      return true;
+    };
+    box.querySelectorAll('[data-org-add]').forEach(btn => btn.addEventListener('click', () => send('POST', '/api/org/' + btn.dataset.orgAdd, fields(btn.closest('tr')))));
+    box.querySelectorAll('[data-org-save]').forEach(btn => btn.addEventListener('click', () => {
+      const [kind, id] = btn.dataset.orgSave.split(':');
+      const row = btn.closest('tr'); const body = {};
+      row.querySelectorAll('[data-f]').forEach(el => { if (!el.disabled) body[el.dataset.f] = el.value; });
+      send('PUT', `/api/org/${kind}/${id}`, body);
+    }));
+    box.querySelectorAll('[data-org-delete]').forEach(btn => btn.addEventListener('click', async () => {
+      const [kind, id] = btn.dataset.orgDelete.split(':');
+      const name = btn.closest('tr').querySelector('[data-f="name"]').value;
+      if (!(await UIDialog.confirm(`حذف «${name}» نهائياً؟`))) return;
+      send('DELETE', `/api/org/${kind}/${id}`);
+    }));
+  },
+
   // ================== إدارة المستخدمين والصلاحيات ==================
   async loadUsers() {
     this.loadPasswordResetRequests();
+    const orgBtn = document.getElementById('btnManageOrgUnits');
+    if (orgBtn) orgBtn.style.display = Auth.currentUser?.role === 'admin' ? '' : 'none';
     try {
       const res = await fetch('/api/users');
       const json = await res.json();
@@ -2562,9 +2633,15 @@ const Settings = {
     const has = (list, id) => (list || []).some(x => String(x) === String(id));
 
     if (branchSelect) {
-      const current = user ? (user.branch_id || '') : '';
+      const isAdmin = Auth.currentUser?.role === 'admin';
+      const current = user ? (user.branch_id || '') : (isAdmin ? '' : (Auth.currentUser?.branch_id || ''));
       branchSelect.innerHTML = `<option value="">— غير محدد —</option>` +
         (meta?.branches || []).map(b => `<option value="${Number(b.id)}" ${String(b.id) === String(current) ? 'selected' : ''}>🏢 ${esc(b.name)}</option>`).join('');
+      // الفرع الأساسي يغيّره المدير العام فقط
+      branchSelect.disabled = !isAdmin;
+      branchSelect.title = isAdmin ? '' : 'تغيير الفرع الأساسي للمدير العام فقط';
+      const manage = document.getElementById('userBranchManageLink');
+      if (manage) manage.style.display = isAdmin ? '' : 'none';
     }
     if (deptSelect) {
       const current = user ? (user.department_id || '') : '';
@@ -3350,7 +3427,8 @@ const Settings = {
       status,
       permissions: finalPerms,
       two_factor_enabled: twoFactorEnabled,
-      branch_id: branch_id ? Number(branch_id) : null,
+      // غير المدير لا يرسل الفرع الأساسي (الخادم يرفض تغييره)
+      ...(Auth.currentUser?.role === 'admin' ? { branch_id: branch_id ? Number(branch_id) : null } : {}),
       department_id: department_id ? Number(department_id) : null,
       scope
     };

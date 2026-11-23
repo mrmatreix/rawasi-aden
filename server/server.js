@@ -110,6 +110,7 @@ app.use('/api/auth/password-reset', require('./routes/staff_password_reset').pub
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/staff-password-resets', requireAuth, require('./routes/staff_password_reset').adminRouter);
 app.use('/api/users', requireAuth, require('./routes/users'));
+app.use('/api/org', requireAuth, require('./routes/org_units'));
 app.use('/api/projects', requireAuth, require('./routes/projects'));
 app.use('/api/inventory', requireAuth, require('./routes/inventory'));
 app.use('/api/purchases', requireAuth, require('./routes/purchases'));

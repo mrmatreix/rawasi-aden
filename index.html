@@ -4061,6 +4061,7 @@
                 <button type="button" class="btn btn-sm btn-soft-danger" onclick="Auth.logout()" title="تسجيل الخروج مع أخذ نسخة احتياطية فورية لقاعدة البيانات">
                   🚪 تسجيل خروج (نسخ احتياطي)
                 </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnManageOrgUnits" onclick="Settings.openOrgUnitsManager()" style="display: none;" title="إضافة وتعديل وحذف الفروع والأقسام (المدير العام فقط)">🏢 الفروع والأقسام</button>
                 <button class="btn btn-primary btn-sm" onclick="Settings.openNewUserModal()">+ إضافة مستخدم جديد</button>
               </div>
             </div>
@@ -7352,7 +7353,10 @@
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 4px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label for="userBranchVal" style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">🏢 الفرع الأساسي</label>
+              <label for="userBranchVal" style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); display: flex; justify-content: space-between; gap: 8px;">
+                <span>🏢 الفرع الأساسي</span>
+                <button type="button" id="userBranchManageLink" onclick="Settings.openOrgUnitsManager()" style="display: none; background: none; border: none; color: var(--color-info, #38bdf8); font-size: 0.72rem; cursor: pointer; text-decoration: underline; padding: 0;">إدارة الفروع والأقسام</button>
+              </label>
               <select id="userBranchVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
                 <option value="">— غير محدد —</option>
               </select>
