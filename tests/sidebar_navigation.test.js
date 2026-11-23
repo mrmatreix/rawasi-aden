@@ -15,3 +15,17 @@ test('deep links preserve the precise module tab and respect navigation rejectio
 test('Arabic navigation search normalizes diacritics and common letter variants',()=>{const {subject}=sidebar(true);assert.equal(subject.normalize('إيرادات'),subject.normalize('ايرادات'));assert.equal(subject.normalize('مُورِّد'),subject.normalize('مورد'));});
 
 test('client application and user management have separate navigation and permissions',()=>{const users=groups.find(g=>g.id==='groupSystemSettings'),clients=groups.find(g=>g.id==='groupClientApp');assert.ok(users&&clients);assert.equal(users.sections.flatMap(s=>s[1]).some(i=>i.view==='clientApp'),false);assert.ok(clients.sections.flatMap(s=>s[1]).some(i=>i.view==='clientApp'&&i.perm==='client_app:view'));assert.ok(html.includes('id="clientAppView"'));assert.ok(!html.includes('id="tabBtn_settings_client_app"'));});
+
+test('the unified payment wizard is reachable from the menu and leads back to the system',()=>{
+ const accounting=groups.find(g=>g.id==='groupAccounting');
+ const link=accounting.sections.flatMap(s=>s[1]).find(i=>i.action==='payment-wizard');
+ assert.ok(link,'menu item present under accounting');
+ assert.equal(link.perm,'revenues:view,expenses:view,accounting:view','same view permission as the wizard API');
+ assert.match(renderNavigation(),/data-nav-action="payment-wizard"/);
+ assert.match(html,/data-nav-action="payment-wizard"/,'index.html carries the regenerated menu');
+ const sidebarJs=fs.readFileSync(require('path').join(__dirname,'../js/sidebar.js'),'utf8');
+ assert.match(sidebarJs,/action === 'payment-wizard'\) \{ window\.location\.href = '\/views\/payment-wizard\.html'/);
+ const page=fs.readFileSync(require('path').join(__dirname,'../views/payment-wizard.html'),'utf8');
+ assert.match(page,/href="\/"[^>]*>[\s\S]*?العودة إلى النظام/,'the page links back to the system');
+ assert.match(page,/js\/payment-wizard\.js/);
+});
