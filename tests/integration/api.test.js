@@ -19,7 +19,9 @@ test('API Integration - Health, Version & Docs Endpoints', async (t) => {
   assert.strictEqual(resHealth.status, 200, 'Health check should return 200');
   const dataHealth = await resHealth.json();
   assert.strictEqual(dataHealth.status, 'online');
-  assert.ok(dataHealth.system.includes('رواسي عدن'));
+  // the probe is minimal on purpose (no system details for unauthenticated callers)
+  assert.strictEqual(dataHealth.ready, true);
+  assert.equal(dataHealth.system, undefined);
 
   // 2. فحص /api/version
   const resVersion = await fetch(`${baseUrl}/api/version`);
@@ -28,10 +30,10 @@ test('API Integration - Health, Version & Docs Endpoints', async (t) => {
   assert.strictEqual(dataVersion.success, true);
   assert.ok(dataVersion.version, 'Version string must be present');
 
-  // 3. فحص مواصفة OpenAPI /api/docs/spec
+  // 3. مواصفة OpenAPI محمية: لا تُكشف لغير المسجّلين (تفاصيلها تُختبر من الملف نفسه)
   const resDocs = await fetch(`${baseUrl}/api/docs/spec`);
-  assert.strictEqual(resDocs.status, 200, 'Docs spec should return 200');
-  const dataDocs = await resDocs.json();
+  assert.strictEqual(resDocs.status, 401, 'Docs spec requires authentication');
+  const dataDocs = require('../../server/docs/openapi.json');
   assert.strictEqual(dataDocs.openapi, '3.0.3');
   assert.ok(dataDocs.paths['/api/accounting/journal-entries'], 'Journal entries path must be documented');
 

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>مشاريعك - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div id="appHeader"></div>
+
+  <div class="app-container">
+    <div style="margin-bottom: 16px;">
+      <h2 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;">المشاريع الهندسية</h2>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">متابعة وتفاصيل كافة مشاريعك المعتمدة مع الشركة</p>
+    </div>
+
+    <!-- Search & Filter -->
+    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+      <div style="position: relative; flex: 1;">
+        <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 12px; top: 14px; color: var(--text-muted);"></i>
+        <input type="text" id="searchInput" oninput="filterProjects()" placeholder="بحث باسم المشروع أو الكود..." class="form-input" style="padding-right: 36px;">
+      </div>
+      <select id="statusFilter" onchange="filterProjects()" class="form-select" style="width: 120px;">
+        <option value="all">الكل</option>
+        <option value="active">نشط</option>
+        <option value="completed">مكتمل</option>
+      </select>
+    </div>
+
+    <!-- Projects List Container -->
+    <div id="projectsListContainer">
+      <div class="sk-list" role="status" aria-busy="true" aria-label="جاري تحميل قائمة المشاريع"><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div></div>
+    </div>
+  </div>
+
+  <div id="bottomNav"></div>
+
+  <script src="js/dialogs.js"></script>
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    let allProjects = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('projects');
+      const isAuth = await ClientAuth.requireAuth();
+      if (!isAuth) return;
+
+      loadProjects();
+    });
+
+    async function loadProjects() {
+      try {
+        const data = await ClientAPI.get('/projects');
+        if (!data.success) throw new Error(data.message);
+        allProjects = data.projects || [];
+        renderProjects(allProjects);
+      } catch (err) {
+      { const box = document.getElementById('projectsListContainer'); if (box) box.innerHTML = ClientApp.errorState(err.message || 'فشل تحميل المشاريع'); }
+      ClientApp.showToast(err.message || 'فشل تحميل المشاريع', 'error');
+      }
+    }
+
+    function renderProjects(projects) {
+      const container = document.getElementById('projectsListContainer');
+      if (!projects || projects.length === 0) {
+        container.innerHTML = `
+          ${ClientApp.emptyState({ icon: 'fa-folder-open', title: 'لا توجد مشاريع مطابقة', text: 'لم يتم العثور على مشاريع مسجلة لحسابك حالياً' })}
+        `;
+        return;
+      }
+
+      container.innerHTML = projects.map(p => `
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <span style="font-size: 0.72rem; color: var(--gold); font-weight: bold;">${p.code || 'مشروع هندسي'}</span>
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: #FFFFFF; margin: 2px 0 6px;">${p.name}</h3>
+            </div>
+            <span class="badge ${p.status === 'active' ? 'badge-active' : 'badge-approved'}">
+              ${p.status === 'active' ? 'قيد التنفيذ' : 'مكتمل'}
+            </span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 12px 0; background: var(--bg-input); padding: 12px; border-radius: 12px; border: 1px solid var(--border);">
+            <div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">قيمة العقد</div>
+              <div style="font-size: 0.95rem; font-weight: 800; color: var(--gold);">${ClientApp.formatMoney(p.contract_value)}</div>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">المستخلصات المصدرة</div>
+              <div style="font-size: 0.95rem; font-weight: 800; color: #FFFFFF;">${ClientApp.isHidden(p.bills_count) ? 'غير متاح' : `${p.bills_count} مستخلص`}</div>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">تاريخ البدء</div>
+              <div style="font-size: 0.8rem; color: var(--text-main);">${ClientApp.formatDate(p.start_date)}</div>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">تاريخ الانتهاء المخطط</div>
+              <div style="font-size: 0.8rem; color: var(--text-main);">${ClientApp.formatDate(p.end_date)}</div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span style="font-size: 0.75rem; color: var(--text-muted);">نسبة الإنجاز الميداني</span>
+            <span style="font-size: 0.85rem; font-weight: 800; color: ${ClientApp.isHidden(p.progress_percentage) ? 'var(--text-muted)' : 'var(--gold)'};">${ClientApp.formatProgress(p.progress_percentage)}</span>
+          </div>
+          ${ClientApp.isHidden(p.progress_percentage) ? '' : `<div class="progress-container">
+            <div class="progress-fill" style="width: ${ClientApp.progressWidth(p.progress_percentage)}%;"></div>
+          </div>`}
+
+          <div style="display: flex; gap: 8px; margin-top: 14px;">
+            <a href="project-details.html?id=${p.id}" class="btn btn-primary btn-sm" style="flex: 1;">
+              <i class="fa-solid fa-eye"></i> تفاصيل المشروع
+            </a>
+            <a href="invoices.html?project_id=${p.id}" class="btn btn-secondary btn-sm" style="flex: 1;">
+              <i class="fa-solid fa-file-invoice"></i> المستخلصات
+            </a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterProjects() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      const status = document.getElementById('statusFilter').value;
+
+      const filtered = allProjects.filter(p => {
+        const matchesQuery = (p.name && p.name.toLowerCase().includes(q)) || (p.code && p.code.toLowerCase().includes(q));
+        const matchesStatus = status === 'all' || p.status === status;
+        return matchesQuery && matchesStatus;
+      });
+
+      renderProjects(filtered);
+    }
+  </script>
+</body>
+</html>

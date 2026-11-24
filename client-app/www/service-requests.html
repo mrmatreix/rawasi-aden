@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>طلباتي وعروض الأسعار - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div id="appHeader"></div>
+  <main class="app-container">
+    <div class="page-head">
+      <div>
+        <h2>طلباتي وعروض الأسعار</h2>
+        <p>تابع حالة طلباتك، راجع عروض الأسعار، وراسل فريقنا مباشرة.</p>
+      </div>
+      <a href="services.html" class="btn btn-primary"><i class="fa-solid fa-plus"></i> طلب خدمة جديدة</a>
+    </div>
+    <div id="requests">
+      <div class="sk-list" role="status" aria-busy="true" aria-label="جاري تحميل طلباتك"><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div></div>
+    </div>
+  </main>
+  <div id="bottomNav"></div>
+
+  <script src="js/dialogs.js"></script>
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script>
+    // الحالة: النص، لون الشارة، ورقم المرحلة من 5 (0 = لا يُعرض شريط المراحل)
+    const STATUS = {
+      new:             ['تم استلام طلبك', 'info', 1],
+      under_review:    ['قيد المراجعة', 'info', 1],
+      pricing:         ['جاري إعداد عرض السعر', 'wait', 2],
+      pending_manager: ['عرض السعر قيد الاعتماد', 'wait', 2],
+      manager_changes: ['جاري تعديل عرض السعر', 'wait', 2],
+      client_changes:  ['نراجع ملاحظاتك على العرض', 'wait', 2],
+      quoted:          ['عرض السعر بانتظار قرارك', 'action', 3],
+      client_accepted: ['وافقت على العرض', 'ok', 4],
+      converted:       ['تحوّل إلى مشروع', 'ok', 5],
+      rejected:        ['نعتذر عن تنفيذ الطلب', 'bad', 0]
+    };
+    const STEP_NAMES = ['الاستلام', 'التسعير', 'عرض السعر', 'الموافقة', 'المشروع'];
+    const esc = v => ClientApp.escape(v);
+
+    // التواريخ من الخادم بتوقيت UTC بصيغة "YYYY-MM-DD HH:MM:SS"
+    function parseDate(value) {
+      if (!value) return null;
+      const s = String(value);
+      const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+      return isNaN(d) ? null : d;
+    }
+    function when(value) {
+      const d = parseDate(value);
+      return d ? d.toLocaleString('ar-YE', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+    }
+
+    function renderQuote(r) {
+      const q = r.quote;
+      if (!q) return '';
+      const decide = r.status === 'quoted' ? `
+        <div class="sr-decide">
+          <textarea id="note-${Number(r.id)}" placeholder="ملاحظاتك (مطلوبة عند طلب تعديل العرض)"></textarea>
+          <div class="sr-decide__btns">
+            <button type="button" class="btn btn-primary" onclick="respond(${Number(r.id)},${Number(q.id)},'accept',this)"><i class="fa-solid fa-check"></i> الموافقة على العرض</button>
+            <button type="button" class="btn btn-secondary" onclick="respond(${Number(r.id)},${Number(q.id)},'changes',this)"><i class="fa-solid fa-pen"></i> طلب تعديل</button>
+          </div>
+        </div>` : '';
+      return `
+        <div class="sr-quote">
+          <div class="sr-quote__top">
+            <span class="sr-quote__label"><i class="fa-solid fa-file-signature"></i> عرض السعر رقم ${Number(q.version) || 1}</span>
+            <span class="sr-quote__amount">${esc(ClientApp.formatMoney(q.amount, q.currency || 'ر.ي'))}</span>
+          </div>
+          <div class="sr-quote__meta">${q.duration ? `<span><i class="fa-regular fa-clock"></i> مدة التنفيذ: ${esc(q.duration)}</span>` : ''}</div>
+          ${q.details ? `<div class="sr-quote__details">${esc(q.details)}</div>` : ''}
+          ${decide}
+        </div>`;
+    }
+
+    function renderChat(r) {
+      const msgs = (r.messages || []).map(m => {
+        const mine = m.actor_type === 'client' || m.actor_type === 'guest';
+        return `<div class="sr-msg ${mine ? 'mine' : 'theirs'}">${esc(m.message)}<small>${mine ? 'أنت' : 'رواسي عدن'}${m.created_at ? ' · ' + esc(when(m.created_at)) : ''}</small></div>`;
+      }).join('');
+      return `
+        <div class="sr-chat">
+          <div class="sr-chat__title"><i class="fa-regular fa-comments"></i> مراسلات الطلب</div>
+          <div class="sr-chat__log" id="log-${Number(r.id)}">${msgs || '<div class="sr-chat__empty">لا توجد رسائل بعد. اكتب لنا أي استفسار حول طلبك.</div>'}</div>
+          <div class="sr-chat__compose">
+            <textarea id="message-${Number(r.id)}" placeholder="اكتب رسالة لفريق رواسي عدن" aria-label="رسالة جديدة"></textarea>
+            <button type="button" class="btn btn-primary" onclick="sendMessage(${Number(r.id)},this)" aria-label="إرسال الرسالة" title="إرسال"><i class="fa-solid fa-paper-plane"></i></button>
+          </div>
+        </div>`;
+    }
+
+    function renderRequest(r) {
+      const [label, tone, step] = STATUS[r.status] || [r.status, 'info', 0];
+      const steps = step ? `<div class="sr-steps" title="المرحلة ${step} من 5: ${STEP_NAMES[step - 1]}" aria-label="المرحلة ${step} من 5: ${STEP_NAMES[step - 1]}">${STEP_NAMES.map((_, i) => `<span class="${i < step ? 'on' : ''}"></span>`).join('')}</div>` : '';
+      return `
+        <section class="card sr-card">
+          <div class="sr-card__head">
+            <div>
+              <div class="sr-card__no">${esc(r.request_no)}</div>
+              <h3 class="sr-card__title">${esc(r.project_name || 'طلب خدمة')}</h3>
+            </div>
+            <span class="sr-status tone-${tone}">${esc(label)}</span>
+          </div>
+          ${steps}
+          ${renderQuote(r)}
+          ${renderChat(r)}
+        </section>`;
+    }
+
+    async function loadRequests() {
+      const node = document.getElementById('requests');
+      try {
+        const data = await ClientAPI.get('/my-service-requests');
+        const list = data.requests || [];
+        node.innerHTML = list.length ? list.map(renderRequest).join('') : ClientApp.emptyState({
+          icon: 'fa-clipboard-list', title: 'لا توجد طلبات بعد',
+          text: 'اطلب خدمة هندسية أو مقاولات وسيصلك عرض السعر هنا لتوافق عليه أو تطلب تعديله.',
+          actionHref: 'services.html', actionLabel: 'طلب خدمة جديدة'
+        });
+        // كل محادثة تُفتح على آخر رسالة
+        node.querySelectorAll('.sr-chat__log').forEach(log => { log.scrollTop = log.scrollHeight; });
+      } catch (e) {
+        node.innerHTML = ClientApp.errorState(e.message || 'تعذر تحميل الطلبات');
+      }
+    }
+
+    async function respond(id, quoteId, decision, btn) {
+      const note = document.getElementById('note-' + id).value.trim();
+      if (decision === 'changes' && !note) { await UIDialog.alert('يرجى كتابة ملاحظاتك على العرض حتى نعدّله لك.'); document.getElementById('note-' + id).focus(); return; }
+      if (decision === 'accept' && !await UIDialog.confirm('تأكيد موافقتك على عرض السعر المعروض؟', { okText: 'نعم، أوافق' })) return;
+      if (btn) btn.disabled = true;
+      try {
+        await ClientAPI.post('/my-service-requests/' + id + '/response', { decision, note, quote_id: quoteId });
+        ClientApp.showToast(decision === 'accept' ? 'تم تسجيل موافقتك على العرض' : 'تم إرسال ملاحظاتك', 'success');
+        await loadRequests();
+      } catch (e) {
+        if (btn) btn.disabled = false;
+        UIDialog.alert(e.message || 'تعذر إرسال الرد');
+      }
+    }
+
+    async function sendMessage(id, btn) {
+      const el = document.getElementById('message-' + id);
+      const text = el.value.trim();
+      if (!text) { el.focus(); return; }
+      if (btn) btn.disabled = true;
+      try {
+        await ClientAPI.post('/my-service-requests/' + id + '/message', { message: text });
+        await loadRequests();
+      } catch (e) {
+        if (btn) btn.disabled = false;
+        UIDialog.alert(e.message || 'تعذر إرسال الرسالة');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('dashboard');
+      if (await ClientAuth.requireAuth()) await loadRequests();
+    });
+  </script>
+</body>
+</html>

@@ -7,6 +7,7 @@
  */
 
 const { query, get, run, transaction } = require('../database/db');
+const Numbering = require('./numberingService');
 const { logAudit } = require('./auditService');
 const { assertPeriodOpen, assertMakerChecker, resolveValidUserId } = require('./financialControlService');
 
@@ -34,13 +35,8 @@ const ProcurementService = {
     const userName = user?.username || user?.full_name || 'مهندس الموقع';
 
     return await transaction(async (tx) => {
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM purchase_requisitions');
-      let prSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let pr_no = `PR-${new Date().getFullYear()}-${String(prSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM purchase_requisitions WHERE pr_no = ?', [pr_no])) {
-        prSeq += 1;
-        pr_no = `PR-${new Date().getFullYear()}-${String(prSeq).padStart(4, '0')}`;
-      }
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const pr_no = await Numbering.next(tx, 'PR', { table: 'purchase_requisitions', column: 'pr_no', date: new Date().toISOString().slice(0, 10) });
 
       let estimatedTotal = 0;
       for (const itm of items) {
@@ -136,13 +132,8 @@ const ProcurementService = {
     const userId = await resolveValidUserId(user?.id);
 
     return await transaction(async (tx) => {
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM rfqs');
-      let rfqSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let rfq_no = `RFQ-${new Date().getFullYear()}-${String(rfqSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM rfqs WHERE rfq_no = ?', [rfq_no])) {
-        rfqSeq += 1;
-        rfq_no = `RFQ-${new Date().getFullYear()}-${String(rfqSeq).padStart(4, '0')}`;
-      }
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const rfq_no = await Numbering.next(tx, 'RFQ', { table: 'rfqs', column: 'rfq_no', date: new Date().toISOString().slice(0, 10) });
 
       // اختيار العرض الأفضل تلقائياً إن وُجدت عروض
       let winnerSupplierId = null;
@@ -227,13 +218,8 @@ const ProcurementService = {
     const userName = user?.username || user?.full_name || 'مسؤول المشتريات';
 
     return await transaction(async (tx) => {
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM purchase_orders');
-      let poSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let po_no = `PO-${new Date().getFullYear()}-${String(poSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM purchase_orders WHERE po_no = ?', [po_no])) {
-        poSeq += 1;
-        po_no = `PO-${new Date().getFullYear()}-${String(poSeq).padStart(4, '0')}`;
-      }
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const po_no = await Numbering.next(tx, 'PO', { table: 'purchase_orders', column: 'po_no', date: new Date().toISOString().slice(0, 10) });
 
       let subtotal = 0;
       let taxAmount = 0;
@@ -366,13 +352,8 @@ const ProcurementService = {
     const userId = await resolveValidUserId(user?.id);
 
     return await transaction(async (tx) => {
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM goods_receipt_notes');
-      let grnSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-      let grn_no = `GRN-${new Date().getFullYear()}-${String(grnSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM goods_receipt_notes WHERE grn_no = ?', [grn_no])) {
-        grnSeq += 1;
-        grn_no = `GRN-${new Date().getFullYear()}-${String(grnSeq).padStart(4, '0')}`;
-      }
+      // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+      const grn_no = await Numbering.next(tx, 'GRN', { table: 'goods_receipt_notes', column: 'grn_no', date: new Date().toISOString().slice(0, 10) });
 
       const grnRes = await tx.run(`
         INSERT INTO goods_receipt_notes (

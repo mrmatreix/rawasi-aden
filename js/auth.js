@@ -16,7 +16,8 @@
   window.fetch = async function (resource, init = {}) {
     try {
       const url = typeof resource === 'string' ? resource : (resource?.url || '');
-      const isApiCall = url.startsWith('/api/') || url.includes('/api/');
+      const targetUrl=new URL(url,window.location.href);
+      const isApiCall=targetUrl.origin===window.location.origin && targetUrl.pathname.startsWith('/api/');
 
       if (isApiCall) {
         init = init || {};
@@ -33,15 +34,14 @@
           headers = { ...headers };
         }
 
-        // 1. إضافة توكن المصادقة Authorization تلقائياً إذا لم يكن مضافاً وكان المستخدم مسجلاً
+        // 1. الجلسة في كوكي HttpOnly يرسله المتصفح تلقائياً؛ لا يُضاف توكن إلا إن كان توكناً حقيقياً (غير متوقع في المتصفح)
         if (!headers['Authorization'] && !headers['authorization']) {
-          const activeToken = (window.Auth && window.Auth.token)
-            || sessionStorage.getItem('rawasi_token')
-            || localStorage.getItem('rawasi_token');
-          if (activeToken) {
+          const activeToken = window.Auth && window.Auth.token;
+          if (activeToken && activeToken !== 'cookie-session') {
             headers['Authorization'] = `Bearer ${activeToken}`;
           }
         }
+        headers['X-Requested-With'] = 'XMLHttpRequest';
 
         // 2. إضافة توكن CSRF للعمليات غير الآمنة (POST, PUT, DELETE, PATCH)
         const method = (init.method || 'GET').toUpperCase();
@@ -76,6 +76,8 @@
 
 const Auth = {
   currentUser: null,
+  // لا يحمل التوكن الحقيقي أبداً: الجلسة في كوكي HttpOnly، وهذه القيمة غير السرية تعني "مسجّل الدخول عبر الكوكي"
+  COOKIE_SESSION: 'cookie-session',
   token: null,
   sessionId: null,
   csrfToken: null,
@@ -109,19 +111,45 @@ const Auth = {
     sensitiveKeys.forEach(k => {
       try { localStorage.removeItem(k); } catch(e){}
     });
-    // ترحيل الجلسة الآمنة تلقائياً
+    // لا يبقى أي توكن جلسة في التخزين (تقرؤه أي سكربت في الصفحة)؛ يُعاد التوكن القديم مرة واحدة للترحيل إلى الكوكي
+    let legacyToken = null;
     try {
-      const legacyToken = localStorage.getItem('rawasi_token');
-      const legacyUser = localStorage.getItem('rawasi_user');
-      if (legacyToken && !sessionStorage.getItem('rawasi_token')) {
-        sessionStorage.setItem('rawasi_token', legacyToken);
+      for (const store of [sessionStorage, localStorage]) {
+        for (const key of ['rawasi_token', 'token']) {
+          const v = store.getItem(key);
+          if (v && !legacyToken && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(v)) legacyToken = v;
+          store.removeItem(key);
+        }
       }
-      if (legacyUser && !sessionStorage.getItem('rawasi_user')) {
-        sessionStorage.setItem('rawasi_user', legacyUser);
-      }
-      localStorage.removeItem('rawasi_token');
-      localStorage.removeItem('rawasi_user');
     } catch (e) {}
+    return legacyToken;
+  },
+
+  // نقل جلسة قديمة كانت محفوظة في التخزين إلى كوكي HttpOnly دون إعادة تسجيل الدخول
+  async adoptLegacySession(legacyToken) {
+    try {
+      const fetchFn = window._rawasiOriginalFetch || window.fetch;
+      const res = await fetchFn('/api/auth/session-cookie', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${legacyToken}`, 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.tokenExpiresAt) sessionStorage.setItem('rawasi_token_exp', data.tokenExpiresAt);
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  // تسجيل حالة الجلسة بعد الدخول (بدون حفظ التوكن)
+  _storeSession(data) {
+    this.token = this.COOKIE_SESSION;
+    this.sessionId = data.sessionId;
+    this.currentUser = data.user;
+    sessionStorage.setItem('rawasi_session_active', 'true');
+    sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+    localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+    if (data.tokenExpiresAt) sessionStorage.setItem('rawasi_token_exp', data.tokenExpiresAt);
   },
 
   // جلب رمز CSRF من الخادم
@@ -149,23 +177,21 @@ const Auth = {
 
   // تهيئة نظام الدخول والمصادقة
   async init() {
-    this.purgeSensitiveLocalStorage();
+    const legacyToken = this.purgeSensitiveLocalStorage();
+    if (legacyToken) await this.adoptLegacySession(legacyToken);
     this.initLockEngine();
     this.fetchSecuritySettings();
     this.fetchCsrfToken();
 
-    // التحقق مما إذا كانت هناك جلسة مصادقة نشطة ومصرح بها
-    const savedToken = sessionStorage.getItem('rawasi_token') || localStorage.getItem('rawasi_token');
+    // الجلسة نفسها في كوكي HttpOnly؛ بيانات المستخدم المحفوظة (غير السرية) تسمح بعرض النظام فوراً ثم يتحقق الخادم منها
     const savedUserStr = sessionStorage.getItem('rawasi_user') || localStorage.getItem('rawasi_user');
 
-    if (savedToken && savedUserStr) {
+    if (savedUserStr) {
       try {
-        this.token = savedToken;
+        this.token = this.COOKIE_SESSION;
         this.currentUser = JSON.parse(savedUserStr);
         sessionStorage.setItem('rawasi_session_active', 'true');
-        sessionStorage.setItem('rawasi_token', savedToken);
         sessionStorage.setItem('rawasi_user', savedUserStr);
-        localStorage.setItem('rawasi_token', savedToken);
         localStorage.setItem('rawasi_user', savedUserStr);
 
         // إذا كانت الشاشة مقفلة قبل إعادة تحميل الصفحة
@@ -216,9 +242,8 @@ const Auth = {
           }
         });
         const data = await res.json();
-        if (!data.success && data.session_terminated) {
-          this.stopHeartbeat();
-          this.logout(true, data.message || 'تم تسجيل الدخول بهذا الحساب من جهاز أو نافذة أخرى. تم إنهاء هذه الجلسة منعاً للتكرار.');
+        if (res.status === 401 || (!data.success && data.session_terminated)) {
+          this.handleExpiredSession(data.message);
         }
       } catch (e) {
         // خطأ شبكة مؤقت
@@ -231,6 +256,28 @@ const Auth = {
     if (this._heartbeatInterval) {
       clearInterval(this._heartbeatInterval);
       this._heartbeatInterval = null;
+    }
+  },
+
+  // Keep unsaved forms in the current page; never retry a write automatically.
+  handleExpiredSession(message) {
+    const expiredToken = this.token;
+    const username = this.currentUser?.username;
+    this.stopHeartbeat();
+    this.stopActivityTracker();
+    this.token = null;
+    this.sessionId = null;
+    this.currentUser = null;
+    sessionStorage.removeItem('rawasi_user');
+    sessionStorage.removeItem('rawasi_session_active');
+    sessionStorage.removeItem('rawasi_token_exp');
+    if (expiredToken) localStorage.removeItem('rawasi_user');
+    if (username) localStorage.setItem('rawasi_last_username', username);
+    this.showLogin();
+    const errorBox = document.getElementById('loginErrorMsg');
+    if (errorBox) {
+      errorBox.textContent = 'انتهت جلسة الدخول أو أُغلقت. سجل الدخول مجددًا في هذه الصفحة، ثم أعد الحفظ؛ تبقى البيانات غير المحفوظة في النموذج المفتوح.';
+      errorBox.style.display = 'block';
     }
   },
 
@@ -247,11 +294,10 @@ const Auth = {
         localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
         this.updateUserUI();
         this.applyPermissions();
-      } else {
+      } else if (res.status === 401 || res.status === 403 || data.session_terminated) {
         // انتهت صلاحية الجلسة أو تم تسجيل الدخول من مكان آخر
         console.warn('جلسة الدخول منتهية أو غير صالحة:', data.message);
-        this.stopHeartbeat();
-        this.logout(false, data.message || 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول');
+        this.handleExpiredSession(data.message);
       }
     } catch (err) {
       console.warn('تعذر التحقق من الخادم حالياً، مواصلة العمل بالجلسة المخزنة محلياً:', err);
@@ -365,6 +411,7 @@ const Auth = {
     const conflictBox = document.getElementById('loginConflictBox');
     const conflictText = document.getElementById('loginConflictText');
     const submitBtn = document.getElementById('btnLoginSubmit');
+    this._showBox('loginSuccessMsg', '');
 
     const username = (this._pendingCredentials && force) ? this._pendingCredentials.username : usernameInput?.value?.trim();
     const password = (this._pendingCredentials && force) ? this._pendingCredentials.password : passwordInput?.value;
@@ -398,7 +445,7 @@ const Auth = {
 
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'cookie' },
         body: JSON.stringify({ 
           username, 
           password, 
@@ -462,7 +509,7 @@ const Auth = {
         return;
       }
 
-      if (data.success && data.token && data.user) {
+      if (data.success && (data.cookieSession || data.token) && data.user) {
         // إيقاف مؤقت الحظر وإخفاء الصندوق عند النجاح
         if (this._rateLimitTimer) {
           clearInterval(this._rateLimitTimer);
@@ -472,15 +519,7 @@ const Auth = {
         if (rateLimitBox) rateLimitBox.style.display = 'none';
 
         this._pendingCredentials = null;
-        this.token = data.token;
-        this.sessionId = data.sessionId;
-        this.currentUser = data.user;
-
-        sessionStorage.setItem('rawasi_session_active', 'true');
-        sessionStorage.setItem('rawasi_token', this.token);
-        sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
-        localStorage.setItem('rawasi_token', this.token);
-        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+        this._storeSession(data);
         sessionStorage.removeItem('rawasi_is_locked');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || username);
@@ -527,7 +566,7 @@ const Auth = {
       } else {
         let msg = data.message || 'بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.';
         if (data.remainingAttempts !== undefined) {
-          msg = `<strong>⚠️ بيانات الدخول غير صحيحة</strong><br>المحاولات المتبقية قبل القفل المؤقت: <span style="font-weight:900;color:#f87171;">(${data.remainingAttempts} من 5)</span>`;
+          msg = `<strong>⚠️ بيانات الدخول غير صحيحة</strong><br>المحاولات المتبقية قبل القفل المؤقت: <span style="font-weight:900;color:var(--color-danger, #f87171);">(${data.remainingAttempts} من 5)</span>`;
         }
         if (errorBox) {
           errorBox.innerHTML = msg;
@@ -610,14 +649,167 @@ const Auth = {
     }, 1000);
   },
 
-  // فتح نافذة التحقق بخطوتين (2FA) للمدير العام
+  // تطبيع وتوحيد مدخلات رمز التحقق بخطوتين (تحويل الأرقام العربية إلى إنجليزية ومنع الرموز)
+  // ================== نسيت كلمة المرور ==================
+  _showBox(id, text) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.textContent = text || '';
+    box.style.display = text ? 'block' : 'none';
+  },
+
+  openForgotPassword() {
+    const modal = document.getElementById('forgotPasswordModal');
+    if (!modal) return;
+    const typed = document.getElementById('loginUsername')?.value || '';
+    const input = document.getElementById('forgotUsername');
+    if (input && !input.value) input.value = typed.trim();
+    this._showBox('forgotPasswordErrorMsg', '');
+    const result = document.getElementById('forgotPasswordResult');
+    if (result) result.style.display = 'none';
+    modal.style.display = 'flex';
+    setTimeout(() => input?.focus(), 50);
+  },
+
+  closeForgotPassword() {
+    const modal = document.getElementById('forgotPasswordModal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  async submitForgotPassword(event) {
+    if (event) event.preventDefault();
+    const username = (document.getElementById('forgotUsername')?.value || '').trim();
+    const note = (document.getElementById('forgotNote')?.value || '').trim();
+    const btn = document.getElementById('btnSubmitForgot');
+    this._showBox('forgotPasswordErrorMsg', '');
+    if (!username) return this._showBox('forgotPasswordErrorMsg', 'يرجى إدخال اسم المستخدم');
+    if (btn) { btn.disabled = true; btn.textContent = 'جاري الإرسال...'; }
+    try {
+      const res = await fetch('/api/auth/password-reset/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, note })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) return this._showBox('forgotPasswordErrorMsg', data.message || 'تعذر إرسال الطلب حالياً');
+      const result = document.getElementById('forgotPasswordResult');
+      const text = document.getElementById('forgotPasswordResultText');
+      const ref = document.getElementById('forgotPasswordRef');
+      if (text) text.textContent = data.message || '';
+      if (ref) ref.textContent = data.ref || '';
+      if (result) result.style.display = 'block';
+    } catch (e) {
+      this._showBox('forgotPasswordErrorMsg', 'خطأ في الاتصال بالخادم');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'إرسال الطلب'; }
+    }
+  },
+
+  openResetWithCode() {
+    const forgot = document.getElementById('forgotUsername')?.value || document.getElementById('loginUsername')?.value || '';
+    this.closeForgotPassword();
+    const modal = document.getElementById('resetWithCodeModal');
+    if (!modal) return;
+    const user = document.getElementById('resetUsername');
+    if (user && !user.value) user.value = forgot.trim();
+    this._showBox('resetWithCodeErrorMsg', '');
+    modal.style.display = 'flex';
+    setTimeout(() => (user && user.value ? document.getElementById('resetCode') : user)?.focus(), 50);
+  },
+
+  closeResetWithCode() {
+    const modal = document.getElementById('resetWithCodeModal');
+    if (modal) modal.style.display = 'none';
+    ['resetCode', 'resetCurrentPin', 'resetNewPin', 'resetNewPassword', 'resetNewPasswordConfirm'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const pinGroup = document.getElementById('resetNewPinGroup');
+    if (pinGroup) pinGroup.style.display = 'none';
+  },
+
+  async submitResetWithCode(event) {
+    if (event) event.preventDefault();
+    const val = id => document.getElementById(id)?.value || '';
+    const payload = {
+      username: val('resetUsername').trim(),
+      code: val('resetCode'),
+      current_pin: val('resetCurrentPin'),
+      new_pin: val('resetNewPin'),
+      new_password: val('resetNewPassword'),
+      new_password_confirm: val('resetNewPasswordConfirm')
+    };
+    this._showBox('resetWithCodeErrorMsg', '');
+    if (payload.new_password.length < 8) return this._showBox('resetWithCodeErrorMsg', 'كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل.');
+    if (payload.new_password !== payload.new_password_confirm) return this._showBox('resetWithCodeErrorMsg', 'كلمة المرور وتأكيدها غير متطابقين.');
+    const btn = document.getElementById('btnSubmitResetWithCode');
+    if (btn) { btn.disabled = true; btn.textContent = 'جاري التحقق...'; }
+    try {
+      const res = await fetch('/api/auth/password-reset/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        if (data.requiresNewPin) {
+          const pinGroup = document.getElementById('resetNewPinGroup');
+          if (pinGroup) pinGroup.style.display = 'block';
+          document.getElementById('resetNewPin')?.focus();
+        }
+        return this._showBox('resetWithCodeErrorMsg', data.message || 'تعذر تغيير كلمة المرور');
+      }
+      const username = payload.username;
+      this.closeResetWithCode();
+      const loginUser = document.getElementById('loginUsername');
+      const loginPass = document.getElementById('loginPassword');
+      if (loginUser) loginUser.value = username;
+      if (loginPass) { loginPass.value = ''; loginPass.focus(); }
+      this._showBox('loginErrorMsg', '');
+      if (document.getElementById('loginSuccessMsg')) this._showBox('loginSuccessMsg', data.message);
+      else if (window.App?.showToast) App.showToast(data.message, 'success');
+    } catch (e) {
+      this._showBox('resetWithCodeErrorMsg', 'خطأ في الاتصال بالخادم');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'تغيير كلمة المرور'; }
+    }
+  },
+
+  normalize2FaInput(input) {
+    if (!input) return;
+    let val = String(input.value || '')
+      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+      .replace(/[^0-9]/g, '');
+    input.value = val.slice(0, 6);
+  },
+
+  // تبديل إظهار / إخفاء رمز 2FA في نافذة تسجيل الدخول
+  toggle2FaLoginEye() {
+    const input = document.getElementById('twoFactorCodeInput');
+    const eye = document.getElementById('twoFactorLoginEyeIcon');
+    if (!input) return;
+    if (input.type === 'password') {
+      input.type = 'text';
+      if (eye) eye.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      if (eye) eye.textContent = '👁️';
+    }
+  },
+
+  // فتح نافذة التحقق بخطوتين (2FA)
   show2FAModal() {
     const modal = document.getElementById('twoFactorModal');
     const input = document.getElementById('twoFactorCodeInput');
     const err = document.getElementById('twoFactorErrorMsg');
+    const subtitle = document.getElementById('twoFactorSubtitle');
     if (err) {
       err.style.display = 'none';
       err.textContent = '';
+    }
+    if (subtitle && this._pending2FAUser) {
+      const uName = this._pending2FAUser.full_name || this._pending2FAUser.username;
+      subtitle.textContent = `مرحباً بك (${uName})! حسابك محمي بالتحقق بخطوتين. يرجى إدخال رمز الأمان (PIN) المكون من 6 أرقام للدخول.`;
     }
     if (modal) {
       modal.style.display = 'flex';
@@ -625,6 +817,9 @@ const Auth = {
     }
     if (input) {
       input.value = '';
+      input.type = 'password';
+      const eye = document.getElementById('twoFactorLoginEyeIcon');
+      if (eye) eye.textContent = '👁️';
       setTimeout(() => input.focus(), 150);
     }
   },
@@ -652,7 +847,17 @@ const Auth = {
     const input = document.getElementById('twoFactorCodeInput');
     const err = document.getElementById('twoFactorErrorMsg');
     const btn = document.getElementById('btnSubmit2FA');
-    const code = input ? input.value.trim() : '';
+
+    const normalizeDigits = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+        .replace(/[^0-9]/g, '')
+        .trim();
+    };
+
+    const code = normalizeDigits(input ? input.value : '');
 
     if (!code || code.length !== 6) {
       if (err) {
@@ -681,7 +886,7 @@ const Auth = {
 
       const res = await fetch('/api/auth/verify-2fa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'cookie' },
         body: JSON.stringify({
           tempToken: this._pending2FAToken,
           code: code,
@@ -693,22 +898,14 @@ const Auth = {
 
       const data = await res.json();
 
-      if (data.success && data.token && data.user) {
+      if (data.success && (data.cookieSession || data.token) && data.user) {
         const modal = document.getElementById('twoFactorModal');
         if (modal) modal.style.display = 'none';
 
         this._pending2FAToken = null;
         this._pending2FAUser = null;
         this._pendingCredentials = null;
-        this.token = data.token;
-        this.sessionId = data.sessionId;
-        this.currentUser = data.user;
-
-        sessionStorage.setItem('rawasi_session_active', 'true');
-        sessionStorage.setItem('rawasi_token', this.token);
-        sessionStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
-        localStorage.setItem('rawasi_token', this.token);
-        localStorage.setItem('rawasi_user', JSON.stringify(this.currentUser));
+        this._storeSession(data);
         sessionStorage.removeItem('rawasi_is_locked');
         localStorage.removeItem('rawasi_last_logout_backup');
         localStorage.setItem('rawasi_last_username', this.currentUser.username || 'admin');
@@ -836,11 +1033,10 @@ const Auth = {
     } catch (e) {}
 
     // مسح بيانات الجلسة الحالية من sessionStorage و localStorage
-    sessionStorage.removeItem('rawasi_token');
     sessionStorage.removeItem('rawasi_user');
     sessionStorage.removeItem('rawasi_session_active');
     sessionStorage.removeItem('rawasi_is_locked');
-    localStorage.removeItem('rawasi_token');
+    sessionStorage.removeItem('rawasi_token_exp');
     localStorage.removeItem('rawasi_user');
     localStorage.removeItem('rawasi_last_logout_backup');
     this.purgeSensitiveLocalStorage();
@@ -924,7 +1120,7 @@ const Auth = {
     if (!this.currentUser) return false;
 
     // مدير النظام الرئيسي (Super Admin) يملك كافة الصلاحيات دائماً
-    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') {
+    if (this.currentUser.role === 'admin') {
       return true;
     }
 
@@ -937,58 +1133,10 @@ const Auth = {
       }
     }
 
-    // إذا كانت الصلاحيات فارغة تماماً ولم تُخصص، نطبق الصلاحيات الافتراضية حسب الدور
+    // صلاحيات فارغة: قالب الدور من الكتالوج الموحّد (نفس ما يطبّقه الخادم)
     if (!perms || perms.length === 0) {
-      if (this.currentUser.role === 'admin') {
-        return true;
-      }
-      if (this.currentUser.role === 'accountant') {
-        perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-          'custody:view', 'custody:create', 'custody:manage', 'custody:export',
-          'clients:view', 'clients:create', 'clients:manage', 'clients:statement',
-          'suppliers:view', 'suppliers:create', 'suppliers:manage', 'suppliers:statement',
-          'cash:view',
-          'hr:view', 'hr:payroll',
-          'reports:view', 'reports:export'
-        ];
-      } else if (this.currentUser.role === 'auditor') {
-        perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-          'expenses:view', 'expenses:approve', 'expenses:export',
-          'revenues:view', 'revenues:approve', 'revenues:export',
-          'billing:view', 'billing:approve', 'billing:export',
-          'custody:view', 'custody:approve', 'custody:export',
-          'projects:view', 'projects:export',
-          'inventory:view', 'inventory:export',
-          'purchases:view', 'purchases:approve', 'purchases:export',
-          'hr:view', 'hr:approve', 'hr:export',
-          'reports:view', 'reports:export',
-          'cash:view'
-        ];
-      } else if (this.currentUser.role === 'project_manager') {
-        perms = [
-          'dashboard:view',
-          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export', 'projects:manage', 'projects:print',
-          'expenses:view', 'expenses:create',
-          'custody:view',
-          'inventory:view', 'inventory:issue',
-          'reports:view'
-        ];
-      } else if (this.currentUser.role === 'storekeeper') {
-        perms = [
-          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export', 'inventory:manage',
-          'purchases:view',
-          'projects:view'
-        ];
-      } else {
-        perms = ['dashboard:view'];
-      }
+      const template = typeof SystemCatalog !== 'undefined' && SystemCatalog.roles?.[this.currentUser.role];
+      perms = template ? template.permissions : ['dashboard:view'];
     }
 
     if (Array.isArray(perms) && (perms.includes('*') || perms.includes('all'))) {
@@ -1016,20 +1164,22 @@ const Auth = {
   },
 
   // التحقق الأمني من صلاحية المستخدم للوصول لشاشة معينة لمنع التلاعب بالـ DOM
-  canAccessView(viewId) {
-    if (!this.currentUser) return false;
-    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') return true;
-
-    const viewPermMap = {
+  // صلاحية العرض المطلوبة لكل شاشة (مصدر واحد للعرض والتصدير)
+  viewPermissions() {
+    return {
       'dashboard': 'dashboard:view',
       'projects': 'projects:view',
       'projectHub': 'projects:view',
+      'projectWorkItems': 'projects:view',
+      'projectProgressReport': 'projects:view,reports:view',
+      'projectCloseout': 'projects:view,reports:view',
       'inventory': 'inventory:view',
       'hr': 'hr:view',
       'reports': 'reports:view',
       'revenues': 'revenues:view',
       'expenses': 'expenses:view',
       'journal': 'accounting:journal,accounting:view,reports:view',
+      'journalPosting': 'accounting:view',
       'chartOfAccounts': 'accounting:view,settings:company',
       'costCenters': 'accounting:view,projects:view',
       'currencies': 'accounting:view,settings:company',
@@ -1038,8 +1188,80 @@ const Auth = {
       'clients': 'clients:view',
       'suppliers': 'suppliers:view',
       'cash': 'cash:view',
-      'settings': 'settings:users,settings:company,settings:backup'
+      'contractLifecycle': 'projects:view',
+      'cashFlow': 'accounting:view,reports:view',
+      'settings': 'settings:users,settings:company,settings:backup',
+      'clientApp': 'client_app:view'
     };
+  },
+
+  // التصدير إلى Excel يتطلب صلاحية «تصدير» للوحدة التي تُعرض شاشتها حالياً
+  // الطباعة = تصدير: كل دالة طباعة تتطلب صلاحية «تصدير» للوحدة التي يخصها المستند.
+  // null = معفاة (معاينة إعدادات الطباعة نفسها). أي دالة print* جديدة يجب أن تُضاف هنا (اختبار يتحقق من ذلك).
+  PRINT_PERMISSIONS: {
+    Accounting: {
+      printJournalListPdf: 'accounting:export', printJournalEntryById: 'accounting:export', printCurrentJournalEntry: 'accounting:export',
+      printCashMovement: 'cash:export,accounting:export', printExpenseReceipt: 'expenses:export,accounting:export',
+      printReceipt: 'revenues:export,accounting:export', printCustodyReceipt: 'custody:export,accounting:export', printTestReceipt: null
+    },
+    HR: { printComprehensivePayroll: 'hr:export' },
+    ProjectCloseout: { printCurrentView: 'projects:export,reports:export', printReport: 'projects:export,reports:export', printClientBoQ: 'projects:export', printInternalAuditBoQ: 'projects:export' },
+    ProjectHub: {
+      printOfficialContract: 'projects:export', printOfficialIPC: 'billing:export,projects:export', printFinalSettlementDoc: 'billing:export,projects:export',
+      printQuotationDoc: 'projects:export', printChangeOrderSlip: 'projects:export', printDailyReportDoc: 'projects:export', printWeeklyReportDoc: 'projects:export',
+      printHandoverDoc: 'projects:export', printCorrespondenceDoc: 'projects:export', printIntegratedQuotationOfficialDoc: 'projects:export'
+    },
+    Projects: { printCurrentProjectDetails: 'projects:export,reports:export', printProjectReport: 'projects:export,reports:export' },
+    Reports: { printSupplierStatement: 'suppliers:export,reports:export', printActiveReport: 'reports:export' },
+    Settings: { printCurrentPreviewDoc: null }
+  },
+
+  /** يلفّ دوال الطباعة في الوحدات المحمّلة بفحص صلاحية التصدير (مرة واحدة لكل دالة) */
+  guardPrintFunctions() {
+    // الوحدات معرّفة بـ const في سكربتات مستقلة (ليست خصائص window)، وCSP تمنع eval، لذا مراجع صريحة
+    const modules = {
+      Accounting: typeof Accounting !== 'undefined' ? Accounting : undefined,
+      HR: typeof HR !== 'undefined' ? HR : undefined,
+      ProjectCloseout: typeof ProjectCloseout !== 'undefined' ? ProjectCloseout : undefined,
+      ProjectHub: typeof ProjectHub !== 'undefined' ? ProjectHub : undefined,
+      Projects: typeof Projects !== 'undefined' ? Projects : undefined,
+      Reports: typeof Reports !== 'undefined' ? Reports : undefined,
+      Settings: typeof Settings !== 'undefined' ? Settings : undefined
+    };
+    for (const [objectName, methods] of Object.entries(this.PRINT_PERMISSIONS)) {
+      const target = modules[objectName];
+      if (!target) continue;
+      for (const [method, permission] of Object.entries(methods)) {
+        const original = target[method];
+        if (!permission || typeof original !== 'function' || original.__printGuarded) continue;
+        const guarded = function (...args) {
+          if (!Auth.hasPermission(permission)) {
+            if (typeof App !== 'undefined' && App.showToast) App.showToast('⛔ لا تملك صلاحية الطباعة والتصدير لهذا المستند', 'error');
+            return undefined;
+          }
+          return original.apply(this, args);
+        };
+        guarded.__printGuarded = true;
+        target[method] = guarded;
+      }
+    }
+  },
+
+  canExportCurrentView() {
+    if (!this.currentUser) return false;
+    if (this.currentUser.role === 'admin') return true;
+    const view = (typeof App !== 'undefined' && App.activeView) || 'dashboard';
+    const viewPerm = this.viewPermissions()[view];
+    if (!viewPerm) return true;
+    const exportPerm = viewPerm.split(',').map(p => p.trim().split(':')[0] + ':export').join(',');
+    return this.hasPermission(exportPerm);
+  },
+
+  canAccessView(viewId) {
+    if (!this.currentUser) return false;
+    if (this.currentUser.role === 'admin') return true;
+
+    const viewPermMap = this.viewPermissions();
 
     const perm = viewPermMap[viewId];
     if (!perm) return true;
@@ -1119,19 +1341,19 @@ const Auth = {
 
     if (ruleLen) {
       ruleLen.textContent = (evalResult.rules.hasLength ? '🟢' : '⚪') + ' 8+ خانات';
-      ruleLen.style.color = evalResult.rules.hasLength ? '#10b981' : 'var(--text-secondary)';
+      ruleLen.style.color = evalResult.rules.hasLength ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
     if (ruleNum) {
       ruleNum.textContent = (evalResult.rules.hasNumber ? '🟢' : '⚪') + ' أرقام';
-      ruleNum.style.color = evalResult.rules.hasNumber ? '#10b981' : 'var(--text-secondary)';
+      ruleNum.style.color = evalResult.rules.hasNumber ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
     if (ruleMix) {
       ruleMix.textContent = (evalResult.rules.hasMixed ? '🟢' : '⚪') + ' أحرف A-z';
-      ruleMix.style.color = evalResult.rules.hasMixed ? '#10b981' : 'var(--text-secondary)';
+      ruleMix.style.color = evalResult.rules.hasMixed ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
     if (ruleSym) {
       ruleSym.textContent = (evalResult.rules.hasSymbol ? '🟢' : '⚪') + ' رموز خاصة';
-      ruleSym.style.color = evalResult.rules.hasSymbol ? '#10b981' : 'var(--text-secondary)';
+      ruleSym.style.color = evalResult.rules.hasSymbol ? 'var(--color-success, #10b981)' : 'var(--text-secondary)';
     }
   },
 
@@ -1144,11 +1366,12 @@ const Auth = {
       const reqPerm = li.getAttribute('data-perm');
       if (this.hasPermission(reqPerm)) {
         li.style.display = '';
-        if (!firstAllowed) {
+        if (!firstAllowed && !li.classList.contains('nav-group')) {
           const navLink = li.querySelector('a');
           if (navLink) {
             const match = navLink.getAttribute('onclick')?.match(/App\.navigate\('([^']+)'/);
-            if (match) firstAllowed = match[1];
+            if (navLink.dataset.view) firstAllowed = navLink.dataset.view;
+            else if (match) firstAllowed = match[1];
           }
         }
       } else {
@@ -1156,10 +1379,15 @@ const Auth = {
       }
     });
 
+    if (typeof Sidebar !== 'undefined') Sidebar.refresh();
+
     // إخفاء أو إظهار ألسنة الإعدادات حسب الصلاحيات
+    for (const [id,permission] of [['settingsHeaderAddUser','settings:users'],['settingsHeaderBackup','settings:backup'],['settingsHeaderRestore','settings:backup'],['clientAppAddUser','client_app:create']]) { const el=document.getElementById(id);if(el)el.style.display=this.hasPermission(permission)?'':'none'; }
     const usersTab = document.getElementById('tabBtn_settings_users');
     if (usersTab) usersTab.style.display = this.hasPermission('settings:users') ? '' : 'none';
 
+    const printTab = document.getElementById('tabBtn_settings_print');
+    if(printTab)printTab.style.display=this.hasPermission('settings:company')?'':'none';
     const compTab = document.getElementById('tabBtn_settings_company');
     if (compTab) compTab.style.display = this.hasPermission('settings:company') ? '' : 'none';
 
@@ -1204,15 +1432,15 @@ const Auth = {
     if (this.lockTimeoutMinutes === 0) {
       badge.textContent = 'معطل';
       badge.style.background = 'rgba(148, 163, 184, 0.15)';
-      badge.style.color = '#94a3b8';
+      badge.style.color = 'var(--text-secondary, #94a3b8)';
     } else if (this.lockTimeoutMinutes === 60) {
       badge.textContent = '60 دقيقة';
       badge.style.background = 'rgba(212, 175, 55, 0.2)';
-      badge.style.color = '#d4af37';
+      badge.style.color = 'var(--text-gold, #d4af37)';
     } else {
       badge.textContent = `${this.lockTimeoutMinutes} دقيقة`;
       badge.style.background = 'rgba(212, 175, 55, 0.2)';
-      badge.style.color = '#d4af37';
+      badge.style.color = 'var(--text-gold, #d4af37)';
     }
   },
 
@@ -1445,24 +1673,22 @@ const Auth = {
     if (isMulti) {
       badge.textContent = `متعددة (${limit})`;
       badge.style.background = 'rgba(16, 185, 129, 0.2)';
-      badge.style.color = '#10b981';
+      badge.style.color = 'var(--color-success, #10b981)';
     } else {
       badge.textContent = 'جلسة واحدة';
       badge.style.background = 'rgba(59, 130, 246, 0.2)';
-      badge.style.color = '#60a5fa';
+      badge.style.color = 'var(--color-info, #60a5fa)';
     }
   },
 
   // حساب وتنسيق تاريخ ووقت انتهاء الجلسة الحالية من التوكن (JWT)
   getCurrentSessionExpiryFormatted() {
-    const token = this.token || localStorage.getItem('rawasi_token') || localStorage.getItem('token');
-    if (!token) return 'غير متوفر (يرجى تسجيل الدخول)';
+    if (!this.token) return 'غير متوفر (يرجى تسجيل الدخول)';
     try {
-      const parts = token.split('.');
-      if (parts.length < 2) return 'غير محدد';
-      const payload = JSON.parse(atob(parts[1]));
-      if (!payload.exp) return 'جلسة دائمة (بدون انتهاء)';
-      const expDate = new Date(payload.exp * 1000);
+      // التوكن نفسه في كوكي HttpOnly لا تقرؤه الصفحة؛ الخادم يرسل وقت انتهائه عند الدخول
+      const expIso = sessionStorage.getItem('rawasi_token_exp');
+      if (!expIso) return 'غير محدد';
+      const expDate = new Date(expIso);
       
       const dateStr = expDate.toLocaleDateString('ar-YE', {
         year: 'numeric',
@@ -1559,7 +1785,7 @@ const Auth = {
     if (!this._targetSecurityUserId) return;
     const target = this._securityUsersList.find(u => u.id === this._targetSecurityUserId);
     const targetName = target?.full_name || target?.username || 'هذا المستخدم';
-    const confirmReset = confirm(`هل أنت متأكد من رغبتك في إلغاء الإعدادات المخصصة للمستخدم (${targetName}) واستعادة الإعدادات العامة الافتراضية للنظام؟`);
+    const confirmReset = await UIDialog.confirm(`هل أنت متأكد من رغبتك في إلغاء الإعدادات المخصصة للمستخدم (${targetName}) واستعادة الإعدادات العامة الافتراضية للنظام؟`);
     if (!confirmReset) return;
 
     try {
@@ -1603,21 +1829,21 @@ const Auth = {
     if (bannerTitle) {
       if (isUserMode) {
         const u = this._securityUsersList.find(x => x.id === this._targetSecurityUserId) || this._targetUserInfo;
-        bannerTitle.innerHTML = `<span style="color:#10b981;">🛡️</span> تخصيص أمان وجلسات: <span style="color:#d4af37;">${u?.full_name || u?.username || 'المستخدم'}</span>`;
+        bannerTitle.innerHTML = `<span style="color:var(--color-success, #10b981);">🛡️</span> تخصيص أمان وجلسات: <span style="color:var(--text-gold, #d4af37);">${u?.full_name || u?.username || 'المستخدم'}</span>`;
       } else {
-        bannerTitle.innerHTML = `<span style="color:#10b981;">🛡️</span> إعدادات الأمان وسياسة الجلسات العامة للنظام`;
+        bannerTitle.innerHTML = `<span style="color:var(--color-success, #10b981);">🛡️</span> إعدادات الأمان وسياسة الجلسات العامة للنظام`;
       }
     }
 
     if (badgeCustom) {
       if (isUserMode) {
         if (this._isTargetUserCustom) {
-          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);">⭐ إعدادات مخصصة خاصة بهذا المستخدم</span>`;
+          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--color-success, #10b981); border: 1px solid rgba(16, 185, 129, 0.4);">⭐ إعدادات مخصصة خاصة بهذا المستخدم</span>`;
         } else {
-          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);">⚙️ يرث حالياً الإعدادات العامة للنظام</span>`;
+          badgeCustom.innerHTML = `<span class="badge" style="background: rgba(148, 163, 184, 0.15); color: var(--text-secondary, #94a3b8); border: 1px solid rgba(148, 163, 184, 0.3);">⚙️ يرث حالياً الإعدادات العامة للنظام</span>`;
         }
       } else {
-        badgeCustom.innerHTML = `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);">🌐 تطبق افتراضياً على كل المستخدمين</span>`;
+        badgeCustom.innerHTML = `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: var(--color-info, #60a5fa); border: 1px solid rgba(59, 130, 246, 0.4);">🌐 تطبق افتراضياً على كل المستخدمين</span>`;
       }
     }
 
@@ -1700,10 +1926,10 @@ const Auth = {
         if (s.authorized_device_id) {
           const devName = s.authorized_device_name || 'جهاز مسجل';
           const devDate = s.authorized_device_at ? new Date(s.authorized_device_at).toLocaleDateString('ar-YE') : '';
-          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#38bdf8;">${devName}</span> ${devDate ? `(تاريخ الربط: ${devDate})` : ''}`;
+          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:var(--color-info, #38bdf8);">${devName}</span> ${devDate ? `(تاريخ الربط: ${devDate})` : ''}`;
           if (resetDevBtn) resetDevBtn.style.display = 'inline-block';
         } else {
-          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:#94a3b8;">لم يسجل جهاز بعد (سيتم قفل أول جهاز يسجل منه).</span>`;
+          devText.innerHTML = `📱 <strong>الجهاز المعتمد:</strong> <span style="color:var(--text-secondary, #94a3b8);">لم يسجل جهاز بعد (سيتم قفل أول جهاز يسجل منه).</span>`;
           if (resetDevBtn) resetDevBtn.style.display = 'none';
         }
       } else {
@@ -1777,7 +2003,7 @@ const Auth = {
 
   // فك قفل الجهاز المعتمد لمستخدم محدد
   async resetAuthorizedDevice() {
-    if (!confirm('هل أنت متأكد من فك قفل الجهاز المعتمد؟ سيتم السماح للمستخدم بتسجيل الدخول من جهاز جديد واعتماده.')) {
+    if (!await UIDialog.confirm('هل أنت متأكد من فك قفل الجهاز المعتمد؟ سيتم السماح للمستخدم بتسجيل الدخول من جهاز جديد واعتماده.')) {
       return;
     }
     if (this._targetSecurityUserId) {
@@ -1948,7 +2174,7 @@ const Auth = {
 
   // تأكيد وإغلاق البرنامج بالكامل من شاشة الدخول مع حفظ نسخة احتياطية
   async confirmShutdownApp() {
-    const isConfirm = confirm('هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن وإنهاء البرنامج؟\n\nسيتم حفظ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.');
+    const isConfirm = await UIDialog.confirm('هل أنت متأكد من رغبتك في إغلاق نظام شركة رواسي عدن وإنهاء البرنامج؟\n\nسيتم حفظ نسخة احتياطية آمنة وتلقائية من قاعدة البيانات فوراً.');
     if (!isConfirm) return;
 
     if (typeof App !== 'undefined' && App.showToast) {
@@ -1983,8 +2209,8 @@ const Auth = {
         <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#0f172a;color:#fff;font-family:'Segoe UI',Tahoma,sans-serif;direction:rtl;">
           <div style="text-align:center;padding:40px;background:#1e293b;border-radius:16px;border:1px solid #334155;max-width:480px;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
             <div style="font-size:48px;margin-bottom:16px;">🔒</div>
-            <h2 style="color:#d4af37;margin-bottom:12px;">تم إغلاق نظام رواسي عدن بنجاح</h2>
-            <p style="color:#cbd5e1;line-height:1.7;">تم حفظ أحدث نسخة احتياطية من قاعدة البيانات وإيقاف الخادم بأمان.<br>يمكنك إغلاق هذه النافذة الآن أو الضغط على Alt+F4.</p>
+            <h2 style="color:var(--text-gold, #d4af37);margin-bottom:12px;">تم إغلاق نظام رواسي عدن بنجاح</h2>
+            <p style="color:var(--text-secondary, #cbd5e1);line-height:1.7;">تم حفظ أحدث نسخة احتياطية من قاعدة البيانات وإيقاف الخادم بأمان.<br>يمكنك إغلاق هذه النافذة الآن أو الضغط على Alt+F4.</p>
           </div>
         </div>
       `;

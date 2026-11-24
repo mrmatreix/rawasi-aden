@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2022","module":"NodeNext","moduleResolution":"NodeNext","strict":true,"noEmit":true,"allowImportingTsExtensions":true,"skipLibCheck":true},"include":["src/features/orders/domain/**/*.ts","src/features/identity/application/**/*.ts","src/features/inventory/application/**/*.ts"]}

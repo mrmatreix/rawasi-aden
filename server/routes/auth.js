@@ -3,67 +3,32 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { get, query, run, connectionManager } = require('../database/db');
+const { get, query, run } = require('../database/db');
 const {
   loginRateLimiter,
   recordFailedLogin,
   resetLoginAttempts,
+  getStaffLockRemainingMs,
+  registerStaffFailure,
+  clearStaffFailures,
+  staffLockedResponse,
   generateCsrfToken,
   requireAuth,
+  getStaffToken,
+  setStaffCookie,
+  clearStaffCookie,
   JWT_SECRET
 } = require('../middleware/security');
 
+router.post('/realtime-ticket',requireAuth,(req,res)=>res.json({success:true,ticket:jwt.sign({id:req.user.id,purpose:'realtime'},JWT_SECRET,{expiresIn:'60s'})}));
+// ترحيل جلسة قديمة: المتصفح الذي كان يحفظ التوكن في التخزين يرسله مرة واحدة في الترويسة فيُنقل إلى كوكي HttpOnly ثم يُحذف من التخزين
+router.post('/session-cookie',requireAuth,(req,res)=>{const {token,source}=getStaffToken(req);if(source!=='header')return res.json({success:true,cookieSession:true});setStaffCookie(req,res,token);let tokenExpiresAt=null;try{const {exp}=jwt.decode(token)||{};if(exp)tokenExpiresAt=new Date(exp*1000).toISOString();}catch{}res.json({success:true,cookieSession:true,tokenExpiresAt});});
+router.get('/staff-access',requireAuth,require('../middleware/security').requirePermission('client_app:staff_login'),(req,res)=>res.json({success:true}));
+
+// قالب صلاحيات الدور من الكتالوج الموحّد (js/system-catalog.js): نفس المصدر الذي تقرأ منه الواجهة وrequireAuth
 function getRoleDefaultPermissions(role) {
-  switch (role) {
-    case 'admin':
-      return ['*'];
-    case 'accountant':
-      return [
-        'dashboard:view', 'dashboard:export',
-        'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-        'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-        'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-        'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-        'custody:view', 'custody:create', 'custody:edit', 'custody:export',
-        'clients:view', 'clients:create', 'clients:edit', 'clients:export',
-        'suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:export',
-        'cash:view',
-        'hr:view', 'hr:payroll',
-        'reports:view', 'reports:export'
-      ];
-    case 'auditor':
-      return [
-        'dashboard:view', 'dashboard:export',
-        'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-        'expenses:view', 'expenses:approve', 'expenses:export',
-        'revenues:view', 'revenues:approve', 'revenues:export',
-        'billing:view', 'billing:approve', 'billing:export',
-        'custody:view', 'custody:approve', 'custody:export',
-        'projects:view', 'projects:export',
-        'inventory:view', 'inventory:export',
-        'purchases:view', 'purchases:approve', 'purchases:export',
-        'hr:view', 'hr:approve', 'hr:export',
-        'reports:view', 'reports:export',
-        'cash:view'
-      ];
-    case 'project_manager':
-      return [
-        'dashboard:view',
-        'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export',
-        'expenses:view', 'expenses:create',
-        'custody:view',
-        'inventory:view', 'inventory:issue',
-        'reports:view'
-      ];
-    case 'storekeeper':
-      return [
-        'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export',
-        'purchases:view',
-        'projects:view'
-      ];
-    default:
-      return ['dashboard:view'];
-  }
+  const template = require('../../js/system-catalog').roles[role];
+  return template ? [...template.permissions] : ['dashboard:view'];
 }
 
 function parseUserPermissions(user) {
@@ -96,21 +61,23 @@ function getHeartbeatTimestamp(hb) {
 }
 
 // التحقق من أن المستخدم المتصل هو المدير العام (Admin Only)
-function verifyAdmin(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'يرجى تسجيل الدخول بحساب المدير العام لتنفيذ هذا الإجراء' });
-  }
-  const token = authHeader.split(' ')[1];
+function verifyAdmin(req,res,next) {
+  return requireAuth(req,res,()=>{
+    if(req.user.role!=='admin')return res.status(403).json({success:false,message:'هذه العملية متاحة للمدير العام فقط'});
+    req.adminUser=req.user;next();
+  });
+}
+
+// الساعة الحالية بتوقيت الشركة (عدن افتراضياً) لا بتوقيت الخادم: Railway يعمل بتوقيت UTC،
+// فكانت فترة 08:00–16:00 تُطبَّق فعلياً 11:00–19:00 بتوقيت عدن.
+function companyClock(date = new Date()) {
+  const tz = process.env.APP_TIMEZONE || 'Asia/Aden';
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== 'admin' && decoded.username !== 'admin') {
-      return res.status(403).json({ success: false, message: 'عذراً! ضبط وتعديل خيارات الأمان متاح حصرياً لحساب المدير العام' });
-    }
-    req.adminUser = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ success: false, message: 'جلسة المدير العام غير صالحة أو منتهية، يرجى إعادة تسجيل الدخول' });
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
+    const get = t => Number(parts.find(p => p.type === t)?.value);
+    return { h: get('hour'), m: get('minute') };
+  } catch {
+    return { h: date.getHours(), m: date.getMinutes() };
   }
 }
 
@@ -233,8 +200,7 @@ router.get('/2fa-status', verifyAdmin, async (req, res) => {
     const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
     const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
     const isEnabled = row2fa ? (row2fa.value === '1' || row2fa.value === 'true') : true;
-    const pin = rowPin && rowPin.value ? rowPin.value : '123456';
-    res.json({ success: true, enabled: isEnabled, pin, backupCode: '889900' });
+    res.json({ success: true, enabled: isEnabled, pinConfigured:Boolean(rowPin?.value) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -256,17 +222,25 @@ router.post('/2fa-config', verifyAdmin, async (req, res) => {
   }
 });
 
+// سجل تدقيق أمني لأحداث الدخول (نجاح، فشل، قفل) مع عنوان IP والجهاز. لا يُسجَّل أي رمز أو كلمة مرور.
+async function securityAudit(req, user, action, details = {}) {
+  const { logAudit } = require('../services/auditService');
+  const attempted = req.body && req.body.username ? String(req.body.username).trim().slice(0, 80) : null;
+  await logAudit({ ip: req.ip, socket: req.socket, headers: {}, user: { id: user?.id || null, username: user?.username || attempted || 'غير معروف' } }, {
+    action, entity_type: 'auth', entity_id: user?.id || null,
+    details: { ...details, user_agent: String(req.get('user-agent') || '').slice(0, 200) }
+  });
+}
+
 // دالة مركزية لإكمال جلسة تسجيل الدخول وتوليد التوكنات
 async function completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName } = {}) {
   const secSettings = await getSecuritySettings(user);
 
   // فحص فترة وساعات العمل
-  if (user.username !== 'admin' && (secSettings.jwt_token_expiry === 'custom' || secSettings.work_hours_enabled)) {
+  if (user.role !== 'admin' && (secSettings.jwt_token_expiry === 'custom' || secSettings.work_hours_enabled)) {
     const startTime = secSettings.work_start_time || '08:00';
     const endTime = secSettings.work_end_time || '16:00';
-    const now = new Date();
-    const currentH = now.getHours();
-    const currentM = now.getMinutes();
+    const { h: currentH, m: currentM } = companyClock();
     const currentTimeStr = `${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`;
 
     let isAllowed = false;
@@ -290,9 +264,7 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   if (tokenExpiry === 'custom') {
     const startTime = secSettings.work_start_time || '08:00';
     const endTime = secSettings.work_end_time || '16:00';
-    const now = new Date();
-    const currentH = now.getHours();
-    const currentM = now.getMinutes();
+    const { h: currentH, m: currentM } = companyClock();
     const [endH, endM] = endTime.split(':').map(Number);
 
     let remainingMins = (endH * 60 + endM) - (currentH * 60 + currentM);
@@ -341,7 +313,7 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   const incomingDeviceName = String(deviceName || deviceInfo || 'جهاز النظام').trim();
 
   if (overflowAction === 'lock_device') {
-    const isSuperAdmin = (user.username === 'admin');
+    const isSuperAdmin = (user.role === 'admin');
 
     if (!secSettings.authorized_device_id) {
       if (incomingDeviceId) {
@@ -377,7 +349,8 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   }
 
   if (activeSessions.length >= maxDevices) {
-    if (overflowAction === 'block_new' && !force) {
+    // «منع الجلسة الجديدة» لا يتجاوزه إلا المدير العام؛ كان أي مستخدم يرسل force=true فيُبطل السياسة
+    if (overflowAction === 'block_new' && !(force && user.role === 'admin')) {
       const policyDesc = isSingleMode ? 'جلسة واحدة صارمة' : `سقف الجلسات المتعددة (${maxDevices} أجهزة)`;
       return res.status(409).json({
         success: false,
@@ -458,15 +431,25 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
     WHERE id = ?
   `, [sessionId, JSON.stringify(activeSessions), nowIsoDb, nowIsoDb, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
 
-  let dbStatus = connectionManager ? connectionManager.getStatus() : { isOnline: false, mode: 'offline' };
+  // the login itself just read and wrote the database: report the same status as /api/settings/db-status
+  // (the old connection manager always answered "offline", so the badge flickered offline -> online after login)
+  const dbStatus = { isOnline: true, mode: 'online', activeDb: 'sqlite', statusMessage: 'متصل بخادم النظام وقاعدة البيانات تعمل بشكل طبيعي' };
 
   // نجاح الدخول - تصفير محاولات Rate Limit
   resetLoginAttempts(req);
+  await securityAudit(req, user, 'LOGIN_SUCCESS', { device: String(deviceStr).substring(0, 120) });
+
+  // المتصفح يحمل الجلسة في كوكي HttpOnly ولا يستلم التوكن نفسه؛ تطبيق الجوال يستلمه كالسابق
+  setStaffCookie(req, res, token);
+  const cookieMode = String(req.headers['x-auth-mode'] || '').toLowerCase() === 'cookie';
+  let tokenExpiresAt = null;
+  try { const { exp } = jwt.decode(token) || {}; if (exp) tokenExpiresAt = new Date(exp * 1000).toISOString(); } catch {}
 
   return res.json({
     success: true,
     message: `مرحباً بك ${user.full_name}! تم تسجيل الدخول بنجاح`,
-    token,
+    ...(cookieMode ? { cookieSession: true } : { token }),
+    tokenExpiresAt,
     csrfToken,
     sessionId,
     dbStatus,
@@ -501,6 +484,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     
     if (!user) {
       const failInfo = recordFailedLogin(req);
+      await securityAudit(req, null, 'LOGIN_FAILED', { stage: 'unknown_username' });
       if (failInfo.isLocked) {
         return res.status(429).json({
           success: false,
@@ -517,13 +501,16 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
-    if (user.status === 'inactive') {
-      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً، يرجى مراجعة إدارة النظام' });
-    }
+    const lockRemaining = getStaffLockRemainingMs(user);
+    if (lockRemaining) return staffLockedResponse(res, lockRemaining);
 
     const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
       const failInfo = recordFailedLogin(req);
+      const accountFail = await registerStaffFailure(user.id);
+      await securityAudit(req, user, accountFail.locked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', { stage: 'password' });
+      if (accountFail.locked) return staffLockedResponse(res, accountFail.lockoutSeconds * 1000);
+      failInfo.remainingAttempts = Math.min(failInfo.remainingAttempts, accountFail.remainingAttempts);
       if (failInfo.isLocked) {
         return res.status(429).json({
           success: false,
@@ -540,40 +527,47 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
-    // التحقق هل الحساب للمدير العام وهل ميزة 2FA مفعلة
+    // حالة التعطيل تُكشف فقط بعد صحة كلمة المرور حتى لا تُستخدم لمعرفة أسماء الحسابات
+    if (user.status === 'inactive') {
+      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً، يرجى مراجعة إدارة النظام' });
+    }
+
+    // التحقق هل الحساب مفعل له 2FA (المدير العام أو أي مستخدم مفعّل له التحقق بخطوتين)
+    let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
+      ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
+      : (user.role === 'admin' || user.username === 'admin');
+
     if (user.role === 'admin' || user.username === 'admin') {
-      let is2FaEnabled = (user.two_factor_enabled !== undefined && user.two_factor_enabled !== null)
-        ? (user.two_factor_enabled === 1 || user.two_factor_enabled === '1' || user.two_factor_enabled === true)
-        : true;
       try {
         const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
         if (row2fa && (user.two_factor_enabled === undefined || user.two_factor_enabled === null)) {
           is2FaEnabled = (row2fa.value === '1' || row2fa.value === 'true');
         }
       } catch (e) {}
-
-      if (is2FaEnabled) {
-        const tempToken = jwt.sign(
-          { id: user.id, username: user.username, role: user.role, isPending2FA: true },
-          JWT_SECRET,
-          { expiresIn: '5m' }
-        );
-        return res.json({
-          success: true,
-          requires2FA: true,
-          tempToken,
-          user: {
-            id: user.id,
-            username: user.username,
-            full_name: user.full_name,
-            role: user.role
-          },
-          message: 'مرحباً بالمدير العام! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️'
-        });
-      }
     }
 
-    // إكمال تسجيل الدخول الاعتيادي
+    if (is2FaEnabled) {
+      const tempToken = jwt.sign(
+        { id: user.id, username: user.username, role: user.role, isPending2FA: true },
+        JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+      return res.json({
+        success: true,
+        requires2FA: true,
+        tempToken,
+        user: {
+          id: user.id,
+          username: user.username,
+          full_name: user.full_name,
+          role: user.role
+        },
+        message: `مرحباً بك (${user.full_name || user.username})! يتطلب حسابك التحقق بخطوتين (2FA). أدخل رمز الأمان للمتابعة 🛡️`
+      });
+    }
+
+    // إكمال تسجيل الدخول الاعتيادي (عداد المحاولات لا يُصفّر قبل 2FA حتى لا تُعاد محاولات الرمز بلا حد)
+    await clearStaffFailures(user.id);
     return await completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName });
   } catch (err) {
     console.error('Login error:', err);
@@ -581,7 +575,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   }
 });
 
-// 1.1 التحقق من رمز التحقق بخطوتين (2FA) للمدير العام
+// 1.1 التحقق من رمز التحقق بخطوتين (2FA)
 router.post('/verify-2fa', async (req, res) => {
   try {
     const { tempToken, code, force, deviceInfo, deviceId, deviceName } = req.body;
@@ -596,15 +590,17 @@ router.post('/verify-2fa', async (req, res) => {
       return res.status(401).json({ success: false, message: 'جلسة التحقق المؤقتة منتهية، يرجى إعادة تسجيل الدخول' });
     }
 
-    if (!decoded || !decoded.isPending2FA || decoded.role !== 'admin') {
+    if (!decoded || !decoded.isPending2FA) {
       return res.status(401).json({ success: false, message: 'طلب التحقق غير صالح' });
     }
 
     // جلب بيانات المستخدم أولاً
     const user = await get('SELECT * FROM users WHERE id = ?', [decoded.id]);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    if (!user || user.status !== 'active') {
+      return res.status(404).json({ success: false, message: 'المستخدم غير متاح' });
     }
+    const pinLockRemaining = getStaffLockRemainingMs(user);
+    if (pinLockRemaining) return staffLockedResponse(res, pinLockRemaining);
 
     // جلب الرمز السري المعتمد لـ 2FA الخاص بالمستخدم أو من إعدادات النظام
     let admin2FaPin = user.two_factor_pin;
@@ -616,16 +612,36 @@ router.post('/verify-2fa', async (req, res) => {
     }
     if (!admin2FaPin) admin2FaPin = '123456';
 
-    const cleanCode = String(code).trim();
-    // التحقق من الرمز أو رمز الطوارئ الاحتياطي 889900
-    if (cleanCode !== String(admin2FaPin).trim() && cleanCode !== '889900') {
+    const normalizeDigits = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+        .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+        .trim();
+    };
+
+    const cleanCode = normalizeDigits(code);
+    const userPinNormalized = normalizeDigits(user.two_factor_pin);
+    const adminPinNormalized = normalizeDigits(admin2FaPin);
+
+    // Accept only this user's configured PIN. Published emergency codes are never accepted.
+    const expectedPin = userPinNormalized || (user.role==='admin' ? adminPinNormalized : '');
+    if (!expectedPin || (!require('../config/environment').isDev && ['123456','654321','889900'].includes(expectedPin))) return res.status(403).json({success:false,message:'يجب إعداد رمز أمان خاص بالحساب قبل الدخول'});
+    const validPins = new Set([expectedPin]);
+
+    if (!validPins.has(cleanCode)) {
+      const pinFail = await registerStaffFailure(user.id);
+      await securityAudit(req, user, pinFail.locked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', { stage: '2fa_pin' });
+      if (pinFail.locked) return staffLockedResponse(res, pinFail.lockoutSeconds * 1000);
       return res.status(401).json({
         success: false,
-        message: 'رمز التحقق بخطوتين (2FA) غير صحيح، يرجى التأكد من الرمز والمحاولة مجدداً'
+        remainingAttempts: pinFail.remainingAttempts,
+        message: `رمز التحقق بخطوتين (2FA) غير صحيح (متبقي ${pinFail.remainingAttempts} محاولات قبل قفل الحساب)`
       });
     }
 
     // اعتماد الجلسة وإصدار التوكن النهائي
+    await clearStaffFailures(user.id);
     return await completeLoginSession(user, req, res, { force, deviceInfo, deviceId, deviceName });
   } catch (err) {
     console.error('Verify 2FA error:', err);
@@ -634,13 +650,12 @@ router.post('/verify-2fa', async (req, res) => {
 });
 
 // 2. نبض الحفاظ على الجلسة والتحقق من عدم تكرار الدخول
-router.post('/heartbeat', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+router.post('/heartbeat', requireAuth, async (req, res) => {
+  const { token } = getStaffToken(req);
+  if (!token) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await get('SELECT id, is_logged_in, session_token, active_sessions, status, full_name, username FROM users WHERE id = ?', [decoded.id]);
@@ -692,13 +707,12 @@ router.post('/heartbeat', async (req, res) => {
 });
 
 // 3. التحقق من صحة الجلسة (Verify Token)
-router.get('/me', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+router.get('/me', requireAuth, async (req, res) => {
+  const { token } = getStaffToken(req);
+  if (!token) {
     return res.status(401).json({ success: false, message: 'جلسة غير صالحة' });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await get('SELECT id, username, full_name, role, email, phone, status, permissions, is_logged_in, session_token, active_sessions, branch_id, branch, department_id, department, allowed_projects, allowed_branches, allowed_departments FROM users WHERE id = ?', [decoded.id]);
@@ -764,16 +778,17 @@ router.get('/me', async (req, res) => {
 });
 
 // 4. تسجيل الخروج وإنهاء الجلسة فوراً
-router.post('/logout', async (req, res) => {
+// يُمسح الكوكي حتى لو كانت الجلسة منتهية (فيرفضها requireAuth بـ 401)
+router.post('/logout', (req, res, next) => { clearStaffCookie(req, res); next(); }, requireAuth, async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    let userId = req.body?.userId;
-    let username = req.body?.username;
+    const { token: sessionToken } = getStaffToken(req);
+    let userId = req.user.id;
+    let username = req.user.username;
     let currentSessionId = null;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    if (sessionToken) {
       try {
-        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+        const decoded = jwt.verify(sessionToken, JWT_SECRET);
         userId = userId || decoded.id;
         username = username || decoded.username;
         currentSessionId = decoded.sessionId;
@@ -815,7 +830,7 @@ router.post('/logout', async (req, res) => {
 });
 
 // 5. جلب قائمة المستخدمين المتصلين حالياً بالنظام
-router.get('/connected-users', async (req, res) => {
+router.get('/connected-users', verifyAdmin, async (req, res) => {
   try {
     const ACTIVE_THRESHOLD_MS = 75 * 1000;
     const now = Date.now();
@@ -852,18 +867,26 @@ router.post('/unlock', async (req, res) => {
 
     const cleanUsername = String(username).trim();
     const user = await get('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [cleanUsername]);
+    // رسالة موحّدة حتى لا يكشف المسار وجود اسم المستخدم، وكل محاولة خاطئة تُحتسب على قفل الحساب نفسه
     if (!user) {
-      return res.status(401).json({ success: false, message: 'اسم المستخدم غير موجود' });
+      recordFailedLogin(req);
+      return res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى' });
     }
-
-    if (user.status === 'inactive') {
-      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً' });
-    }
+    const unlockLockRemaining = getStaffLockRemainingMs(user);
+    if (unlockLockRemaining) return staffLockedResponse(res, unlockLockRemaining);
 
     const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى' });
+      recordFailedLogin(req);
+      const unlockFail = await registerStaffFailure(user.id);
+      await securityAudit(req, user, unlockFail.locked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', { stage: 'screen_unlock' });
+      if (unlockFail.locked) return staffLockedResponse(res, unlockFail.lockoutSeconds * 1000);
+      return res.status(401).json({ success: false, remainingAttempts: unlockFail.remainingAttempts, message: `كلمة المرور غير صحيحة (متبقي ${unlockFail.remainingAttempts} محاولات قبل قفل الحساب)` });
     }
+    if (user.status === 'inactive') {
+      return res.status(403).json({ success: false, message: 'هذا الحساب معطل حالياً' });
+    }
+    await clearStaffFailures(user.id);
 
     const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
     await run('UPDATE users SET last_heartbeat = ?, is_logged_in = 1 WHERE id = ?', [nowIso, user.id]);
@@ -885,6 +908,7 @@ router.post('/unlock', async (req, res) => {
 });
 
 router.verifyAdmin = verifyAdmin;
+router.companyClock = companyClock;
 router.getSecuritySettings = getSecuritySettings;
 router.JWT_SECRET = JWT_SECRET;
 

@@ -11,43 +11,15 @@
 
 const db = require('../database/db');
 
-const { query, get, run, getActiveEngine } = db;
+const { query, get, run } = db;
 
-let schemaEnsured = false;
 
 /**
  * التأكد من عمود التقسيم (idempotent). يُستدعى خارج المعاملات وعند الإقلاع.
  */
 async function ensureSchema() {
-  if (schemaEnsured) return true;
-  const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
-
-  try {
-    if (engine === 'mysql') {
-      const cols = await query('SHOW COLUMNS FROM cash_movements');
-      const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
-      if (!names.includes('project_id')) {
-        await run('ALTER TABLE cash_movements ADD COLUMN project_id INT NULL');
-      }
-      try {
-        await run('CREATE INDEX idx_cash_box ON cash_movements (project_id, id)');
-      } catch {}
-    } else {
-      const cols = await query('PRAGMA table_info(cash_movements)');
-      const names = (cols || []).map(c => c.name);
-      if (!names.includes('project_id')) {
-        await run('ALTER TABLE cash_movements ADD COLUMN project_id INTEGER');
-      }
-      try {
-        await run('CREATE INDEX IF NOT EXISTS idx_cash_box ON cash_movements (project_id, id)');
-      } catch {}
-    }
-    schemaEnsured = true;
-    return true;
-  } catch (err) {
-    console.warn('⚠️ [CashBox] تعذر التأكد من مخطط الصناديق:', err.message);
-    throw err;
-  }
+  // cash_movements.project_id and idx_cash_box come from migration 0006 at boot (SQLite is the only engine)
+  return true;
 }
 
 /** الشرط المحمول للمطابقة مع NULL على المحركين (IFNULL مدعوم في SQLite وMySQL).
@@ -88,13 +60,15 @@ async function appendMovement(conn, {
  */
 async function getBoxesSummary() {
   await ensureSchema();
+  // رصيد الصندوق = رصيد أول حركة فيه + مجموع حركاته (لا "آخر صف حسب المعرّف": حركة بتاريخ سابق لا تفسد الأرصدة اللاحقة)
   const boxes = await query(`
-    SELECT m.project_id, p.code as project_code, p.name as project_name,
-           m.current_balance, m.date as last_date
-    FROM cash_movements m
-    LEFT JOIN projects p ON p.id = m.project_id
-    WHERE m.id IN (SELECT MAX(id) FROM cash_movements GROUP BY IFNULL(project_id, 0))
-    ORDER BY m.project_id IS NULL DESC, m.project_id ASC
+    SELECT b.project_id, p.code as project_code, p.name as project_name, b.last_date,
+           COALESCE((SELECT f.previous_balance FROM cash_movements f WHERE IFNULL(f.project_id, 0) = IFNULL(b.project_id, 0) ORDER BY f.date ASC, f.id ASC LIMIT 1), 0)
+             + b.net AS current_balance
+    FROM (SELECT project_id, MAX(date) AS last_date, SUM(COALESCE(cash_in, 0) - COALESCE(cash_out, 0) - COALESCE(withdrawals, 0)) AS net
+          FROM cash_movements GROUP BY IFNULL(project_id, 0)) b
+    LEFT JOIN projects p ON p.id = b.project_id
+    ORDER BY b.project_id IS NULL DESC, b.project_id ASC
   `);
   const totals = await get(`
     SELECT COALESCE(SUM(cash_in), 0) as total_in,
@@ -121,25 +95,6 @@ async function getBoxesSummary() {
   };
 }
 
-/** إجمالي النقدية عبر الصناديق (للوحة التحكم). */
-async function getTotalBalance() {
-  const summary = await getBoxesSummary();
-  return summary.current_balance;
-}
-
-/** إجمالي النقدية عبر الصناديق بتاريخ محدد (شامل asOf أو قبل before — للتدفقات). */
-async function getTotalBalanceAsOf({ asOf = null, before = null } = {}) {
-  await ensureSchema();
-  let cond = '';
-  const params = [];
-  if (asOf) { cond = 'WHERE m2.date <= ?'; params.push(asOf); }
-  if (before) { cond = 'WHERE m2.date < ?'; params.push(before); }
-  const rows = await query(`
-    SELECT m.current_balance
-    FROM cash_movements m
-    WHERE m.id IN (SELECT MAX(m2.id) FROM cash_movements m2 ${cond} GROUP BY IFNULL(m2.project_id, 0))
-  `, params);
-  return (rows || []).reduce((s, r) => s + (Number(r.current_balance) || 0), 0);
-}
-
-module.exports = { ensureSchema, appendMovement, getBoxesSummary, getTotalBalance, getTotalBalanceAsOf };
+// Dashboard and cash-flow totals read the general ledger (reportingService); the cash-book totals that used to
+// live here had no caller left.
+module.exports = { ensureSchema, appendMovement, getBoxesSummary };

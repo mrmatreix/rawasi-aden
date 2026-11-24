@@ -12,14 +12,7 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
-// مفتاح التوقيع: إلزامي من البيئة في الإنتاج (يفشل الإقلاع بدونه)، وافتراضي تحذيري في التطوير/الفحص فقط.
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'rawasi_aden_secret_key_2024');
-if (!JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable must be set in production. Refusing to boot with a known default secret.');
-}
-if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  [Security] JWT_SECRET is not set — using insecure development default. NEVER expose this instance publicly.');
-}
+const JWT_SECRET = require('../config/environment').secret('JWT_SECRET');
 
 // ==========================================
 // 1. نظام محدد محاولات الدخول (Rate Limiting)
@@ -30,7 +23,7 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_TIME_MS = 60 * 1000; // قفل مؤقت لمدة 60 ثانية
 
 function getClientIdentifier(req) {
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
   const username = (req.body && req.body.username) ? String(req.body.username).trim().toLowerCase() : '';
   return `${ip}::${username}`;
 }
@@ -96,6 +89,58 @@ function resetLoginAttempts(req) {
   loginAttempts.delete(key);
 }
 
+// قفل حساب الموظف نفسه بعد محاولات خاطئة متتالية (كلمة مرور أو رمز 2FA أو فك قفل الشاشة)،
+// بغض النظر عن عنوان IP، ومحفوظ في صف المستخدم فلا يُمسح بإعادة تشغيل الخادم.
+const STAFF_MAX_FAILURES = 5;
+const STAFF_LOCK_MS = 15 * 60 * 1000;
+function getStaffLockRemainingMs(user) {
+  if (!user || !user.login_locked_until) return 0;
+  const remaining = new Date(user.login_locked_until).getTime() - Date.now();
+  return Number.isFinite(remaining) && remaining > 0 ? remaining : 0;
+}
+/** يسجّل محاولة خاطئة؛ يعيد عدد المحاولات المتبقية وهل قُفل الحساب */
+async function registerStaffFailure(userId) {
+  const db = require('../database/db');
+  const row = await db.get('SELECT failed_login_count FROM users WHERE id = ?', [userId]);
+  const count = Number(row?.failed_login_count || 0) + 1;
+  if (count >= STAFF_MAX_FAILURES) {
+    await db.run('UPDATE users SET failed_login_count = 0, login_locked_until = ? WHERE id = ?', [new Date(Date.now() + STAFF_LOCK_MS).toISOString(), userId]);
+    return { locked: true, remainingAttempts: 0, lockoutSeconds: STAFF_LOCK_MS / 1000 };
+  }
+  await db.run('UPDATE users SET failed_login_count = ? WHERE id = ?', [count, userId]);
+  return { locked: false, remainingAttempts: STAFF_MAX_FAILURES - count, lockoutSeconds: 0 };
+}
+/** يمسح عدادات الذاكرة (IP + اسم المستخدم) لهذا الحساب عند فك القفل من الإدارة */
+function clearLoginAttemptsFor(username) {
+  const suffix = '::' + String(username || '').trim().toLowerCase();
+  for (const key of loginAttempts.keys()) if (key.endsWith(suffix)) loginAttempts.delete(key);
+}
+async function clearStaffFailures(userId) {
+  await require('../database/db').run('UPDATE users SET failed_login_count = 0, login_locked_until = NULL WHERE id = ?', [userId]);
+}
+/**
+ * ينهي جلسات الموظف فعلياً: requireAuth يقبل الجلسة فقط إن كان sessionId في active_sessions أو يساوي session_token،
+ * فيجب تفريغ الاثنين معاً. keepSessionId يُبقي جلسة واحدة (مثلاً المدير الذي غيّر كلمة مروره بنفسه).
+ * dbh اختياري لاستعماله داخل transaction.
+ */
+async function revokeAllStaffSessions(userId, { keepSessionId = null, dbh = null } = {}) {
+  const db = dbh || require('../database/db');
+  if (keepSessionId) {
+    const row = await db.get('SELECT active_sessions FROM users WHERE id = ?', [userId]);
+    let sessions = [];
+    try { sessions = JSON.parse(row?.active_sessions || '[]'); } catch {}
+    const kept = (Array.isArray(sessions) ? sessions : []).filter(s => s && s.sessionId === keepSessionId);
+    const keep = kept.length ? kept : [{ sessionId: keepSessionId, lastHeartbeat: new Date().toISOString(), lastHeartbeatMs: Date.now() }];
+    await db.run('UPDATE users SET active_sessions = ?, session_token = ? WHERE id = ?', [JSON.stringify(keep), keepSessionId, userId]);
+    return;
+  }
+  await db.run("UPDATE users SET is_logged_in = 0, session_token = NULL, active_sessions = '[]', last_heartbeat = NULL WHERE id = ?", [userId]);
+}
+function staffLockedResponse(res, remainingMs) {
+  const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  return res.status(429).json({ success: false, rateLimited: true, accountLocked: true, lockoutSeconds: Math.ceil(remainingMs / 1000), remainingAttempts: 0, message: `⛔ تم قفل الحساب مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد ${minutes} دقيقة أو اطلب من المدير فك القفل.` });
+}
+
 // تنظيف دوري للذاكرة كل 10 دقائق
 setInterval(() => {
   const now = Date.now();
@@ -108,6 +153,53 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000).unref();
 
+
+// ==========================================
+// جلسة الموظفين في كوكي HttpOnly
+// ==========================================
+// المتصفح يحمل التوكن في كوكي لا تقرؤه سكربتات الصفحة (حماية من سرقة الجلسة عبر XSS).
+// تطبيق الجوال يستمر بإرسال Authorization: Bearer كالسابق.
+const STAFF_COOKIE = 'rawasi_token';
+const COOKIE_SESSION_MARKER = 'cookie-session'; // قيمة غير سرية يضعها المتصفح مكان التوكن
+const looksLikeJwt = t => typeof t === 'string' && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(t);
+
+function readCookie(req, name) {
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) {
+      try { return decodeURIComponent(part.slice(i + 1).trim()); } catch { return null; }
+    }
+  }
+  return null;
+}
+
+/** مصدر توكن الموظف: الترويسة أولاً، ثم الكوكي، ثم ?token= (لتذاكر البث اللحظي فقط) */
+function getStaffToken(req) {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    const t = header.slice(7).trim();
+    if (looksLikeJwt(t)) return { token: t, source: 'header' };
+  }
+  const cookie = readCookie(req, STAFF_COOKIE);
+  if (looksLikeJwt(cookie)) return { token: cookie, source: 'cookie' };
+  const q = req.query && req.query.token;
+  if (looksLikeJwt(q)) return { token: q, source: 'query' };
+  return { token: null, source: null };
+}
+
+function isLocalHost(req) {
+  return ['localhost', '127.0.0.1', '::1'].includes(String(req.hostname || ''));
+}
+
+function setStaffCookie(req, res, token) {
+  let maxAge;
+  try { const { exp } = jwt.decode(token) || {}; if (exp) maxAge = Math.max(0, exp * 1000 - Date.now()); } catch {}
+  res.cookie(STAFF_COOKIE, token, { httpOnly: true, secure: !isLocalHost(req), sameSite: 'strict', path: '/', ...(maxAge ? { maxAge } : {}) });
+}
+
+function clearStaffCookie(req, res) {
+  res.clearCookie(STAFF_COOKIE, { httpOnly: true, secure: !isLocalHost(req), sameSite: 'strict', path: '/' });
+}
 
 // ==========================================
 // 2. نظام التحقق من رمز الـ CSRF (CSRF Token)
@@ -136,7 +228,11 @@ const verifyCsrfToken = (req, res, next) => {
     '/api/auth/csrf-token',
     '/api/auth/verify-2fa',
     '/api/auth/unlock',
-    '/api/health'
+    '/api/auth/password-reset',
+    '/api/health',
+    '/api/client-portal',
+    '/api/admin',
+    '/api/payments/webhook'
   ];
   if (exemptPaths.some(p => urlPath.startsWith(p))) {
     return next();
@@ -144,18 +240,17 @@ const verifyCsrfToken = (req, res, next) => {
 
   const clientToken = req.headers['x-csrf-token'] || (req.body && req.body._csrf);
 
-  // إذا تم إرسال توكن CSRF وكان معروفاً أو توكن JWT معتمد
-  // التحقق من صلاحية توكن CSRF أو وجود ترويسة X-Requested-With / Custom Header
-  if (clientToken && (csrfTokens.has(clientToken) || clientToken.length >= 32)) {
+  // إذا تم إرسال توكن CSRF وكان معروفاً أو توكن صريح
+  if (clientToken && csrfTokens.has(clientToken) && Date.now() - csrfTokens.get(clientToken).createdAt < 8*60*60*1000) {
     return next();
   }
 
-  // إذا لم يتوفر رمز CSRF صريح، نتأكد من أن الطلب ليس عبر استدعاء Cross-Site حقيقي
-  // أو نقبل طلبات التطبيق الأصلية مع توجيه تنبيه لتحديث التوكن
-  const customHeader = req.headers['x-requested-with'];
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ') && customHeader === 'XMLHttpRequest') {
-    return next();
+  // توكن Bearer صريح في الترويسة لا يرسله المتصفح تلقائياً فلا خطر CSRF.
+  // الكوكي يُرسل تلقائياً، لذا يُشترط معه ترويسة X-Requested-With التي لا تستطيع النماذج العابرة للمواقع إضافتها
+  // (و originGuard + SameSite=Strict يمنعان الطلبات من مصادر أخرى أصلاً).
+  const { token, source } = getStaffToken(req);
+  if (token && (source === 'header' || (source === 'cookie' && req.headers['x-requested-with'] === 'XMLHttpRequest'))) {
+    try { const decoded=jwt.verify(token,JWT_SECRET,{algorithms:['HS256']}); if(decoded.id&&!decoded.isPending2FA) return next(); } catch {}
   }
 
   return res.status(403).json({
@@ -168,19 +263,18 @@ const verifyCsrfToken = (req, res, next) => {
 // ==========================================
 // 3. التحقق من المصادقة (Require Authentication)
 // ==========================================
-const requireAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+const requireAuth = async (req, res, next) => {
+  const { token, source } = getStaffToken(req);
+
+  if (!token) {
     return res.status(401).json({
       success: false,
       authenticated: false,
       message: 'يرجى تسجيل الدخول أولاً لتنفيذ هذه العملية'
     });
   }
-
-  const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     if (decoded && decoded.isPending2FA) {
       return res.status(403).json({
         success: false,
@@ -188,17 +282,35 @@ const requireAuth = (req, res, next) => {
         message: '⛔ الحساب يتطلب التحقق بخطوتين (2FA). لا يمكن الوصول إلى النظام بالتوكن المؤقت قبل إدخال رمز التحقق الأمني.'
       });
     }
-    req.user = decoded;
-    // ضمان توفر كائن النطاق الصلاحي (Scope Context)
-    if (!req.user.scope) {
-      req.user.scope = {
-        allowed_projects: req.user.allowed_projects || '*',
-        allowed_branches: req.user.allowed_branches || '*',
-        allowed_departments: req.user.allowed_departments || '*',
-        branch_id: req.user.branch_id || 1,
-        department_id: req.user.department_id || 1
-      };
+    // التوكن في الرابط يظهر في السجلات وسجل المتصفح، فلا يُقبل إلا لتذاكر البث القصيرة (60 ثانية)
+    if (source === 'query' && decoded.purpose !== 'realtime') return res.status(401).json({success:false,message:'لا يُقبل توكن الجلسة في الرابط'});
+    req.authSource = source;
+    if (decoded.purpose === 'realtime' && !/^\/(?:api\/contracts\/(?:alerts\/)?stream|ws(?:\/(?:alerts|contracts))?|alerts\/ws)(?:\?|$)/.test(req.originalUrl||req.url||'')) return res.status(401).json({success:false,message:'رمز مخصص للتنبيهات فقط'});
+    if (!decoded.id || decoded.type === 'client') return res.status(401).json({success:false,message:'جلسة غير مصرح بها'});
+    const current = await require('../database/db').get('SELECT id,username,full_name,role,status,permissions,allowed_projects,allowed_branches,allowed_departments,scope_mode,branch_id,department_id,session_token,active_sessions,(SELECT permissions FROM roles WHERE name=users.role LIMIT 1) AS role_permissions FROM users WHERE id = ?', [decoded.id]);
+    if (!current || current.status !== 'active') return res.status(401).json({success:false,message:'الحساب غير متاح'});
+    if (decoded.sessionId) {
+      let sessions=[];try{sessions=JSON.parse(current.active_sessions || '[]');}catch{}
+      if (!(sessions.some(session=>session.sessionId===decoded.sessionId) || current.session_token===decoded.sessionId)) return res.status(401).json({success:false,message:'الجلسة ملغاة'});
     }
+    // صلاحيات المستخدم المحفوظة؛ وإن لم تُحفظ أي صلاحية فقالب دوره من الكتالوج الموحّد، ثم جدول الأدوار للأدوار المخصّصة
+    const roleTemplate=require('../../js/system-catalog').roles[current.role]?.permissions;
+    const permissionValue=current.permissions || roleTemplate || current.role_permissions || '[]';
+    let permissions=[];
+    if(Array.isArray(permissionValue))permissions=permissionValue;
+    else {try{const parsed=JSON.parse(permissionValue);if(Array.isArray(parsed))permissions=parsed;}catch{permissions=String(permissionValue).split(',').map(p=>p.trim()).filter(Boolean);}}
+    req.user = {...decoded,...current,permissions};
+    delete req.user.session_token; delete req.user.active_sessions;
+    if (current.role === 'service_supervisor') {
+      const pathname=(req.originalUrl || '').split('?')[0];
+      const allowed=/^\/api\/auth\/(?:me|staff-access|logout|heartbeat|verify|session)(?:\/|$)/.test(pathname) || /^\/api\/admin\/client-users\/service-requests(?:\/|$)/.test(pathname) || /^\/uploads\/service_requests\//.test(pathname);
+      if(!allowed)return res.status(403).json({success:false,message:'هذا الحساب مخصص لمساحة المشرف في التطبيق'});
+      if(!/^\/api\/auth\/(?:me|logout)(?:\/|$)/.test(pathname) && !hasUserPermission(req.user,'client_app:staff_login'))return res.status(403).json({success:false,message:'حسابك لا يملك صلاحية دخول فريق العمل في التطبيق'});
+    }
+    // نطاق الوصول الفعلي من منح المستخدم (فروع/أقسام/مشاريع/سجلات عامة)، يُحسب في كل طلب فيسري التغيير فوراً
+    const scopeService = require('../services/scopeService');
+    req.user.scopeResolved = await scopeService.resolveScope(current);
+    req.user.scope = scopeService.toRequestScope(req.user.scopeResolved, current);
     next();
   } catch (err) {
     return res.status(401).json({
@@ -239,14 +351,38 @@ function parseScopeArray(scopeVal) {
 /**
  * التحقق من صلاحية المستخدم على عملية معينة (Deny by Default)
  */
+/**
+ * مشرف طلبات مقيّد: لا يرى طلبات الزوار وردودهم إلا بعد إسنادها إليه.
+ * يشمل دور service_supervisor، وأي موظف فُعّل له خيار "مشرف" (client_app:supervisor) صراحةً.
+ * يُفحص الخيار في قائمة صلاحيات المستخدم نفسها، لا عبر hasUserPermission، حتى لا يُقيَّد
+ * المدير العام أو من يملك صلاحية شاملة (*) أو قالب مسؤول التطبيق.
+ */
+function isScopedRequestSupervisor(user) {
+  if (!user || user.role === 'admin') return false;
+  if (user.role === 'service_supervisor') return true;
+  let permissions = user.permissions;
+  if (!Array.isArray(permissions)) {
+    const raw = user.permissions || user.role_permissions || '[]';
+    try { permissions = JSON.parse(raw); } catch { permissions = String(raw).split(',').map(p => p.trim()); }
+  }
+  return Array.isArray(permissions) && permissions.includes('client_app:supervisor');
+}
+
+/** من يحق له إسناد طلبات الزوار للمشرفين: المدير العام، أو خدمة العملاء بصلاحية التحديد، وليس مشرفاً مقيّداً */
+function canAssignServiceRequests(user) {
+  return Boolean(user) && !isScopedRequestSupervisor(user) && hasUserPermission(user, 'client_app:requests_assign_supervisor');
+}
+
 function hasUserPermission(user, requiredPerm) {
   if (!user) return false;
 
   // المدير العام يملك كافة الصلاحيات دائماً دون قيود
-  if (user.role === 'admin' || user.username === 'admin') {
+  if (user.role === 'admin') {
     return true;
   }
 
+  // لا استثناءات حسب الدور غير المدير العام: المحاسب وغيره يملكون ما في صلاحياتهم (أو قالب دورهم) فقط.
+  // (كان المحاسب يُمنح كل العمليات المالية ضمنياً، بما فيها الاعتماد والترحيل، خلافاً لفصل المُنشئ عن المعتمِد.)
   const userPerms = Array.isArray(user.permissions) ? user.permissions : [];
   if (userPerms.length === 0) {
     return false; // Deny by Default
@@ -267,8 +403,8 @@ function hasUserPermission(user, requiredPerm) {
     const domain = parts[0];
     const action = parts[1] || '';
 
-    // 2. صلاحية النطاق الكامل للموديول (e.g., 'projects:*' يغطي 'projects:create')
-    if (userPerms.includes(`${domain}:*`)) return true;
+    // 2. صلاحية النطاق الكامل للموديول (e.g., 'projects:*' أو 'projects' يغطي 'projects:create' أو 'projects:view')
+    if (userPerms.includes(`${domain}:*`) || userPerms.includes(domain)) return true;
 
     // 3. التوافق المتقدم مع الأسماء السابقة والعمليات المكافئة:
     // الإضافة والتعديل مشمولة في manage
@@ -309,7 +445,7 @@ function hasUserPermission(user, requiredPerm) {
  */
 function checkUserScope(user, { projectId, branchId, departmentId }) {
   if (!user) return { allowed: false, reason: 'المستخدم غير معرف' };
-  if (user.role === 'admin' || user.username === 'admin') return { allowed: true };
+  if (user.role === 'admin') return { allowed: true };
 
   const userScope = user.scope || {};
   const allowedProjects = parseScopeArray(userScope.allowed_projects || user.allowed_projects);
@@ -430,6 +566,51 @@ const requirePermission = (permissionKey, scopeOptions = null) => {
 };
 
 /**
+ * router.param('id', recordScopeParam(table)): يفحص مشروع السجل المخزَّن نفسه قبل أي مسار يحمل :id
+ * (عرض، تعديل، حذف، اعتماد، ترحيل، عكس). بدونه كان المستخدم المقيّد بمشروع يعدّل أو يحذف سجل مشروع آخر برقمه،
+ * لأن requirePermission لا يرى إلا project_id المرسل في الطلب.
+ * table: اسم جدول ثابت من الكود (لا يأتي من الطلب)، أو دالة (req) => اسم الجدول أو null لتخطي الفحص.
+ * السجل غير الموجود يُترك لمعالج المسار (404)، والسجل العام بلا مشروع يبقى كما هو الآن (مرحلة لاحقة).
+ */
+function recordScopeParam(table) {
+  return async (req, res, next, id) => {
+    try {
+      if (!req.user || req.user.role === 'admin') return next();
+      const tableName = typeof table === 'function' ? table(req) : table;
+      if (!tableName) return next();
+      if (!/^[a-z_]+$/.test(tableName)) throw new Error('invalid scope table');
+      const allowed = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
+      if (allowed.includes('*') || allowed.includes('all')) return next();
+      const row = await require('../database/db').get(`SELECT project_id FROM ${tableName} WHERE id = ?`, [id]);
+      if (!row) return next();
+      const general = row.project_id === null || row.project_id === undefined || row.project_id === '';
+      // السجل العام (بلا مشروع) لا يصله المقيّد إلا بمنح «السجلات العامة»
+      if (general ? req.user.scope?.general !== false : allowed.some(p => Number(p) === Number(row.project_id))) return next();
+      return res.status(403).json({ success: false, scopeDenied: true, scopeType: 'project', message: '⛔ السجل غير موجود أو خارج نطاق صلاحياتك.' });
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
+ * شرط SQL لفلترة قائمة بحسب نطاق المستخدم على عمود project_id.
+ * null = بلا قيد (المدير أو «كل المؤسسة»). القائمة الفارغة لا تعني «بلا قيد» أبداً: تعطي '1 = 0'.
+ * السجلات بلا مشروع تظهر فقط مع منح «السجلات العامة».
+ */
+function projectScopeSql(user, column) {
+  if (!user || user.role === 'admin') return null;
+  const allowed = parseScopeArray(user.scope?.allowed_projects ?? user.allowed_projects);
+  if (allowed.includes('*') || allowed.includes('all')) return null;
+  const ids = allowed.map(Number).filter(n => Number.isInteger(n) && n > 0);
+  const parts = [], params = [];
+  if (ids.length) { parts.push(`${column} IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
+  if (user.scope?.general !== false) parts.push(`${column} IS NULL`);
+  if (!parts.length) return { sql: '1 = 0', params: [] };
+  return { sql: parts.length > 1 ? `(${parts.join(' OR ')})` : parts[0], params };
+}
+
+/**
  * وسيط التحقق من النطاق فقط (مشاريع / فروع / أقسام)
  */
 const requireScope = (options = {}) => {
@@ -437,7 +618,7 @@ const requireScope = (options = {}) => {
     if (!req.user) {
       return res.status(401).json({ success: false, authenticated: false, message: 'مطلوب تسجيل الدخول أولاً' });
     }
-    if (req.user.role === 'admin' || req.user.username === 'admin') {
+    if (req.user.role === 'admin') {
       return next();
     }
 
@@ -459,15 +640,30 @@ const requireScope = (options = {}) => {
 };
 
 module.exports = {
+  STAFF_COOKIE,
+  COOKIE_SESSION_MARKER,
+  getStaffToken,
+  setStaffCookie,
+  clearStaffCookie,
   loginRateLimiter,
   recordFailedLogin,
   resetLoginAttempts,
+  getStaffLockRemainingMs,
+  registerStaffFailure,
+  clearStaffFailures,
+  revokeAllStaffSessions,
+  clearLoginAttemptsFor,
+  staffLockedResponse,
   generateCsrfToken,
   verifyCsrfToken,
   requireAuth,
   requirePermission,
   requireScope,
+  recordScopeParam,
+  projectScopeSql,
   hasUserPermission,
+  isScopedRequestSupervisor,
+  canAssignServiceRequests,
   checkUserScope,
   parseScopeArray,
   JWT_SECRET

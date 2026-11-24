@@ -83,7 +83,8 @@ const Projects = {
       // 1. فلتر الحالة
       if (status !== 'all') {
         const pStatus = p.status || 'active';
-        if (pStatus !== status) return false;
+        const normalize = value => ['جاري','جارية','قيد التنفيذ','تحت التنفيذ','in_progress'].includes(value) ? 'active' : ['مكتمل','منفذ','منفذة','مكتملة','completed','مكتمل ومستلم'].includes(value) ? 'completed' : ['تحت الدراسة','دراسة'].includes(value) ? 'under_study' : value;
+        if (status === 'active_completed' ? !['active','completed'].includes(normalize(pStatus)) : normalize(pStatus) !== status) return false;
       }
 
       // 2. فلتر العميل
@@ -253,7 +254,7 @@ const Projects = {
 
     const data = projectsToRender !== null ? projectsToRender : (this.filteredList || this.list);
     if (data.length === 0) {
-      const emptyDashboard = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
+      const emptyDashboard = `<tr><td colspan="9" style="text-align: center; padding: 24px; color: var(--text-secondary);">لا توجد مشاريع مسجلة حالياً</td></tr>`;
       const emptyFull = `
         <tr>
           <td colspan="10" style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
@@ -275,8 +276,8 @@ const Projects = {
 
     const getStatusBadge = (s) => {
       if (s === 'under_study') return '<span class="badge badge-info">تحت الدراسة والتسعير</span>';
-      if (s === 'completed') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);">مكتمل ومستلم</span>';
-      if (s === 'paused') return '<span class="badge" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">متوقف مؤقتاً</span>';
+      if (s === 'completed') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: var(--color-success, #10b981); border: 1px solid rgba(16,185,129,0.3);">مكتمل ومستلم</span>';
+      if (s === 'paused') return '<span class="badge" style="background: rgba(239,68,68,0.15); color: var(--color-danger, #ef4444); border: 1px solid rgba(239,68,68,0.3);">متوقف مؤقتاً</span>';
       return '<span class="badge badge-active">جاري التنفيذ</span>';
     };
 
@@ -291,7 +292,7 @@ const Projects = {
               <div style="font-size: 0.72rem; color: var(--text-secondary);">${p.code || ''}</div>
             </td>
             <td>${p.client_name || 'عميل مباشر'}</td>
-            <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: var(--text-gold); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>${App.formatNumber(p.estimated_cost)} <small style="font-size:0.75rem">${curr}</small></td>
             <td style="color: ${p.actual_cost > p.estimated_cost ? 'var(--accent-red)' : 'var(--text-primary)'}; font-weight: 600;">
               ${App.formatNumber(p.actual_cost)} <small style="font-size:0.75rem">${curr}</small>
@@ -308,10 +309,16 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8;">
+                  📈 إنجاز
+                </button>
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light);">
+                  📋 VO
+                </button>
+                <button class="btn btn-sm btn-soft-gold" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="font-weight: 700;">
                   📁 16 قسم
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--text-gold); border-color: var(--gold-primary);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
@@ -346,7 +353,7 @@ const Projects = {
             </td>
             <td>${p.client_name || 'عميل مباشر'}</td>
             <td>${getStatusBadge(p.status)}</td>
-            <td style="color: var(--gold-light); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
+            <td style="color: var(--text-gold); font-weight: 700;">${App.formatNumber(p.contract_value)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>${App.formatNumber(p.estimated_cost)} <small style="font-size:0.75rem">${curr}</small></td>
             <td style="color: ${p.actual_cost > p.estimated_cost ? 'var(--accent-red)' : 'var(--text-primary)'}; font-weight: 600;">
               ${App.formatNumber(p.actual_cost)} <small style="font-size:0.75rem">${curr}</small>
@@ -363,16 +370,22 @@ const Projects = {
             <td style="color: var(--accent-green); font-weight: 700;">${App.formatNumber(p.actual_profit)} <small style="font-size:0.75rem">${curr}</small></td>
             <td>
               <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="background: rgba(212,175,55,0.15); color: var(--gold-light); border-color: var(--gold-primary); font-weight: 700;">
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openProgressModal(${p.id})" title="تحديث نسبة الإنجاز والتحكم المالي" style="color: var(--color-info, #38bdf8); border-color: #38bdf8;">
+                  📈 إنجاز
+                </button>
+                <button class="btn btn-secondary btn-xs" onclick="Projects.openVariationModal(${p.id})" title="تسجيل أمر تغييري للعقد (V.O)" style="color: var(--text-gold); border-color: var(--gold-light);">
+                  📋 VO
+                </button>
+                <button class="btn btn-sm btn-soft-gold" onclick="ProjectHub.openProject(${p.id})" title="مركز مستندات المشروع (16 قسم)" style="font-weight: 700;">
                   📁 16 قسم
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printProjectReport(${p.id})" title="طباعة تقرير المشروع" style="color: var(--text-gold); border-color: var(--gold-primary);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="Projects.viewDetails(${p.id})" title="عرض التفاصيل">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                 </button>
-                <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 3px;">
+                <button class="btn btn-success btn-sm" onclick="Projects.exportFullProjectPackage(${p.id})" title="تصدير وتفريغ كافة ملفات وبيانات المشروع (إيرادات، مصروفات، نثريات وعهد، موردين، مخازن ومواد، صندوق وبنك) في مجلده الخاص" style="border: 1px solid #10b981; font-weight: bold; display: inline-flex; align-items: center; gap: 2px;">
                   <span>📦</span><span>تصدير</span>
                 </button>
                 <button class="btn btn-danger btn-sm" onclick="Projects.deleteProject(${p.id})" title="حذف المشروع">
@@ -386,14 +399,17 @@ const Projects = {
     }
   },
 
-  openNewModal() {
-    // ملء قائمة العملاء في نموذج المشروع
+  openNewModal(preSelectedClientId = null) {
+    // ملء قائمة العملاء في نموذج المشروع مع إمكانية التحديد المسبق
     const select = document.getElementById('projClientSelect');
     if (select) {
       fetch('/api/clients').then(r => r.json()).then(res => {
         if (res.success) {
-          select.innerHTML = `<option value="">اختر العميل...</option>` + 
-            res.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+          select.innerHTML = `<option value="">اختر العميل لربطه بالمشروع والعقد...</option>` + 
+            res.data.map(c => `<option value="${c.id}" ${preSelectedClientId && String(c.id) === String(preSelectedClientId) ? 'selected' : ''}>${c.name} (${c.company || 'فردي'})</option>`).join('');
+          if (preSelectedClientId) {
+            select.value = String(preSelectedClientId);
+          }
         }
       });
     }
@@ -408,7 +424,7 @@ const Projects = {
     const contract_value = document.getElementById('projContractVal')?.value;
     const currency = document.getElementById('projCurrency')?.value || 'ر.ي';
     const estimated_cost = document.getElementById('projEstimatedCost')?.value || 0;
-    const actual_cost = 0; // التكلفة الفعلية تُحتسب تلقائياً من المصادر الموحدة (الحقل للقراءة فقط)
+    const actual_cost = document.getElementById('projActualCost')?.value || 0;
     const progress_percentage = document.getElementById('projProgress')?.value || 0;
     const expected_profit = document.getElementById('projExpectedProfit')?.value || (Number(contract_value || 0) - Number(estimated_cost || 0));
     const actual_profit = document.getElementById('projActualProfit')?.value || (Number(contract_value || 0) - Number(actual_cost || 0));
@@ -489,15 +505,38 @@ const Projects = {
           body.innerHTML = `
             <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; border: 1px solid var(--border-light);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <h4 style="color: var(--gold-light); margin: 0;">${p.name} (${p.code})</h4>
-                <button class="btn btn-secondary btn-sm" onclick="Projects.printCurrentProjectDetails()" style="color: var(--gold-light); border-color: var(--gold-primary);">
+                <h4 style="color: var(--text-gold); margin: 0;">${p.name} (${p.code})</h4>
+                <button class="btn btn-secondary btn-sm" onclick="Projects.printCurrentProjectDetails()" style="color: var(--text-gold); border-color: var(--gold-primary);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
                   <span>طباعة التقرير</span>
                 </button>
               </div>
-              <p style="color: var(--text-secondary); font-size: 0.85rem;">العميل: <strong>${p.client_name || 'غير محدد'}</strong> | هاتف: ${p.client_phone || 'غير مسجل'}</p>
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px;">
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                  العميل: <strong style="color: #fff;">${p.client_name || 'غير محدد'}</strong> ${p.client_phone ? `| هاتف: ${p.client_phone}` : ''}
+                </p>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary btn-xs" onclick="Projects.openProgressModal(${p.id})" style="color: var(--color-info, #38bdf8); border-color: #38bdf8;">
+                      <span>📈 تحديث الإنجاز</span>
+                    </button>
+                    <button class="btn btn-secondary btn-xs" onclick="Projects.openVariationModal(${p.id})" style="color: var(--text-gold); border-color: var(--gold-light);">
+                      <span>📋 أمر تغييري (VO)</span>
+                    </button>
+                    ${p.client_id ? `
+                      <button class="btn btn-primary btn-xs" onclick="App.openClientChainModal(${p.client_id})">
+                        <span>🔗 سلسلة العميل المالية</span>
+                      </button>
+                      <button class="btn btn-secondary btn-xs" onclick="App.navigate('reports'); Reports.switchReportTab('client-statement'); document.getElementById('repClientSelect').value = ${p.client_id}; Reports.fetchFullClientStatement();">
+                        <span>كشف الحساب</span>
+                      </button>
+                      <button class="btn btn-secondary btn-xs" onclick="App.openNewClientBillModal(${p.client_id}, null, ${p.id})" style="border-color: var(--gold-light); color: var(--text-gold);">
+                        <span>+ مستخلص</span>
+                      </button>
+                    ` : ''}
+                  </div>
+              </div>
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px;">
-                <div><span style="font-size:0.75rem; color:var(--text-secondary)">قيمة العقد:</span> <strong style="color:var(--gold-light)">${App.formatNumber(p.contract_value)} ${p.currency || 'ر.ي'}</strong></div>
+                <div><span style="font-size:0.75rem; color:var(--text-secondary)">قيمة العقد:</span> <strong style="color:var(--text-gold)">${App.formatNumber(p.contract_value)} ${p.currency || 'ر.ي'}</strong></div>
                 <div><span style="font-size:0.75rem; color:var(--text-secondary)">التكلفة الفعلية:</span> <strong>${App.formatNumber(p.actual_cost)} ${p.currency || 'ر.ي'}</strong></div>
                 <div><span style="font-size:0.75rem; color:var(--text-secondary)">نسبة الإنجاز:</span> <strong style="color:var(--accent-green)">${p.progress_percentage}%</strong></div>
               </div>
@@ -846,7 +885,7 @@ const Projects = {
         App.showToast(`تم تصدير حزمة ملفات المشروع بنجاح (${json.data.filesGenerated} ملف) 📦✨`, 'success');
         
         // رسالة تأكيد للمستخدم مع إمكانية فتح المجلد في ويندوز مباشرة
-        const confirmOpen = confirm(
+        const confirmOpen = await UIDialog.confirm(
           `تم تصدير وتفريغ ملفات المشروع بنجاح!\n` +
           `• المشروع: ${json.data.projectName}\n` +
           `• عدد الملفات: ${json.data.filesGenerated} ملفاً رسمياً (Excel + HTML + JSON)\n` +
@@ -902,7 +941,7 @@ const Projects = {
         }
       });
     } else {
-      if (!confirm(`هل أنت متأكد من رغبتك في حذف "${projName}"؟`)) {
+      if (!await UIDialog.confirm(`هل أنت متأكد من رغبتك في حذف "${projName}"؟`)) {
         this.list = previousList;
         this.renderProjectsTable();
         return;
@@ -920,6 +959,262 @@ const Projects = {
         App.showToast('خطأ أثناء الحذف', 'error');
         await this.loadProjects();
       }
+    }
+  },
+
+  // ============================================================================
+  // نافذة تحديث نسبة الإنجاز والتحكم المالي الذكي (EV & Progress Modal)
+  // ============================================================================
+  currentProgressProjectMetrics: null,
+
+  async openProgressModal(projectId) {
+    if (!projectId) return;
+    const projIdInput = document.getElementById('projProgProjectId');
+    if (projIdInput) projIdInput.value = projectId;
+
+    // تصفير الواجهة مبدئياً
+    const titleEl = document.getElementById('projProgModalTitle');
+    const contractEl = document.getElementById('projProgContractVal');
+    const earnedEl = document.getElementById('projProgEarnedVal');
+    const actualEl = document.getElementById('projProgActualCost');
+    const slider = document.getElementById('projProgSlider');
+    const input = document.getElementById('projProgInput');
+    const label = document.getElementById('projProgSliderValLabel');
+    const notes = document.getElementById('projProgNotes');
+
+    if (notes) notes.value = '';
+
+    App.openModal('projectProgressModal');
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/control-metrics`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.currentProgressProjectMetrics = json.data;
+        const p = json.data.project || {};
+        const f = json.data.financials || {};
+        const curr = p.currency || 'ر.ي';
+
+        if (titleEl) titleEl.innerText = `تحديث نسبة إنجاز: ${p.name}`;
+        if (contractEl) contractEl.innerText = `${App.formatNumber(f.contract_value)} ${curr}`;
+        if (earnedEl) earnedEl.innerText = `${App.formatNumber(f.earned_value)} ${curr}`;
+        if (actualEl) actualEl.innerText = `${App.formatNumber(f.actual_cost)} ${curr}`;
+
+        const prog = Number(f.progress_percentage) || 0;
+        if (slider) slider.value = prog;
+        if (input) input.value = prog;
+        if (label) label.innerText = `${prog}%`;
+
+        this.updateProgressHealthAlert(f.earned_value, f.actual_cost);
+      }
+    } catch (e) {
+      console.error('Error fetching project progress control metrics:', e);
+    }
+  },
+
+  onProgressModalSliderChange(val) {
+    const input = document.getElementById('projProgInput');
+    if (input) input.value = val;
+    this.recalcProgressModalMetrics(parseFloat(val) || 0);
+  },
+
+  onProgressModalInputChange(val) {
+    const slider = document.getElementById('projProgSlider');
+    if (slider) slider.value = val;
+    this.recalcProgressModalMetrics(parseFloat(val) || 0);
+  },
+
+  recalcProgressModalMetrics(newProg) {
+    const label = document.getElementById('projProgSliderValLabel');
+    if (label) label.innerText = `${newProg}%`;
+
+    const metrics = this.currentProgressProjectMetrics;
+    if (!metrics) return;
+
+    const contractVal = Number(metrics.financials?.contract_value) || 0;
+    const actualCost = Number(metrics.financials?.actual_cost) || 0;
+    const curr = metrics.project?.currency || 'ر.ي';
+
+    const newEarnedVal = Math.round((contractVal * (newProg / 100)) * 100) / 100;
+    const earnedEl = document.getElementById('projProgEarnedVal');
+    if (earnedEl) earnedEl.innerText = `${App.formatNumber(newEarnedVal)} ${curr}`;
+
+    this.updateProgressHealthAlert(newEarnedVal, actualCost);
+  },
+
+  updateProgressHealthAlert(earnedVal, actualCost) {
+    const alertBox = document.getElementById('projProgHealthAlert');
+    const alertIcon = document.getElementById('projProgHealthIcon');
+    const alertText = document.getElementById('projProgHealthText');
+    if (!alertBox || !alertText) return;
+
+    if (actualCost > earnedVal && actualCost > 0) {
+      const diff = actualCost - earnedVal;
+      const cpi = earnedVal > 0 ? (earnedVal / actualCost).toFixed(2) : '0.00';
+      alertBox.style.background = 'rgba(239, 68, 68, 0.12)';
+      alertBox.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+      if (alertIcon) alertIcon.innerText = '⚠️';
+      alertText.innerHTML = `<strong style="color: var(--accent-red)">مؤشر خطر تجاوز التكلفة:</strong> التكلفة الفعلية المنصرفة تتجاوز القيمة المكتسبة بفارق <strong>${App.formatNumber(diff)}</strong> (مؤشر الأداء CPI = ${cpi}).`;
+    } else {
+      const diff = earnedVal - actualCost;
+      const cpi = actualCost > 0 ? (earnedVal / actualCost).toFixed(2) : '1.00';
+      alertBox.style.background = 'rgba(16, 185, 129, 0.12)';
+      alertBox.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+      if (alertIcon) alertIcon.innerText = '✅';
+      alertText.innerHTML = `<strong style="color: var(--accent-green)">أداء مالي متزن:</strong> القيمة المكتسبة تغطي التكاليف بوفر قدره <strong>${App.formatNumber(diff)}</strong> (مؤشر الأداء CPI = ${cpi}).`;
+    }
+  },
+
+  async submitProgressUpdate(e) {
+    e.preventDefault();
+    const projectId = document.getElementById('projProgProjectId')?.value;
+    const newProg = parseFloat(document.getElementById('projProgInput')?.value) || 0;
+    const notes = document.getElementById('projProgNotes')?.value || '';
+
+    if (!projectId) {
+      App.showToast('تعذر تحديد المشروع المطلوب تحديثه', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          progress_percentage: newProg,
+          notes
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم تحديث نسبة الإنجاز والاعتماد المالي بنجاح 📈', 'success');
+        App.closeModal('projectProgressModal');
+        await this.loadProjects();
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) {
+          Reports.loadDashboardKPIs();
+        }
+      } else {
+        App.showToast(json.message || 'فشل في تحديث نسبة الإنجاز', 'error');
+      }
+    } catch (err) {
+      console.error('Error submitting progress update:', err);
+      App.showToast('خطأ أثناء حفظ نسبة الإنجاز', 'error');
+    }
+  },
+
+  // ============================================================================
+  // نافذة تسجيل أمر تغييري للعقد (Variation Order - VO)
+  // ============================================================================
+  currentVoProject: null,
+
+  async openVariationModal(projectId) {
+    if (!projectId) return;
+    const project = (this.allProjects || []).find(p => p.id == projectId);
+    this.currentVoProject = project;
+
+    const idInput = document.getElementById('projVoProjectId');
+    if (idInput) idInput.value = projectId;
+
+    const titleEl = document.getElementById('projVoModalTitle');
+    if (titleEl) titleEl.innerText = `تسجيل أمر تغييري (V.O) - ${project ? project.name : ''}`;
+
+    const prevContractEl = document.getElementById('projVoPrevContractVal');
+    const newContractEl = document.getElementById('projVoNewContractVal');
+    const contractVal = project ? (Number(project.contract_value) || 0) : 0;
+    const curr = project?.currency || 'ر.ي';
+
+    if (prevContractEl) prevContractEl.innerText = `${App.formatNumber(contractVal)} ${curr}`;
+    if (newContractEl) newContractEl.innerText = `${App.formatNumber(contractVal)} ${curr}`;
+
+    const titleInput = document.getElementById('projVoTitle');
+    if (titleInput) titleInput.value = '';
+
+    const typeSelect = document.getElementById('projVoType');
+    if (typeSelect) typeSelect.value = 'addition';
+
+    const amtInput = document.getElementById('projVoAmount');
+    if (amtInput) amtInput.value = '';
+
+    const daysInput = document.getElementById('projVoDays');
+    if (daysInput) daysInput.value = '0';
+
+    const dateInput = document.getElementById('projVoDate');
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+    const reasonInput = document.getElementById('projVoReason');
+    if (reasonInput) reasonInput.value = '';
+
+    App.openModal('projectVariationModal');
+  },
+
+  calcVariationImpact() {
+    const project = this.currentVoProject;
+    const contractVal = project ? (Number(project.contract_value) || 0) : 0;
+    const type = document.getElementById('projVoType')?.value || 'addition';
+    const amount = parseFloat(document.getElementById('projVoAmount')?.value) || 0;
+    const curr = project?.currency || 'ر.ي';
+
+    let newVal = contractVal;
+    if (type === 'addition') {
+      newVal = contractVal + amount;
+    } else if (type === 'reduction') {
+      newVal = Math.max(0, contractVal - amount);
+    }
+
+    const newContractEl = document.getElementById('projVoNewContractVal');
+    if (newContractEl) {
+      newContractEl.innerText = `${App.formatNumber(newVal)} ${curr}`;
+    }
+  },
+
+  async submitVariationOrder(e) {
+    e.preventDefault();
+    const projectId = document.getElementById('projVoProjectId')?.value;
+    const title = document.getElementById('projVoTitle')?.value?.trim();
+    const type = document.getElementById('projVoType')?.value || 'addition';
+    const amount = parseFloat(document.getElementById('projVoAmount')?.value) || 0;
+    const time_extension_days = parseInt(document.getElementById('projVoDays')?.value) || 0;
+    const date = document.getElementById('projVoDate')?.value;
+    const reason = document.getElementById('projVoReason')?.value?.trim();
+
+    if (!projectId || !title) {
+      App.showToast('يرجى تحديد المشروع وعنوان الأمر التغييري', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/variation-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          type,
+          amount,
+          time_extension_days,
+          date,
+          reason
+        })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        App.showToast(json.message || 'تم اعتماد وتوثيق الأمر التغييري بنجاح 📋', 'success');
+        App.closeModal('projectVariationModal');
+        await this.loadProjects();
+
+        // تحديث سلسلة العميل إذا كانت مفتوحة
+        if (typeof App !== 'undefined' && App.currentChainClientId) {
+          App.openClientChainModal(App.currentChainClientId);
+        }
+        if (typeof Reports !== 'undefined' && Reports.loadDashboardKPIs) {
+          Reports.loadDashboardKPIs();
+        }
+      } else {
+        App.showToast(json.message || 'فشل في حفظ الأمر التغييري', 'error');
+      }
+    } catch (err) {
+      console.error('Error submitting variation order:', err);
+      App.showToast('خطأ أثناء حفظ الأمر التغييري', 'error');
     }
   }
 };

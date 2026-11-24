@@ -21,16 +21,19 @@
  */
 
 const db = require('../database/db');
+const SystemAccounts = require('./systemAccountService');
+const { projectCostCenter } = require('./ledger/costCenters');
+const PostingService = require('./ledger/postingService');
+const Numbering = require('./numberingService');
 const CashBoxService = require('./cashBoxService');
 const { checkPeriodOpen } = require('./periodService');
 
-const { query, get, run, transaction, getActiveEngine } = db;
+const { query, get, run, transaction } = db;
 
 // الحالات التي تُحتسب ضمن التكلفة (المرحلة + المعتمدة الملتزم بها)
 const COUNTED_EXPENSE_STATUSES = ['posted', 'approved'];
 
 // حماية من تكرار فحص المخطط (تُضبط فقط عند النجاح ليُعاد الفحص عند الفشل)
-let schemaEnsured = false;
 
 /**
  * التأكد من أعمدة الربط (idempotent). يُستدعى خارج المعاملات.
@@ -41,47 +44,8 @@ let schemaEnsured = false;
  * - accounts.215 (الأجور المستحقة — خصوم تحت 2)
  */
 async function ensureSchema() {
-  if (schemaEnsured) return true;
-  const engine = typeof getActiveEngine === 'function' ? getActiveEngine() : 'sqlite';
-
-  const ensureColumn = async (table, column, sqliteDef, mysqlDef) => {
-    if (engine === 'mysql') {
-      const cols = await query(`SHOW COLUMNS FROM ${table}`);
-      const names = (cols || []).map(c => c.Field || c.field || c.COLUMN_NAME);
-      if (!names.includes(column)) {
-        await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${mysqlDef}`);
-      }
-    } else {
-      const cols = await query(`PRAGMA table_info(${table})`);
-      const names = (cols || []).map(c => c.name);
-      if (!names.includes(column)) {
-        await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqliteDef}`);
-      }
-    }
-  };
-
-  try {
-    await ensureColumn('expenses', 'source_table', 'TEXT', 'VARCHAR(60) NULL');
-    await ensureColumn('expenses', 'source_id', 'INTEGER', 'INT NULL');
-    await ensureColumn('project_labor_expenses', 'linked_expense_id', 'INTEGER', 'INT NULL');
-    await ensureColumn('project_purchases', 'linked_expense_id', 'INTEGER', 'INT NULL');
-    // SUGGESTION-8: تتبع المسدد للأجور الموقعية + تعبئة القديم حسب حالته
-    await ensureColumn('project_labor_expenses', 'paid_amount', 'REAL DEFAULT NULL', 'REAL DEFAULT NULL');
-    await run(`UPDATE project_labor_expenses SET paid_amount = total_amount WHERE paid_amount IS NULL AND payment_status = 'مدفوع'`);
-    await run(`UPDATE project_labor_expenses SET paid_amount = 0 WHERE paid_amount IS NULL`);
-    // SUGGESTION-8: حساب الأجور المستحقة (215) — خصوم تحت 2
-    const wageAcc = await get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
-    if (!wageAcc) {
-      const parent = await get("SELECT id FROM accounts WHERE code = '2' LIMIT 1");
-      await run('INSERT INTO accounts (code, name, type, parent_id, balance) VALUES (?, ?, ?, ?, 0)',
-        ['215', 'أجور مستحقة الدفع (عمال وطواقم المواقع)', 'خصوم', parent ? parent.id : null]);
-    }
-    schemaEnsured = true;
-    return true;
-  } catch (err) {
-    console.warn('⚠️ [ProjectCost] تعذر التأكد من مخطط الربط:', err.message);
-    throw err;
-  }
+  // the cost-link columns and the paid_amount backfill come from migration 0006 at boot (SQLite is the only engine)
+  return true;
 }
 
 /** تنفيذ قراءة عبر tx أو الاتصال العام */
@@ -245,17 +209,6 @@ async function linkSubRecordToExpense(table, subId, expenseId, projectId, tx = n
     note = `تنبيه: مبلغ السند (${expAmount.toLocaleString('en')}) يتجاوز البند (${subTotal.toLocaleString('en')}) — يُحتسب السند كاملاً`;
   }
   return { linked: true, expense_id: eId, sub_id: sId, note };
-}
-
-/** فك ربط بند فرعي عن سنده (يعود للاحتساب الكامل). */
-async function unlinkSubRecord(table, subId, tx = null) {
-  if (!['project_labor_expenses', 'project_purchases'].includes(table)) {
-    throw new Error('جدول المصدر غير صالح');
-  }
-  if (!tx) await ensureSchema();
-  const conn = pickConn(tx);
-  await conn.run(`UPDATE ${table} SET linked_expense_id = NULL WHERE id = ?`, [Number(subId)]);
-  return { unlinked: true };
 }
 
 /** تنظيف الروابط المعلقة عند حذف مسودة سند (حتى لا تشير لغير موجود). */
@@ -470,20 +423,55 @@ const MIRROR_JE_TYPES = {
 };
 
 /** حسابات المرآة: العمالة ← 511 (فإن غاب: 5)، المشتريات ← 5، الدائن ← 111 */
-async function resolveMirrorAccounts(conn, sourceTable) {
+/** Role account, or the legacy guess when the role is not mapped yet (e.g. before the stage-2 chart repair). */
+async function roleOr(conn, role, legacyId) {
+  const acc = await SystemAccounts.resolveOptional(role, conn);
+  return acc ? acc.id : legacyId;
+}
+const mirrorUser = user => ({ id: (user && user.id) || null, name: (user && user.name) || 'ترحيل آلي' });
+
+async function legacyResolveMirrorAccounts(conn, sourceTable) {
   let debitAcc = null;
   if (sourceTable === 'project_labor_expenses') {
-    debitAcc = await conn.get("SELECT id FROM accounts WHERE code = '511' LIMIT 1");
+    debitAcc = await conn.get(`
+      SELECT id FROM accounts 
+      WHERE (code = '511' AND (is_posting = 1 OR is_posting IS NULL))
+         OR code = '32101008'
+         OR (type = 'expense' AND is_posting = 1)
+      ORDER BY (code = '511' AND is_posting = 1) DESC, (code = '32101008') DESC, id ASC LIMIT 1
+    `);
   }
   if (!debitAcc) {
-    debitAcc = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
+    debitAcc = await conn.get(`
+      SELECT id FROM accounts 
+      WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL))
+         OR code = '32102005'
+         OR (type = 'expense' AND is_posting = 1)
+      ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC, id ASC LIMIT 1
+    `);
   }
-  const cashAcc = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+  const cashAcc = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '11101001'
+       OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
+    ORDER BY (code = '11101001') DESC, id ASC LIMIT 1
+  `);
   if (!debitAcc || !cashAcc) {
     throw new Error('الحسابات المحاسبية للمرايا (5/111) غير موجودة في الدليل');
   }
   return { debitAccId: debitAcc.id, cashAccId: cashAcc.id };
 }
+
+async function resolveMirrorAccounts(conn, sourceTable) {
+  // عمالة الموقع ← أجور عمالة الموقع، مشتريات الموقع ← تكلفة مواد المشروع (لا مصروفات إدارية)
+  const legacy = await legacyResolveMirrorAccounts(conn, sourceTable).catch(() => ({}));
+  const debitAccId = await roleOr(conn, sourceTable === 'project_labor_expenses' ? 'SITE_LABOR_COST' : 'PROJECT_MATERIAL_COST', legacy.debitAccId);
+  const cashAccId = await roleOr(conn, 'CASH_DEFAULT', legacy.cashAccId);
+  if (!debitAccId || !cashAccId) throw new Error('الحسابات المحاسبية للمرايا غير مربوطة في حسابات النظام');
+  return { debitAccId, cashAccId };
+}
+
 
 /**
  * إنشاء قيد المرآة داخل معاملة المتصل (لا DDL هنا).
@@ -496,38 +484,18 @@ async function createMirrorJournal(conn, {
   const refType = MIRROR_JE_TYPES[sourceTable];
   if (!refType) throw new Error('نوع مصدر المرآة غير معروف: ' + sourceTable);
   const { debitAccId, cashAccId } = await resolveMirrorAccounts(conn, sourceTable);
-  const countRes = await conn.get('SELECT COUNT(*) as cnt FROM journal_entries');
-  let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
-  let entryNo = `JE-MIR-${year}-${String(jeSeq).padStart(4, '0')}`;
-  while (await conn.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-    jeSeq++;
-    entryNo = `JE-MIR-${year}-${String(jeSeq).padStart(4, '0')}`;
-  }
-  const userName = (user && user.name) || 'ترحيل آلي';
-  const userId = (user && user.id) || null;
-  const jeRes = await conn.run(`
-    INSERT INTO journal_entries (
-      entry_no, date, description, reference_type, reference_id,
-      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `, [
-    entryNo, date, `${refType} ${receiptNo} — ${label}`,
-    refType, expenseId, amount, amount,
-    userId, userName, userId, userName
-  ]);
-  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `, [jeId, debitAccId, costCenterId ?? null, projectId ?? null, amount, `${refType} ${receiptNo}`]);
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, 0, ?, ?)
-  `, [jeId, cashAccId, costCenterId ?? null, projectId ?? null, amount, `الصندوق — ${refType} ${receiptNo}`]);
-  return { jeId, entryNo };
+  const center = costCenterId ?? await projectCostCenter(conn, projectId);
+  const posted = await PostingService.post(conn, {
+    date: date || new Date().toISOString().slice(0, 10), series: 'JE-MIR', user: mirrorUser(user), syncCash: false,
+    description: `${refType} ${receiptNo} — ${label}`, source: { type: refType, id: expenseId },
+    lines: [
+      { accountId: debitAccId, debit: amount, costCenterId: center, projectId, notes: `${refType} ${receiptNo}` },
+      { accountId: cashAccId, credit: amount, costCenterId: center, projectId, notes: `الصندوق — ${refType} ${receiptNo}` }
+    ]
+  });
+  return { jeId: posted.id, entryNo: posted.entry_no };
 }
+
 
 /** قيد المرآة المرتبط بمصروف (مطابقة دقيقة بالنوع + المرجع) */
 async function getMirrorJournal(conn, expenseId) {
@@ -561,42 +529,15 @@ async function reverseLinkedMirrors(sourceTable, sourceId, { tx = null, user = n
   let reversed = 0;
   for (const m of mirrors) {
     const je = await getMirrorJournal(conn, m.id);
-    if (!je || (je.status || '').toLowerCase() !== 'posted') continue;
+    if (!je || (je.status || '').toLowerCase() !== 'posted' || je.reversal_ref_id) continue;
     const lines = await conn.query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [je.id]);
     if (!lines || lines.length === 0) continue;
 
-    const countRes = await conn.get('SELECT COUNT(*) as cnt FROM journal_entries');
-    let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-    let revNo = `REV-${revDate.slice(0, 4)}-${String(jeSeq).padStart(4, '0')}`;
-    while (await conn.get('SELECT id FROM journal_entries WHERE entry_no = ?', [revNo])) {
-      jeSeq++;
-      revNo = `REV-${revDate.slice(0, 4)}-${String(jeSeq).padStart(4, '0')}`;
-    }
-    const total = Number(je.total_debit) || 0;
-    const revRes = await conn.run(`
-      INSERT INTO journal_entries (
-        entry_no, date, description, reference_type, reference_id,
-        total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-      )
-      VALUES (?, ?, ?, 'قيد عكسي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [
-      revNo, revDate, `قيد عكسي للمرآة ${m.receipt_no} (${je.entry_no}) — ${cleanReason}`,
-      m.id, total, total, userId, userName, userId, userName
-    ]);
-    const revId = revRes.lastInsertRowid || revRes.insertId;
-    for (const l of lines) {
-      await conn.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [revId, l.account_id, l.cost_center_id ?? null, l.project_id ?? null,
-          Number(l.credit) || 0, Number(l.debit) || 0, `عكس: ${l.notes || ''}`]);
-    }
-    await conn.run(`
-      UPDATE journal_entries
-      SET status = 'reversed', reversed_by = ?, reversed_by_name = ?,
-          reversed_at = CURRENT_TIMESTAMP, reversal_reason = ?, reversal_ref_id = ?
-      WHERE id = ?
-    `, [userId, userName, cleanReason, revId, je.id]);
+    // عكس مرآة حرفي عبر PostingService (حركة صندوق المشروع تُكتب أدناه منفصلة)
+    const { id: revId } = await PostingService.reverse(conn, { entry: je, lines }, {
+      date: revDate, referenceType: 'قيد عكسي', referenceId: m.id, reason: cleanReason, user: { id: userId, name: userName },
+      description: `قيد عكسي للمرآة ${m.receipt_no} (${je.entry_no}) — ${cleanReason}`, syncCash: false, lineNote: l => `عكس: ${l.notes || ''}`
+    });
     await conn.run(`
       UPDATE expenses
       SET status = 'reversed', reversed_by = ?, reversed_by_name = ?,
@@ -640,7 +581,10 @@ async function backfillMirrorJEs() {
         const prjCc = await tx.get('SELECT id FROM cost_centers WHERE project_id = ? LIMIT 1', [m.project_id]);
         if (prjCc) ccId = prjCc.id;
       }
-      if (!ccId) ccId = 1;
+      if (!ccId) {
+        const anyCc = await tx.get('SELECT id FROM cost_centers ORDER BY id ASC LIMIT 1');
+        ccId = anyCc ? anyCc.id : null;
+      }
       await createMirrorJournal(tx, {
         sourceTable: m.source_table, expenseId: m.id,
         projectId: m.project_id ?? null, costCenterId: ccId,
@@ -668,26 +612,47 @@ const AP_JE_TYPES = {
 };
 
 /** حسابات الذمم: المصروف ← 5، الالتزام ← 21، النقد ← 111 */
-async function resolvePayableAccounts(conn) {
-  const exp = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
-  const ap = await conn.get("SELECT id FROM accounts WHERE code = '21' LIMIT 1");
-  const cash = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+async function legacyResolvePayableAccounts(conn) {
+  const exp = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '32102005'
+       OR (type = 'expense' AND is_posting = 1)
+    ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC, id ASC LIMIT 1
+  `);
+  const ap = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '21' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '21101001'
+       OR (type = 'liability' AND is_posting = 1)
+    ORDER BY (code = '21101001') DESC, id ASC LIMIT 1
+  `);
+  const cash = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '11101001'
+       OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
+    ORDER BY (code = '11101001') DESC, id ASC LIMIT 1
+  `);
   if (!exp || !ap || !cash) {
     throw new Error('الحسابات المحاسبية للذمم (5/21/111) غير موجودة في الدليل');
   }
   return { expenseAccId: exp.id, apAccId: ap.id, cashAccId: cash.id };
 }
 
+async function resolvePayableAccounts(conn) {
+  const legacy = await legacyResolvePayableAccounts(conn).catch(() => ({}));
+  const expenseAccId = await roleOr(conn, 'PROJECT_MATERIAL_COST', legacy.expenseAccId);
+  const apAccId = await roleOr(conn, 'SUPPLIERS_PAYABLE', legacy.apAccId);
+  const cashAccId = await roleOr(conn, 'CASH_DEFAULT', legacy.cashAccId);
+  if (!expenseAccId || !apAccId || !cashAccId) throw new Error('الحسابات المحاسبية للذمم غير مربوطة في حسابات النظام');
+  return { expenseAccId, apAccId, cashAccId };
+}
+
+
 /** ترقيم قيود ببادئة مخصصة (مع ضمان الفرادة) */
 async function nextEntryNo(conn, prefix, year) {
-  const countRes = await conn.get('SELECT COUNT(*) as cnt FROM journal_entries');
-  let jeSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-  let entryNo = `${prefix}-${year}-${String(jeSeq).padStart(4, '0')}`;
-  while (await conn.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-    jeSeq++;
-    entryNo = `${prefix}-${year}-${String(jeSeq).padStart(4, '0')}`;
-  }
-  return entryNo;
+  return Numbering.next(conn, prefix, { date: `${year}-01-01` });
 }
 
 /**
@@ -699,33 +664,19 @@ async function createPayableJournal(conn, {
   amount, date, invoiceRef, user = null
 }) {
   const { expenseAccId, apAccId } = await resolvePayableAccounts(conn);
-  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
-  const entryNo = await nextEntryNo(conn, 'JE-AP', year);
-  const userName = (user && user.name) || 'ترحيل آلي';
-  const userId = (user && user.id) || null;
-  const refType = AP_JE_TYPES.accrual;
-  const jeRes = await conn.run(`
-    INSERT INTO journal_entries (
-      entry_no, date, description, reference_type, reference_id,
-      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `, [
-    entryNo, date, `استحقاق مورد — فاتورة موقعية ${invoiceRef}`,
-    refType, purchaseId, amount, amount,
-    userId, userName, userId, userName
-  ]);
-  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `, [jeId, expenseAccId, costCenterId ?? null, projectId ?? null, amount, `مصروف مواد — ${invoiceRef}`]);
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, 0, ?, ?)
-  `, [jeId, apAccId, costCenterId ?? null, projectId ?? null, amount, `ذمة المورد — ${invoiceRef}`]);
-  return { jeId, entryNo };
+  const center = costCenterId ?? await projectCostCenter(conn, projectId);
+  const supplier = supplierId ? { partyType: 'supplier', partyId: supplierId } : {};
+  const posted = await PostingService.post(conn, {
+    date, series: 'JE-AP', user: mirrorUser(user), syncCash: false,
+    description: `استحقاق مورد — فاتورة موقعية ${invoiceRef}`, source: { type: AP_JE_TYPES.accrual, id: purchaseId },
+    lines: [
+      { accountId: expenseAccId, debit: amount, costCenterId: center, projectId, notes: `مصروف مواد — ${invoiceRef}` },
+      { accountId: apAccId, credit: amount, costCenterId: center, projectId, ...supplier, notes: `ذمة المورد — ${invoiceRef}` }
+    ]
+  });
+  return { jeId: posted.id, entryNo: posted.entry_no };
 }
+
 
 /**
  * قيد سداد المستحق داخل معاملة المتصل: مدين موردون (21) / دائن صندوق (111).
@@ -736,33 +687,19 @@ async function createSettlementJournal(conn, {
   amount, date, payRef, user = null
 }) {
   const { apAccId, cashAccId } = await resolvePayableAccounts(conn);
-  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
-  const entryNo = await nextEntryNo(conn, 'JE-SET', year);
-  const userName = (user && user.name) || 'ترحيل آلي';
-  const userId = (user && user.id) || null;
-  const refType = AP_JE_TYPES.settlement;
-  const jeRes = await conn.run(`
-    INSERT INTO journal_entries (
-      entry_no, date, description, reference_type, reference_id,
-      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `, [
-    entryNo, date, `سداد مستحق موقعية — ${payRef}`,
-    refType, purchaseId, amount, amount,
-    userId, userName, userId, userName
-  ]);
-  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `, [jeId, apAccId, costCenterId ?? null, projectId ?? null, amount, `سداد ذمة المورد — ${payRef}`]);
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, 0, ?, ?)
-  `, [jeId, cashAccId, costCenterId ?? null, projectId ?? null, amount, `الصندوق — ${payRef}`]);
-  return { jeId, entryNo };
+  const center = costCenterId ?? await projectCostCenter(conn, projectId);
+  const supplier = supplierId ? { partyType: 'supplier', partyId: supplierId } : {};
+  const posted = await PostingService.post(conn, {
+    date, series: 'JE-SET', user: mirrorUser(user), syncCash: false,
+    description: `سداد مستحق موقعية — ${payRef}`, source: { type: AP_JE_TYPES.settlement, id: purchaseId },
+    lines: [
+      { accountId: apAccId, debit: amount, costCenterId: center, projectId, ...supplier, notes: `سداد ذمة المورد — ${payRef}` },
+      { accountId: cashAccId, credit: amount, costCenterId: center, projectId, notes: `الصندوق — ${payRef}` }
+    ]
+  });
+  return { jeId: posted.id, entryNo: posted.entry_no };
 }
+
 
 /** قيد الاستحقاق المرحّل لفاتورة موقعية (الأحدث أولاً) */
 async function getPayableJournal(conn, purchaseId) {
@@ -770,7 +707,7 @@ async function getPayableJournal(conn, purchaseId) {
   return c.get(
     `SELECT * FROM journal_entries
      WHERE reference_id = ? AND reference_type = ?
-       AND LOWER(status) = 'posted'
+       AND LOWER(status) = 'posted' AND reversal_ref_id IS NULL
      ORDER BY id DESC LIMIT 1`,
     [purchaseId, AP_JE_TYPES.accrual]
   );
@@ -782,7 +719,7 @@ async function getSettlementJournals(conn, purchaseId) {
   return c.query(
     `SELECT * FROM journal_entries
      WHERE reference_id = ? AND reference_type = ?
-       AND LOWER(status) = 'posted'
+       AND LOWER(status) = 'posted' AND reversal_ref_id IS NULL
      ORDER BY id ASC`,
     [purchaseId, AP_JE_TYPES.settlement]
   );
@@ -792,35 +729,12 @@ async function getSettlementJournals(conn, purchaseId) {
 async function postPayableReversalJE(conn, je, { revDate, reason, user, refId, label = 'لذمم الموردين' }) {
   const lines = await conn.query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [je.id]);
   if (!lines || lines.length === 0) return null;
-  const revNo = await nextEntryNo(conn, 'REV', String(revDate).slice(0, 4));
-  const total = Number(je.total_debit) || 0;
-  const userName = (user && user.name) || 'النظام';
-  const userId = (user && user.id) || null;
-  const revRes = await conn.run(`
-    INSERT INTO journal_entries (
-      entry_no, date, description, reference_type, reference_id,
-      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-    )
-    VALUES (?, ?, ?, 'قيد عكسي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `, [
-    revNo, revDate, `قيد عكسي ${label} (${je.entry_no}) — ${reason}`,
-    refId, total, total, userId, userName, userId, userName
-  ]);
-  const revId = revRes.lastInsertRowid || revRes.insertId;
-  for (const l of lines) {
-    await conn.run(`
-      INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [revId, l.account_id, l.cost_center_id ?? null, l.project_id ?? null,
-        Number(l.credit) || 0, Number(l.debit) || 0, `عكس: ${l.notes || ''}`]);
-  }
-  await conn.run(`
-    UPDATE journal_entries
-    SET status = 'reversed', reversed_by = ?, reversed_by_name = ?,
-        reversed_at = CURRENT_TIMESTAMP, reversal_reason = ?, reversal_ref_id = ?
-    WHERE id = ?
-  `, [userId, userName, reason, revId, je.id]);
-  return { revId, revNo, total };
+  // عكس حرفي عبر PostingService؛ حركات صندوق المشروع يكتبها المتصل
+  const rev = await PostingService.reverse(conn, { entry: je, lines }, {
+    date: revDate, referenceType: 'قيد عكسي', referenceId: refId, reason, user: user ? { id: user.id || null, name: user.name || 'النظام' } : null,
+    description: `قيد عكسي ${label} (${je.entry_no}) — ${reason}`, syncCash: false, lineNote: l => `عكس: ${l.notes || ''}`
+  });
+  return { revId: rev.id, revNo: rev.entry_no, total: Number(je.total_debit) || 0 };
 }
 
 /**
@@ -869,7 +783,7 @@ async function reverseSitePurchasePayables(conn, purchase, { user = null, reason
     const delta = apBooked - settledSum;
     if (delta > 0) {
       await conn.run(
-        'UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?',
+        'UPDATE suppliers SET balance = balance - ? WHERE id = ?',
         [delta, supplierId]
       );
       balanceDelta = -delta;
@@ -898,7 +812,7 @@ async function reportUnbookedPayables() {
         SELECT 1 FROM journal_entries j
         WHERE j.reference_id = pp.id
           AND j.reference_type = '${AP_JE_TYPES.accrual}'
-          AND LOWER(j.status) = 'posted'
+          AND LOWER(j.status) = 'posted' AND j.reversal_ref_id IS NULL
       )
     ORDER BY pp.date ASC, pp.id ASC
   `);
@@ -917,16 +831,44 @@ const WAGE_JE_TYPES = {
 };
 
 /** حسابات الأجور: المصروف ← 511 (فإن غاب: 5)، الالتزام ← 215، النقد ← 111 */
-async function resolveWageAccounts(conn) {
-  let exp = await conn.get("SELECT id FROM accounts WHERE code = '511' LIMIT 1");
-  if (!exp) exp = await conn.get("SELECT id FROM accounts WHERE code = '5' LIMIT 1");
-  const wp = await conn.get("SELECT id FROM accounts WHERE code = '215' LIMIT 1");
-  const cash = await conn.get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
+async function legacyResolveWageAccounts(conn) {
+  let exp = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '511' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '32101008'
+       OR (code = '5' AND (is_posting = 1 OR is_posting IS NULL))
+       OR (type = 'expense' AND is_posting = 1)
+    ORDER BY (code = '511' AND is_posting = 1) DESC, (code = '32101008') DESC, (code = '5') DESC, id ASC LIMIT 1
+  `);
+  const wp = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '215' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '21401001'
+       OR (type = 'liability' AND is_posting = 1)
+    ORDER BY (code = '21401001') DESC, id ASC LIMIT 1
+  `);
+  const cash = await conn.get(`
+    SELECT id FROM accounts 
+    WHERE (code = '111' AND (is_posting = 1 OR is_posting IS NULL))
+       OR code = '11101001'
+       OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%')
+    ORDER BY (code = '11101001') DESC, id ASC LIMIT 1
+  `);
   if (!exp || !wp || !cash) {
     throw new Error('الحسابات المحاسبية للأجور (511/215/111) غير موجودة في الدليل');
   }
   return { wageExpAccId: exp.id, wagesPayableAccId: wp.id, cashAccId: cash.id };
 }
+
+async function resolveWageAccounts(conn) {
+  const legacy = await legacyResolveWageAccounts(conn).catch(() => ({}));
+  const wageExpAccId = await roleOr(conn, 'SITE_LABOR_COST', legacy.wageExpAccId);
+  const wagesPayableAccId = await roleOr(conn, 'SALARIES_PAYABLE', legacy.wagesPayableAccId);
+  const cashAccId = await roleOr(conn, 'CASH_DEFAULT', legacy.cashAccId);
+  if (!wageExpAccId || !wagesPayableAccId || !cashAccId) throw new Error('الحسابات المحاسبية للأجور غير مربوطة في حسابات النظام');
+  return { wageExpAccId, wagesPayableAccId, cashAccId };
+}
+
 
 /**
  * قيد استحقاق الأجور داخل معاملة المتصل: مدين أجور (511) / دائن مستحقة (215).
@@ -937,33 +879,18 @@ async function createWageAccrualJournal(conn, {
   amount, date, user = null
 }) {
   const { wageExpAccId, wagesPayableAccId } = await resolveWageAccounts(conn);
-  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
-  const entryNo = await nextEntryNo(conn, 'JE-WP', year);
-  const userName = (user && user.name) || 'ترحيل آلي';
-  const userId = (user && user.id) || null;
-  const refType = WAGE_JE_TYPES.accrual;
-  const jeRes = await conn.run(`
-    INSERT INTO journal_entries (
-      entry_no, date, description, reference_type, reference_id,
-      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `, [
-    entryNo, date, `استحقاق أجور — ${workerLabel} (سجل #${laborId})`,
-    refType, laborId, amount, amount,
-    userId, userName, userId, userName
-  ]);
-  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `, [jeId, wageExpAccId, costCenterId ?? null, projectId ?? null, amount, `مصروف أجور — ${workerLabel}`]);
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, 0, ?, ?)
-  `, [jeId, wagesPayableAccId, costCenterId ?? null, projectId ?? null, amount, `أجر مستحق — ${workerLabel}`]);
-  return { jeId, entryNo };
+  const center = costCenterId ?? await projectCostCenter(conn, projectId);
+  const posted = await PostingService.post(conn, {
+    date, series: 'JE-WP', user: mirrorUser(user), syncCash: false,
+    description: `استحقاق أجور — ${workerLabel} (سجل #${laborId})`, source: { type: WAGE_JE_TYPES.accrual, id: laborId },
+    lines: [
+      { accountId: wageExpAccId, debit: amount, costCenterId: center, projectId, notes: `مصروف أجور — ${workerLabel}` },
+      { accountId: wagesPayableAccId, credit: amount, costCenterId: center, projectId, notes: `أجر مستحق — ${workerLabel}` }
+    ]
+  });
+  return { jeId: posted.id, entryNo: posted.entry_no };
 }
+
 
 /**
  * قيد سداد المستحق داخل معاملة المتصل: مدين مستحقة (215) / دائن صندوق (111).
@@ -974,33 +901,18 @@ async function createWageSettlementJournal(conn, {
   amount, date, payRef, user = null
 }) {
   const { wagesPayableAccId, cashAccId } = await resolveWageAccounts(conn);
-  const year = String(date || '').slice(0, 4) || new Date().getFullYear();
-  const entryNo = await nextEntryNo(conn, 'JE-WS', year);
-  const userName = (user && user.name) || 'ترحيل آلي';
-  const userId = (user && user.id) || null;
-  const refType = WAGE_JE_TYPES.settlement;
-  const jeRes = await conn.run(`
-    INSERT INTO journal_entries (
-      entry_no, date, description, reference_type, reference_id,
-      total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `, [
-    entryNo, date, `سداد مستحق أجور — ${workerLabel} (${payRef})`,
-    refType, laborId, amount, amount,
-    userId, userName, userId, userName
-  ]);
-  const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `, [jeId, wagesPayableAccId, costCenterId ?? null, projectId ?? null, amount, `سداد أجر مستحق — ${workerLabel}`]);
-  await conn.run(`
-    INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, project_id, debit, credit, notes)
-    VALUES (?, ?, ?, ?, 0, ?, ?)
-  `, [jeId, cashAccId, costCenterId ?? null, projectId ?? null, amount, `الصندوق — ${payRef}`]);
-  return { jeId, entryNo };
+  const center = costCenterId ?? await projectCostCenter(conn, projectId);
+  const posted = await PostingService.post(conn, {
+    date, series: 'JE-WS', user: mirrorUser(user), syncCash: false,
+    description: `سداد مستحق أجور — ${workerLabel} (${payRef})`, source: { type: WAGE_JE_TYPES.settlement, id: laborId },
+    lines: [
+      { accountId: wagesPayableAccId, debit: amount, costCenterId: center, projectId, notes: `سداد أجر مستحق — ${workerLabel}` },
+      { accountId: cashAccId, credit: amount, costCenterId: center, projectId, notes: `الصندوق — ${payRef}` }
+    ]
+  });
+  return { jeId: posted.id, entryNo: posted.entry_no };
 }
+
 
 /** قيد الاستحقاق المرحّل لسجل أجور (الأحدث أولاً) */
 async function getWageAccrualJournal(conn, laborId) {
@@ -1008,7 +920,7 @@ async function getWageAccrualJournal(conn, laborId) {
   return c.get(
     `SELECT * FROM journal_entries
      WHERE reference_id = ? AND reference_type = ?
-       AND LOWER(status) = 'posted'
+       AND LOWER(status) = 'posted' AND reversal_ref_id IS NULL
      ORDER BY id DESC LIMIT 1`,
     [laborId, WAGE_JE_TYPES.accrual]
   );
@@ -1020,7 +932,7 @@ async function getWageSettlementJournals(conn, laborId) {
   return c.query(
     `SELECT * FROM journal_entries
      WHERE reference_id = ? AND reference_type = ?
-       AND LOWER(status) = 'posted'
+       AND LOWER(status) = 'posted' AND reversal_ref_id IS NULL
      ORDER BY id ASC`,
     [laborId, WAGE_JE_TYPES.settlement]
   );
@@ -1078,7 +990,7 @@ async function reportUnbookedWages() {
         SELECT 1 FROM journal_entries j
         WHERE j.reference_id = l.id
           AND j.reference_type = '${WAGE_JE_TYPES.accrual}'
-          AND LOWER(j.status) = 'posted'
+          AND LOWER(j.status) = 'posted' AND j.reversal_ref_id IS NULL
       )
     ORDER BY l.date ASC, l.id ASC
   `);
@@ -1095,7 +1007,6 @@ module.exports = {
   backfillMirrorLinks,
   deleteLinkedMirrors,
   linkSubRecordToExpense,
-  unlinkSubRecord,
   clearLinksToExpense,
   detectPossibleDuplicates,
   createMirrorJournal,
