@@ -54,6 +54,7 @@ const App = {
       script.async = true;
       script.onload = () => {
         this._loadedModules[name] = true;
+        if (typeof Auth !== 'undefined' && Auth.guardPrintFunctions) Auth.guardPrintFunctions();
         console.log(`⚡ [CodeSplitting] تم تحميل الوحدة بنجاح: ${name}`);
         resolve();
       };
@@ -103,6 +104,8 @@ const App = {
       await this.loadModule(mod);
     }
     if(modules.length&&typeof Settings!=='undefined'&&!Settings._printSettingsLoaded)await Settings.loadPrintSettings();
+    // الطباعة تتطلب صلاحية التصدير: لفّ دوال الطباعة في الوحدات المحمّلة (بما فيها المضمّنة في الصفحة)
+    if (typeof Auth !== 'undefined' && Auth.guardPrintFunctions) Auth.guardPrintFunctions();
   },
 
   // التحميل الكسول المسبق في أوقات خمول المتصفح (Idle Preload)

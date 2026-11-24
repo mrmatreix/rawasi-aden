@@ -34,6 +34,27 @@ test('every permission the server checks exists in the single catalog, and every
  assert.ok(!/value="accounting:view"[^>]*perm-chk|perm-chk[^>]*value="accounting:view"/.test(html),'module permissions are generated, not static');
 });
 
+test('every print function is mapped to an export permission (printing = export)',()=>{
+ const auth=fs.readFileSync(path.join(root,'js','auth.js'),'utf8');
+ const start=auth.indexOf('PRINT_PERMISSIONS: {');assert.ok(start>0,'PRINT_PERMISSIONS map exists');
+ const block=auth.slice(start+'PRINT_PERMISSIONS: {'.length,auth.indexOf('guardPrintFunctions()',start));
+ const mapped={};
+ for(const m of block.matchAll(/(\w+): \{([\s\S]*?)\}/g))mapped[m[1]]=Object.fromEntries([...m[2].matchAll(/(print\w+): ('([^']*)'|null)/g)].map(x=>[x[1],x[3]??null]));
+ const files={Accounting:'accounting.js',HR:'hr.js',ProjectCloseout:'project_closeout.js',ProjectHub:'project_hub.js',Projects:'projects.js',Reports:'reports.js',Settings:'settings.js'};
+ const keys=new Set(catalog.permissionKeys);
+ for(const [obj,file] of Object.entries(files)){
+  const src=fs.readFileSync(path.join(root,'js',file),'utf8');
+  for(const m of src.matchAll(/^\s{2}(?:async\s+)?(print\w*)\s*\(/gm)){
+   assert.ok(mapped[obj]&&m[1] in mapped[obj],`${obj}.${m[1]} (js/${file}) is not in Auth.PRINT_PERMISSIONS`);
+   const perm=mapped[obj][m[1]];
+   if(perm)for(const k of perm.split(','))assert.ok(keys.has(k)&&k.endsWith(':export'),`${obj}.${m[1]} maps to unknown/non-export key ${k}`);
+  }
+ }
+ // كل الوحدات تُلفّ عند تحميلها
+ const app=fs.readFileSync(path.join(root,'js','app.js'),'utf8');
+ assert.ok((app.match(/Auth\.guardPrintFunctions\(\)/g)||[]).length>=2,'guard runs on module load and on view load');
+});
+
 test('role templates apply on the server; the accountant creates but cannot approve or post; nobody below the admin can escalate',async()=>{
  const scratch=path.resolve(__dirname,'../../scratch');fs.mkdirSync(scratch,{recursive:true});
  const temp=fs.mkdtempSync(path.join(scratch,'perm-matrix-'));

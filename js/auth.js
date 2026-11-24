@@ -1196,6 +1196,57 @@ const Auth = {
   },
 
   // التصدير إلى Excel يتطلب صلاحية «تصدير» للوحدة التي تُعرض شاشتها حالياً
+  // الطباعة = تصدير: كل دالة طباعة تتطلب صلاحية «تصدير» للوحدة التي يخصها المستند.
+  // null = معفاة (معاينة إعدادات الطباعة نفسها). أي دالة print* جديدة يجب أن تُضاف هنا (اختبار يتحقق من ذلك).
+  PRINT_PERMISSIONS: {
+    Accounting: {
+      printJournalListPdf: 'accounting:export', printJournalEntryById: 'accounting:export', printCurrentJournalEntry: 'accounting:export',
+      printCashMovement: 'cash:export,accounting:export', printExpenseReceipt: 'expenses:export,accounting:export',
+      printReceipt: 'revenues:export,accounting:export', printCustodyReceipt: 'custody:export,accounting:export', printTestReceipt: null
+    },
+    HR: { printComprehensivePayroll: 'hr:export' },
+    ProjectCloseout: { printCurrentView: 'projects:export,reports:export', printReport: 'projects:export,reports:export', printClientBoQ: 'projects:export', printInternalAuditBoQ: 'projects:export' },
+    ProjectHub: {
+      printOfficialContract: 'projects:export', printOfficialIPC: 'billing:export,projects:export', printFinalSettlementDoc: 'billing:export,projects:export',
+      printQuotationDoc: 'projects:export', printChangeOrderSlip: 'projects:export', printDailyReportDoc: 'projects:export', printWeeklyReportDoc: 'projects:export',
+      printHandoverDoc: 'projects:export', printCorrespondenceDoc: 'projects:export', printIntegratedQuotationOfficialDoc: 'projects:export'
+    },
+    Projects: { printCurrentProjectDetails: 'projects:export,reports:export', printProjectReport: 'projects:export,reports:export' },
+    Reports: { printSupplierStatement: 'suppliers:export,reports:export', printActiveReport: 'reports:export' },
+    Settings: { printCurrentPreviewDoc: null }
+  },
+
+  /** يلفّ دوال الطباعة في الوحدات المحمّلة بفحص صلاحية التصدير (مرة واحدة لكل دالة) */
+  guardPrintFunctions() {
+    // الوحدات معرّفة بـ const في سكربتات مستقلة (ليست خصائص window)، وCSP تمنع eval، لذا مراجع صريحة
+    const modules = {
+      Accounting: typeof Accounting !== 'undefined' ? Accounting : undefined,
+      HR: typeof HR !== 'undefined' ? HR : undefined,
+      ProjectCloseout: typeof ProjectCloseout !== 'undefined' ? ProjectCloseout : undefined,
+      ProjectHub: typeof ProjectHub !== 'undefined' ? ProjectHub : undefined,
+      Projects: typeof Projects !== 'undefined' ? Projects : undefined,
+      Reports: typeof Reports !== 'undefined' ? Reports : undefined,
+      Settings: typeof Settings !== 'undefined' ? Settings : undefined
+    };
+    for (const [objectName, methods] of Object.entries(this.PRINT_PERMISSIONS)) {
+      const target = modules[objectName];
+      if (!target) continue;
+      for (const [method, permission] of Object.entries(methods)) {
+        const original = target[method];
+        if (!permission || typeof original !== 'function' || original.__printGuarded) continue;
+        const guarded = function (...args) {
+          if (!Auth.hasPermission(permission)) {
+            if (typeof App !== 'undefined' && App.showToast) App.showToast('⛔ لا تملك صلاحية الطباعة والتصدير لهذا المستند', 'error');
+            return undefined;
+          }
+          return original.apply(this, args);
+        };
+        guarded.__printGuarded = true;
+        target[method] = guarded;
+      }
+    }
+  },
+
   canExportCurrentView() {
     if (!this.currentUser) return false;
     if (this.currentUser.role === 'admin') return true;
