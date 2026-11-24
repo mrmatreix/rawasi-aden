@@ -2221,7 +2221,7 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
-  max-height: 380px;
+  max-height: min(64vh, 600px);
   overflow-y: auto;
   padding-left: 4px;
 }
@@ -2277,6 +2277,96 @@ body.light-mode .sidebar-nav .nav-group.has-active > .nav-group-header { backgro
 .perm-checkbox-item span {
   line-height: 1.35;
 }
+
+/* ---------- مصفوفة الصلاحيات: بطاقة لكل وحدة + شرائح تفعيل ---------- */
+.pm-wrap { grid-column: 1 / -1; display: grid; gap: 12px; }
+.pm-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 12px; border: 1px solid var(--border-light); border-radius: var(--radius-md);
+  background: var(--card-nested-bg);
+}
+.pm-search {
+  flex: 1 1 180px; min-width: 160px; height: 32px; padding: 4px 12px;
+  border: 1px solid var(--border-color); border-radius: 999px;
+  background: var(--bg-sunken); color: var(--text-primary); font: inherit; font-size: 0.8rem;
+}
+.pm-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pm-toolbar-label { font-size: 0.74rem; color: var(--text-muted); }
+.pm-tool-btn {
+  height: 28px; padding: 2px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-color); background: transparent;
+  color: var(--text-secondary); font: inherit; font-size: 0.74rem; font-weight: 600;
+  transition: var(--transition);
+}
+.pm-tool-btn:hover, .pm-tool-btn:focus-visible { border-color: var(--gold-primary); color: var(--text-gold); outline: none; }
+.pm-summary { margin-inline-start: auto; font-size: 0.76rem; color: var(--text-secondary); white-space: nowrap; }
+.pm-summary strong { color: var(--text-gold); }
+
+.pm-modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.pm-card {
+  border: 1px solid var(--border-light); border-radius: var(--card-nested-radius);
+  background: var(--card-nested-bg); padding: 10px 12px; display: grid; gap: 8px; align-content: start;
+  transition: var(--transition);
+}
+.pm-card.is-partial { border-color: rgba(214, 173, 53, 0.35); }
+.pm-card.is-full { border-color: var(--gold-primary); box-shadow: inset 0 0 0 1px rgba(214, 173, 53, 0.25); }
+.pm-card-head { display: flex; align-items: center; gap: 8px; }
+.pm-card-title { font-size: 0.84rem; font-weight: 700; color: var(--text-primary); flex: 1; line-height: 1.4; }
+.pm-count {
+  font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  background: var(--bg-sunken); color: var(--text-muted); white-space: nowrap;
+}
+.pm-card.is-partial .pm-count, .pm-card.is-full .pm-count { background: rgba(214, 173, 53, 0.18); color: var(--text-gold); }
+
+/* مفتاح «الكل» للوحدة */
+.pm-switch { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.72rem; color: var(--text-muted); }
+.pm-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pm-switch-track {
+  width: 32px; height: 18px; border-radius: 999px; background: var(--border-color); position: relative; transition: var(--transition);
+}
+.pm-switch-track::after {
+  content: ''; position: absolute; top: 2px; inset-inline-start: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; transition: var(--transition);
+}
+.pm-switch input:checked + .pm-switch-track { background: var(--gold-primary); }
+.pm-switch input:checked + .pm-switch-track::after { inset-inline-start: 16px; }
+.pm-switch input:indeterminate + .pm-switch-track { background: rgba(214, 173, 53, 0.5); }
+.pm-switch input:focus-visible + .pm-switch-track { outline: 2px solid var(--gold-primary); outline-offset: 2px; }
+
+/* شرائح العمليات */
+.pm-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; align-content: flex-start; }
+.pm-chip { position: relative; display: inline-flex; }
+.pm-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pm-chip-face {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 4px 12px;
+  border: 1px solid var(--border-color); border-radius: 999px; cursor: pointer; user-select: none;
+  font-size: 0.78rem; color: var(--text-secondary); background: transparent; transition: var(--transition);
+}
+.pm-chip-face::before { content: '+'; font-weight: 700; opacity: 0.6; }
+.pm-chip-face:hover { border-color: var(--gold-primary); color: var(--text-primary); }
+.pm-chip input:checked + .pm-chip-face {
+  background: rgba(214, 173, 53, 0.18); border-color: var(--gold-primary); color: var(--text-gold); font-weight: 700;
+}
+.pm-chip input:checked + .pm-chip-face::before { content: '✓'; opacity: 1; }
+.pm-chip input:focus-visible + .pm-chip-face { outline: 2px solid var(--gold-primary); outline-offset: 2px; }
+/* عمليات حساسة: اعتماد، ترحيل، إلغاء */
+.pm-chip[data-risk="high"] input:checked + .pm-chip-face {
+  background: rgba(239, 68, 68, 0.14); border-color: rgba(239, 68, 68, 0.6); color: var(--color-danger);
+}
+/* عمليات إضافية خاصة بالوحدة */
+.pm-chip--extra .pm-chip-face { border-style: dashed; }
+.pm-extra-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+.pm-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.72rem; color: var(--text-muted); }
+.pm-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-inline-end: 4px; vertical-align: middle; }
+.pm-legend .pm-l-on::before { background: rgba(214, 173, 53, 0.6); }
+.pm-legend .pm-l-risk::before { background: rgba(239, 68, 68, 0.6); }
+.pm-legend .pm-l-extra::before { border: 1px dashed var(--text-muted); }
+.pm-card[hidden] { display: none; }
+
+body.light-mode .pm-chip input:checked + .pm-chip-face { background: rgba(214, 173, 53, 0.22); color: #6b4a00; }
+body.light-mode .pm-chip[data-risk="high"] input:checked + .pm-chip-face { background: rgba(239, 68, 68, 0.1); }
+body.light-mode .pm-switch-track::after { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+body.light-mode .permissions-container { background: var(--bg-sunken); }
 
 /* ==========================================================================
    شاشة تسجيل الدخول الفاخرة (Luxury Login Screen Overlay)

@@ -2747,20 +2747,86 @@ const Settings = {
     if (!box || box.dataset.ready === '1' || typeof SystemCatalog === 'undefined' || !SystemCatalog.modules) return;
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const acts = SystemCatalog.actions;
-    const head = `<tr><th style="text-align: right; min-width: 180px;">الوحدة</th>${acts.map(a => `<th style="text-align: center;"><button type="button" class="perm-quick-btn" data-perm-col="${a.id}" title="تحديد/إلغاء ${esc(a.label)} في كل الوحدات">${esc(a.label)}</button></th>`).join('')}<th style="text-align: right; min-width: 180px;">عمليات إضافية</th></tr>`;
-    const rows = SystemCatalog.modules.map(m => {
-      const cells = acts.map(a => m.actions.includes(a.id)
-        ? `<td style="text-align: center;"><input type="checkbox" class="perm-chk" name="userPerm" value="${esc(m.key + ':' + a.id)}" aria-label="${esc(m.label + ' — ' + a.label)}" style="accent-color: var(--gold-primary); width: 16px; height: 16px;"></td>`
-        : `<td style="text-align: center; color: var(--text-muted);" title="لا تنطبق على هذه الوحدة">—</td>`).join('');
-      const extras = Object.entries(m.extra || {}).map(([k, label]) => `<label style="display: flex; align-items: center; gap: 4px; font-size: 0.74rem; white-space: nowrap;"><input type="checkbox" class="perm-chk" name="userPerm" value="${esc(m.key + ':' + k)}" style="accent-color: var(--gold-primary);"> ${esc(label)}</label>`).join('');
-      return `<tr><td><button type="button" class="perm-quick-btn" data-perm-row="${esc(m.key)}" title="تحديد/إلغاء كل عمليات الوحدة" style="font-weight: 700; text-align: right;">${esc(m.label)}</button></td>${cells}<td><div style="display: grid; gap: 4px;">${extras || '<span style="color: var(--text-muted);">—</span>'}</div></td></tr>`;
+    const risky = new Set(['approve', 'post', 'cancel']);
+    const chip = (value, label, { risk = false, extra = false } = {}) => `
+      <label class="pm-chip${extra ? ' pm-chip--extra' : ''}"${risk ? ' data-risk="high"' : ''}>
+        <input type="checkbox" class="perm-chk" name="userPerm" value="${esc(value)}">
+        <span class="pm-chip-face">${esc(label)}</span>
+      </label>`;
+    const cards = SystemCatalog.modules.map(m => {
+      const actionChips = acts.filter(a => m.actions.includes(a.id)).map(a => chip(m.key + ':' + a.id, a.label, { risk: risky.has(a.id) })).join('');
+      const extras = Object.entries(m.extra || {});
+      return `
+      <section class="pm-card" data-pm-module="${esc(m.key)}" data-pm-name="${esc(m.label)}">
+        <div class="pm-card-head">
+          <span class="pm-card-title">${esc(m.label)}</span>
+          <span class="pm-count" data-pm-count>0/0</span>
+          <label class="pm-switch" title="تفعيل أو إلغاء كل عمليات الوحدة">
+            <input type="checkbox" data-pm-all aria-label="كل عمليات ${esc(m.label)}">
+            <span class="pm-switch-track"></span>
+          </label>
+        </div>
+        <div class="pm-chips">${actionChips}</div>
+        ${extras.length ? `<div class="pm-extra-label">عمليات خاصة بالوحدة</div><div class="pm-chips">${extras.map(([k, label]) => chip(m.key + ':' + k, label, { extra: true })).join('')}</div>` : ''}
+      </section>`;
     }).join('');
-    box.innerHTML = `<table class="custom-table" style="font-size: 0.8rem; min-width: 760px;"><thead>${head}</thead><tbody>${rows}</tbody></table>
-      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">«—» العملية لا تنطبق على الوحدة. الترحيل المحاسبي للسندات يتم بصلاحية «المحاسبة: ترحيل». التصدير يتحكم في أزرار التصدير إلى Excel.</div>`;
-    const toggle = boxes => { const list = [...boxes]; const on = list.some(b => !b.checked); list.forEach(b => { b.checked = on; }); };
-    box.querySelectorAll('[data-perm-col]').forEach(btn => btn.addEventListener('click', () => toggle(box.querySelectorAll(`.perm-chk[value$=":${btn.dataset.permCol}"]`))));
-    box.querySelectorAll('[data-perm-row]').forEach(btn => btn.addEventListener('click', () => toggle(btn.closest('tr').querySelectorAll('.perm-chk'))));
+    box.className = 'pm-wrap';
+    box.removeAttribute('style');
+    box.innerHTML = `
+      <div class="pm-toolbar">
+        <input type="search" class="pm-search" data-pm-search placeholder="🔍 ابحث عن وحدة..." aria-label="بحث في الوحدات">
+        <div class="pm-toolbar-group">
+          <span class="pm-toolbar-label">لكل الوحدات:</span>
+          ${acts.map(a => `<button type="button" class="pm-tool-btn" data-pm-action="${a.id}" title="تفعيل/إلغاء «${esc(a.label)}» في كل الوحدات">${esc(a.label)}</button>`).join('')}
+          <button type="button" class="pm-tool-btn" data-pm-viewonly title="عرض فقط في كل الوحدات، وإلغاء غيره">عرض فقط</button>
+        </div>
+        <span class="pm-summary" data-pm-summary></span>
+      </div>
+      <div class="pm-legend"><span class="pm-l-on">مفعّلة</span><span class="pm-l-risk">عملية حساسة مفعّلة (اعتماد، ترحيل، إلغاء)</span><span class="pm-l-extra">عملية خاصة بالوحدة</span></div>
+      <div class="pm-modules">${cards}</div>`;
+
+    const moduleBoxes = card => [...card.querySelectorAll('.perm-chk')];
+    box.addEventListener('change', e => {
+      const all = e.target.closest('[data-pm-all]');
+      if (all) moduleBoxes(all.closest('.pm-card')).forEach(b => { b.checked = all.checked; });
+      this.refreshPermissionMatrix();
+    });
+    box.querySelector('[data-pm-search]').addEventListener('input', e => {
+      const q = e.target.value.trim().toLowerCase();
+      box.querySelectorAll('.pm-card').forEach(card => { card.hidden = Boolean(q) && !card.dataset.pmName.toLowerCase().includes(q) && !card.dataset.pmModule.includes(q); });
+    });
+    box.querySelectorAll('[data-pm-action]').forEach(btn => btn.addEventListener('click', () => {
+      const list = [...box.querySelectorAll(`.pm-card .perm-chk[value$=":${btn.dataset.pmAction}"]`)];
+      const on = list.some(b => !b.checked);
+      list.forEach(b => { b.checked = on; });
+      this.refreshPermissionMatrix();
+    }));
+    box.querySelector('[data-pm-viewonly]').addEventListener('click', () => {
+      box.querySelectorAll('.pm-card .perm-chk').forEach(b => { b.checked = b.value.endsWith(':view'); });
+      this.refreshPermissionMatrix();
+    });
     box.dataset.ready = '1';
+    this.refreshPermissionMatrix();
+  },
+
+  /** يحدّث العدّادات ومفاتيح «الكل» وحالة كل بطاقة بعد أي تغيير (يدوي أو قالب دور أو تحديد الكل) */
+  refreshPermissionMatrix() {
+    const box = document.getElementById('permMatrixGrid');
+    if (!box || box.dataset.ready !== '1') return;
+    let total = 0, on = 0;
+    box.querySelectorAll('.pm-card').forEach(card => {
+      const boxes = [...card.querySelectorAll('.perm-chk')];
+      const n = boxes.filter(b => b.checked).length;
+      total += boxes.length; on += n;
+      card.querySelector('[data-pm-count]').textContent = `${n}/${boxes.length}`;
+      const all = card.querySelector('[data-pm-all]');
+      all.checked = n === boxes.length && n > 0;
+      all.indeterminate = n > 0 && n < boxes.length;
+      card.classList.toggle('is-full', n === boxes.length && n > 0);
+      card.classList.toggle('is-partial', n > 0 && n < boxes.length);
+    });
+    const summary = box.querySelector('[data-pm-summary]');
+    if (summary) summary.innerHTML = `المفعّل: <strong>${on}</strong> من ${total}`;
   },
 
   // ================== نافذة إضافة مستخدم جديد ==================
@@ -2906,6 +2972,7 @@ const Settings = {
         const chk = document.querySelector(`.perm-chk[value="${p}"]`);
         if (chk) chk.checked = true;
       });
+      this.refreshPermissionMatrix();
       // إذا كانت الصلاحيات مخصصة، نظهر الدور كـ "مخصص" في القائمة
       const totalCheckboxes = document.querySelectorAll('.perm-chk').length;
       if (roleSelect && perms.length < totalCheckboxes && ![...roleSelect.options].some(option => option.value === user.role)) {
@@ -3195,12 +3262,14 @@ const Settings = {
       const box = document.querySelector(`.perm-chk[value="${permission}"]`);
       if (box) box.checked = true;
     }
+    this.refreshPermissionMatrix();
   },
 
   selectAllPermissions(select) {
     document.querySelectorAll('.perm-chk').forEach(chk => {
       chk.checked = !!select;
     });
+    this.refreshPermissionMatrix();
   },
 
   // ================== حفظ المستخدم والصلاحيات ==================
