@@ -24,11 +24,10 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
   const cleanup = async () => {
     try {
       await db.run("DELETE FROM journal_entry_lines WHERE project_id = ? OR entry_id IN (SELECT id FROM journal_entries WHERE created_by IN (?, ?) OR created_by_name IN ('maker_ctrl', 'checker_ctrl'))", [testProjectId, makerId, checkerId]);
+      await db.run("DELETE FROM journal_entries WHERE created_by IN (?, ?) OR created_by_name IN ('maker_ctrl', 'checker_ctrl')", [makerId, checkerId]);
       await db.run("DELETE FROM bills WHERE project_id = ? OR created_by IN (?, ?)", [testProjectId, makerId, checkerId]);
       await db.run("DELETE FROM expenses WHERE project_id = ? OR created_by IN (?, ?)", [testProjectId, makerId, checkerId]);
       await db.run("DELETE FROM purchases WHERE project_id = ? OR created_by IN (?, ?)", [testProjectId, makerId, checkerId]);
-      await db.run("DELETE FROM cash_movements WHERE project_id = ?", [testProjectId]);
-      await db.run("DELETE FROM journal_entries WHERE created_by IN (?, ?) OR created_by_name IN ('maker_ctrl', 'checker_ctrl')", [makerId, checkerId]);
       await db.run("DELETE FROM projects WHERE id = ?", [testProjectId]);
       await db.run("DELETE FROM clients WHERE id = ?", [testClientId]);
       await db.run("DELETE FROM users WHERE id IN (?, ?) OR username IN ('maker_ctrl', 'checker_ctrl')", [makerId, checkerId]);
@@ -59,6 +58,9 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
     INSERT OR REPLACE INTO projects (id, name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status)
     VALUES (?, 'مشروع برج الأمان المالي', ?, 1000000, 800000, 0, 0, 'in_progress')
   `, [testProjectId, testClientId]);
+
+  // postings resolve system account roles; the minimal fixture chart lacks them
+  const roleAcc = await require('../fixtures/roleAccounts').ensureRoleAccounts(db);
 
   const getHeaders = (user, extraClaims = {}) => {
     const token = jwt.sign(
@@ -201,8 +203,8 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
       method: 'POST',
       headers: checkerHeaders
     });
-    assert.strictEqual(resPost.status, 200);
     const postJson = await resPost.json();
+    assert.strictEqual(resPost.status, 200, JSON.stringify(postJson));
     assert.strictEqual(postJson.status, 'posted');
     assert.ok(postJson.journal_entry_no, 'Posting bill must generate journal entry');
 
@@ -280,14 +282,14 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
         description: 'مسودة قيد تسوية مخصصات الصيانة',
         status: 'draft',
         lines: [
-          { account_id: 10, cost_center_id: 1, debit: 75000, credit: 0, description: 'مصروفات صيانة' },
-          { account_id: 3, cost_center_id: 1, debit: 0, credit: 75000, description: 'البنك / الصندوق' }
+          { account_id: roleAcc.BANK_CHARGES, cost_center_id: 1, debit: 75000, credit: 0, description: 'مصروفات صيانة' },
+          { account_id: roleAcc.CASH_DEFAULT, cost_center_id: 1, debit: 0, credit: 75000, description: 'البنك / الصندوق' }
         ]
       })
     });
 
-    assert.strictEqual(resDraftJe.status, 200);
     const draftJeJson = await resDraftJe.json();
+    assert.strictEqual(resDraftJe.status, 200, JSON.stringify(draftJeJson));
     assert.strictEqual(draftJeJson.success, true);
     assert.strictEqual(draftJeJson.status, 'draft');
     const jeId = draftJeJson.id;
@@ -356,7 +358,9 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
     assert.ok(revJeResult.reversing_entry_no);
 
     const reversedJeRecord = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [jeId]);
-    assert.strictEqual(reversedJeRecord.status, 'reversed');
+    // storno: the original stays posted (history intact) and points at its reversing entry
+    assert.strictEqual(reversedJeRecord.status, 'posted');
+    assert.ok(reversedJeRecord.reversal_ref_id, 'linked to the reversing entry');
   });
 
   // =========================================================================
@@ -399,9 +403,16 @@ test('SOX Financial Control & True Document Lifecycle Backend Verification Suite
     assert.strictEqual(resBlockedBill.status, 403, 'Must block bill in closed period');
 
     // 5.4 إعادة فتح الفترة رسمياً بطلب موثق في سجل التدقيق
-    const resReopen = await fetch(`${baseUrl}/api/accounting/periods/${periodId}/reopen`, {
+    // المرحلة 6 (H11): إعادة الفتح تحتاج صلاحية الإقفال المخصصة؛ صلاحية الاعتماد العامة للمدقق لا تكفي
+    const resReopenAuditor = await fetch(`${baseUrl}/api/accounting/periods/${periodId}/reopen`, {
       method: 'PUT',
       headers: checkerHeaders,
+      body: JSON.stringify({ reason: 'إعادة فتح استثنائية لتدقيق تسوية جردية معتمدة' })
+    });
+    assert.strictEqual(resReopenAuditor.status, 403);
+    const resReopen = await fetch(`${baseUrl}/api/accounting/periods/${periodId}/reopen`, {
+      method: 'PUT',
+      headers: getHeaders({ id: 1, username: 'admin', role: 'admin', permissions: ['*'] }),
       body: JSON.stringify({ reason: 'إعادة فتح استثنائية لتدقيق تسوية جردية معتمدة' })
     });
     assert.strictEqual(resReopen.status, 200);

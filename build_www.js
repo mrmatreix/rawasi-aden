@@ -22,12 +22,16 @@ if (!fs.existsSync(dest)) {
 });
 
 // نسخ مجلدات الواجهة الأمامية
-['css', 'js', 'images'].forEach(dir => {
+// views مطلوب لأن الواجهة تحمّل الشاشات منه؛ بدونه بقيت www/views نسخة قديمة لا تُحدّث
+['css', 'js', 'images', 'views'].forEach(dir => {
   const src = path.join(root, dir);
   if (fs.existsSync(src)) {
     fs.cpSync(src, path.join(dest, dir), { recursive: true });
   }
 });
+
+// نوافذ التأكيد والتنبيه مشتركة: المصدر js/dialogs.js وتطبيق العملاء يأخذ نسخة منه
+fs.copyFileSync(path.join(root, 'js', 'dialogs.js'), path.join(root, 'client-app', 'www', 'js', 'dialogs.js'));
 
 console.log('✓ www build completed successfully for Cloudflare Pages!');
 process.exit(0);

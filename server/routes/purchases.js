@@ -1,10 +1,13 @@
 const express = require('express');
+const Numbering = require('../services/numberingService');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
-const CashBoxService = require('../services/cashBoxService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, recordScopeParam, projectScopeSql } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam('purchases'));
+
 
 // جلب فواتير المشتريات
 router.get('/', requirePermission('purchases:view'), async (req, res) => {
@@ -22,12 +25,7 @@ router.get('/', requirePermission('purchases:view'), async (req, res) => {
     const conditions = [];
 
     // التحقق من نطاق المشاريع المصرح بها للمستخدم
-    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
-    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-      const placeholders = allowedProjects.map(() => '?').join(',');
-      conditions.push(`(pu.project_id IS NULL OR pu.project_id IN (${placeholders}))`);
-      params.push(...allowedProjects);
-    }
+    { const scopeSql = projectScopeSql(req.user, 'pu.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (supplier_id) {
       conditions.push('pu.supplier_id = ?');
@@ -70,6 +68,10 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
       status: requestedStatus = 'posted'
     } = req.body;
 
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) {
+      return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
+    }
+
     // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ فاتورة الشراء
     await FinancialControlService.assertPeriodOpen(date);
 
@@ -77,13 +79,8 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المورد والمبلغ الإجمالي' });
     }
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM purchases');
-    let purSeq = (((countRes ? countRes.cnt : 0) || 0)) + 1;
-    let invoice_no = `PO-${new Date().getFullYear()}-${String(purSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM purchases WHERE invoice_no = ?', [invoice_no])) {
-      purSeq += 1;
-      invoice_no = `PO-${new Date().getFullYear()}-${String(purSeq).padStart(4, '0')}`;
-    }
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const invoice_no = await Numbering.next(require('../database/db'), 'PO', { table: 'purchases', column: 'invoice_no', date: new Date().toISOString().slice(0, 10) });
 
     const parsedTotal = Number(total_amount);
     const parsedPaid = Number(paid_amount);
@@ -117,12 +114,15 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
           await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, supplier_id]);
         }
 
-        // إذا دفعت مبالغ نقداً، تسجيل حركة الصندوق في سلسلة صندوق المشروع (أو الرئيسي)
+        // إذا دفعت مبالغ نقداً، تسجيل حركة الصندوق
         if (parsedPaid > 0) {
-          await CashBoxService.appendMovement(tx, {
-            projectId: project_id ?? null, cashOut: parsedPaid,
-            currency, date, notes: `سداد مشتريات: ${invoice_no}`
-          });
+          const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+          const prevBal = Number(lastCash.current_balance) || 0;
+          const newBal = prevBal - parsedPaid;
+          await tx.run(`
+            INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
+            VALUES (?, 0, ?, 0, ?, ?, ?, ?)
+          `, [prevBal, parsedPaid, newBal, currency, date, `سداد مشتريات: ${invoice_no}`]);
         }
       }
 
@@ -260,10 +260,13 @@ router.post('/:id/post', requirePermission('purchases:post,accounting:post'), as
       }
 
       if (parsedPaid > 0) {
-        await CashBoxService.appendMovement(tx, {
-          projectId: pu.project_id ?? null, cashOut: parsedPaid,
-          currency: pu.currency || 'ر.ي', date: pu.date, notes: `ترحيل سداد مشتريات: ${pu.invoice_no}`
-        });
+        const lastCash = await tx.get('SELECT current_balance FROM cash_movements ORDER BY id DESC LIMIT 1') || { current_balance: 125000 };
+        const prevBal = Number(lastCash.current_balance) || 0;
+        const newBal = prevBal - parsedPaid;
+        await tx.run(`
+          INSERT INTO cash_movements (previous_balance, cash_in, cash_out, withdrawals, current_balance, currency, date, notes)
+          VALUES (?, 0, ?, 0, ?, ?, ?, ?)
+        `, [prevBal, parsedPaid, newBal, pu.currency || 'ر.ي', pu.date, `ترحيل سداد مشتريات: ${pu.invoice_no}`]);
       }
 
       await tx.run(`
@@ -348,7 +351,7 @@ router.post('/:id/reverse', requirePermission('purchases:approve,accounting:appr
 
     res.json(result);
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });

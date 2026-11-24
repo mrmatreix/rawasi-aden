@@ -41,13 +41,17 @@ test('Accounting Rules - Rejects Negative Amounts & Same-Line Dual Entry', async
 });
 
 test('Accounting Rules - Rejects Unbalanced Entries', async () => {
+  const { get } = require('../../server/database/db');
+  const leaf1 = await get("SELECT id FROM accounts WHERE is_posting = 1 LIMIT 1");
+  const leaf2 = await get("SELECT id FROM accounts WHERE is_posting = 1 AND id != ? LIMIT 1", [leaf1.id]);
   await assert.rejects(
     async () => {
       await AccountingService.validateJournalEntryLines([
-        { account_id: 1, debit: 1000, credit: 0 },
-        { account_id: 2, debit: 0, credit: 800 }
+        { account_id: leaf1.id, debit: 1000, credit: 0 },
+        { account_id: leaf2.id, debit: 0, credit: 800 }
       ]);
     },
     { message: /القيد غير متزن محاسبياً/ }
   );
 });
+

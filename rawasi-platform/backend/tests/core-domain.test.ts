@@ -1,0 +1,57 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {PricingEngineDomainService, shouldHidePriceOnSubmission} from '../src/features/orders/domain/pricing-engine.ts';
+import {OrderStateMachine, SlaTracker, calculateQuarterlyRating} from '../src/features/orders/domain/order-state-machine.ts';
+import type {DomainOrder, Actor} from '../src/features/orders/domain/order-state-machine.ts';
+import {toAdminOrderDTO,toSupervisorOrderDTO,toClientOrderDTO} from '../src/features/orders/domain/order-security-mapper.ts';
+import {DomainException} from '../src/features/orders/domain/domain-exception.ts';
+const engine = new PricingEngineDomainService();
+const input = {currency:'YER',agreedBaseCost:'7000',maxBaseCost:'8000',vendorBaseCost:'7000',rawasiMarkupPercent:'30',additionalCosts:[{id:'transport',description:'internal transport',clientDescription:'نقل',vendorCost:'4000',reason:'INTERNAL_SECRET',clientNote:'أجور نقل'}]};
+const price=engine.calculate(input);
+const admin:Actor={userId:'a',role:'SUPER_ADMIN'}, supervisor:Actor={userId:'s',role:'SUPERVISOR_VENDOR',vendorId:'v'}, client:Actor={userId:'c',role:'CLIENT'};
+const base:DomainOrder={id:'o',clientId:'c',vendorId:'v',workerId:null,status:'SUBMITTED',submittedAt:'2026-01-01T00:00:00.000Z',slaDeadlineAt:'2026-01-01T00:10:00.000Z',pricing:null,rejectionReason:null,clientResponseNote:null,rating:null};
+test('exact per-item pricing, rounding, ceiling and reason requirements',()=>{
+ assert.equal(price.clientBasePriceMinor,910000n);assert.equal(price.additionalItems[0].clientPriceMinor,520000n);assert.equal(price.clientTotalMinor,1430000n);assert.equal(price.profitMinor,330000n);
+ assert.equal(engine.calculate({...input,vendorBaseCost:'0.01',agreedBaseCost:'0.01',additionalCosts:[],rawasiMarkupPercent:'50'}).clientBasePriceMinor,2n);
+ assert.throws(()=>engine.calculate({...input,vendorBaseCost:'8001'}),DomainException);
+ assert.throws(()=>engine.calculate({...input,vendorBaseCost:'7500'}),/سبب تعديل/);
+ assert.throws(()=>engine.calculate({...input,rawasiMarkupPercent:'100.01'}),/نسبة الربح/);
+ assert.throws(()=>engine.calculate({...input,additionalCosts:[{...input.additionalCosts[0],reason:' '}]}),/سبب/);
+ assert.throws(()=>engine.calculate({...input,additionalCosts:[input.additionalCosts[0],input.additionalCosts[0]]}),/مكرر/);
+});
+test('submission visibility defaults to hiding except design or enabled budget option',()=>{
+ assert.equal(shouldHidePriceOnSubmission('DESIGN',false,false),false);
+ assert.equal(shouldHidePriceOnSubmission('MAINTENANCE',false,false),true);
+ assert.equal(shouldHidePriceOnSubmission('CONSTRUCTION',true,false),true);
+ assert.equal(shouldHidePriceOnSubmission('CONSTRUCTION',true,true),false);
+});
+test('valid workflow and strict scope, rejection and SLA',()=>{
+ const sm=new OrderStateMachine();
+ assert.equal(SlaTracker.deadline(new Date(base.submittedAt)).toISOString(),base.slaDeadlineAt);
+ assert.equal(SlaTracker.isOverdue(new Date(base.slaDeadlineAt),new Date('2026-01-01T00:10:01Z'),null),true);
+ let review=sm.transition(base,admin,'SUPERVISOR_REVIEW').order;
+ assert.throws(()=>sm.transition(review,supervisor,'REJECTION_REQUESTED',{}),/سبب/);
+ const rejection=sm.transition(review,supervisor,'REJECTION_REQUESTED',{note:'INTERNAL_SECRET'}).order;
+ assert.equal(sm.transition(rejection,admin,'SUPERVISOR_REVIEW').order.status,'SUPERVISOR_REVIEW');
+ assert.throws(()=>sm.transition(review,{...supervisor,vendorId:'other'},'PENDING_ADMIN_APPROVAL',{}),DomainException);
+ assert.throws(()=>sm.transition(review,supervisor,'PENDING_ADMIN_APPROVAL',{workerId:'w',workerActive:true,workerVendorId:'other',pricing:price}),DomainException);
+ review=sm.transition(review,supervisor,'PENDING_ADMIN_APPROVAL',{workerId:'w',workerActive:true,workerVendorId:'v',pricing:price}).order;
+ const quoted=sm.transition(review,admin,'QUOTED_TO_CLIENT').order;
+ assert.throws(()=>sm.transition(quoted,{...client,userId:'other'},'CLIENT_APPROVED',{note:'ok'}),DomainException);
+ const approved=sm.transition(quoted,client,'CLIENT_APPROVED',{note:'موافق'}).order;
+ const ongoing=sm.transition(approved,admin,'IN_PROGRESS').order;
+ const completed=sm.transition(ongoing,admin,'COMPLETED',{rating:3});
+ assert.equal(completed.quarterlyRatingInput,3); assert.deepEqual(calculateQuarterlyRating([3,4]),{sampleCount:2,averageHundredths:350,belowThreshold:true});
+ assert.throws(()=>sm.transition(base,client,'COMPLETED',{rating:5}),DomainException);
+});
+test('role-specific responses are allowlisted and enforce order ownership',()=>{
+ const o:DomainOrder={...base,status:'QUOTED_TO_CLIENT',workerId:'w',pricing:price,rejectionReason:'INTERNAL_SECRET'};
+ const a=JSON.stringify(toAdminOrderDTO(o,admin)),s=JSON.stringify(toSupervisorOrderDTO(o,supervisor)),c=JSON.stringify(toClientOrderDTO(o,client));
+ assert.match(a,/markupPercent/);assert.match(a,/vendorBaseCost/);assert.match(a,/clientTotal/);
+ assert.doesNotMatch(s,/clientTotal|clientPrice|markup|profit/);
+ assert.doesNotMatch(c,/vendor|markup|profit|reason|INTERNAL_SECRET|internal transport/);assert.match(c,/14300.00/);
+ assert.equal(toClientOrderDTO({...o,status:'PENDING_ADMIN_APPROVAL'},client).pricing,null);
+ assert.throws(()=>toClientOrderDTO(o,{...client,userId:'other'}),DomainException);
+ assert.throws(()=>toSupervisorOrderDTO(o,{...supervisor,vendorId:'other'}),DomainException);
+ assert.throws(()=>toAdminOrderDTO(o,client),DomainException);
+});

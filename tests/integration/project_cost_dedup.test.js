@@ -14,6 +14,12 @@ const jwt = require('jsonwebtoken');
 const db = require('../../server/database/db');
 const app = require('../../server/server');
 
+// test cleanup deletes posted entries: allowed only inside an explicit ledger maintenance unlock (stage 1 guards)
+async function withLedgerUnlock(db, fn) {
+  await db.run("INSERT INTO ledger_maintenance_unlock (reason) VALUES ('test cleanup')");
+  try { return await fn(); } finally { await db.run('DELETE FROM ledger_maintenance_unlock'); }
+}
+
 test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, resolve));
@@ -70,8 +76,8 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
           const jeIds = jes.map(j => j.id);
           if (jeIds.length > 0) {
             const jph = jeIds.map(() => '?').join(',');
-            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds);
-            await db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds);
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds));
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds));
           }
           await db.run(`DELETE FROM expenses WHERE id IN (${ph})`, expIds);
         }
@@ -90,8 +96,8 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
           const ljeIds = ljes.map(j => j.id);
           if (ljeIds.length > 0) {
             const ljph = ljeIds.map(() => '?').join(',');
-            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${ljph})`, ljeIds);
-            await db.run(`DELETE FROM journal_entries WHERE id IN (${ljph})`, ljeIds);
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${ljph})`, ljeIds));
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${ljph})`, ljeIds));
           }
         }
         await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
@@ -109,8 +115,8 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
           const pjeIds = pjes.map(j => j.id);
           if (pjeIds.length > 0) {
             const pjph = pjeIds.map(() => '?').join(',');
-            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds);
-            await db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds);
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds));
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds));
           }
         }
         await db.run('DELETE FROM project_purchases WHERE project_id = ?', [p.id]);
@@ -263,10 +269,18 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
     assert.ok(r.data.warnings.length > 0, 'يجب وجود تحذير اشتباه');
     assert.ok(r.data.warnings.some(w => w.kind === 'expense'), 'التحذير يشير للمصروف المشابه');
 
-    // 11. السند المرتبط سدادٌ: الذمة تنخفض والمسدد يتراكم والقيد مدين 21 (SUGGESTION-7)
-    const acc21 = (await db.get("SELECT id FROM accounts WHERE code = '21'")).id;
-    const acc111 = (await db.get("SELECT id FROM accounts WHERE code = '111'")).id;
-    const acc5 = (await db.get("SELECT id FROM accounts WHERE code = '5'")).id;
+    const acc = async (code) => {
+      let row = await db.get('SELECT id FROM accounts WHERE code = ? AND (is_posting = 1 OR is_posting IS NULL)', [code]);
+      if (!row) {
+        if (code === '5') row = await db.get("SELECT id FROM accounts WHERE code = '32102005' OR (type = 'expense' AND is_posting = 1) LIMIT 1");
+        else if (code === '21') row = await db.get("SELECT id FROM accounts WHERE code = '22101001' OR (type = 'liability' AND is_posting = 1) LIMIT 1");
+        else if (code === '111') row = await db.get("SELECT id FROM accounts WHERE code = '12101001' OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%') LIMIT 1");
+      }
+      return row ? row.id : null;
+    };
+    const acc21 = await acc('21');
+    const acc111 = await acc('111');
+    const acc5 = await acc('5');
     const suppAfter = await db.get('SELECT balance FROM suppliers WHERE id = ?', [supplierId]);
     assert.strictEqual(Number(suppAfter.balance), 50000, 'الذمة = 80k استحقاق − 30k تسوية');
     const purAfter = await db.get('SELECT paid_amount, payment_status FROM project_purchases WHERE id = ?', [purchaseId]);

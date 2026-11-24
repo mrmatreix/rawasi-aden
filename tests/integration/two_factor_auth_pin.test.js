@@ -48,7 +48,7 @@ test('2FA PIN - General Manager can configure and change 6-digit PIN anytime', a
     'X-Requested-With': 'XMLHttpRequest'
   };
 
-  // 2. التحقق من مسار GET /api/users لإرجاع two_factor_pin
+  // 2. GET /api/users لا يكشف رمز PIN أبداً، بل يعلن أنه مضبوط فقط
   const resUsers = await fetch(`${baseUrl}/api/users`, {
     headers: authHeaders
   });
@@ -57,10 +57,16 @@ test('2FA PIN - General Manager can configure and change 6-digit PIN anytime', a
   assert.strictEqual(usersData.success, true);
   const foundUser = usersData.data.find(u => u.id === testAdminId);
   assert.ok(foundUser, 'Test admin user should be found in users list');
-  assert.strictEqual(foundUser.two_factor_pin, '123456', 'Initial PIN should be 123456');
+  assert.strictEqual(foundUser.two_factor_pin, '', 'the PIN is never returned by the API');
+  assert.strictEqual(foundUser.two_factor_configured, true);
 
-  // 3. تعديل رمز التحقق بخطوتين (PIN) إلى رمز جديد (654321)
-  const newPin = '654321';
+  // 3. تعديل رمز PIN إلى رمز خاص غير سهل التخمين
+  const newPin = '284917';
+  const resShort = await fetch(`${baseUrl}/api/users/${testAdminId}`, {
+    method: 'PUT', headers: authHeaders,
+    body: JSON.stringify({ full_name: 'المدير العام التجريبي', username: 'tfa_test_admin', role: 'admin', two_factor_pin: '1234', two_factor_enabled: 1 })
+  });
+  assert.strictEqual(resShort.status, 400, 'a PIN must be exactly 6 digits');
   const resUpdate = await fetch(`${baseUrl}/api/users/${testAdminId}`, {
     method: 'PUT',
     headers: authHeaders,
@@ -75,7 +81,9 @@ test('2FA PIN - General Manager can configure and change 6-digit PIN anytime', a
   assert.strictEqual(resUpdate.status, 200);
   const updateData = await resUpdate.json();
   assert.strictEqual(updateData.success, true);
-  assert.strictEqual(updateData.data.two_factor_pin, newPin, 'Updated user should have new PIN');
+  assert.strictEqual(updateData.data.two_factor_pin, '', 'the new PIN is not echoed back');
+  assert.strictEqual(updateData.data.two_factor_configured, true);
+  assert.strictEqual((await db.get('SELECT two_factor_pin FROM users WHERE id = ?', [testAdminId])).two_factor_pin, newPin, 'stored');
 
   // 4. محاكاة تسجيل الدخول والتحقق بخطوتين
   const tempToken = jwt.sign(
@@ -103,11 +111,13 @@ test('2FA PIN - General Manager can configure and change 6-digit PIN anytime', a
   assert.strictEqual(successData.success, true);
   assert.ok(successData.token, 'Should issue valid login token');
 
-  // ج. التحقق بكود الطوارئ الاحتياطي الدائم (889900) -> يجب أن ينجح
-  const resEmergency = await fetch(`${baseUrl}/api/auth/verify-2fa`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tempToken, code: '889900' })
-  });
-  assert.strictEqual(resEmergency.status, 200, 'Should accept emergency backup code 889900');
+  // ج. لا رموز طوارئ منشورة: 889900 والرمز القديم 123456 مرفوضان
+  for (const code of ['889900', '123456']) {
+    const res = await fetch(`${baseUrl}/api/auth/verify-2fa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tempToken, code })
+    });
+    assert.strictEqual(res.status, 401, `published or replaced code ${code} must be rejected`);
+  }
 });

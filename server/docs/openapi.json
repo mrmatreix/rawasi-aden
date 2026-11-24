@@ -70,13 +70,267 @@
         "type": "object",
         "required": ["manager_password"],
         "properties": {
-          "manager_password": { "type": "string", "format": "password", "example": "admin123" },
+          "manager_password": { "type": "string", "format": "password", "example": "your-password" },
           "notes": { "type": "string", "example": "إقفال نهاية الربع المالي الثالث بعد مطابقة البنك" }
         }
       }
     }
   },
   "paths": {
+    "/api/auth/password-reset/request": {
+      "post": {
+        "summary": "نسيت كلمة المرور: طلب إعادة تعيين يصل لمدير النظام (رد موحّد دائماً مع رقم مرجع)",
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "تم تسجيل الطلب (نفس الرد سواء وُجد الحساب أم لا)"
+          },
+          "400": {
+            "description": "اسم المستخدم مفقود"
+          },
+          "429": {
+            "description": "طلبات كثيرة من هذا الجهاز"
+          }
+        }
+      }
+    },
+    "/api/auth/password-reset/complete": {
+      "post": {
+        "summary": "نسيت كلمة المرور: تعيين كلمة مرور جديدة برمز لمرة واحدة أصدره المدير (ينهي كل الجلسات)",
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "code",
+                  "new_password",
+                  "new_password_confirm"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "current_pin": {
+                    "type": "string"
+                  },
+                  "new_pin": {
+                    "type": "string"
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8
+                  },
+                  "new_password_confirm": {
+                    "type": "string",
+                    "format": "password"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "تم تغيير كلمة المرور"
+          },
+          "400": {
+            "description": "رمز غير صالح أو منتهٍ، أو سياسة كلمة المرور، أو requiresNewPin"
+          },
+          "401": {
+            "description": "رمز PIN الحالي غير صحيح (requiresCurrentPin)"
+          },
+          "429": {
+            "description": "محاولات كثيرة أو الحساب مقفل"
+          }
+        }
+      }
+    },
+    "/api/staff-password-resets": {
+      "get": {
+        "summary": "قائمة طلبات إعادة التعيين المفتوحة (status=all للكل)، دون أي رمز",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "القائمة"
+          },
+          "403": {
+            "description": "يتطلب settings:users"
+          }
+        }
+      }
+    },
+    "/api/staff-password-resets/count": {
+      "get": {
+        "summary": "عدد الطلبات المعلّقة",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{pending}"
+          }
+        }
+      }
+    },
+    "/api/staff-password-resets/{id}/approve": {
+      "post": {
+        "summary": "اعتماد الطلب وإصدار رمز لمرة واحدة صالح 30 دقيقة (يُعرض مرة واحدة)",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "reset_pin": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "تم"
+          },
+          "403": {
+            "description": "لا صلاحية، أو اعتماد طلب الحساب نفسه، أو طلب مدير عام من غير مدير عام"
+          },
+          "404": {
+            "description": "الطلب غير موجود"
+          },
+          "409": {
+            "description": "حالة الطلب لا تسمح"
+          }
+        }
+      }
+    },
+    "/api/staff-password-resets/{id}/reject": {
+      "post": {
+        "summary": "رفض الطلب",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "تم"
+          },
+          "403": {
+            "description": "لا صلاحية، أو اعتماد طلب الحساب نفسه، أو طلب مدير عام من غير مدير عام"
+          },
+          "404": {
+            "description": "الطلب غير موجود"
+          },
+          "409": {
+            "description": "حالة الطلب لا تسمح"
+          }
+        }
+      }
+    },
+    "/api/staff-password-resets/{id}/revoke": {
+      "post": {
+        "summary": "إلغاء رمز معتمد قبل استخدامه",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "تم"
+          },
+          "403": {
+            "description": "لا صلاحية، أو اعتماد طلب الحساب نفسه، أو طلب مدير عام من غير مدير عام"
+          },
+          "404": {
+            "description": "الطلب غير موجود"
+          },
+          "409": {
+            "description": "حالة الطلب لا تسمح"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "فحص حالة الخادم والنظام",
@@ -108,7 +362,7 @@
                 "required": ["username", "password"],
                 "properties": {
                   "username": { "type": "string", "example": "admin" },
-                  "password": { "type": "string", "format": "password", "example": "admin123" }
+                  "password": { "type": "string", "format": "password", "example": "your-password" }
                 }
               }
             }

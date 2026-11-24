@@ -1,13 +1,11 @@
 const express = require('express');
+const PayrollPosting = require('../services/payroll/payrollPostingService');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const PayrollService = require('../services/payrollService');
-const AccountingService = require('../services/accountingService');
-const FinancialControlService = require('../services/financialControlService');
-const CashBoxService = require('../services/cashBoxService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, projectScopeSql } = require('../middleware/security');
 
 const today = () => new Date().toISOString().slice(0, 10);
 const number = value => Number(value) || 0;
@@ -35,12 +33,7 @@ router.get('/employees', requirePermission('hr:view'), async (req, res) => {
     const params = [];
     const conditions = [];
 
-    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
-    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-      const placeholders = allowedProjects.map(() => '?').join(',');
-      conditions.push(`(e.project_id IS NULL OR e.project_id IN (${placeholders}))`);
-      params.push(...allowedProjects);
-    }
+    { const scopeSql = projectScopeSql(req.user, 'e.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ');
@@ -56,16 +49,8 @@ router.post('/employees', requirePermission('hr:create'), async (req, res) => {
   try {
     const { employee_no, full_name, national_id, phone, job_title, department, project_id, employment_type, hire_date, basic_salary, currency, status, bank_name, bank_account, notes } = req.body;
     if (!full_name?.trim()) return res.status(400).json({ success: false, message: 'اسم الموظف مطلوب' });
-    let code = employee_no?.trim() || null;
-    if (!code) {
-      const count = await get('SELECT COUNT(*) AS count FROM employees');
-      let empSeq = number(count?.count) + 1;
-      code = `EMP-${String(empSeq).padStart(4, '0')}`;
-      while (await get('SELECT id FROM employees WHERE employee_no = ?', [code])) {
-        empSeq += 1;
-        code = `EMP-${String(empSeq).padStart(4, '0')}`;
-      }
-    }
+    const count = await get('SELECT COUNT(*) AS count FROM employees');
+    const code = employee_no?.trim() || `EMP-${String(number(count?.count) + 1).padStart(4, '0')}`;
     const result = await run(`INSERT INTO employees (employee_no, full_name, national_id, phone, job_title, department, project_id, employment_type, hire_date, basic_salary, currency, status, bank_name, bank_account, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [code, full_name.trim(), national_id || '', phone || '', job_title || '', department || '', project_id || null, employment_type || 'دوام كامل', hire_date || today(), number(basic_salary), currency || 'ر.ي', status || 'active', bank_name || '', bank_account || '', notes || '']);
     res.json({ success: true, id: result.lastInsertRowid || result.insertId, message: 'تمت إضافة الموظف بنجاح' });
@@ -144,9 +129,9 @@ router.post('/leave-types', requirePermission('hr:create'), async (req, res) => 
     const { name, days_per_year = 30, is_paid = 1, description = '' } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'اسم نوع الإجازة مطلوب' });
     const result = await run(`
-      INSERT INTO leave_types (name, days_per_year, is_paid, description)
-      VALUES (?, ?, ?, ?)
-    `, [name.trim(), number(days_per_year), is_paid ? 1 : 0, description.trim()]);
+      INSERT INTO leave_types (name, days_per_year, days_allowed, is_paid, description, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [name.trim(), number(days_per_year), number(days_per_year), is_paid ? 1 : 0, description.trim(), description.trim()]);
     res.json({ success: true, message: 'تمت إضافة نوع الإجازة بنجاح', id: result.lastInsertRowid || result.insertId });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -160,92 +145,31 @@ router.get('/advances', requirePermission('hr:view'), async (_req, res) => {
 
 router.post('/advances', requirePermission('hr:create'), async (req, res) => {
   try {
-    // SUGGESTION-4: أعمدة صحيحة (date/notes) + قيد من 114 إلى 111 + حركة صندوق — ذرياً
-    const { employee_id, amount, request_date = today(), installment_amount, reason } = req.body;
-    const parsedAmount = number(amount);
-    if (!employee_id) {
-      return res.status(400).json({ success: false, message: 'الموظف مطلوب لتسجيل السلفة' });
-    }
-    if (parsedAmount <= 0) {
-      return res.status(400).json({ success: false, message: 'مبلغ السلفة يجب أن يكون أكبر من الصفر' });
-    }
-    const emp = await get('SELECT id, full_name FROM employees WHERE id = ?', [employee_id]);
-    if (!emp) {
-      return res.status(404).json({ success: false, message: 'الموظف المحدد غير موجود' });
-    }
-    const periodCheck = await checkPeriodOpen(request_date);
-    if (!periodCheck.isOpen) {
-      return res.status(403).json({ success: false, message: periodCheck.message });
-    }
-
-    await AccountingService.ensureCustodyJournalLinks();
-    const advAcc = await get("SELECT id FROM accounts WHERE code = '114' LIMIT 1");
-    const cashAcc = await get("SELECT id FROM accounts WHERE code = '111' LIMIT 1");
-    if (!advAcc || !cashAcc) {
-      return res.status(500).json({ success: false, message: 'الحسابات المحاسبية للسلف (114/111) غير موجودة في الدليل' });
-    }
-    const creatorId = await FinancialControlService.resolveValidUserId(req.user?.id || null);
-    const creatorName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
-    const currentYear = new Date().getFullYear();
-
-    const txResult = await transaction(async (tx) => {
-      const result = await tx.run(`
-        INSERT INTO employee_advances (employee_id, amount, recovered_amount, installment_amount, date, status, notes)
-        VALUES (?, ?, 0, ?, ?, 'active', ?)
-      `, [employee_id, parsedAmount, number(installment_amount), request_date, reason || '']);
-      const advanceId = result.lastInsertRowid || result.insertId;
-
-      // قيد الصرف: من حـ/ سلف وعهد الموظفين (114) إلى حـ/ الصندوق (111)
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((entryCount ? entryCount.cnt : 0) || 0) + 1;
-      let entryNo = `JE-ADV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-        jeSeq++;
-        entryNo = `JE-ADV-${currentYear}-${String(jeSeq).padStart(4, '0')}`;
-      }
-      const jeRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id,
-          total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        )
-        VALUES (?, ?, ?, 'سلفة موظف', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entryNo, request_date,
-        `سلفة موظف للسيد/ة ${emp.full_name} — قسط شهري ${number(installment_amount)}`,
-        advanceId, parsedAmount, parsedAmount,
-        creatorId, creatorName, creatorId, creatorName
-      ]);
-      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [jeId, advAcc.id, parsedAmount, `سلفة ${emp.full_name}`]);
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, 0, ?, ?)
-      `, [jeId, cashAcc.id, parsedAmount, `الصندوق — سلفة ${emp.full_name}`]);
-      await tx.run('UPDATE employee_advances SET journal_entry_id = ? WHERE id = ?', [jeId, advanceId]);
-
-      // حركة الصندوق الرئيسي (السلف غير مرتبطة بمشروع)
-      await CashBoxService.appendMovement(tx, {
-        cashOut: parsedAmount,
-        date: request_date, notes: `سلفة موظف: ${emp.full_name}`
+    const { employee_id, amount, request_date = today(), installment_amount, reason, payment_method = 'نقدي', settlement_account_id } = req.body;
+    const employee = employee_id ? await get('SELECT id, full_name FROM employees WHERE id = ?', [employee_id]) : null;
+    if (!employee) return res.status(400).json({ success: false, message: 'يرجى اختيار الموظف' });
+    if (!(number(amount) > 0)) return res.status(400).json({ success: false, message: 'مبلغ السلفة يجب أن يكون أكبر من الصفر' });
+    if (number(installment_amount) < 0 || number(installment_amount) > number(amount)) return res.status(400).json({ success: false, message: 'القسط الشهري يجب أن يكون بين الصفر ومبلغ السلفة' });
+    if (!['نقدي', 'تحويل بنكي'].includes(payment_method)) return res.status(400).json({ success: false, message: 'طريقة الدفع المتاحة هي نقداً أو تحويل بنكي فقط' });
+    // السلفة المصروفة قيد (مدين سلف الموظفين / دائن الصندوق أو البنك) + حركة صندوق؛ المسير يستردها دائناً لاحقاً
+    const { id, entry } = await transaction(async tx => {
+      const ins = await tx.run('INSERT INTO employee_advances (employee_id,amount,request_date,date,installment_amount,reason,notes) VALUES (?,?,?,?,?,?,?)',
+        [employee.id, number(amount), request_date, request_date, number(installment_amount), reason, reason]);
+      const advanceId = ins.lastInsertRowid || ins.insertId;
+      const { entry } = await require('../services/ledger/employeeFundsService').postAdvance(tx, {
+        advanceId, date: request_date, amount: number(amount), employeeId: employee.id, employeeName: employee.full_name,
+        paymentMethod: payment_method, settlementAccountId: settlement_account_id || null, user: req.user
       });
-
-      return { advanceId, jeId, entryNo };
+      return { id: advanceId, entry };
     });
-
     await logAudit(req, {
       action: 'INSERT',
       entity_type: 'advance',
       entity_id: employee_id,
-      details: { amount: parsedAmount, installment_amount, reason, journal_entry_no: txResult.entryNo }
+      details: { amount, installment_amount, reason, entry_no: entry.entry_no }
     });
-    res.json({
-      success: true, message: 'تم تسجيل السلفة وترحيل قيدها',
-      id: txResult.advanceId, journal_entry_id: txResult.jeId, entry_no: txResult.entryNo
-    });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+    res.json({ success: true, message: 'تم تسجيل السلفة وترحيل قيد صرفها', id, journal_entry_id: entry.id, entry_no: entry.entry_no });
+  } catch (err) { res.status(err.statusCode || 500).json({ success: false, message: err.message }); }
 });
 
 router.get('/payroll', requirePermission('hr:view,hr:payroll'), async (req, res) => {
@@ -402,345 +326,56 @@ router.post('/evaluations', requirePermission('hr:create'), async (req, res) => 
   try {
     const { employee_id, evaluation_date = today(), rating = 'جيد جداً', score = 85, bonuses = 0, deductions = 0, evaluator = 'مدير الموارد البشرية', comments = '' } = req.body;
     if (!employee_id) return res.status(400).json({ success: false, message: 'اختر الموظف المراد تقييمه' });
+    const evalPeriod = new Date(evaluation_date).getFullYear().toString();
     const result = await run(`
-      INSERT INTO employee_evaluations (employee_id, evaluation_date, rating, score, bonuses, deductions, evaluator, comments)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [employee_id, evaluation_date, rating, number(score), number(bonuses), number(deductions), evaluator, comments]);
+      INSERT INTO employee_evaluations (employee_id, period, evaluation_date, rating, score, bonuses, deductions, evaluator, evaluator_name, comments, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [employee_id, evalPeriod, evaluation_date, rating, number(score), number(bonuses), number(deductions), evaluator, evaluator, comments, comments]);
     res.json({ success: true, message: 'تم حفظ تقييم الموظف بنجاح', id: result.lastInsertRowid || result.insertId });
   } catch (err) {
     res.status(500).json({ success: false, message: 'خطأ في حفظ التقييم: ' + err.message });
   }
 });
 
-// معاينة القيد المحاسبي المركب لمسير الرواتب وقواعد التأمينات والضرائب قبل الترحيل
+// معاينة قيد استحقاق الرواتب قبل الترحيل (نفس سطور الترحيل الفعلي، من أدوار حسابات النظام)
 router.get('/payroll/:month/preview-journal', requirePermission('hr:view,accounting:view'), async (req, res) => {
   try {
-    const month = req.params.month;
-    const records = await query('SELECT p.*, e.full_name FROM payroll p JOIN employees e ON e.id=p.employee_id WHERE p.payroll_month = ?', [month]);
-    if (!records || records.length === 0) {
-      return res.status(404).json({ success: false, message: `لا توجد مسيرات رواتب لشهر ${month}` });
-    }
-
-    let totalGross = 0;
-    let totalInsEmployer = 0;
-    let totalInsEmployee = 0;
-    let totalSkillsFund = 0;
-    let totalTax = 0;
-    let totalDeductions = 0;
-    let totalNet = 0;
-
-    for (const r of records) {
-      const g = r.gross_salary != null ? number(r.gross_salary) : (number(r.basic_salary) + number(r.overtime_amount));
-      const iOrg = number(r.insurance_employer || 0);
-      const iEmp = number(r.insurance_employee || 0);
-      const sk = number(r.skills_fund || 0);
-      const tx = number(r.tax_amount || 0);
-      const ded = number(r.deductions || 0);
-      const net = r.total_net_salary != null ? number(r.total_net_salary) : number(r.net_salary || 0);
-
-      totalGross += g;
-      totalInsEmployer += iOrg;
-      totalInsEmployee += iEmp;
-      totalSkillsFund += sk;
-      totalTax += tx;
-      totalDeductions += ded;
-      totalNet += net;
-    }
-
-    totalGross = Math.round(totalGross * 100) / 100;
-    totalInsEmployer = Math.round(totalInsEmployer * 100) / 100;
-    totalInsEmployee = Math.round(totalInsEmployee * 100) / 100;
-    totalSkillsFund = Math.round(totalSkillsFund * 100) / 100;
-    totalTax = Math.round(totalTax * 100) / 100;
-    totalDeductions = Math.round(totalDeductions * 100) / 100;
-    
-    // صافي الصرف المحاسبي المتزن تماماً (إجمالي الاستحقاق - الاستقطاعات)
-    const netPayable = Math.round((totalGross - totalInsEmployee - totalTax - totalDeductions) * 100) / 100;
-
-    const totalDebit = Math.round((totalGross + totalInsEmployer + totalSkillsFund) * 100) / 100;
-    const totalCredit = Math.round((netPayable + totalTax + (totalInsEmployee + totalInsEmployer) + totalSkillsFund + totalDeductions) * 100) / 100;
-
-    let salaryExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '511' OR code = '52' OR name LIKE '%رواتب%' LIMIT 1") || { id: 1, code: '511', name: 'مصروف الرواتب والأجور الأساسية والبدلات' };
-    let insExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '512' OR name LIKE '%مساهمة%تأمين%' LIMIT 1") || { id: 2, code: '512', name: 'مصروف مساهمة الشركة في التأمينات الاجتماعية (9%)' };
-    let skillsExpAcc = await get("SELECT id, code, name FROM accounts WHERE code = '513' OR name LIKE '%مهارات%' LIMIT 1") || { id: 3, code: '513', name: 'مصروف مساهمة صندوق تنمية المهارات (1%)' };
-    let cashBankAcc = await get("SELECT id, code, name FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' LIMIT 1") || { id: 4, code: '111', name: 'الصندوق الرئيسي / البنك' };
-    let taxAcc = await get("SELECT id, code, name FROM accounts WHERE code = '213' OR name LIKE '%ضرائب%' OR name LIKE '%كسب%' LIMIT 1") || { id: 5, code: '213', name: 'أمانات مصلحة الضرائب (ضريبة كسب العمل)' };
-    let insLiabilityAcc = await get("SELECT id, code, name FROM accounts WHERE code = '214' OR name LIKE '%تأمينات%' LIMIT 1") || { id: 6, code: '214', name: 'الهيئة العامة للتأمينات والمعاشات (15%)' };
-    let skillsLiabilityAcc = await get("SELECT id, code, name FROM accounts WHERE code = '215' OR name LIKE '%مهارات%' LIMIT 1") || { id: 7, code: '215', name: 'أمانات صندوق تنمية المهارات (1%)' };
-    let advanceAcc = await get("SELECT id, code, name FROM accounts WHERE code = '114' OR name LIKE '%سلف%' LIMIT 1") || { id: 8, code: '114', name: 'سلف وعهد الموظفين' };
-
-    const previewLines = [
-      { side: 'مدين (منه)', account_code: salaryExpAcc.code, account_name: salaryExpAcc.name, debit: totalGross, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `إجمالي استحقاق رواتب وبدلات شهر ${month}` },
-      { side: 'مدين (منه)', account_code: insExpAcc.code, account_name: insExpAcc.name, debit: totalInsEmployer, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `مساهمة المنشأة في التأمينات الاجتماعية (9%)` },
-      { side: 'مدين (منه)', account_code: skillsExpAcc.code, account_name: skillsExpAcc.name, debit: totalSkillsFund, credit: 0, cost_center: 'الإدارة العامة CC-100', notes: `مساهمة المنشأة في صندوق تنمية المهارات (1%)` },
-      { side: 'دائن (له)', account_code: cashBankAcc.code, account_name: cashBankAcc.name, debit: 0, credit: totalNet, cost_center: 'الإدارة العامة CC-100', notes: `صافي رواتب محولة ومسددة للموظفين` },
-      { side: 'دائن (له)', account_code: taxAcc.code, account_name: taxAcc.name, debit: 0, credit: totalTax, cost_center: 'الإدارة العامة CC-100', notes: `أمانات ضريبة كسب العمل المستقطعة` },
-      { side: 'دائن (له)', account_code: insLiabilityAcc.code, account_name: insLiabilityAcc.name, debit: 0, credit: Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100, cost_center: 'الإدارة العامة CC-100', notes: `مستحقات التأمينات (حصة العامل 6% + المنشأة 9%)` },
-      { side: 'دائن (له)', account_code: skillsLiabilityAcc.code, account_name: skillsLiabilityAcc.name, debit: 0, credit: totalSkillsFund, cost_center: 'الإدارة العامة CC-100', notes: `مستحقات صندوق تنمية المهارات (1%)` },
-      { side: 'دائن (له)', account_code: advanceAcc.code, account_name: advanceAcc.name, debit: 0, credit: totalDeductions, cost_center: 'الإدارة العامة CC-100', notes: `استرداد أقساط سلف الموظفين` }
-    ].filter(l => l.debit > 0 || l.credit > 0);
-
-    res.json({
-      success: true,
-      data: {
-        month,
-        employee_count: records.length,
-        summary: {
-          total_gross: totalGross,
-          insurance_employer_9pct: totalInsEmployer,
-          insurance_employee_6pct: totalInsEmployee,
-          total_insurance_15pct: Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100,
-          total_skills_fund_1pct: totalSkillsFund,
-          total_tax: totalTax,
-          total_advances: totalDeductions,
-          total_net_payable: totalNet,
-          total_debit: totalDebit,
-          total_credit: totalCredit,
-          diff: Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100,
-          is_balanced: Math.abs(totalDebit - totalCredit) < 0.05
-        },
-        lines: previewLines,
-        rules: {
-          social_insurance: 'حصة الموظف 6% تستقطع من الراتب الشامل + حصة المنشأة 9% تتحملها الشركة كمصروف إضافي = 15% تورد لهيئة التأمينات والمعاشات',
-          income_tax: 'إعفاء قانوني لأول 65,000 ر.ي شهرياً، ثم 10% للشريحة الأولى (حتى 40,000 ر.ي)، و 15% لما زاد عن ذلك',
-          skills_fund: 'مساهمة قانونية بنسبة 1% من الوعاء لصالح صندوق تنمية المهارات المهنية'
-        }
-      }
-    });
+    res.json({ success: true, data: await PayrollPosting.preview(req.params.month) });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في جلب معاينة قيد الرواتب: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في جلب معاينة قيد الرواتب: ' + err.message });
   }
 });
 
-// ترحيل كشف الراتب آلياً إلى قيد محاسبي مركب متزن تماماً في سجل اليومية العامة
-router.post('/payroll/:month/post-to-journal', requirePermission('hr:post,accounting:create,hr:payroll'), async (req, res) => {
+// 1) قيد استحقاق الرواتب بتاريخ آخر يوم في شهر المسير، للسجلات غير المستحقة فقط (H9)
+router.post('/payroll/:month/post-to-journal', requirePermission('accounting:post'), async (req, res) => {
   try {
     const month = req.params.month;
-    const postDate = today();
-
-    // 1. التحقق من إغلاق الفترة المحاسبية
-    const periodCheck = await checkPeriodOpen(postDate);
-    if (!periodCheck.isOpen) {
-      return res.status(403).json({ success: false, message: periodCheck.message });
-    }
-
-    const records = await query('SELECT p.*, e.full_name FROM payroll p JOIN employees e ON e.id=p.employee_id WHERE p.payroll_month = ?', [month]);
-    if (!records || records.length === 0) {
-      return res.status(400).json({ success: false, message: `لا توجد مسيرات رواتب لشهر ${month}` });
-    }
-
-    const alreadyPosted = records.filter(r => r.journal_entry_id);
-    if (alreadyPosted.length === records.length) {
-      return res.status(400).json({ success: false, message: `تم ترحيل مسير رواتب شهر ${month} مسبقاً بقيد يومية` });
-    }
-
-    let totalGross = 0;
-    let totalInsEmployer = 0;
-    let totalInsEmployee = 0;
-    let totalSkillsFund = 0;
-    let totalTax = 0;
-    let totalDeductions = 0;
-    let totalNet = 0;
-
-    for (const r of records) {
-      const g = r.gross_salary != null ? number(r.gross_salary) : (number(r.basic_salary) + number(r.overtime_amount));
-      const iOrg = number(r.insurance_employer || 0);
-      const iEmp = number(r.insurance_employee || 0);
-      const sk = number(r.skills_fund || 0);
-      const tx = number(r.tax_amount || 0);
-      const ded = number(r.deductions || 0);
-      const net = r.total_net_salary != null ? number(r.total_net_salary) : number(r.net_salary || 0);
-
-      totalGross += g;
-      totalInsEmployer += iOrg;
-      totalInsEmployee += iEmp;
-      totalSkillsFund += sk;
-      totalTax += tx;
-      totalDeductions += ded;
-      totalNet += net;
-    }
-
-    totalGross = Math.round(totalGross * 100) / 100;
-    totalInsEmployer = Math.round(totalInsEmployer * 100) / 100;
-    totalInsEmployee = Math.round(totalInsEmployee * 100) / 100;
-    totalSkillsFund = Math.round(totalSkillsFund * 100) / 100;
-    totalTax = Math.round(totalTax * 100) / 100;
-    totalDeductions = Math.round(totalDeductions * 100) / 100;
-    
-    // صافي الصرف المحاسبي المتزن تماماً
-    const netPayable = Math.round((totalGross - totalInsEmployee - totalTax - totalDeductions) * 100) / 100;
-
-    // إجمالي الجانب المدين (إجمالي استحقاق الرواتب + مساهمة الشركة في التأمينات + صندوق المهارات)
-    const totalDebit = Math.round((totalGross + totalInsEmployer + totalSkillsFund) * 100) / 100;
-    
-    // إجمالي الجانب الدائن (صافي مسدد + ضريبة + إجمالي تأمينات + صندوق مهارات + استرداد سلف)
-    const totalCredit = Math.round((netPayable + totalTax + (totalInsEmployee + totalInsEmployer) + totalSkillsFund + totalDeductions) * 100) / 100;
-
-    // التحقق الرياضي من التوازن المحاسبي
-    const diff = Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100;
-    if (diff > 0.05) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `عدم توازن في مسير الرواتب! المدين: ${totalDebit}، الدائن: ${totalCredit}، الفارق: ${diff}` 
-      });
-    }
-
-    // جلب الحسابات المحاسبية المتخصصة
-    let salaryExpAcc = await get("SELECT id FROM accounts WHERE code = '511' OR code = '52' OR name LIKE '%رواتب%' LIMIT 1");
-    let insExpAcc = await get("SELECT id FROM accounts WHERE code = '512' OR name LIKE '%مساهمة%تأمين%' LIMIT 1");
-    let skillsExpAcc = await get("SELECT id FROM accounts WHERE code = '513' OR name LIKE '%مهارات%' LIMIT 1");
-    let cashBankAcc = await get("SELECT id FROM accounts WHERE code = '111' OR code = '112' OR type = 'أصول' LIMIT 1");
-    let taxAcc = await get("SELECT id FROM accounts WHERE code = '213' OR name LIKE '%ضرائب%' OR name LIKE '%كسب%' LIMIT 1");
-    let insLiabilityAcc = await get("SELECT id FROM accounts WHERE code = '214' OR name LIKE '%تأمينات%' LIMIT 1");
-    let skillsLiabilityAcc = await get("SELECT id FROM accounts WHERE code = '215' OR name LIKE '%مهارات%' LIMIT 1");
-    let advanceAcc = await get("SELECT id FROM accounts WHERE code = '114' OR name LIKE '%سلف%' LIMIT 1");
-
-    if (!salaryExpAcc) salaryExpAcc = { id: 1 };
-    if (!cashBankAcc) cashBankAcc = { id: 2 };
-    const defaultCostCenterId = 1; // CC-100 الإدارة العامة
-
-    const currentYear = new Date().getFullYear();
-    const countRes = await get('SELECT COUNT(*) as cnt FROM journal_entries');
-    let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-    let entry_no = `JV-PAY-${currentYear}-${String(seq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM journal_entries WHERE entry_no = ?', [entry_no])) {
-      seq++;
-      entry_no = `JV-PAY-${currentYear}-${String(seq).padStart(4, '0')}`;
-    }
-
-    const txResult = await transaction(async (tx) => {
-      // إدراج القيد اليومي المركب
-      const jeRes = await tx.run(`
-        INSERT INTO journal_entries (entry_no, date, description, reference_type, total_debit, total_credit)
-        VALUES (?, ?, ?, 'ترحيل رواتب', ?, ?)
-      `, [entry_no, postDate, `إثبات استحقاق واحتساب مسير رواتب شهر ${month} والتأمينات والضرائب لعدد ${records.length} موظف`, totalDebit, totalDebit]);
-
-      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-
-      // 1. طرف مدين: مصروف الرواتب والأجور (إجمالي الاستحقاق)
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-        VALUES (?, ?, ?, ?, 0, ?)
-      `, [jeId, salaryExpAcc.id, defaultCostCenterId, totalGross, `إجمالي استحقاق رواتب وبدلات شهر ${month}`]);
-
-      // 2. طرف مدين: مصروف مساهمة الشركة في التأمينات (9%)
-      if (totalInsEmployer > 0 && insExpAcc) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?)
-        `, [jeId, insExpAcc.id, defaultCostCenterId, totalInsEmployer, `مساهمة المنشأة في التأمينات الاجتماعية (9%) لشهر ${month}`]);
-      }
-
-      // 3. طرف مدين: مصروف مساهمة صندوق تنمية المهارات (1%)
-      if (totalSkillsFund > 0 && skillsExpAcc) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?)
-        `, [jeId, skillsExpAcc.id, defaultCostCenterId, totalSkillsFund, `مساهمة المنشأة في صندوق تنمية المهارات (1%) لشهر ${month}`]);
-      }
-
-      // 4. طرف دائن: الصندوق / البنك بصافي الرواتب المسددة للموظفين
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?, ?)
-      `, [jeId, cashBankAcc.id, defaultCostCenterId, totalNet, `صافي رواتب محولة ومسددة للموظفين لشهر ${month}`]);
-
-      // 5. طرف دائن: أمانات مصلحة الضرائب (ضريبة كسب العمل)
-      if (totalTax > 0 && taxAcc) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?, ?)
-        `, [jeId, taxAcc.id, defaultCostCenterId, totalTax, `أمانات ضريبة كسب العمل المستقطعة لشهر ${month}`]);
-      }
-
-      // 6. طرف دائن: الهيئة العامة للتأمينات والمعاشات (حصة الموظف 6% + حصة الشركة 9%)
-      const totalInsurance = Math.round((totalInsEmployee + totalInsEmployer) * 100) / 100;
-      if (totalInsurance > 0 && insLiabilityAcc) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?, ?)
-        `, [jeId, insLiabilityAcc.id, defaultCostCenterId, totalInsurance, `مستحقات التأمينات الاجتماعية (حصة العامل 6% + حصة المنشأة 9%) لشهر ${month}`]);
-      }
-
-      // 7. طرف دائن: أمانات صندوق تنمية المهارات (1%)
-      if (totalSkillsFund > 0 && skillsLiabilityAcc) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?, ?)
-        `, [jeId, skillsLiabilityAcc.id, defaultCostCenterId, totalSkillsFund, `مستحقات صندوق تنمية المهارات (1%) لشهر ${month}`]);
-      }
-
-      // 8. طرف دائن: استرداد السلف والعهد
-      if (totalDeductions > 0 && advanceAcc) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, cost_center_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?, ?)
-        `, [jeId, advanceAcc.id, defaultCostCenterId, totalDeductions, `استرداد سلف وذمم الموظفين لشهر ${month}`]);
-      }
-
-      // تحديث حالة مسيرات الرواتب إلى مرحلة ومسددة
-      await tx.run(`
-        UPDATE payroll
-        SET status = 'paid', paid_date = ?, journal_entry_id = ?
-        WHERE payroll_month = ?
-      `, [today(), jeId, month]);
-
-      // SUGGESTION-4: تطبيق الاستقطاعات على السلف فعلياً (FIFO لكل موظف — يمنع الاسترداد المكرر)
-      // (فقط السلف ذات القسط > 0 — نفس قاعدة التوليد — حتى لا تمتص سلف راكدة الاسترداد)
-      const unposted = records.filter(r => !r.journal_entry_id);
-      const dedByEmp = {};
-      unposted.forEach(r => {
-        dedByEmp[r.employee_id] = (dedByEmp[r.employee_id] || 0) + number(r.deductions);
-      });
-      for (const [empId, totalDed] of Object.entries(dedByEmp)) {
-        let left = Math.round(totalDed * 100) / 100;
-        if (left <= 0) continue;
-        const advs = await tx.query(
-          "SELECT id, amount, recovered_amount FROM employee_advances WHERE employee_id = ? AND status = 'active' AND installment_amount > 0 ORDER BY id ASC",
-          [empId]
-        );
-        for (const a of advs) {
-          if (left <= 0.005) break;
-          const avail = Math.round(((Number(a.amount) || 0) - (Number(a.recovered_amount) || 0)) * 100) / 100;
-          const apply = Math.min(left, Math.max(0, avail));
-          if (apply <= 0) continue;
-          const newRec = Math.round(((Number(a.recovered_amount) || 0) + apply) * 100) / 100;
-          const newStatus = newRec >= (Number(a.amount) || 0) - 0.005 ? 'recovered' : 'active';
-          await tx.run('UPDATE employee_advances SET recovered_amount = ?, status = ? WHERE id = ?', [newRec, newStatus, a.id]);
-          left = Math.round((left - apply) * 100) / 100;
-        }
-      }
-
-      // SUGGESTION-4: حركة الصندوق بصافي الرواتب المسددة (الصندوق الرئيسي)
-      if (totalNet > 0) {
-        await CashBoxService.appendMovement(tx, {
-          cashOut: totalNet, date: postDate,
-          notes: `صافي رواتب شهر ${month} (${entry_no})`
-        });
-      }
-
-      return { jeId, entry_no };
-    });
-
-    await logAudit(req, {
-      action: 'POST_PAYROLL_JOURNAL',
-      entity_type: 'payroll',
-      entity_id: month,
-      details: { month, entry_no: txResult.entry_no, total_debit: totalDebit, total_net: totalNet }
-    });
-
+    const { entry, totals, count, date } = await PayrollPosting.accrue(month, req.user);
+    await logAudit(req, { action: 'POST_PAYROLL_JOURNAL', entity_type: 'payroll', entity_id: month,
+      details: { month, entry_no: entry.entry_no, date, records: count, total_net: totals.net / 100 } });
     res.json({
       success: true,
-      message: `تم ترحيل مسير رواتب شهر ${month} بنجاح وإنشاء القيد المحاسبي المتزن رقم ${txResult.entry_no}`,
-      entry_no: txResult.entry_no,
-      journal_entry_id: txResult.jeId,
-      total_expense: totalDebit,
-      total_net: totalNet,
-      total_tax: totalTax,
-      total_insurance: totalInsEmployee + totalInsEmployer
+      message: `تم ترحيل استحقاق رواتب شهر ${month} بالقيد ${entry.entry_no} بتاريخ ${date}. الخطوة التالية: صرف الرواتب.`,
+      entry_no: entry.entry_no, journal_entry_id: entry.id, accrual_date: date, records: count,
+      total_expense: entry.total_debit, total_net: totals.net / 100, total_tax: totals.tax / 100, total_insurance: (totals.insEmp + totals.insOrg) / 100
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في ترحيل مسير الرواتب: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في ترحيل مسير الرواتب: ' + err.message });
+  }
+});
+
+// 2) صرف الرواتب المستحقة: مدين رواتب مستحقة / دائن الصندوق أو البنك
+router.post('/payroll/:month/pay', requirePermission('accounting:post'), async (req, res) => {
+  try {
+    const month = req.params.month;
+    const { entry, net, count, date } = await PayrollPosting.pay(month, {
+      user: req.user, date: req.body.date, settlementAccountId: req.body.settlement_account_id ? Number(req.body.settlement_account_id) : null,
+      paymentMethod: req.body.payment_method || 'نقدي'
+    });
+    await logAudit(req, { action: 'PAY_PAYROLL', entity_type: 'payroll', entity_id: month, details: { month, entry_no: entry.entry_no, date, records: count, net } });
+    res.json({ success: true, message: `تم صرف صافي رواتب شهر ${month} (${net}) بالقيد ${entry.entry_no}`, entry_no: entry.entry_no, journal_entry_id: entry.id, total_net: net, records: count });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ في صرف الرواتب: ' + err.message });
   }
 });
 

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>الرسائل والتواصل - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div id="appHeader"></div>
+
+  <div class="app-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <h2 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;">التواصل والمراسلات</h2>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">قناة مباشرة للتواصل الرسمي مع إدارة شركة رواسي عدن</p>
+      </div>
+      <button onclick="openNewMessageModal()" class="btn btn-primary btn-sm" style="white-space: nowrap;">
+        <i class="fa-solid fa-pen-to-square"></i> رسالة جديدة
+      </button>
+    </div>
+
+    <!-- Messages Container -->
+    <div id="messagesContainer">
+      <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--gold); margin-bottom: 10px;"></i>
+        <p>جاري تحميل الرسائل...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Message Modal -->
+  <div id="newMessageModal" class="modal-overlay">
+    <div class="modal-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 1.15rem; font-weight: bold; color: #FFFFFF;">إرسال رسالة جديدة للإدارة</h3>
+        <button onclick="closeNewMessageModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="newMessageForm" onsubmit="submitNewMessage(event)">
+        <div class="form-group">
+          <label class="form-label">المشروع المرتبط (اختياري)</label>
+          <select id="msgProjectId" class="form-select">
+            <option value="">استفسار عام / غير مرتبط بمشروع محدد</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">موضوع الرسالة *</label>
+          <input type="text" id="msgSubject" required placeholder="مثال: استفسار حول توريدات البند رقم 4" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">الأهمية / الأولوية</label>
+          <select id="msgPriority" class="form-select">
+            <option value="normal" selected>عادية</option>
+            <option value="high">هامة</option>
+            <option value="urgent">عاجلة جداً</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">نص الرسالة أو الاستفسار *</label>
+          <textarea id="msgBody" required rows="4" placeholder="اكتب تفاصيل طلبك أو استفسارك هنا..." class="form-textarea"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 20px;">
+          <button type="submit" id="sendMsgBtn" class="btn btn-primary" style="flex: 2;">
+            <i class="fa-solid fa-paper-plane"></i> إرسال الرسالة
+          </button>
+          <button type="button" onclick="closeNewMessageModal()" class="btn btn-secondary" style="flex: 1;">
+            إلغاء
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="bottomNav"></div>
+
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    let messages = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('messages');
+      const isAuth = await ClientAuth.requireAuth();
+      if (!isAuth) return;
+
+      loadMessages();
+      loadProjectsForSelect();
+
+      // فحص هل تم تمرير project_id في الرابط
+      const urlParams = new URLSearchParams(window.location.search);
+      const preProjId = urlParams.get('project_id');
+      if (preProjId) {
+        setTimeout(() => {
+          openNewMessageModal(preProjId);
+        }, 500);
+      }
+    });
+
+    async function loadMessages() {
+      try {
+        const data = await ClientAPI.get('/messages');
+        if (!data.success) throw new Error(data.message);
+
+        messages = data.messages || [];
+        renderMessages(messages);
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل تحميل الرسائل', 'error');
+      }
+    }
+
+    async function loadProjectsForSelect() {
+      try {
+        const data = await ClientAPI.get('/projects');
+        if (data.projects) {
+          const select = document.getElementById('msgProjectId');
+          data.projects.forEach(p => {
+            select.innerHTML += `<option value="${p.id}">${p.name} (${p.code || ''})</option>`;
+          });
+        }
+      } catch {}
+    }
+
+    function renderMessages(msgs) {
+      const container = document.getElementById('messagesContainer');
+      if (!msgs || msgs.length === 0) {
+        container.innerHTML = `
+          <div class="card" style="text-align: center; padding: 40px 20px;">
+            <i class="fa-solid fa-comments" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
+            <h3 style="font-size: 1rem; color: #FFFFFF; font-weight: bold;">لا توجد رسائل سابقة</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">يمكنك بدء محادثة جديدة أو إرسال استفسار لإدارة الشركة بسهولة</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = msgs.map(m => {
+        let statusBadge = 'badge-pending';
+        let statusText = 'قيد المراجعة';
+        if (m.status === 'replied') { statusBadge = 'badge-approved'; statusText = 'تم الرد'; }
+        if (m.status === 'closed') { statusBadge = 'badge-active'; statusText = 'مغلقة'; }
+
+        return `
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+              <div>
+                <span style="font-size: 0.72rem; color: var(--gold); font-weight: bold;">${m.project_name || 'استفسار عام'}</span>
+                <h4 style="font-size: 1.05rem; font-weight: 800; color: #FFFFFF; margin: 2px 0;">${m.subject}</h4>
+                <div style="font-size: 0.72rem; color: var(--text-muted);">${ClientApp.formatDate(m.created_at)}</div>
+              </div>
+              <span class="badge ${statusBadge}">${statusText}</span>
+            </div>
+
+            <div style="background: var(--bg-input); padding: 12px; border-radius: 12px; border: 1px solid var(--border); font-size: 0.85rem; color: var(--text-main); line-height: 1.6; margin: 10px 0;">
+              ${m.body}
+            </div>
+
+            ${m.reply_body ? `
+              <div style="background: rgba(212, 175, 55, 0.08); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 12px; padding: 12px; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <span style="font-size: 0.75rem; color: var(--gold); font-weight: bold;">
+                    <i class="fa-solid fa-reply"></i> رد إدارة رواسي عدن:
+                  </span>
+                  <span style="font-size: 0.7rem; color: var(--text-muted);">${ClientApp.formatDate(m.replied_at)}</span>
+                </div>
+                <p style="font-size: 0.85rem; color: #FFFFFF; line-height: 1.5;">${m.reply_body}</p>
+              </div>
+            ` : `
+              <div style="font-size: 0.72rem; color: var(--text-muted); text-align: left;">
+                <i class="fa-solid fa-clock"></i> بانتظار رد الفريق الهندسي
+              </div>
+            `}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openNewMessageModal(preSelectedProjectId = null) {
+      if (preSelectedProjectId) {
+        document.getElementById('msgProjectId').value = preSelectedProjectId;
+      }
+      document.getElementById('newMessageForm').reset();
+      document.getElementById('newMessageModal').classList.add('active');
+    }
+
+    function closeNewMessageModal() {
+      document.getElementById('newMessageModal').classList.remove('active');
+    }
+
+    async function submitNewMessage(e) {
+      e.preventDefault();
+      const project_id = document.getElementById('msgProjectId').value;
+      const subject = document.getElementById('msgSubject').value.trim();
+      const priority = document.getElementById('msgPriority').value;
+      const body = document.getElementById('msgBody').value.trim();
+      const btn = document.getElementById('sendMsgBtn');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الإرسال...';
+
+      try {
+        const res = await ClientAPI.post('/messages', {
+          project_id: project_id || null,
+          subject,
+          priority,
+          body
+        });
+
+        if (!res.success) throw new Error(res.message);
+
+        ClientApp.showToast(res.message || 'تم إرسال رسالتك بنجاح', 'success');
+        closeNewMessageModal();
+        loadMessages();
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل إرسال الرسالة', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> إرسال الرسالة';
+      }
+    }
+  </script>
+</body>
+</html>

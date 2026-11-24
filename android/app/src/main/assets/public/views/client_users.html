@@ -1,0 +1,2140 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إدارة حسابات بوابة وتطبيق العملاء - شركة رواسي عدن للهندسة والمقاولات</title>
+  
+  <!-- Google Fonts: Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            rawasi: {
+              gold: '#d4af37',
+              goldLight: '#f59e0b',
+              emerald: '#10b981',
+              dark: '#0b1329',
+              card: '#15203e',
+              border: '#203058',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #080e1e;
+      color: #f1f5f9;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(212, 175, 55, 0.05) 0%, transparent 20%),
+        radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 20%);
+    }
+
+    .portal-badge {
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge-owner { background: rgba(212, 175, 55, 0.18); color: #fbbf24; border: 1px solid rgba(212, 175, 55, 0.35); }
+    .badge-manager { background: rgba(59, 130, 246, 0.18); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); }
+    .badge-viewer { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.35); }
+    .badge-active { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-inactive { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+
+    .glass-card {
+      background: rgba(21, 32, 62, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .custom-input {
+      background: #0d162c;
+      border: 1px solid #203058;
+      color: #ffffff;
+      transition: all 0.2s ease;
+    }
+    .custom-input:focus {
+      border-color: #d4af37;
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+      outline: none;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080e1e;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #203058;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #d4af37;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-12">
+
+  <!-- Alert Toast Notification Area -->
+  <div id="toastNotification" class="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] hidden transition-all duration-300">
+    <div id="toastContent" class="glass-card px-6 py-3.5 rounded-2xl border flex items-center gap-3 shadow-2xl text-sm font-bold">
+      <i id="toastIcon" class="fa-solid fa-circle-check text-lg"></i>
+      <span id="toastMessage"></span>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+
+    <!-- Top Header Navigation / Title -->
+    <div class="glass-card rounded-2xl p-6 mb-8 border-t-2 border-t-amber-500/80 shadow-2xl">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-2xl bg-slate-900/90 border-2 border-amber-500/50 flex items-center justify-center p-1.5 shadow-xl shadow-amber-500/25 shrink-0 overflow-hidden group">
+            <img src="/images/logo_clean.png?v=2" onerror="this.onerror=null; this.src='/images/logo.png';" alt="شعار شركة رواسي عدن" class="w-full h-full object-contain filter drop-shadow group-hover:scale-105 transition-transform duration-300">
+          </div>
+          <div>
+            <div class="flex items-center gap-3 mb-1">
+              <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-wide">إدارة حسابات بوابة وتطبيق العملاء</h1>
+              <span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-2.5 py-0.5 rounded-full font-semibold">Client Portal</span>
+            </div>
+            <p class="text-sm text-slate-400">إدارة حسابات أندرويد والبوابة الخاصة بالعملاء، ربطها بدليل العملاء وتحديد صلاحيات المشاريع</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+          <button onclick="openCreateUserModal()" class="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-user-plus text-base"></i>
+            <span>إضافة حساب عميل جديد</span>
+          </button>
+          
+          <button onclick="loadClientUsers()" class="w-full sm:w-auto px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-rotate text-slate-400"></i>
+            <span>تحديث</span>
+          </button>
+
+          <a href="/client-app/" target="_blank" class="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:to-slate-700 text-amber-300 hover:text-white font-extrabold rounded-xl border-2 border-amber-500/60 hover:border-amber-400 transition-all duration-200 flex items-center justify-center gap-3 shadow-xl shadow-amber-500/20 active:scale-95 cursor-pointer group" title="فتح واجهة تطبيق وبوابة العملاء المخصصة في نافذة جديدة">
+            <div class="w-8 h-8 rounded-lg bg-slate-950 border border-amber-500/40 flex items-center justify-center p-1 shrink-0 overflow-hidden group-hover:scale-110 transition-transform duration-200">
+              <img src="/images/logo_clean.png?v=2" onerror="this.onerror=null; this.src='/images/logo.png';" alt="شعار رواسي عدن" class="w-full h-full object-contain">
+            </div>
+            <span>فتح واجهة التطبيق (Client App)</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-xs text-amber-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"></i>
+          </a>
+
+          <a href="/" class="w-full sm:w-auto px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl border border-slate-700 transition flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-house"></i>
+            <span>العودة للنظام الرئيسي</span>
+          </a>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Main Tabs Switcher -->
+    <div class="flex flex-wrap items-center gap-3 mb-6 border-b border-slate-700/80 pb-4">
+      <button id="tabUsersBtn" onclick="switchMainTab('users')" class="px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20">
+        <i class="fa-solid fa-users"></i>
+        <span>حسابات ومستخدمو البوابة</span>
+      </button>
+
+      <button id="tabMessagesBtn" onclick="switchMainTab('messages')" class="px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700 hover:border-amber-500/40">
+        <i class="fa-solid fa-comments text-amber-400"></i>
+        <span>رسائل واستفسارات العملاء</span>
+        <span id="badgePendingMsgs" class="hidden bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full font-black animate-pulse">0</span>
+      </button>
+
+      <button id="tabRequestsBtn" onclick="switchMainTab('requests')" class="px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700 hover:border-amber-500/40">
+        <i class="fa-solid fa-compass-drafting text-amber-400"></i>
+        <span>طلبات خدمات العملاء والزوار</span>
+        <span id="badgePendingServiceReqs" class="hidden bg-amber-500 text-slate-950 text-xs px-2 py-0.5 rounded-full font-black animate-pulse">0</span>
+      </button>
+    </div>
+
+    <!-- Statistics KPIs Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+      
+      <!-- Card 1 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-amber-500 hover:border-amber-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">إجمالي حسابات العملاء</div>
+            <div id="statTotalUsers" class="text-3xl font-black text-white">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-users"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-shield text-amber-500"></i>
+          <span>حسابات بوابة العملاء والتطبيق</span>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-emerald-500 hover:border-emerald-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">الحسابات النشطة</div>
+            <div id="statActiveUsers" class="text-3xl font-black text-emerald-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-user-check"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-circle-check text-emerald-400"></i>
+          <span>تمتلك صلاحية دخول فعالة</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-blue-500 hover:border-blue-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">مصادقة 2FA (OTP)</div>
+            <div id="stat2faUsers" class="text-3xl font-black text-blue-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-key text-blue-400"></i>
+          <span>حماية معززة بالرمز السري</span>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="glass-card p-5 rounded-2xl border-r-4 border-r-purple-500 hover:border-purple-400 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">الأجهزة المسجلة (Android)</div>
+            <div id="statDevices" class="text-3xl font-black text-purple-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-mobile-retro"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-brands fa-android text-purple-400"></i>
+          <span>تطبيقات أندرويد النشطة</span>
+        </div>
+      </div>
+
+      <!-- Card 5 (Pending Messages) -->
+      <div onclick="switchMainTab('messages')" class="glass-card p-5 rounded-2xl border-r-4 border-r-rose-500 hover:border-rose-400 transition cursor-pointer group">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">رسائل بانتظار الرد</div>
+            <div id="statPendingMessages" class="text-3xl font-black text-rose-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-xl group-hover:scale-110 transition">
+            <i class="fa-solid fa-comment-dots"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-bell text-rose-400"></i>
+          <span>استفسارات واردة من التطبيق</span>
+        </div>
+      </div>
+
+      <!-- Card 6 (Pending Service Requests) -->
+      <div onclick="switchMainTab('requests')" class="glass-card p-5 rounded-2xl border-r-4 border-r-amber-400 hover:border-amber-300 transition cursor-pointer group">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-400 text-xs font-bold mb-1">طلبات الخدمات الجديدة</div>
+            <div id="statPendingServiceReqs" class="text-3xl font-black text-amber-400">0</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl group-hover:scale-110 transition">
+            <i class="fa-solid fa-compass-drafting"></i>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+          <i class="fa-solid fa-user-astronaut text-amber-400"></i>
+          <span>طلبات الزوار والعملاء</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- View 1: Users Section -->
+    <div id="viewUsersSection">
+      <!-- Filter & Table Main Card -->
+      <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-slate-700/80 mb-10">
+        
+        <!-- Search & Filters Toolbar -->
+        <div class="p-5 border-b border-slate-700/80 bg-slate-900/60 flex flex-col sm:flex-row justify-between items-center gap-4">
+          
+          <div class="relative w-full sm:w-96">
+            <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+            <input id="searchInput" oninput="filterUsers()" type="text" placeholder="بحث بالاسم، البريد، أو شركة العميل..." class="w-full custom-input rounded-xl pr-10 pl-4 py-2.5 text-sm font-medium placeholder-slate-500 focus:outline-none">
+          </div>
+
+          <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-700">
+            <i class="fa-solid fa-lock text-emerald-400"></i>
+            <span>نظام الحماية: <strong>Deny by Default</strong> (تحديد وصول العميل لمشاريعه فقط)</span>
+          </div>
+
+        </div>
+
+        <!-- Users Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-sm border-collapse">
+            <thead class="bg-slate-950/80 text-amber-400 uppercase text-xs border-b border-slate-700/80 tracking-wider">
+              <tr>
+                <th class="px-6 py-4 font-bold">مستخدم العميل</th>
+                <th class="px-6 py-4 font-bold">الشركة / العميل المرتبط</th>
+                <th class="px-6 py-4 font-bold">الدور والصلاحية</th>
+                <th class="px-6 py-4 font-bold">المشاريع المسموحة</th>
+                <th class="px-6 py-4 font-bold">الأمان والـ 2FA</th>
+                <th class="px-6 py-4 font-bold">آخر دخول</th>
+                <th class="px-6 py-4 font-bold">الحالة</th>
+                <th class="px-6 py-4 font-bold text-center">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody" class="divide-y divide-slate-800/80">
+              <tr>
+                <td colspan="8" class="text-center py-12 text-slate-400">
+                  <i class="fa-solid fa-spinner fa-spin text-2xl text-amber-500 mb-2"></i>
+                  <div>جاري تحميل حسابات العملاء...</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- View 2: Messages Section -->
+    <div id="viewMessagesSection" class="hidden">
+      <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-slate-700/80 mb-10">
+        
+        <!-- Messages Toolbar -->
+        <div class="p-5 border-b border-slate-700/80 bg-slate-900/60 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div class="relative w-full sm:w-80">
+              <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+              <input id="searchMsgInput" oninput="filterMessages()" type="text" placeholder="بحث باسم العميل، الموضوع، أو المشروع..." class="w-full custom-input rounded-xl pr-10 pl-4 py-2.5 text-sm font-medium placeholder-slate-500 focus:outline-none">
+            </div>
+
+            <select id="filterMsgStatus" onchange="loadClientMessages()" class="custom-input rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-300 focus:outline-none bg-slate-900">
+              <option value="all">كافة الحالات</option>
+              <option value="open" selected>بانتظار الرد (جديدة)</option>
+              <option value="replied">تم الرد عليها</option>
+              <option value="closed">مغلقة</option>
+            </select>
+
+            <select id="filterMsgPriority" onchange="filterMessages()" class="custom-input rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-300 focus:outline-none bg-slate-900">
+              <option value="all">كافة الأولويات</option>
+              <option value="urgent">عاجلة جداً</option>
+              <option value="high">هامة</option>
+              <option value="normal">عادية</option>
+            </select>
+          </div>
+
+          <button onclick="loadClientMessages()" class="w-full md:w-auto px-4 py-2.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-rotate text-amber-400"></i>
+            <span>تحديث الرسائل</span>
+          </button>
+        </div>
+
+        <!-- Messages Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-sm border-collapse">
+            <thead class="bg-slate-950/80 text-amber-400 uppercase text-xs border-b border-slate-700/80 tracking-wider">
+              <tr>
+                <th class="px-6 py-4 font-bold">العميل المرسل</th>
+                <th class="px-6 py-4 font-bold">المشروع المرتبط</th>
+                <th class="px-6 py-4 font-bold">موضوع الرسالة والاستفسار</th>
+                <th class="px-6 py-4 font-bold text-center">الأولوية</th>
+                <th class="px-6 py-4 font-bold">تاريخ الإرسال</th>
+                <th class="px-6 py-4 font-bold text-center">الحالة</th>
+                <th class="px-6 py-4 font-bold text-center">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="messagesTableBody" class="divide-y divide-slate-800/80">
+              <tr>
+                <td colspan="7" class="text-center py-12 text-slate-400">
+                  <i class="fa-solid fa-spinner fa-spin text-2xl text-amber-500 mb-2"></i>
+                  <div>جاري تحميل رسائل واستفسارات العملاء...</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- View 3: Service Requests Section (طلبات خدمات العملاء والزوار) -->
+    <div id="viewRequestsSection" class="hidden">
+      <div class="glass-card rounded-2xl overflow-hidden shadow-2xl border border-slate-700/80 mb-10">
+        
+        <!-- Search & Filters Toolbar -->
+        <div class="p-5 border-b border-slate-700/80 bg-slate-900/60 flex flex-col lg:flex-row justify-between items-center gap-4">
+          <div class="relative w-full lg:w-80">
+            <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+            <input id="searchRequestsInput" oninput="filterServiceRequests()" type="text" placeholder="بحث برقم الطلب، اسم العميل، الهاتف، المشروع..." class="w-full custom-input rounded-xl pr-10 pl-4 py-2.5 text-sm font-medium placeholder-slate-500 focus:outline-none">
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <!-- Filter by Status -->
+            <select id="filterRequestStatus" onchange="loadServiceRequests()" class="custom-input rounded-xl px-4 py-2 text-xs font-bold focus:outline-none cursor-pointer bg-slate-900">
+              <option value="all">جميع الحالات</option>
+              <option value="new">طلبات جديدة</option>
+              <option value="under_review">قيد المراجعة الفنية</option>
+              <option value="pricing">جاري التسعير</option>
+              <option value="quoted">تم إرسال عرض السعر</option>
+              <option value="converted">تم التحويل لمشروع</option>
+              <option value="rejected">معتذر عنها / ملغية</option>
+            </select>
+
+            <!-- Filter by Source -->
+            <select id="filterRequestSource" onchange="loadServiceRequests()" class="custom-input rounded-xl px-4 py-2 text-xs font-bold focus:outline-none cursor-pointer bg-slate-900">
+              <option value="all">جميع المصادر (زوار + مسجلين)</option>
+              <option value="guest">زائر (بدون حساب)</option>
+              <option value="registered_client">عميل مسجل في البوابة</option>
+            </select>
+
+            <button onclick="loadServiceRequests()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-bold border border-slate-700 transition flex items-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-rotate"></i>
+              <span>تحديث</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Requests Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-sm border-collapse">
+            <thead class="bg-slate-950/80 text-amber-400 uppercase text-xs border-b border-slate-700/80 tracking-wider">
+              <tr>
+                <th class="px-5 py-4 font-bold">رقم الطلب</th>
+                <th class="px-5 py-4 font-bold">اسم العميل / الزائر</th>
+                <th class="px-5 py-4 font-bold">رقم الهاتف</th>
+                <th class="px-5 py-4 font-bold">الخدمات المطلوبة</th>
+                <th class="px-5 py-4 font-bold text-center">المصدر</th>
+                <th class="px-5 py-4 font-bold">تاريخ الإرسال</th>
+                <th class="px-5 py-4 font-bold text-center">الحالة</th>
+                <th class="px-5 py-4 font-bold">الموظف المسؤول</th>
+                <th class="px-5 py-4 font-bold text-center">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="requestsTableBody" class="divide-y divide-slate-800/80">
+              <tr>
+                <td colspan="9" class="text-center py-12 text-slate-400">
+                  <i class="fa-solid fa-spinner fa-spin text-2xl text-amber-500 mb-2"></i>
+                  <div>جاري تحميل طلبات خدمات العملاء والزوار...</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Create / Edit User Modal Dialog -->
+  <div id="userModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
+        <h3 id="modalTitle" class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-user-plus text-amber-400"></i>
+          <span>إضافة مستخدم عميل جديد</span>
+        </h3>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Form Body -->
+      <form id="userForm" onsubmit="saveClientUser(event)" class="space-y-4">
+        <input type="hidden" id="userId">
+
+        <!-- In-Modal Alert Box for Error Messages -->
+        <div id="modalErrorAlert" class="hidden p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-150">
+          <i class="fa-solid fa-circle-exclamation text-base shrink-0 text-rose-400"></i>
+          <span id="modalErrorText"></span>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">العميل التابع له في قاعدة البيانات *</label>
+          <select id="userClientId" onchange="onClientSelected()" required class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+            <option value="">اختر العميل من الدليل...</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">الاسم الكامل للمستخدم *</label>
+          <input id="userFullName" type="text" required placeholder="مثال: م. أحمد صالح بن محفوظ" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">البريد الإلكتروني *</label>
+            <input id="userEmail" type="email" required placeholder="client@example.com" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">رقم الهاتف</label>
+            <input id="userPhone" type="tel" placeholder="77xxxxxxx" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+          </div>
+        </div>
+
+        <div id="passwordFieldGroup">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">كلمة المرور *</label>
+          <input id="userPassword" type="password" placeholder="6 أحرف أو أرقام كحد أدنى" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">الدور الوظيفي والصلاحية</label>
+            <select id="userRole" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+              <option value="owner">مالك (صلاحية كاملة واعتماد)</option>
+              <option value="manager">مدير ممثل (اطلاع واعتماد)</option>
+              <option value="viewer" selected>مطلع فقط (عرض ومتابعة)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">حالة الحساب</label>
+            <select id="userStatus" class="w-full custom-input rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+              <option value="active" selected>نشط (Active)</option>
+              <option value="inactive">معطل (Inactive)</option>
+              <option value="suspended">موقوف (Suspended)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Section for Client's Projects Selection -->
+        <div id="clientProjectsSection" class="hidden">
+          <label class="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>المشاريع المسموح بها لهذا العميل</span>
+            <span class="text-[0.7rem] text-amber-400 font-normal">يتم التعيين التلقائي لجميع مشاريع العميل إذا تُرك فارغاً</span>
+          </label>
+          <div id="clientProjectsContainer" class="p-3 bg-slate-900/90 rounded-xl border border-slate-700/80 max-h-36 overflow-y-auto space-y-1.5 text-xs">
+            <div class="text-slate-500 italic">اختر العميل أعلاه لعرض مشاريعه...</div>
+          </div>
+        </div>
+
+        <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80 flex items-center justify-between mt-2">
+          <div>
+            <div class="text-xs font-bold text-white">تفعيل التحقق بخطوتين (2FA / OTP)</div>
+            <div class="text-[0.75rem] text-slate-400">إرسال رمز أمان OTP لحساب العميل عند تسجيل الدخول</div>
+          </div>
+          <input id="user2fa" type="checkbox" checked class="w-5 h-5 accent-amber-500 rounded cursor-pointer">
+        </div>
+
+        <!-- Form Buttons -->
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/80 mt-6">
+          <button type="button" onclick="closeModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+            إلغاء
+          </button>
+          <button type="submit" class="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-extrabold transition shadow-lg shadow-amber-500/20 cursor-pointer">
+            حفظ التغييرات
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- Detailed Client & Account View Modal -->
+  <div id="clientDetailsModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-4xl w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
+        <div>
+          <h3 id="detailsModalTitle" class="text-xl font-extrabold text-white flex items-center gap-2">
+            <i class="fa-solid fa-building-user text-amber-400"></i>
+            <span>تفاصيل حساب العميل والصلاحيات</span>
+          </h3>
+          <div id="detailsModalSubtitle" class="text-xs text-slate-400 mt-1">جاري التحميل...</div>
+        </div>
+        <button onclick="closeDetailsModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Tab Navigation Bar -->
+      <div class="flex items-center gap-2 border-b border-slate-700/80 pb-3 mb-5 overflow-x-auto text-xs font-bold">
+        <button id="tabBtnInfo" onclick="switchDetailsTab('info')" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 border border-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-circle-info ml-1"></i> معلومات العميل
+        </button>
+        <button id="tabBtnUsers" onclick="switchDetailsTab('users')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-users ml-1"></i> الحسابات المرتبطة (<span id="detailsUsersCount">0</span>)
+        </button>
+        <button id="tabBtnPermissions" onclick="switchDetailsTab('permissions')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-shield-halved ml-1"></i> الصلاحيات والمشاريع
+        </button>
+        <button id="tabBtnModules" onclick="switchDetailsTab('modules')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-cubes ml-1"></i> وحدات Client App
+        </button>
+        <button id="tabBtnAudit" onclick="switchDetailsTab('audit')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer">
+          <i class="fa-solid fa-clock-rotate-left ml-1"></i> سجل النشاط والتدقيق
+        </button>
+      </div>
+
+      <!-- Tab 1: General Info -->
+      <div id="tabContentInfo" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">العميل التجاري المرتبط:</div>
+            <div id="infoClientName" class="text-base font-extrabold text-amber-400">—</div>
+            <div id="infoClientCompany" class="text-slate-300 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">بيانات مستخدم الحساب:</div>
+            <div id="infoUserName" class="text-base font-extrabold text-white">—</div>
+            <div id="infoUserEmail" class="text-slate-400 font-mono mt-1">—</div>
+            <div id="infoUserPhone" class="text-slate-400 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">حالة الحساب والأمان:</div>
+            <div id="infoUserStatus" class="font-bold text-emerald-400 mt-1">—</div>
+            <div id="infoUser2fa" class="text-slate-300 mt-1">—</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-700/70">
+            <div class="text-slate-400 mb-1">آخر تسجيل دخول والجهاز:</div>
+            <div id="infoLastLogin" class="font-bold text-white mt-1">—</div>
+            <div id="infoLastIp" class="text-slate-400 font-mono mt-1">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Linked Users -->
+      <div id="tabContentUsers" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-2">قائمة بجميع حسابات المستخدمين المرتبطين بالعميل نفسه في قاعدة البيانات:</div>
+        <div id="linkedUsersContainer" class="space-y-2">
+          <div class="text-slate-500 italic text-xs">جاري جلب الحسابات...</div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Permissions & Projects -->
+      <div id="tabContentPermissions" class="hidden space-y-4">
+        <div class="text-xs font-bold text-amber-400 mb-2">المشاريع المصرح بها ومصفوفة الصلاحيات المخصصة:</div>
+        <div id="projectPermissionsContainer" class="space-y-3">
+          <div class="text-slate-500 italic text-xs">جاري جلب المشاريع والصلاحيات...</div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Client App Modules Control -->
+      <div id="tabContentModules" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-3">التحكم في المكونات والوحدات المتاحة للعميل في تطبيق الهاتف (Client App):</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-chart-line text-amber-400 ml-1.5"></i> لوحة الإنجاز ونسب العمل</div>
+              <div class="text-[0.7rem] text-slate-400">استعراض مؤشرات إنجاز المشاريع</div>
+            </div>
+            <span class="text-emerald-400 font-bold">متاح تلقائياً</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-file-invoice-dollar text-emerald-400 ml-1.5"></i> المستخلصات والاعتماد</div>
+              <div class="text-[0.7rem] text-slate-400">عرض فواتير المستخلصات وزر الاعتماد</div>
+            </div>
+            <span class="text-emerald-400 font-bold">مُفعل حسب الصلاحية</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-receipt text-blue-400 ml-1.5"></i> كشف الحساب والقيود</div>
+              <div class="text-[0.7rem] text-slate-400">كشف حساب العميل التحليلي والدفعات</div>
+            </div>
+            <span class="text-emerald-400 font-bold">مربوط بالمحاسبة</span>
+          </div>
+          <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white"><i class="fa-solid fa-comments text-purple-400 ml-1.5"></i> المحادثات والاستفسارات</div>
+              <div class="text-[0.7rem] text-slate-400">إرسال واستقبال رسائل المشروع</div>
+            </div>
+            <span class="text-emerald-400 font-bold">متاح</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 5: Real Audit Log Feed -->
+      <div id="tabContentAudit" class="hidden space-y-3">
+        <div class="text-xs text-slate-400 mb-2">سجل الأمان والنشاط الفعلي المسجل لهذا الحساب من واقع قاعدة البيانات (`audit_logs`):</div>
+        <div id="auditLogsContainer" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+          <div class="text-slate-500 italic text-xs">جاري تحميل سجل التدقيق...</div>
+        </div>
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/80 mt-6">
+        <button type="button" onclick="closeDetailsModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+          إغلاق
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Reply to Client Message Modal Dialog -->
+  <div id="replyMessageModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-xl w-full p-6 shadow-2xl overflow-y-auto max-h-[92vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-reply text-amber-400"></i>
+          <span>عرض استفسار العميل وإرسال الرد الرسمي</span>
+        </h3>
+        <button onclick="closeReplyModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Client & Message Info Box -->
+      <div class="space-y-4 mb-5">
+        <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <div class="text-xs text-amber-400 font-bold mb-0.5" id="replyProjectName">مشروع عام</div>
+            <div class="text-base font-extrabold text-white" id="replyClientName">—</div>
+            <div class="text-xs text-slate-400 font-mono" id="replyClientEmail">—</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <a id="replyWhatsappLink" href="#" target="_blank" class="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition">
+              <i class="fa-brands fa-whatsapp text-sm"></i>
+              <span>واتساب العميل</span>
+            </a>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-slate-400">موضوع الرسالة:</span>
+            <span id="replyPriorityBadge" class="text-xs px-2.5 py-0.5 rounded-full font-bold">عادية</span>
+          </div>
+          <div class="text-sm font-bold text-amber-300" id="replySubject">—</div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-slate-400">نص رسالة واستفسار العميل:</span>
+            <span class="text-xs text-slate-500" id="replyDate">—</span>
+          </div>
+          <div class="p-3.5 bg-slate-950/80 rounded-xl border border-slate-700/80 text-sm text-slate-200 leading-relaxed max-h-40 overflow-y-auto whitespace-pre-wrap" id="replyBody">—</div>
+        </div>
+
+        <!-- Previous Reply Box (if already replied) -->
+        <div id="prevReplySection" class="hidden p-3.5 bg-amber-500/10 rounded-xl border border-amber-500/30">
+          <div class="flex items-center justify-between text-xs text-amber-400 font-bold mb-1">
+            <span><i class="fa-solid fa-circle-check"></i> الرد السابق المسجل:</span>
+            <span class="text-slate-400 font-normal" id="prevReplyDate"></span>
+          </div>
+          <div class="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed" id="prevReplyText"></div>
+        </div>
+      </div>
+
+      <!-- Reply Form -->
+      <form id="replyForm" onsubmit="submitMessageReply(event)" class="space-y-4 pt-3 border-t border-slate-700/80">
+        <input type="hidden" id="replyMessageId">
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">
+            <i class="fa-solid fa-pen-nib text-amber-400 ml-1"></i> نص الرد والتوضيح الهندسي للعميل *
+          </label>
+          <textarea id="replyTextInput" required rows="4" placeholder="اكتب رد إدارة الشركة هنا ليظهر فوراً في تطبيق العميل..." class="w-full custom-input rounded-xl p-3 text-sm focus:outline-none"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">تحديث حالة الاستفسار بعد الرد</label>
+          <select id="replyStatusSelect" class="w-full custom-input rounded-xl px-4 py-2 text-sm focus:outline-none bg-slate-900">
+            <option value="replied" selected>تم الرد (مع إبقاء الاستفسار نشطاً للمتابعة)</option>
+            <option value="closed">تم الرد وإغلاق الاستفسار نهائياً (مكتمل)</option>
+          </select>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex items-center justify-end gap-3 pt-3">
+          <button type="button" onclick="closeReplyModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+            إلغاء
+          </button>
+          <button type="submit" id="sendReplyBtn" class="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shadow-lg shadow-amber-500/25 active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span>إرسال الرد للعميل وتحديث التطبيق</span>
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- Service Request Details & Management Modal -->
+  <div id="serviceRequestModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card border border-slate-700/90 rounded-2xl max-w-3xl w-full p-6 shadow-2xl overflow-y-auto max-h-[92vh] relative animate-in fade-in zoom-in duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-5">
+        <div>
+          <div class="flex items-center gap-3">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-compass-drafting text-amber-400"></i>
+              <span>تفاصيل طلب الخدمة الهندسية</span>
+            </h3>
+            <span id="srvReqNoBadge" class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">SR-2026-0001</span>
+            <span id="srvReqSourceBadge" class="portal-badge badge-owner">زائر</span>
+          </div>
+          <div class="text-xs text-slate-400 mt-1" id="srvReqDate">--</div>
+        </div>
+        <button onclick="closeServiceRequestModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Content Grid -->
+      <div class="space-y-4">
+        <!-- Client & Contact Box -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80 text-xs">
+          <div>
+            <span class="text-slate-400 block mb-0.5">اسم العميل / الزائر:</span>
+            <b class="text-white text-sm" id="srvReqClientName">—</b>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">رقم الهاتف:</span>
+            <b class="text-amber-400 text-sm font-mono" id="srvReqPhone">—</b>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">البريد الإلكتروني:</span>
+            <span class="text-slate-300" id="srvReqEmail">—</span>
+          </div>
+        </div>
+
+        <!-- Project & Location Box -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-900/60 rounded-xl border border-slate-700/60 text-xs">
+          <div>
+            <span class="text-slate-400 block mb-0.5">اسم المشروع:</span>
+            <b class="text-white" id="srvReqProjectName">—</b>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">نوع المشروع:</span>
+            <span class="text-slate-200" id="srvReqProjectType">—</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">الموقع والعنوان:</span>
+            <span class="text-slate-200" id="srvReqLocation">—</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">الميزانية التقديرية:</span>
+            <b class="text-emerald-400 font-mono" id="srvReqBudget">—</b>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">الموعد المتوقع للبدء:</span>
+            <span class="text-slate-300 font-mono" id="srvReqStartDate">—</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">رمز التحقق والمتابعة:</span>
+            <span class="text-amber-400 font-mono font-bold" id="srvReqVerifyCode">—</span>
+          </div>
+        </div>
+
+        <!-- Requested Services Box -->
+        <div class="p-3.5 bg-amber-500/10 rounded-xl border border-amber-500/30">
+          <div class="text-xs font-bold text-amber-400 mb-2 flex items-center gap-2">
+            <i class="fa-solid fa-list-check"></i>
+            <span>الخدمات المطلوبة ضمن هذا الطلب:</span>
+          </div>
+          <div id="srvReqItemsContainer" class="flex flex-wrap gap-2">
+            <!-- Dynamic Chips -->
+          </div>
+        </div>
+
+        <!-- Client Description Box -->
+        <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80">
+          <span class="text-xs font-bold text-slate-400 block mb-1">وصف احتياجات العميل وتفاصيل الطلب:</span>
+          <div class="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto" id="srvReqDescription">—</div>
+        </div>
+
+        <!-- Attachments Box -->
+        <div class="p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80">
+          <span class="text-xs font-bold text-slate-400 block mb-2">المرفقات والمخططات المرفوعة:</span>
+          <div id="srvReqAttachmentsContainer" class="flex flex-wrap gap-2">
+            <span class="text-xs text-slate-500 italic">لا توجد مرفقات مع هذا الطلب</span>
+          </div>
+        </div>
+
+        <!-- Administrative Action Form -->
+        <form id="srvReqActionForm" onsubmit="submitServiceRequestUpdate(event)" class="space-y-4 pt-3 border-t border-slate-700/80">
+          <input type="hidden" id="srvReqId">
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">حالة الطلب</label>
+              <select id="srvReqStatusSelect" class="w-full custom-input rounded-xl px-3 py-2 text-xs focus:outline-none bg-slate-900 font-bold">
+                <option value="new">طلب جديد</option>
+                <option value="under_review">قيد المراجعة الفنية</option>
+                <option value="pricing">جاري التسعير وإعداد العرض</option>
+                <option value="quoted">تم إرسال عرض السعر للعميل</option>
+                <option value="converted">تم اعتماده وتحويله لمشروع</option>
+                <option value="rejected">معتذر عنه / ملغي</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">تعيين الموظف / المهندس المسؤول</label>
+              <select id="srvReqAssigneeSelect" class="w-full custom-input rounded-xl px-3 py-2 text-xs focus:outline-none bg-slate-900">
+                <option value="">غير معين (بدون تعيين)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">مبلغ عرض السعر المقترح</label>
+              <input type="number" id="srvReqQuoteAmountInput" placeholder="أدخل مبلغ العرض..." class="w-full custom-input rounded-xl px-3 py-2 text-xs focus:outline-none">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">ملاحظات وقرارات الإدارة الهندسية</label>
+            <textarea id="srvReqAdminNotesInput" rows="2" placeholder="ملاحظات المراجعة، مواعيد المقابلات، أو تفاصيل دراسة المشروع..." class="w-full custom-input rounded-xl p-2.5 text-xs focus:outline-none"></textarea>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-3">
+            <button type="button" id="btnConvertToProject" onclick="executeConvertToProject()" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-lg shadow-emerald-600/25 cursor-pointer">
+              <i class="fa-solid fa-city"></i>
+              <span>تحويل إلى مشروع رسمي في النظام</span>
+            </button>
+
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="closeServiceRequestModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer">
+                إغلاق
+              </button>
+              <button type="submit" class="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shadow-lg shadow-amber-500/25 cursor-pointer">
+                <i class="fa-solid fa-floppy-disk"></i>
+                <span>حفظ التعديلات والتحديث</span>
+              </button>
+            </div>
+          </div>
+        </form>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Page Logic Script -->
+  <script>
+    let allUsers = [];
+    let allMessages = [];
+    let currentMainTab = 'users';
+
+    // Unified Authentication & CSRF Token Headers Resolver
+    function getAuthToken() {
+      return localStorage.getItem('rawasi_token') || 
+             sessionStorage.getItem('rawasi_token') || 
+             localStorage.getItem('token') || 
+             sessionStorage.getItem('token') || '';
+    }
+
+    function getAuthHeaders(extraHeaders = {}) {
+      const token = getAuthToken();
+      const csrf = (window.Auth && window.Auth.csrfToken) || sessionStorage.getItem('rawasi_csrf_token') || 'rawasi_security_token_32bytes_v2';
+      const headers = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': csrf,
+        ...extraHeaders
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      return headers;
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toastNotification');
+      const toastContent = document.getElementById('toastContent');
+      const toastIcon = document.getElementById('toastIcon');
+      const toastMsg = document.getElementById('toastMessage');
+
+      toastMsg.textContent = message;
+      if (type === 'success') {
+        toastContent.className = 'glass-card px-6 py-3.5 rounded-2xl border border-emerald-500/40 text-emerald-400 flex items-center gap-3 shadow-2xl text-sm font-bold bg-slate-900/90';
+        toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+      } else {
+        toastContent.className = 'glass-card px-6 py-3.5 rounded-2xl border border-rose-500/40 text-rose-400 flex items-center gap-3 shadow-2xl text-sm font-bold bg-slate-900/90';
+        toastIcon.className = 'fa-solid fa-circle-exclamation text-rose-400 text-lg';
+      }
+
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 4000);
+    }
+
+    async function loadClientUsers() {
+      const tbody = document.getElementById('usersTableBody');
+      try {
+        const headers = getAuthHeaders();
+        const res = await fetch('/api/admin/client-users', { headers });
+        const data = await res.json();
+
+        if (data.success) {
+          allUsers = data.users || [];
+          renderUsers(allUsers);
+          updateStats(allUsers);
+        } else {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="text-center py-12 text-slate-400">
+                <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-400 mb-2"></i>
+                <div class="font-bold text-white mb-1">${data.message || 'تعذر تحميل حسابات العملاء'}</div>
+                <div class="text-xs text-slate-500 mb-4">يرجى التأكد من تسجيل الدخول بالنظام الرئيسي أولاً</div>
+                <button onclick="loadClientUsers()" class="px-4 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold">إعادة المحاولة</button>
+              </td>
+            </tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading client users:', err);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-wifi-slash text-3xl text-rose-400 mb-2"></i>
+              <div class="font-bold text-white mb-1">حدث خطأ في الاتصال بالخادم</div>
+              <button onclick="loadClientUsers()" class="px-4 py-2 bg-slate-800 text-amber-400 rounded-xl text-xs font-bold mt-2">إعادة المحاولة</button>
+            </td>
+          </tr>`;
+      }
+    }
+
+    function renderUsers(users) {
+      const tbody = document.getElementById('usersTableBody');
+      if (!users || users.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-folder-open text-3xl text-slate-600 mb-2"></i>
+              <div>لا توجد حسابات عملاء مسجلة حالياً</div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = users.map(u => {
+        const roleBadge = u.role === 'owner' ? 'badge-owner' : (u.role === 'manager' ? 'badge-manager' : 'badge-viewer');
+        const roleLabel = u.role === 'owner' ? 'مالك' : (u.role === 'manager' ? 'مدير ممثل' : 'مطلع فقط');
+        const statusBadge = u.status === 'active' ? 'badge-active' : 'badge-inactive';
+        const statusLabel = u.status === 'active' ? 'نشط' : (u.status === 'suspended' ? 'موقوف' : 'معطل');
+
+        return `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="px-6 py-4">
+              <div class="font-bold text-white text-sm">${u.full_name}</div>
+              <div class="text-xs text-slate-400 font-mono">${u.email}</div>
+              ${u.phone ? `<div class="text-xs text-slate-500">${u.phone}</div>` : ''}
+            </td>
+            <td class="px-6 py-4">
+              <div class="font-bold text-slate-200 text-sm">${u.client_name || '—'}</div>
+              <div class="text-xs text-slate-400">${u.client_company || ''}</div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="portal-badge ${roleBadge}">
+                <i class="fa-solid fa-user-shield text-[0.7rem]"></i>
+                ${roleLabel}
+              </span>
+            </td>
+            <td class="px-6 py-4">
+              <span class="text-xs bg-slate-900/90 text-amber-300 font-bold px-2.5 py-1 rounded-lg border border-slate-700">
+                ${u.role === 'owner' ? 'جميع المشاريع' : `${u.assigned_projects_count || 0} مشاريع`}
+              </span>
+            </td>
+            <td class="px-6 py-4">
+              ${u.two_factor_enabled 
+                ? '<span class="text-xs text-emerald-400 font-bold flex items-center gap-1.5"><i class="fa-solid fa-shield-halved"></i> مفعّل (OTP)</span>' 
+                : '<span class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-regular fa-circle"></i> معطل</span>'}
+            </td>
+            <td class="px-6 py-4 text-xs text-slate-400">
+              ${u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('ar-YE') : 'لم يدخل بعد'}
+            </td>
+            <td class="px-6 py-4">
+              <span class="portal-badge ${statusBadge}">
+                <i class="fa-solid fa-circle text-[0.4rem]"></i>
+                ${statusLabel}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-center">
+              <div class="flex items-center justify-center gap-2">
+                <button onclick="viewClientDetails(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="عرض التفاصيل الكاملة، الصلاحيات وسجل النشاط">
+                  <i class="fa-solid fa-eye text-xs"></i>
+                </button>
+                <button onclick="sendInvite(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-emerald-600 hover:text-white text-emerald-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إرسال دعوة تفعيل وبيانات الدخول المؤقتة">
+                  <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+                <button onclick="revokeSessions(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-rose-700 hover:text-white text-rose-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إبطال جميع الجلسات وتجميد الحساب فوراً">
+                  <i class="fa-solid fa-user-slash text-xs"></i>
+                </button>
+                <button onclick="editUser(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="تعديل الحساب">
+                  <i class="fa-solid fa-pen text-xs"></i>
+                </button>
+                <button onclick="resetPassword(${u.id})" class="w-8 h-8 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="إعادة تعيين كلمة المرور">
+                  <i class="fa-solid fa-key text-xs"></i>
+                </button>
+                <button onclick="deleteUser(${u.id}, '${(u.full_name || '').replace(/'/g, "\\'")}')" class="w-8 h-8 bg-slate-800 hover:bg-rose-600 hover:text-white text-rose-400 rounded-lg transition flex items-center justify-center cursor-pointer" title="حذف حساب العميل">
+                  <i class="fa-solid fa-trash text-xs"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateStats(users) {
+      document.getElementById('statTotalUsers').innerText = users.length;
+      document.getElementById('statActiveUsers').innerText = users.filter(u => u.status === 'active').length;
+      document.getElementById('stat2faUsers').innerText = users.filter(u => u.two_factor_enabled).length;
+      document.getElementById('statDevices').innerText = users.filter(u => u.device_platform === 'android').length;
+    }
+
+    function filterUsers() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = allUsers.filter(u => 
+        (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.client_name && u.client_name.toLowerCase().includes(q))
+      );
+      renderUsers(filtered);
+    }
+
+    async function loadClientsList() {
+      try {
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch('/api/clients', { headers });
+        const data = await res.json();
+        const select = document.getElementById('userClientId');
+        select.innerHTML = '<option value="">اختر العميل من الدليل...</option>';
+
+        const clientsList = Array.isArray(data) ? data : (data.data || data.clients || []);
+        clientsList.forEach(c => {
+          select.innerHTML += `<option value="${c.id}">${c.name} ${c.company ? `(${c.company})` : ''}</option>`;
+        });
+      } catch (e) {
+        console.error('Error loading clients list:', e);
+      }
+    }
+
+    async function onClientSelected() {
+      const clientId = document.getElementById('userClientId').value;
+      const section = document.getElementById('clientProjectsSection');
+      const container = document.getElementById('clientProjectsContainer');
+
+      if (!clientId) {
+        section.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+      }
+
+      try {
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch(`/api/admin/client-users/client-projects/${clientId}`, { headers });
+        const data = await res.json();
+
+        section.classList.remove('hidden');
+        if (data.success && data.projects && data.projects.length > 0) {
+          container.innerHTML = data.projects.map(p => `
+            <label class="flex items-center justify-between p-2 rounded bg-slate-800/80 hover:bg-slate-700/80 cursor-pointer">
+              <span class="font-bold text-white">${p.name} <small class="text-slate-400">(${p.code || ''})</small></span>
+              <input type="checkbox" name="selected_project_ids" value="${p.id}" checked class="accent-amber-500 w-4 h-4">
+            </label>
+          `).join('');
+        } else {
+          container.innerHTML = '<div class="text-amber-400 p-2">لا توجد مشاريع مسجلة مباشرة لهذا العميل حالياً (سيتم منح الوصول التلقائي لجميع العقود المبرمة لاحقاً).</div>';
+        }
+      } catch (e) {
+        console.error('Error fetching client projects:', e);
+      }
+    }
+
+    function showModalError(msg) {
+      const box = document.getElementById('modalErrorAlert');
+      const text = document.getElementById('modalErrorText');
+      if (box && text) {
+        text.textContent = msg;
+        box.classList.remove('hidden');
+      }
+      showToast(msg, 'error');
+    }
+
+    function hideModalError() {
+      const box = document.getElementById('modalErrorAlert');
+      if (box) box.classList.add('hidden');
+    }
+
+    function openCreateUserModal() {
+      hideModalError();
+      document.getElementById('userId').value = '';
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-amber-400"></i><span>إضافة مستخدم عميل جديد</span>';
+      document.getElementById('passwordFieldGroup').style.display = 'block';
+      document.getElementById('userPassword').required = true;
+      document.getElementById('userForm').reset();
+      document.getElementById('clientProjectsSection').classList.add('hidden');
+      loadClientsList();
+      document.getElementById('userModal').classList.remove('hidden');
+    }
+
+    function editUser(id) {
+      hideModalError();
+      const user = allUsers.find(u => u.id === id);
+      if (!user) return;
+      document.getElementById('userId').value = user.id;
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-pen text-amber-400"></i><span>تعديل حساب العميل</span>';
+      document.getElementById('passwordFieldGroup').style.display = 'none';
+      document.getElementById('userPassword').required = false;
+
+      loadClientsList().then(() => {
+        document.getElementById('userClientId').value = user.client_id || '';
+        document.getElementById('userFullName').value = user.full_name || '';
+        document.getElementById('userEmail').value = user.email || '';
+        document.getElementById('userPhone').value = user.phone || '';
+        document.getElementById('userRole').value = user.role || 'viewer';
+        document.getElementById('userStatus').value = user.status || 'active';
+        document.getElementById('user2fa').checked = !!user.two_factor_enabled;
+        onClientSelected();
+        document.getElementById('userModal').classList.remove('hidden');
+      });
+    }
+
+    function closeModal() {
+      hideModalError();
+      document.getElementById('userModal').classList.add('hidden');
+    }
+
+    async function saveClientUser(e) {
+      e.preventDefault();
+      hideModalError();
+
+      const id = document.getElementById('userId').value;
+      const token = getAuthToken();
+
+      const clientId = document.getElementById('userClientId').value;
+      const fullName = document.getElementById('userFullName').value.trim();
+      const email = document.getElementById('userEmail').value.trim();
+      const phone = document.getElementById('userPhone').value.trim();
+      const password = document.getElementById('userPassword').value;
+      const role = document.getElementById('userRole').value;
+      const status = document.getElementById('userStatus').value;
+      const twoFactor = document.getElementById('user2fa').checked;
+
+      if (!clientId) {
+        showModalError('يرجى اختيار العميل التابع له في قاعدة البيانات من القائمة');
+        return;
+      }
+      if (!fullName) {
+        showModalError('يرجى إدخال الاسم الكامل للمستخدم');
+        return;
+      }
+      if (!email) {
+        showModalError('يرجى إدخال البريد الإلكتروني');
+        return;
+      }
+      if (!id && (!password || password.length < 6)) {
+        showModalError('كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل');
+        return;
+      }
+
+      const selectedProjects = Array.from(document.querySelectorAll('input[name="selected_project_ids"]:checked')).map(cb => parseInt(cb.value, 10));
+
+      const payload = {
+        client_id: parseInt(clientId, 10),
+        full_name: fullName,
+        email: email,
+        phone: phone,
+        role: role,
+        status: status,
+        two_factor_enabled: twoFactor,
+        project_ids: selectedProjects
+      };
+
+      if (!id) {
+        payload.password = password;
+      }
+
+      const url = id ? `/api/admin/client-users/${id}` : '/api/admin/client-users';
+      const method = id ? 'PUT' : 'POST';
+
+      const btnSubmit = e.target.querySelector('button[type="submit"]');
+      const originalText = btnSubmit ? btnSubmit.innerHTML : 'حفظ التغييرات';
+
+      try {
+        if (btnSubmit) {
+          btnSubmit.disabled = true;
+          btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
+        }
+
+        const res = await fetch(url, {
+          method,
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeModal();
+          showToast(data.message || 'تم حفظ حساب العميل بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showModalError(data.message || 'خطأ أثناء الحفظ');
+        }
+      } catch (err) {
+        showModalError('خطأ في الاتصال بالخادم أثناء الحفظ');
+      } finally {
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalText;
+        }
+      }
+    }
+
+    async function resetPassword(id) {
+      const newPass = prompt('أدخل كلمة المرور الجديدة للحساب (6 أحرف على الأقل):');
+      if (!newPass) return;
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/reset-password`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ new_password: newPass })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تمت إعادة تعيين كلمة المرور بنجاح', 'success');
+        } else {
+          showToast(data.message || 'خطأ في إعادة تعيين كلمة المرور', 'error');
+        }
+      } catch (e) {
+        showToast('خطأ في الاتصال أثناء إعادة التعيين', 'error');
+      }
+    }
+
+    async function sendInvite(id) {
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/send-invite`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' })
+        });
+        const data = await res.json();
+        if (data.success && data.invite_details) {
+          const inv = data.invite_details;
+          const waUrl = `https://wa.me/${inv.phone ? inv.phone.replace(/[^0-9]/g, '') : ''}?text=${encodeURIComponent(inv.whatsapp_share_text)}`;
+          alert(`✅ تم إصدار بيانات تفعيل الحساب بنجاح!\n\nاسم المستلم: ${inv.full_name}\nالبريد: ${inv.email}\nكلمة المرور المؤقتة: ${inv.temp_password}\nرمز الـ OTP: ${inv.otp_code}\n\nيمكنك نُسخ الرسالة أو المشاركة فوراً عبر واتساب.`);
+          window.open(waUrl, '_blank');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'تعذر إصدار رمز الدعوة', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال أثناء إصدار الدعوة', 'error');
+      }
+    }
+
+    async function revokeSessions(id) {
+      if (!confirm('هل أنت متأكد من رغبتك في إبطال جميع جلسات الدخول الحالية وتجميد الحساب فوراً؟')) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/revoke-sessions`, {
+          method: 'POST',
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تم إبطال الجلسات وتجميد الحساب بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'خطأ أثناء إبطال الجلسات', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء إبطال الجلسات', 'error');
+      }
+    }
+
+    function closeDetailsModal() {
+      document.getElementById('clientDetailsModal').classList.add('hidden');
+    }
+
+    function switchDetailsTab(tabName) {
+      const tabs = ['info', 'users', 'permissions', 'modules', 'audit'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const content = document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (btn && content) {
+          if (t === tabName) {
+            btn.className = 'px-4 py-2 rounded-xl bg-amber-500 text-slate-950 border border-amber-400 transition cursor-pointer font-bold';
+            content.classList.remove('hidden');
+          } else {
+            btn.className = 'px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer font-bold';
+            content.classList.add('hidden');
+          }
+        }
+      });
+    }
+
+    async function viewClientDetails(id) {
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}/details`, {
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (!data.success || !data.user) {
+          showToast(data.message || 'تعذر تحميل تفاصيل حساب العميل', 'error');
+          return;
+        }
+
+        const u = data.user;
+        document.getElementById('detailsModalTitle').innerHTML = `<i class="fa-solid fa-building-user text-amber-400"></i><span>${u.full_name}</span>`;
+        document.getElementById('detailsModalSubtitle').innerText = `${u.client_name || 'عميل محدد'} ${u.client_company ? `(${u.client_company})` : ''} - ${u.email}`;
+
+        // 1. Tab Info
+        document.getElementById('infoClientName').innerText = u.client_name || '—';
+        document.getElementById('infoClientCompany').innerText = u.client_company || 'سجل تجاري مسجل في النظام';
+        document.getElementById('infoUserName').innerText = u.full_name || '—';
+        document.getElementById('infoUserEmail').innerText = u.email || '—';
+        document.getElementById('infoUserPhone').innerText = u.phone || '—';
+        document.getElementById('infoUserStatus').innerText = u.status === 'active' ? '🟢 نشط (Active)' : (u.status === 'suspended' ? '🔴 موقوف (Suspended)' : '⚪ معطل');
+        document.getElementById('infoUser2fa').innerText = u.two_factor_enabled ? '🛡️ مفعّل بالرمز السري OTP' : 'معطل';
+        document.getElementById('infoLastLogin').innerText = u.last_login_at ? new Date(u.last_login_at).toLocaleString('ar-YE') : 'لم يسجل دخول بعد';
+        document.getElementById('infoLastIp').innerText = u.last_login_ip ? `IP: ${u.last_login_ip}` : '—';
+
+        // 2. Tab Users
+        const linkedUsers = data.linked_users || [];
+        document.getElementById('detailsUsersCount').innerText = linkedUsers.length;
+        const usersContainer = document.getElementById('linkedUsersContainer');
+        if (linkedUsers.length === 0) {
+          usersContainer.innerHTML = '<div class="text-slate-500 italic text-xs">لا يوجد مستخدمون آخرون مرتبكون بهذا العميل</div>';
+        } else {
+          usersContainer.innerHTML = linkedUsers.map(lu => `
+            <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-700/80 flex items-center justify-between text-xs">
+              <div>
+                <div class="font-bold text-white">${lu.full_name}</div>
+                <div class="text-slate-400 font-mono">${lu.email}</div>
+              </div>
+              <div class="text-right">
+                <span class="portal-badge ${lu.role === 'owner' ? 'badge-owner' : 'badge-viewer'}">${lu.role === 'owner' ? 'مالك' : 'مطلع'}</span>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // 3. Tab Permissions & Projects
+        const projs = data.project_access || [];
+        const projsContainer = document.getElementById('projectPermissionsContainer');
+        if (projs.length === 0) {
+          projsContainer.innerHTML = '<div class="p-4 bg-slate-900/80 rounded-xl text-amber-400 text-xs">متاح الوصول التلقائي لجميع مشاريع العميل (مالك الحساب)</div>';
+        } else {
+          projsContainer.innerHTML = projs.map(p => `
+            <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-700/80 space-y-2 text-xs">
+              <div class="flex items-center justify-between font-bold text-white border-b border-slate-800 pb-2">
+                <span>🏗️ ${p.project_name} <small class="text-slate-400">(${p.project_code || ''})</small></span>
+                <span class="text-amber-400 font-mono">${Number(p.contract_value || 0).toLocaleString()} ر.ي</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[0.75rem]">
+                <span class="${p.can_view_progress ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> نسبة الإنجاز</span>
+                <span class="${p.can_view_invoices ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> المستخلصات</span>
+                <span class="${p.can_approve_invoices ? 'text-amber-400 font-bold' : 'text-slate-500'}"><i class="fa-solid fa-signature ml-1"></i> اعتماد المستخلص</span>
+                <span class="${p.can_view_payments ? 'text-emerald-400' : 'text-slate-500'}"><i class="fa-solid fa-check ml-1"></i> الدفعات السابقة</span>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // 4. Tab Audit Logs
+        const logs = data.audit_logs || [];
+        const logsContainer = document.getElementById('auditLogsContainer');
+        if (logs.length === 0) {
+          logsContainer.innerHTML = '<div class="text-slate-500 italic text-xs">لا يوجد نشاط مسجل مؤخراً لهذا الحساب</div>';
+        } else {
+          logsContainer.innerHTML = logs.map(l => `
+            <div class="p-2.5 bg-slate-900/80 rounded-lg border border-slate-800 text-xs flex items-center justify-between">
+              <div>
+                <div class="font-bold text-slate-200">${l.action}</div>
+                <div class="text-slate-400 text-[0.72rem]">${l.details || '—'}</div>
+              </div>
+              <div class="text-slate-500 text-[0.7rem] text-right font-mono">
+                ${new Date(l.created_at).toLocaleString('ar-YE')}
+              </div>
+            </div>
+          `).join('');
+        }
+
+        switchDetailsTab('info');
+        document.getElementById('clientDetailsModal').classList.remove('hidden');
+      } catch (err) {
+        console.error('viewClientDetails Error:', err);
+        showToast('خطأ في تحميل تفاصيل العميل', 'error');
+      }
+    }
+
+    async function deleteUser(id, fullName) {
+      if (!confirm(`هل أنت تأكد من رغبتك في حذف حساب العميل (${fullName}) نهائياً؟`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/admin/client-users/${id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'تم حذف حساب العميل بنجاح', 'success');
+          loadClientUsers();
+        } else {
+          showToast(data.message || 'خطأ أثناء حذف الحساب', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء الحذف', 'error');
+      }
+    }
+
+    let allServiceRequests = [];
+    let currentServiceRequestId = null;
+    let systemEngineers = [];
+
+    function switchMainTab(tab) {
+      currentMainTab = tab;
+      const tabUsersBtn = document.getElementById('tabUsersBtn');
+      const tabMessagesBtn = document.getElementById('tabMessagesBtn');
+      const tabRequestsBtn = document.getElementById('tabRequestsBtn');
+      const viewUsers = document.getElementById('viewUsersSection');
+      const viewMessages = document.getElementById('viewMessagesSection');
+      const viewRequests = document.getElementById('viewRequestsSection');
+
+      const activeClass = 'px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20';
+      const inactiveClass = 'px-5 py-2.5 rounded-xl text-sm font-extrabold flex items-center gap-2.5 transition cursor-pointer bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700 hover:border-amber-500/40';
+
+      tabUsersBtn.className = tab === 'users' ? activeClass : inactiveClass;
+      tabMessagesBtn.className = tab === 'messages' ? activeClass : inactiveClass;
+      if (tabRequestsBtn) tabRequestsBtn.className = tab === 'requests' ? activeClass : inactiveClass;
+
+      viewUsers.classList.toggle('hidden', tab !== 'users');
+      viewMessages.classList.toggle('hidden', tab !== 'messages');
+      if (viewRequests) viewRequests.classList.toggle('hidden', tab !== 'requests');
+
+      if (tab === 'messages') {
+        loadClientMessages();
+      } else if (tab === 'requests') {
+        loadServiceRequests();
+      }
+    }
+
+    async function loadClientMessages() {
+      const tbody = document.getElementById('messagesTableBody');
+      const statusFilter = document.getElementById('filterMsgStatus').value;
+      try {
+        const headers = getAuthHeaders();
+        const url = `/api/admin/client-users/messages?status=${encodeURIComponent(statusFilter)}`;
+        const res = await fetch(url, { headers });
+        const data = await res.json();
+
+        if (data.success) {
+          allMessages = data.messages || [];
+          renderMessages(allMessages);
+          updateMessageStats(data.stats);
+        } else {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="7" class="text-center py-12 text-slate-400">
+                <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-400 mb-2"></i>
+                <div class="font-bold text-white mb-1">${data.message || 'تعذر تحميل الرسائل'}</div>
+                <button onclick="loadClientMessages()" class="px-4 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold mt-2">إعادة المحاولة</button>
+              </td>
+            </tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading messages:', err);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-wifi-slash text-3xl text-rose-400 mb-2"></i>
+              <div class="font-bold text-white mb-1">حدث خطأ في الاتصال بالخادم</div>
+              <button onclick="loadClientMessages()" class="px-4 py-2 bg-slate-800 text-amber-400 rounded-xl text-xs font-bold mt-2">إعادة المحاولة</button>
+            </td>
+          </tr>`;
+      }
+    }
+
+    function updateMessageStats(stats) {
+      if (!stats) return;
+      const pending = stats.pending || 0;
+      const statElem = document.getElementById('statPendingMessages');
+      if (statElem) statElem.innerText = pending;
+
+      const badge = document.getElementById('badgePendingMsgs');
+      if (badge) {
+        if (pending > 0) {
+          badge.innerText = pending;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+    }
+
+    function renderMessages(msgs) {
+      const tbody = document.getElementById('messagesTableBody');
+      if (!msgs || msgs.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-inbox text-3xl text-slate-600 mb-2"></i>
+              <div class="font-bold text-slate-300">لا توجد رسائل مطابقة حالياً</div>
+              <div class="text-xs text-slate-500 mt-1">عندما يرسل العملاء استفسارات من التطبيق ستظهر مباشرة هنا</div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = msgs.map(m => {
+        let statusBadge = 'bg-amber-500/15 text-amber-300 border border-amber-500/40';
+        let statusText = 'بانتظار الرد';
+        let pulseDot = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block mr-1"></span>';
+        if (m.status === 'replied') {
+          statusBadge = 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40';
+          statusText = 'تم الرد';
+          pulseDot = '<i class="fa-solid fa-circle-check text-[0.65rem] ml-1"></i>';
+        } else if (m.status === 'closed') {
+          statusBadge = 'bg-slate-700/50 text-slate-400 border border-slate-600';
+          statusText = 'مغلقة';
+          pulseDot = '<i class="fa-solid fa-lock text-[0.65rem] ml-1"></i>';
+        }
+
+        let priorityBadge = 'bg-slate-800 text-slate-300 border border-slate-700';
+        let priorityText = 'عادية';
+        if (m.priority === 'urgent') {
+          priorityBadge = 'bg-rose-500/20 text-rose-300 border border-rose-500/40';
+          priorityText = 'عاجلة جداً';
+        } else if (m.priority === 'high') {
+          priorityBadge = 'bg-amber-500/20 text-amber-300 border border-amber-500/40';
+          priorityText = 'هامة';
+        }
+
+        const dateStr = m.created_at ? new Date(m.created_at).toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+        const phone = (m.client_phone || '').replace(/[^0-9]/g, '');
+
+        return `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="px-6 py-4">
+              <div class="font-bold text-white text-sm">${m.client_name || 'عميل'}</div>
+              <div class="text-xs text-slate-400">${m.company_name || '—'}</div>
+              <div class="text-xs text-slate-500 font-mono mt-0.5">${m.client_email || ''}</div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="text-xs font-bold text-amber-300 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-700 inline-block">
+                ${m.project_name ? `${m.project_name} (${m.project_code || ''})` : 'استفسار عام'}
+              </span>
+            </td>
+            <td class="px-6 py-4 max-w-xs">
+              <div class="font-bold text-slate-200 text-sm truncate" title="${m.subject}">${m.subject}</div>
+              <div class="text-xs text-slate-400 line-clamp-2 mt-0.5" title="${m.body}">${m.body}</div>
+            </td>
+            <td class="px-6 py-4 text-center">
+              <span class="text-xs px-2.5 py-0.5 rounded-full font-bold inline-block ${priorityBadge}">
+                ${priorityText}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-xs text-slate-400 font-mono">
+              ${dateStr}
+            </td>
+            <td class="px-6 py-4 text-center">
+              <span class="text-xs px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1 ${statusBadge}">
+                ${pulseDot}
+                <span>${statusText}</span>
+              </span>
+            </td>
+            <td class="px-6 py-4 text-center">
+              <div class="flex items-center justify-center gap-2">
+                <button onclick="openReplyModal(${m.id})" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-xs transition flex items-center gap-1.5 shadow cursor-pointer">
+                  <i class="fa-solid fa-reply"></i>
+                  <span>عرض والرد</span>
+                </button>
+                ${phone ? `
+                  <a href="https://wa.me/${phone.startsWith('967') ? phone : '967' + phone}" target="_blank" class="w-8 h-8 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 flex items-center justify-center transition" title="محادثة واتساب">
+                    <i class="fa-brands fa-whatsapp"></i>
+                  </a>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterMessages() {
+      const q = (document.getElementById('searchMsgInput').value || '').toLowerCase();
+      const priority = document.getElementById('filterMsgPriority').value;
+
+      const filtered = allMessages.filter(m => {
+        const matchesQuery = !q || 
+          (m.subject && m.subject.toLowerCase().includes(q)) ||
+          (m.body && m.body.toLowerCase().includes(q)) ||
+          (m.client_name && m.client_name.toLowerCase().includes(q)) ||
+          (m.project_name && m.project_name.toLowerCase().includes(q));
+
+        const matchesPriority = priority === 'all' || m.priority === priority;
+
+        return matchesQuery && matchesPriority;
+      });
+
+      renderMessages(filtered);
+    }
+
+    function openReplyModal(msgId) {
+      const m = allMessages.find(item => item.id === msgId);
+      if (!m) return;
+
+      document.getElementById('replyMessageId').value = m.id;
+      document.getElementById('replyProjectName').innerText = m.project_name ? `المشروع: ${m.project_name}` : 'استفسار عام';
+      document.getElementById('replyClientName').innerText = m.client_name || 'العميل';
+      document.getElementById('replyClientEmail').innerText = `${m.client_email || ''} ${m.client_phone ? ' • ' + m.client_phone : ''}`;
+      document.getElementById('replySubject').innerText = m.subject;
+      document.getElementById('replyBody').innerText = m.body;
+      document.getElementById('replyDate').innerText = m.created_at ? new Date(m.created_at).toLocaleString('ar-YE') : '';
+
+      const phone = (m.client_phone || '').replace(/[^0-9]/g, '');
+      const waLink = document.getElementById('replyWhatsappLink');
+      if (phone) {
+        waLink.href = `https://wa.me/${phone.startsWith('967') ? phone : '967' + phone}`;
+        waLink.classList.remove('hidden');
+      } else {
+        waLink.classList.add('hidden');
+      }
+
+      // Priority badge
+      const pBadge = document.getElementById('replyPriorityBadge');
+      if (m.priority === 'urgent') {
+        pBadge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40';
+        pBadge.innerText = 'عاجلة جداً';
+      } else if (m.priority === 'high') {
+        pBadge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40';
+        pBadge.innerText = 'هامة';
+      } else {
+        pBadge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-800 text-slate-300 border border-slate-700';
+        pBadge.innerText = 'عادية';
+      }
+
+      // Previous reply
+      const prevSec = document.getElementById('prevReplySection');
+      if (m.reply_body) {
+        document.getElementById('prevReplyDate').innerText = m.replied_at ? new Date(m.replied_at).toLocaleString('ar-YE') : '';
+        document.getElementById('prevReplyText').innerText = m.reply_body;
+        document.getElementById('replyTextInput').value = m.reply_body;
+        prevSec.classList.remove('hidden');
+      } else {
+        document.getElementById('replyTextInput').value = '';
+        prevSec.classList.add('hidden');
+      }
+
+      document.getElementById('replyStatusSelect').value = m.status === 'closed' ? 'closed' : 'replied';
+      document.getElementById('replyMessageModal').classList.remove('hidden');
+    }
+
+    function closeReplyModal() {
+      document.getElementById('replyMessageModal').classList.add('hidden');
+    }
+
+    async function submitMessageReply(e) {
+      e.preventDefault();
+      const msgId = document.getElementById('replyMessageId').value;
+      const reply_body = document.getElementById('replyTextInput').value.trim();
+      const status = document.getElementById('replyStatusSelect').value;
+      const btn = document.getElementById('sendReplyBtn');
+
+      if (!reply_body) {
+        showToast('يرجى كتابة نص الرد أولاً', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الإرسال...';
+
+      try {
+        const res = await fetch(`/api/admin/client-users/messages/${msgId}/reply`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ reply_body, status })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showToast(data.message || 'تم إرسال الرد للعميل بنجاح', 'success');
+          closeReplyModal();
+          loadClientMessages();
+        } else {
+          showToast(data.message || 'فشل إرسال الرد', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء إرسال الرد', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span>إرسال الرد للعميل وتحديث التطبيق</span>';
+      }
+    }
+
+    async function loadServiceRequests() {
+      const tbody = document.getElementById('requestsTableBody');
+      const statusFilter = document.getElementById('filterRequestStatus')?.value || 'all';
+      const sourceFilter = document.getElementById('filterRequestSource')?.value || 'all';
+
+      try {
+        const headers = getAuthHeaders();
+        const url = `/api/admin/client-users/service-requests?status=${encodeURIComponent(statusFilter)}&source=${encodeURIComponent(sourceFilter)}`;
+        const res = await fetch(url, { headers });
+        const data = await res.json();
+
+        if (data.success) {
+          allServiceRequests = data.requests || [];
+          systemEngineers = data.engineers || [];
+          renderServiceRequests(allServiceRequests);
+          updateServiceRequestStats(data.stats);
+          populateEngineersSelect(systemEngineers);
+        } else {
+          if (tbody) {
+            tbody.innerHTML = `
+              <tr>
+                <td colspan="9" class="text-center py-12 text-slate-400">
+                  <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-400 mb-2"></i>
+                  <div class="font-bold text-white mb-1">${data.message || 'تعذر تحميل طلبات الخدمات'}</div>
+                  <button onclick="loadServiceRequests()" class="px-4 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold mt-2">إعادة المحاولة</button>
+                </td>
+              </tr>`;
+          }
+        }
+      } catch (err) {
+        console.error('Error loading service requests:', err);
+        if (tbody) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="9" class="text-center py-12 text-slate-400">
+                <i class="fa-solid fa-wifi-slash text-3xl text-rose-400 mb-2"></i>
+                <div class="font-bold text-white mb-1">حدث خطأ في الاتصال بالخادم</div>
+                <button onclick="loadServiceRequests()" class="px-4 py-2 bg-slate-800 text-amber-400 rounded-xl text-xs font-bold mt-2">إعادة المحاولة</button>
+              </td>
+            </tr>`;
+        }
+      }
+    }
+
+    function updateServiceRequestStats(stats) {
+      if (!stats) return;
+      const newCount = stats.new || 0;
+      const statElem = document.getElementById('statPendingServiceReqs');
+      if (statElem) statElem.innerText = newCount;
+
+      const badge = document.getElementById('badgePendingServiceReqs');
+      if (badge) {
+        if (newCount > 0) {
+          badge.innerText = newCount;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+    }
+
+    function populateEngineersSelect(engineers) {
+      const select = document.getElementById('srvReqAssigneeSelect');
+      if (!select) return;
+      select.innerHTML = '<option value="">غير معين (بدون تعيين)</option>' + (engineers || []).map(e => `
+        <option value="${e.id}">${e.name || e.username} (${e.role || 'مهندس'})</option>
+      `).join('');
+    }
+
+    function renderServiceRequests(requests) {
+      const tbody = document.getElementById('requestsTableBody');
+      if (!tbody) return;
+      if (!requests || requests.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="text-center py-12 text-slate-500">
+              <i class="fa-solid fa-inbox text-3xl mb-2 text-slate-600 block"></i>
+              <div>لا توجد طلبات خدمات تطابق خيارات الفلترة المحددة</div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      const statusBadges = {
+        'new': '<span class="portal-badge badge-owner"><i class="fa-solid fa-sparkles"></i> طلب جديد</span>',
+        'under_review': '<span class="portal-badge badge-manager"><i class="fa-solid fa-magnifying-glass"></i> قيد المراجعة</span>',
+        'pricing': '<span class="portal-badge badge-owner"><i class="fa-solid fa-coins"></i> جاري التسعير</span>',
+        'quoted': '<span class="portal-badge badge-active"><i class="fa-solid fa-file-invoice-dollar"></i> تم عرض السعر</span>',
+        'converted': '<span class="portal-badge badge-active"><i class="fa-solid fa-city"></i> محول لمشروع</span>',
+        'rejected': '<span class="portal-badge badge-inactive"><i class="fa-solid fa-xmark"></i> ملغي / معتذر</span>'
+      };
+
+      tbody.innerHTML = requests.map(r => {
+        const sourceBadge = r.source === 'guest'
+          ? '<span class="portal-badge badge-viewer"><i class="fa-solid fa-user-astronaut"></i> زائر</span>'
+          : '<span class="portal-badge badge-active"><i class="fa-solid fa-user-check"></i> عميل مسجل</span>';
+
+        const statusBadge = statusBadges[r.status] || `<span class="portal-badge badge-viewer">${r.status}</span>`;
+
+        // Service badges
+        const servicesText = r.requested_services_text || 'خدمات هندسية';
+        const serviceBadges = servicesText.split(' | ').slice(0, 2).map(s => `
+          <span class="inline-block bg-slate-900/90 text-amber-300 border border-amber-500/30 text-[0.72rem] px-2 py-0.5 rounded-md font-semibold">${escapeHtml(s)}</span>
+        `).join(' ');
+        const extraCount = servicesText.split(' | ').length > 2 ? `<span class="text-[0.7rem] text-slate-400">+${servicesText.split(' | ').length - 2} أخرى</span>` : '';
+
+        const assignedName = r.assigned_name || r.assigned_username || '<span class="text-slate-500 italic">غير محدد</span>';
+
+        return `
+          <tr class="hover:bg-slate-900/60 transition duration-150">
+            <td class="px-5 py-4 font-mono font-bold text-amber-400 whitespace-nowrap">
+              ${escapeHtml(r.request_no)}
+            </td>
+            <td class="px-5 py-4">
+              <div class="font-bold text-white">${escapeHtml(r.client_name)}</div>
+              ${r.project_name ? `<div class="text-[0.73rem] text-slate-400">${escapeHtml(r.project_name)}</div>` : ''}
+            </td>
+            <td class="px-5 py-4 font-mono text-slate-300" dir="ltr" style="text-align: right;">
+              <a href="tel:${r.phone}" class="hover:text-amber-400 transition">${escapeHtml(r.phone)}</a>
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex flex-wrap items-center gap-1">
+                ${serviceBadges} ${extraCount}
+              </div>
+            </td>
+            <td class="px-5 py-4 text-center whitespace-nowrap">
+              ${sourceBadge}
+            </td>
+            <td class="px-5 py-4 text-xs text-slate-400 whitespace-nowrap font-mono">
+              ${new Date(r.created_at).toLocaleDateString('ar-YE')}
+            </td>
+            <td class="px-5 py-4 text-center whitespace-nowrap">
+              ${statusBadge}
+            </td>
+            <td class="px-5 py-4 text-xs text-slate-300 whitespace-nowrap">
+              ${assignedName}
+            </td>
+            <td class="px-5 py-4 text-center whitespace-nowrap">
+              <button onclick="openServiceRequestModal(${r.id})" class="px-3.5 py-1.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-extrabold rounded-lg border border-amber-500/40 transition text-xs flex items-center gap-1.5 mx-auto cursor-pointer" title="استعراض تفاصيل الطلب والمرفقات">
+                <i class="fa-solid fa-eye"></i>
+                <span>عرض وإجراء</span>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterServiceRequests() {
+      const term = (document.getElementById('searchRequestsInput').value || '').trim().toLowerCase();
+      if (!term) {
+        renderServiceRequests(allServiceRequests);
+        return;
+      }
+
+      const filtered = allServiceRequests.filter(r => {
+        return (r.request_no && r.request_no.toLowerCase().includes(term)) ||
+               (r.client_name && r.client_name.toLowerCase().includes(term)) ||
+               (r.phone && r.phone.includes(term)) ||
+               (r.project_name && r.project_name.toLowerCase().includes(term)) ||
+               (r.requested_services_text && r.requested_services_text.toLowerCase().includes(term));
+      });
+
+      renderServiceRequests(filtered);
+    }
+
+    async function openServiceRequestModal(id) {
+      currentServiceRequestId = id;
+      try {
+        const headers = getAuthHeaders();
+        const res = await fetch(`/api/admin/client-users/service-requests/${id}`, { headers });
+        const data = await res.json();
+
+        if (!data.success || !data.request) {
+          showToast(data.message || 'تعذر تحميل بيانات الطلب', 'error');
+          return;
+        }
+
+        const r = data.request;
+
+        // Header info
+        document.getElementById('srvReqNoBadge').innerText = r.request_no;
+        document.getElementById('srvReqDate').innerText = `تاريخ التقديم: ${new Date(r.created_at).toLocaleString('ar-YE')}`;
+        
+        const srcBadge = document.getElementById('srvReqSourceBadge');
+        srcBadge.className = r.source === 'guest' ? 'portal-badge badge-viewer' : 'portal-badge badge-active';
+        srcBadge.innerHTML = r.source === 'guest' ? '<i class="fa-solid fa-user-astronaut"></i> زائر' : '<i class="fa-solid fa-user-check"></i> عميل مسجل';
+
+        // Client info
+        document.getElementById('srvReqClientName').innerText = r.client_name || '—';
+        document.getElementById('srvReqPhone').innerText = r.phone || '—';
+        document.getElementById('srvReqEmail').innerText = r.email || 'غير متوفر';
+
+        // Project info
+        document.getElementById('srvReqProjectName').innerText = r.project_name || 'غير محدد';
+        document.getElementById('srvReqProjectType').innerText = r.project_type || 'أعمال هندسية';
+        document.getElementById('srvReqLocation').innerText = r.location || 'غير محدد';
+        document.getElementById('srvReqBudget').innerText = r.estimated_budget ? `${Number(r.estimated_budget).toLocaleString()} ${r.currency || 'YER'}` : 'لم تحدد';
+        document.getElementById('srvReqStartDate').innerText = r.expected_start_date || 'غير محدد';
+        document.getElementById('srvReqVerifyCode').innerText = r.verification_code || '---';
+
+        // Description
+        document.getElementById('srvReqDescription').innerText = r.description || (r.notes ? `ملاحظات: ${r.notes}` : 'لا يوجد وصف مفصل مدخل من العميل');
+
+        // Items
+        const itemsContainer = document.getElementById('srvReqItemsContainer');
+        itemsContainer.innerHTML = (r.items || []).map(item => `
+          <div class="px-3 py-1.5 rounded-lg bg-slate-900 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-2">
+            <i class="${item.icon || 'fa-solid fa-check'} text-amber-400"></i>
+            <span>${escapeHtml(item.service_title)}</span>
+          </div>
+        `).join('');
+
+        // Attachments
+        const attContainer = document.getElementById('srvReqAttachmentsContainer');
+        const attachments = r.attachments || [];
+        if (attachments.length === 0) {
+          attContainer.innerHTML = '<span class="text-xs text-slate-500 italic">لا توجد ملفات مرفقة مع هذا الطلب</span>';
+        } else {
+          attContainer.innerHTML = attachments.map(att => `
+            <a href="${att.url}" target="_blank" download="${att.fileName}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-amber-400 rounded-lg text-xs font-semibold flex items-center gap-2 transition" title="تحميل أو معاينة الملف">
+              <i class="fa-solid fa-file-arrow-down text-amber-400"></i>
+              <span>${escapeHtml(att.fileName)}</span>
+              <span class="text-slate-400 text-[0.7rem]">(${formatFileSize(att.size)})</span>
+            </a>
+          `).join('');
+        }
+
+        // Action Form
+        document.getElementById('srvReqId').value = r.id;
+        document.getElementById('srvReqStatusSelect').value = r.status || 'new';
+        document.getElementById('srvReqAssigneeSelect').value = r.assigned_to || '';
+        document.getElementById('srvReqQuoteAmountInput').value = r.quoted_amount || '';
+        document.getElementById('srvReqAdminNotesInput').value = r.admin_notes || '';
+
+        // If converted already, adjust button
+        const convertBtn = document.getElementById('btnConvertToProject');
+        if (r.status === 'converted') {
+          convertBtn.disabled = true;
+          convertBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>تم تحويله إلى مشروع بالفعل</span>';
+          convertBtn.className = 'px-4 py-2 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold cursor-not-allowed';
+        } else {
+          convertBtn.disabled = false;
+          convertBtn.innerHTML = '<i class="fa-solid fa-city"></i> <span>تحويل إلى مشروع رسمي في النظام</span>';
+          convertBtn.className = 'px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-lg shadow-emerald-600/25 cursor-pointer';
+        }
+
+        document.getElementById('serviceRequestModal').classList.remove('hidden');
+      } catch (err) {
+        console.error('Error opening service request modal:', err);
+        showToast('خطأ أثناء تحميل تفاصيل الطلب', 'error');
+      }
+    }
+
+    function closeServiceRequestModal() {
+      document.getElementById('serviceRequestModal').classList.add('hidden');
+      currentServiceRequestId = null;
+    }
+
+    async function submitServiceRequestUpdate(e) {
+      e.preventDefault();
+      const id = document.getElementById('srvReqId').value;
+      const status = document.getElementById('srvReqStatusSelect').value;
+      const assigned_to = document.getElementById('srvReqAssigneeSelect').value || null;
+      const quoted_amount = document.getElementById('srvReqQuoteAmountInput').value || null;
+      const admin_notes = document.getElementById('srvReqAdminNotesInput').value.trim();
+
+      try {
+        const res = await fetch(`/api/admin/client-users/service-requests/${id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ status, assigned_to, quoted_amount, admin_notes })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showToast(data.message || 'تم تحديث بيانات الطلب بنجاح', 'success');
+          closeServiceRequestModal();
+          loadServiceRequests();
+        } else {
+          showToast(data.message || 'فشل تحديث الطلب', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء التحديث', 'error');
+      }
+    }
+
+    async function executeConvertToProject() {
+      if (!currentServiceRequestId) return;
+      if (!confirm('هل أنت متأكد من رغبتك في تحويل طلب الخدمة هذا إلى مشروع رسمي في النظام؟ سيتم إضافة العميل والمشروع وتحديث حالة الطلب.')) {
+        return;
+      }
+
+      const btn = document.getElementById('btnConvertToProject');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري إنشاء المشروع...';
+
+      try {
+        const res = await fetch(`/api/admin/client-users/service-requests/${currentServiceRequestId}/convert-to-project`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showToast(data.message || 'تم تحويل الطلب إلى مشروع بنجاح', 'success');
+          closeServiceRequestModal();
+          loadServiceRequests();
+        } else {
+          showToast(data.message || 'تعذر تحويل الطلب إلى مشروع', 'error');
+        }
+      } catch (err) {
+        showToast('خطأ في الاتصال بالخادم أثناء التحويل', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadClientUsers();
+      loadClientMessages();
+      loadServiceRequests();
+    });
+  </script>
+</body>
+</html>

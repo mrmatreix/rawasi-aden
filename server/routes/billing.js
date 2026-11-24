@@ -3,7 +3,10 @@ const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, recordScopeParam, projectScopeSql } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam('bills'));
+
 
 // جلب الفواتير والمستخلصات مع تطبيق النطاق الصلاحي
 router.get('/', requirePermission('billing:view,revenues:view'), async (req, res) => {
@@ -21,17 +24,7 @@ router.get('/', requirePermission('billing:view,revenues:view'), async (req, res
     const conditions = [];
 
     // تطبيق نطاق المشاريع المصرح بها
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
-      const allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
-      if (!allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-        if (allowedProjects.length === 0) {
-          return res.json({ success: true, data: [] });
-        }
-        const placeholders = allowedProjects.map(() => '?').join(',');
-        conditions.push(`(b.project_id IS NULL OR b.project_id IN (${placeholders}))`);
-        params.push(...allowedProjects.map(Number));
-      }
-    }
+    { const scopeSql = projectScopeSql(req.user, 'b.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (project_id) {
       conditions.push('b.project_id = ?');
@@ -61,182 +54,36 @@ router.get('/', requirePermission('billing:view,revenues:view'), async (req, res
 const FinancialControlService = {
   ...require('../services/financialControlService')
 };
+const clientChainService = require('../services/clientChainService');
 
-// إنشاء مستخلص أو فاتورة أعمال جديدة مع التحقق من الصلاحيات والنطاق
+const BillingService = require('../services/billing/billingService');
+const billStatus = err => err.statusCode || (/انتهاك|لا يجوز/.test(err.message) ? 403 : 500);
+
+// إنشاء مستخلص: يُنشأ دائماً مسودة؛ الاعتماد بمستخدم آخر ثم الترحيل (سياسة الإيراد عند اعتماد المستخلص)
 router.post('/', requirePermission('billing:create'), async (req, res) => {
   try {
-    const {
-      bill_type = 'مستخلص جاري',
-      project_id,
-      client_id,
-      amount,
-      deduction = 0,
-      advance_deduction = 0,
-      retention_deduction = 0,
-      status: requestedStatus = 'draft',
-      date = new Date().toISOString().split('T')[0],
-      notes
-    } = req.body;
-
-    // 1. التحقق من إغلاق الفترة المحاسبية لتاريخ المستخلص
-    const periodCheck = await checkPeriodOpen(date);
-    if (!periodCheck.isOpen) {
-      return res.status(403).json({ success: false, message: periodCheck.message });
-    }
-
-    if (!project_id || !amount || Number(amount) <= 0) {
-      return res.status(400).json({ success: false, message: 'يرجى تحديد المشروع والمبلغ الإجمالي' });
-    }
-
-    const parsedGrossAmount = Number(amount);
-    const parsedAdvDed = Number(advance_deduction) || 0;
-    const parsedRetDed = Number(retention_deduction) || 0;
-    const totalDeductions = parsedAdvDed > 0 || parsedRetDed > 0 
-      ? (parsedAdvDed + parsedRetDed)
-      : (Number(deduction) || 0);
-
-    const net_amount = Math.max(0, parsedGrossAmount - totalDeductions);
-
-    // جلب معرف العميل إن لم يكن محدد
-    let finalClientId = client_id;
-    if (!finalClientId) {
-      const proj = await get('SELECT client_id FROM projects WHERE id = ?', [project_id]);
-      if (proj) finalClientId = proj.client_id;
-    }
-
-    // توليد رقم المستخلص (حلقة فرادة: COUNT+1 وحده يصطدم بعد أي حذف صف)
-    const countRes = await get('SELECT COUNT(*) as cnt FROM bills');
-    let billSeq = ((countRes ? countRes.cnt : 0) || 0) + 1;
-    let bill_no = `INV-${new Date().getFullYear()}-${String(billSeq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM bills WHERE bill_no = ?', [bill_no])) {
-      billSeq += 1;
-      bill_no = `INV-${new Date().getFullYear()}-${String(billSeq).padStart(4, '0')}`;
-    }
-
-    const rawCreatorId = req.user?.id || null;
-    const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
-    const creatorName = req.user?.username || req.user?.full_name || 'مسؤول فواتير';
-
-    const isPosted = (requestedStatus === 'معتمد' || requestedStatus === 'posted');
-    const finalStatus = isPosted ? (requestedStatus === 'معتمد' ? 'معتمد' : 'posted') : (requestedStatus || 'draft');
-
-    let jeNo = null;
-
-    const txResult = await transaction(async (tx) => {
-      const result = await tx.run(`
-        INSERT INTO bills (
-          bill_no, bill_type, project_id, client_id, 
-          amount, deduction, net_amount, status, date, notes,
-          gross_amount, advance_deduction, retention_deduction,
-          created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        bill_no, bill_type, project_id, finalClientId || null,
-        parsedGrossAmount, totalDeductions, net_amount, finalStatus, date, notes || '',
-        parsedGrossAmount, parsedAdvDed, parsedRetDed,
-        creatorId, creatorName,
-        isPosted ? creatorId : null,
-        isPosted ? creatorName : null,
-        isPosted ? new Date().toISOString() : null
-      ]);
-
-      const billId = result.lastInsertRowid || result.insertId;
-
-      // التأثير المحاسبي وقيد استحقاق المستخلص فقط عند الترحيل/الاعتماد
-      if (isPosted) {
-        if (finalClientId) {
-          await tx.run(`
-            UPDATE clients SET 
-              total_due = total_due + ?,
-              current_balance = current_balance + ?
-            WHERE id = ?
-          `, [net_amount, net_amount, finalClientId]);
-        }
-
-        const jeCountRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-        let jeSeq = ((jeCountRes ? jeCountRes.cnt : 0) || 0) + 1;
-        jeNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-        while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [jeNo])) {
-          jeSeq++;
-          jeNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-        }
-
-        const jeRes = await tx.run(`
-          INSERT INTO journal_entries (
-            entry_no, date, description, reference_type, reference_id,
-            total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-          ) VALUES (?, ?, ?, 'مستخلص أعمال معتمد', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [
-          jeNo, date,
-          `استحقاق ${bill_type} رقم ${bill_no} - إجمالي منجز: ${parsedGrossAmount.toLocaleString()} ر.ي`,
-          billId, parsedGrossAmount, parsedGrossAmount,
-          creatorId, creatorName, creatorId, creatorName
-        ]);
-
-        const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-
-        // ربط المستخلص برقم القيد
-        await tx.run('UPDATE bills SET journal_entry_id = ? WHERE id = ?', [jeId, billId]);
-
-        // مدين: ذمم العملاء (بصافي المستخلص)
-        if (net_amount > 0) {
-          await tx.run(`
-            INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-            VALUES (?, 4, ?, ?, 0, ?)
-          `, [jeId, project_id, net_amount, `ذمم عملاء مستحقة - صافي ${bill_type} رقم ${bill_no}`]);
-        }
-
-        // مدين: محتجزات ضمان لدى العملاء (Retention Receivable)
-        if (parsedRetDed > 0) {
-          await tx.run(`
-            INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-            VALUES (?, 16, ?, ?, 0, ?)
-          `, [jeId, project_id, parsedRetDed, `أصل تعاقدي - محتجز ضمان مستقطع لحين التسليم النهائي`]);
-        }
-
-        // مدين: استهلاك الدفعة المقدمة (إطفاء التزام الدفعة المقدمة)
-        if (parsedAdvDed > 0) {
-          await tx.run(`
-            INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-            VALUES (?, 18, ?, ?, 0, ?)
-          `, [jeId, project_id, parsedAdvDed, `إطفاء التزام تعاقدي - استقطاع استهلاك دفعة مقدمة`]);
-        }
-
-        // دائن: أصول تعاقدية / أعمال منجزة مفوترة (Contract Billings)
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 17, ?, 0, ?, ?)
-        `, [jeId, project_id, parsedGrossAmount, `أصول تعاقدية - إجمالي الأعمال المنجزة المفوترة بالمستخلص`]);
-      }
-
-      return result;
-    });
-
+    const requested = req.body.status;
+    const bill = await BillingService.create(req.body, req.user);
     await logAudit(req, {
-      action: isPosted ? 'INSERT' : 'CREATE_DRAFT',
-      entity_type: 'bill',
-      entity_id: bill_no,
-      details: {
-        bill_no, bill_type, project_id, client_id: finalClientId,
-        gross_amount: parsedGrossAmount, deductions: totalDeductions,
-        net_amount, status: finalStatus, date, journal_entry_no: jeNo
-      }
+      action: 'CREATE_DRAFT', entity_type: 'bill', entity_id: bill.bill_no,
+      details: { ...bill, requested_status: requested || 'draft' }
     });
-
+    const wantedPosting = requested === 'posted' || requested === 'معتمد' || requested === 'approved';
     res.json({
       success: true,
-      message: isPosted 
-        ? `تم إنشاء واعتماد المستخلص (${bill_no}) بنجاح وتوليد القيد المحاسبي المتزن (${jeNo || 'بدون قيد'})`
-        : `تم حفظ مسودة المستخلص (${bill_no}) بنجاح وهي جاهزة للمراجعة والاعتماد`,
-      bill_no,
-      status: finalStatus,
-      id: txResult.lastInsertRowid || txResult.insertId,
-      gross_amount: parsedGrossAmount,
-      net_amount,
-      journal_entry_no: jeNo
+      message: wantedPosting
+        ? `تم حفظ المستخلص (${bill.bill_no}) كمسودة. لا يُرحّل المستخلص لحظة إنشائه: يجب اعتماده بواسطة مستخدم آخر ثم ترحيله.`
+        : `تم حفظ مسودة المستخلص (${bill.bill_no}) بنجاح وهي جاهزة للمراجعة والاعتماد`,
+      requires_approval: true,
+      bill_no: bill.bill_no,
+      status: bill.status,
+      id: bill.id,
+      gross_amount: bill.gross_amount,
+      net_amount: bill.net_amount,
+      journal_entry_no: null
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في إنشاء المستخلص: ' + err.message, error: err.message });
+    res.status(billStatus(err)).json({ success: false, message: 'خطأ في إنشاء المستخلص: ' + err.message, error: err.message });
   }
 });
 
@@ -279,206 +126,44 @@ router.post('/:id/submit-review', requirePermission('billing:create,billing:edit
 // اعتماد المستخلص مع فحص مبدأ العيون الأربع (Maker-Checker / Four-Eyes Principle)
 router.post('/:id/approve', requirePermission('billing:approve,accounting:approve'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const { notes } = req.body;
-    const bill = await get('SELECT * FROM bills WHERE id = ?', [id]);
-    if (!bill) return res.status(404).json({ success: false, message: 'المستخلص غير موجود' });
-
-    // 1. تطبيق مبدأ العيون الأربع (منع منشئ المستخلص من اعتماده بنفسه)
-    try {
-      FinancialControlService.assertMakerChecker(bill, req.user, 'اعتماد');
-    } catch (soDError) {
-      return res.status(403).json({ success: false, message: soDError.message, fourEyesViolation: true });
-    }
-
-    // 2. التحقق من الفترة المحاسبية
-    await FinancialControlService.assertPeriodOpen(bill.date);
-
-    if (bill.status === 'approved' || bill.status === 'معتمد' || bill.status === 'posted') {
-      return res.status(400).json({ success: false, message: 'المستخلص معتمد مسبقاً' });
-    }
-
-    const rawAppId = req.user?.id || null;
-    const approverId = await FinancialControlService.resolveValidUserId(rawAppId);
-    const approverName = req.user?.username || req.user?.full_name || 'مدير المشاريع';
-
-    await run(`
-      UPDATE bills 
-      SET status = 'approved', approved_by = ?, approved_by_name = ?, approved_at = CURRENT_TIMESTAMP, approval_notes = ?
-      WHERE id = ?
-    `, [approverId, approverName, notes || null, id]);
-
+    const { bill, approved_by } = await BillingService.approve(req.params.id, req.user, req.body.notes);
     await logAudit(req, {
-      action: 'APPROVE',
-      entity_type: 'bill',
-      entity_id: bill.bill_no,
-      old_values: { status: bill.status },
-      new_values: { status: 'approved', approved_by: approverName },
-      reason: notes || 'اعتماد هندسي ومالي معتمد'
+      action: 'APPROVE', entity_type: 'bill', entity_id: bill.bill_no,
+      old_values: { status: bill.status }, new_values: { status: 'approved', approved_by },
+      reason: req.body.notes || 'اعتماد هندسي ومالي معتمد'
     });
-
-    res.json({ success: true, message: `تم اعتماد المستخلص (${bill.bill_no}) بنجاح بواسطة [${approverName}]`, status: 'approved' });
+    res.json({ success: true, message: `تم اعتماد المستخلص (${bill.bill_no}) بنجاح بواسطة [${approved_by}]`, status: 'approved' });
   } catch (err) {
-    const status = err.message.includes('انتهاك') || err.message.includes('لا يجوز') ? 403 : 500;
-    res.status(status).json({ success: false, message: err.message });
+    const status = billStatus(err);
+    res.status(status).json({ success: false, message: err.message, ...(status === 403 ? { fourEyesViolation: true } : {}) });
   }
 });
 
-// ترحيل المستخلص المعتمد لدفتر الأستاذ وحسابات العميل (Post to GL)
+// ترحيل المستخلص المعتمد لدفتر الأستاذ وحسابات العميل (Post to GL) عبر PostingService
 router.post('/:id/post', requirePermission('billing:post,accounting:post'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const bill = await get('SELECT * FROM bills WHERE id = ?', [id]);
-    if (!bill) return res.status(404).json({ success: false, message: 'المستخلص غير موجود' });
-
-    if (bill.status === 'posted' || bill.status === 'معتمد') {
-      return res.status(400).json({ success: false, message: 'المستخلص مرحل مسبقاً' });
-    }
-    if (bill.status === 'reversed') {
-      return res.status(400).json({ success: false, message: 'لا يمكن ترحيل مستخلص تم عكسه مسبقاً' });
-    }
-
-    await FinancialControlService.assertPeriodOpen(bill.date);
-
-    const rawPosterId = req.user?.id || null;
-    const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
-    const posterName = req.user?.username || req.user?.full_name || 'المحاسب المالي';
-
-    const parsedGrossAmount = Number(bill.gross_amount || bill.amount || 0);
-    const parsedAdvDed = Number(bill.advance_deduction || 0);
-    const parsedRetDed = Number(bill.retention_deduction || 0);
-    const net_amount = Number(bill.net_amount || (parsedGrossAmount - parsedAdvDed - parsedRetDed) || 0);
-
-    let jeNo = null;
-
-    await transaction(async (tx) => {
-      // 1. زيادة مستحقات العميل بصافي المستخلص
-      if (bill.client_id && net_amount > 0) {
-        await tx.run(`
-          UPDATE clients SET 
-            total_due = total_due + ?,
-            current_balance = current_balance + ?
-          WHERE id = ?
-        `, [net_amount, net_amount, bill.client_id]);
-      }
-
-      // 2. توليد قيد استحقاق المستخلص المركب المتزن
-      const jeCountRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((jeCountRes ? jeCountRes.cnt : 0) || 0) + 1;
-      jeNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [jeNo])) {
-        jeSeq++;
-        jeNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      }
-
-      const jeRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id,
-          total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'مستخلص أعمال معتمد', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        jeNo, bill.date,
-        `استحقاق ${bill.bill_type} رقم ${bill.bill_no} - إجمالي منجز: ${parsedGrossAmount.toLocaleString()} ر.ي`,
-        bill.id, parsedGrossAmount, parsedGrossAmount,
-        posterId, posterName, posterId, posterName
-      ]);
-
-      const jeId = jeRes.lastInsertRowid || jeRes.insertId;
-
-      if (net_amount > 0) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 4, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, net_amount, `ذمم عملاء مستحقة - صافي ${bill.bill_type} رقم ${bill.bill_no}`]);
-      }
-
-      if (parsedRetDed > 0) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 16, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, parsedRetDed, `أصل تعاقدي - محتجز ضمان مستقطع لحين التسليم النهائي`]);
-      }
-
-      if (parsedAdvDed > 0) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, 18, ?, ?, 0, ?)
-        `, [jeId, bill.project_id, parsedAdvDed, `إطفاء التزام تعاقدي - استقطاع استهلاك دفعة مقدمة`]);
-      }
-
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, 17, ?, 0, ?, ?)
-      `, [jeId, bill.project_id, parsedGrossAmount, `أصول تعاقدية - إجمالي الأعمال المنجزة المفوترة بالمستخلص`]);
-
-      await tx.run(`
-        UPDATE bills 
-        SET status = 'posted', posted_by = ?, posted_by_name = ?, posted_at = CURRENT_TIMESTAMP, journal_entry_id = ?
-        WHERE id = ?
-      `, [posterId, posterName, jeId, bill.id]);
-    });
-
+    const { bill, entry } = await BillingService.post(req.params.id, req.user);
     await logAudit(req, {
-      action: 'POST',
-      entity_type: 'bill',
-      entity_id: bill.bill_no,
-      old_values: { status: bill.status },
-      new_values: { status: 'posted', posted_by: posterName, journal_entry_no: jeNo }
+      action: 'POST', entity_type: 'bill', entity_id: bill.bill_no,
+      old_values: { status: bill.status }, new_values: { status: 'posted', posted_by: req.user?.username, journal_entry_no: entry.entry_no }
     });
-
-    res.json({ success: true, message: `تم ترحيل المستخلص (${bill.bill_no}) بنجاح وتوليد القيد المحاسبي (${jeNo})`, status: 'posted', journal_entry_no: jeNo });
+    res.json({ success: true, message: `تم ترحيل المستخلص (${bill.bill_no}) بنجاح وتوليد القيد المحاسبي (${entry.entry_no})`, status: 'posted', journal_entry_no: entry.entry_no });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء ترحيل المستخلص: ' + err.message });
+    res.status(billStatus(err)).json({ success: false, message: 'خطأ أثناء ترحيل المستخلص: ' + err.message });
   }
 });
 
-// تعديل مستخلص (محمي صارماً: للمسودات فقط)
+// تعديل مستخلص (للمسودات وقيد المراجعة فقط؛ المتبقي يتبع الصافي دائماً)
 router.put('/:id', requirePermission('billing:edit'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const bill = await get('SELECT * FROM bills WHERE id = ?', [id]);
-    if (!bill) return res.status(404).json({ success: false, message: 'المستخلص غير موجود' });
-
-    try {
-      FinancialControlService.assertMutable(bill, 'تعديل بيانات أو قيم');
-    } catch (mErr) {
-      return res.status(400).json({ success: false, message: mErr.message, immutable: true });
-    }
-
-    await FinancialControlService.assertPeriodOpen(bill.date);
-
-    const { amount, advance_deduction, retention_deduction, notes, date } = req.body;
-    const targetDate = date || bill.date;
-    await FinancialControlService.assertPeriodOpen(targetDate);
-
-    const parsedGross = amount ? Number(amount) : Number(bill.gross_amount || bill.amount);
-    const parsedAdv = advance_deduction !== undefined ? Number(advance_deduction) : Number(bill.advance_deduction || 0);
-    const parsedRet = retention_deduction !== undefined ? Number(retention_deduction) : Number(bill.retention_deduction || 0);
-    const totalDeds = parsedAdv + parsedRet;
-    const newNet = Math.max(0, parsedGross - totalDeds);
-
-    const oldVals = { gross_amount: bill.gross_amount || bill.amount, net_amount: bill.net_amount, date: bill.date };
-    const newVals = { gross_amount: parsedGross, net_amount: newNet, date: targetDate };
-
-    await run(`
-      UPDATE bills 
-      SET amount = ?, gross_amount = ?, advance_deduction = ?, retention_deduction = ?, 
-          deduction = ?, net_amount = ?, notes = COALESCE(?, notes), date = ?
-      WHERE id = ?
-    `, [parsedGross, parsedGross, parsedAdv, parsedRet, totalDeds, newNet, notes, targetDate, id]);
-
+    const { before, after, bill } = await BillingService.update(req.params.id, req.body);
     await logAudit(req, {
-      action: 'UPDATE',
-      entity_type: 'bill',
-      entity_id: bill.bill_no,
-      old_values: oldVals,
-      new_values: newVals,
-      reason: req.body.reason || 'تعديل مسودة مستخلص'
+      action: 'UPDATE', entity_type: 'bill', entity_id: bill.bill_no,
+      old_values: before, new_values: after, reason: req.body.reason || 'تعديل مسودة مستخلص'
     });
-
     res.json({ success: true, message: 'تم تعديل مسودة المستخلص بنجاح' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(billStatus(err)).json({ success: false, message: err.message, ...(err.immutable ? { immutable: true } : {}) });
   }
 });
 
@@ -497,7 +182,7 @@ router.post('/:id/reverse', requirePermission('billing:approve,accounting:approv
 
     res.json(result);
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });
@@ -542,7 +227,7 @@ const ContractingAccountingService = require('../services/contractingAccountingS
 router.get('/contracting-matrix', requirePermission('billing:view,revenues:view,reports:view'), async (req, res) => {
   try {
     let allowedProjects = ['*'];
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
     }
 
@@ -585,7 +270,7 @@ router.post('/recognize-revenue', requirePermission('billing:create,accounting:c
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء إثبات الإيراد التعاقدي: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ أثناء إثبات الإيراد التعاقدي: ' + err.message, code: err.code });
   }
 });
 

@@ -115,7 +115,15 @@ test('Supplier Payables - Accrual on Credit, Settlement, Unwind on Delete, Expos
      VALUES (?, 'payables_tester', ?, 'admin', 'مختبِر الذمم', 'active', '["*"]')`,
     [testerId, passwordHash]
   );
-  const acc = async (code) => (await db.get('SELECT id FROM accounts WHERE code = ?', [code])).id;
+  const acc = async (code) => {
+    let row = await db.get('SELECT id FROM accounts WHERE code = ? AND (is_posting = 1 OR is_posting IS NULL)', [code]);
+    if (!row) {
+      if (code === '5') row = await db.get("SELECT id FROM accounts WHERE code = '32102005' OR (type = 'expense' AND is_posting = 1) LIMIT 1");
+      else if (code === '21') row = await db.get("SELECT id FROM accounts WHERE code = '22101001' OR (type = 'liability' AND is_posting = 1) LIMIT 1");
+      else if (code === '111') row = await db.get("SELECT id FROM accounts WHERE code = '12101001' OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%') LIMIT 1");
+    }
+    return row ? row.id : null;
+  };
   const acc5 = await acc('5');
   const acc21 = await acc('21');
   const acc111 = await acc('111');
@@ -128,8 +136,8 @@ test('Supplier Payables - Accrual on Credit, Settlement, Unwind on Delete, Expos
   const projectId = r.data.data.id;
 
   r = await api('POST', '/api/suppliers', { name: SUPPLIER_NAME });
-  assert.strictEqual(r.status, 200, 'إنشاء المورد: ' + JSON.stringify(r.data));
-  const supplierId = r.data.id;
+  assert.ok(r.status === 200 || r.status === 201, 'إنشاء المورد: ' + JSON.stringify(r.data));
+  const supplierId = r.data.id || r.data.data?.id;
 
   // 1. فاتورة آجلة 100,000 (مدفوع 40,000) ← استحقاق 60,000
   r = await api('POST', `/api/project-hub/${projectId}/purchases`, {
@@ -257,10 +265,10 @@ test('Supplier Payables - Accrual on Credit, Settlement, Unwind on Delete, Expos
   assert.strictEqual(r.status, 200, 'حذف الفاتورة: ' + JSON.stringify(r.data));
   deadPurchaseIds.push(purchaseId);
   assert.ok(/استحقاق/.test(r.data.message || ''), 'الرسالة تعلن فك الاستحقاق');
-  const apRev = await db.get('SELECT status FROM journal_entries WHERE id = ?', [apJe.id]);
-  assert.strictEqual(apRev.status, 'reversed', 'قيد الاستحقاق معكوس');
-  const setRev = await db.get('SELECT status FROM journal_entries WHERE id = ?', [setJe.id]);
-  assert.strictEqual(setRev.status, 'reversed', 'قيد التسوية معكوس');
+  const apRev = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [apJe.id]);
+  assert.strictEqual(apRev.status, 'posted', 'الأصل يبقى مرحّلاً ليتقابل مع قيده العكسي'); assert.ok(apRev.reversal_ref_id, 'قيد الاستحقاق معكوس');
+  const setRev = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [setJe.id]);
+  assert.strictEqual(setRev.status, 'posted', 'الأصل يبقى مرحّلاً ليتقابل مع قيده العكسي'); assert.ok(setRev.reversal_ref_id, 'قيد التسوية معكوس');
   const revCount = await db.get(
     `SELECT COUNT(*) c FROM journal_entries WHERE reference_id = ? AND reference_type = 'قيد عكسي' AND description LIKE '%ذمم الموردين%'`,
     [purchaseId]

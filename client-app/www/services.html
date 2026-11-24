@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>خدمات مكتب الهندسة والمقاولات - شركة رواسي عدن</title>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Client Theme -->
+  <link rel="stylesheet" href="css/client-theme.css">
+
+  <style>
+    /* Styling Specific to Engineering Services & Guest Request */
+    .services-page-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px 16px 90px 16px;
+    }
+
+    /* Top Navigation Bar */
+    .services-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand-guest-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-logo-small {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      background: radial-gradient(circle at 30% 30%, #1e3355 0%, #13223b 70%, #0b1426 100%);
+      border: 1.5px solid rgba(212, 175, 55, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    }
+    .brand-logo-small img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .mode-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      background: rgba(212, 175, 55, 0.15);
+      color: var(--gold);
+      border: 1px solid rgba(212, 175, 55, 0.35);
+    }
+    .mode-badge.registered {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.35);
+    }
+
+    /* Hero Banner */
+    .services-hero {
+      background: linear-gradient(135deg, rgba(21, 34, 56, 0.95) 0%, rgba(15, 23, 42, 0.9) 100%);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      border-radius: 20px;
+      padding: 24px 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+      position: relative;
+      overflow: hidden;
+    }
+    .services-hero::before {
+      content: '';
+      position: absolute;
+      top: -40px;
+      left: -40px;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(212, 175, 55, 0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-heading {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #FFFFFF;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .hero-subtext {
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+
+    /* Category Filter Pills */
+    .filter-pills-container {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 20px;
+      scrollbar-width: none;
+    }
+    .filter-pills-container::-webkit-scrollbar {
+      display: none;
+    }
+    .filter-pill {
+      white-space: nowrap;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .filter-pill:hover, .filter-pill.active {
+      background: rgba(212, 175, 55, 0.18);
+      border-color: var(--gold);
+      color: var(--gold);
+      box-shadow: 0 4px 12px rgba(212, 175, 55, 0.15);
+    }
+
+    /* Selected Services Sticky Floating Bar */
+    .selected-summary-bar {
+      position: sticky;
+      top: 10px;
+      z-index: 90;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1.5px solid var(--gold);
+      border-radius: 18px;
+      padding: 12px 18px;
+      margin-bottom: 24px;
+      box-shadow: 0 14px 35px rgba(0, 0, 0, 0.55), 0 0 20px rgba(212, 175, 55, 0.15);
+      display: none;
+      animation: fadeInSlideDown 0.3s ease;
+    }
+    .selected-summary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .selected-count-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #FFFFFF;
+    }
+    .selected-chips-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      max-height: 90px;
+      overflow-y: auto;
+    }
+    .service-chip {
+      background: rgba(212, 175, 55, 0.15);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      color: #fef08a;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chip-delete-btn {
+      background: none;
+      border: none;
+      color: #f87171;
+      cursor: pointer;
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* Services Grid */
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 18px;
+      margin-bottom: 30px;
+    }
+    .service-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .service-card:hover {
+      border-color: rgba(212, 175, 55, 0.45);
+      transform: translateY(-3px);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.4);
+    }
+    .service-card.selected {
+      background: linear-gradient(145deg, rgba(21, 34, 56, 1) 0%, rgba(26, 43, 71, 0.95) 100%);
+      border-color: var(--gold);
+      box-shadow: 0 10px 30px rgba(212, 175, 55, 0.2), inset 0 0 18px rgba(212, 175, 55, 0.08);
+    }
+    .service-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+    .service-icon-box {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.45rem;
+      color: var(--gold);
+      transition: all 0.25s ease;
+    }
+    .service-card.selected .service-icon-box {
+      background: var(--gold);
+      color: #0b1329;
+      box-shadow: 0 4px 14px rgba(212, 175, 55, 0.4);
+    }
+    .service-check-indicator {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--bg-input);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      color: transparent;
+      transition: all 0.2s ease;
+    }
+    .service-card.selected .service-check-indicator {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #0b1329;
+      box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);
+    }
+    .service-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: #FFFFFF;
+      margin-bottom: 8px;
+      line-height: 1.35;
+    }
+    .service-desc {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-bottom: 18px;
+      flex-grow: 1;
+    }
+    .service-card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 12px;
+      margin-top: auto;
+    }
+    .service-category-tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .service-select-btn {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 14px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .service-card.selected .service-select-btn {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #0b1329;
+      font-weight: 800;
+    }
+
+    /* Request Form Step View */
+    .step-container {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .step-container.active {
+      display: block;
+    }
+
+    /* Form Card */
+    .form-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px 20px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      margin-bottom: 24px;
+    }
+    .form-section-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #FFFFFF;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(212, 175, 55, 0.25);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .required-star {
+      color: #ef4444;
+      font-size: 0.9rem;
+    }
+    .form-input-srv {
+      width: 100%;
+      height: 48px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: #ffffff;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 0.92rem;
+      outline: none;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+      direction: rtl;
+    }
+    .form-input-srv:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px var(--gold-glow);
+    }
+    textarea.form-input-srv {
+      height: 95px;
+      resize: vertical;
+    }
+
+    /* File Upload Box */
+    .upload-dropzone {
+      border: 2px dashed rgba(212, 175, 55, 0.35);
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 16px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 14px;
+    }
+    .upload-dropzone:hover {
+      border-color: var(--gold);
+      background: rgba(212, 175, 55, 0.05);
+    }
+    .file-preview-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .file-preview-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 0.8rem;
+    }
+
+    /* Action Buttons */
+    .btn-submit-request {
+      width: 100%;
+      height: 52px;
+      background: linear-gradient(135deg, #F59E0B 0%, #D4AF37 55%, #B89628 100%);
+      color: #0b1329;
+      font-size: 1.05rem;
+      font-weight: 800;
+      border-radius: 14px;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      box-shadow: 0 8px 25px rgba(212, 175, 55, 0.35);
+      transition: all 0.2s ease;
+    }
+    .btn-submit-request:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      filter: grayscale(0.5);
+    }
+    .btn-submit-request:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    /* Success Card */
+    .success-box {
+      background: linear-gradient(145deg, #111e38 0%, #172642 100%);
+      border: 2px solid var(--gold);
+      border-radius: 28px;
+      padding: 36px 22px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 35px rgba(212, 175, 55, 0.2);
+      max-width: 600px;
+      margin: 20px auto;
+      animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .success-icon-badge {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 18px;
+      border-radius: 26px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 2px solid #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.4rem;
+      color: #34d399;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    }
+    .request-number-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1.5px solid var(--gold);
+      padding: 10px 22px;
+      border-radius: 14px;
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: var(--gold);
+      letter-spacing: 1px;
+      margin: 14px 0;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeInSlideDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.92); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* تجربة Android أولاً: لمسات أكبر، تمرير سلس، ومساحات آمنة للشاشات ذات الحافة. */
+    * { -webkit-tap-highlight-color: transparent; }
+    html { scroll-behavior: smooth; }
+    body { min-height: 100dvh; overscroll-behavior-y: contain; }
+    button, a, input, textarea, select { touch-action: manipulation; }
+    .track-request-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 44px; padding: 0 15px; white-space: nowrap;
+      border: 1px solid rgba(219, 182, 73, .68); border-radius: 14px;
+      color: #f5d77d; background: linear-gradient(145deg, #243650, #111d34);
+      box-shadow: 0 5px 16px rgba(0,0,0,.18), inset 0 1px rgba(255,255,255,.05);
+      font: inherit; font-size: .8rem; font-weight: 800; cursor: pointer;
+      transition: border-color .2s, background .2s, transform .2s;
+    }
+    .track-request-btn:hover { border-color: #f3ce61; background: #263a55; }
+    .track-request-btn:focus-visible { outline: 3px solid #f3ce61; outline-offset: 3px; }
+    .track-request-btn:active { transform: translateY(1px); }
+    .track-request-btn svg { width: 17px; height: 17px; flex: 0 0 auto; }
+    #trackModal { box-sizing:border-box; overflow:hidden; padding:12px; align-items:center; }
+    #trackModal .track-modal-panel { box-sizing:border-box; width:100%; max-width:480px; max-height:100%; min-height:0; margin:auto; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scroll-padding-bottom:18px; }
+    #trackModal .track-modal-panel textarea { scroll-margin-bottom:18px; }
+    .guest-message-feedback { margin: 8px 0 2px; padding: 10px 12px; border: 1px solid rgba(251,191,36,.45); border-radius: 10px; color: #ffe2a3; background: rgba(146,95,18,.18); font-size: .8rem; line-height: 1.6; }
+    .guest-message-feedback[hidden] { display: none; }
+    #guestMessage[aria-invalid="true"] { border-color: #f2b84a; }
+    .services-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .services-actions .btn { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; }
+    @media (max-width: 768px) {
+      .services-page-container { padding: max(12px, env(safe-area-inset-top)) 12px calc(98px + env(safe-area-inset-bottom)); }
+      .services-top-bar { align-items: flex-start; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; }
+      .brand-guest-header { gap: 8px; min-width: 0; }
+      .brand-logo-small { width: 42px; height: 42px; border-radius: 13px; padding: 5px; flex-shrink: 0; }
+      .brand-guest-header h2 { font-size: 0.96rem !important; white-space: nowrap; }
+      .mode-badge { padding: 3px 8px; font-size: 0.65rem; }
+      .services-actions { gap: 6px; }
+      .track-request-btn { min-height: 42px; padding: 0 11px; font-size: .75rem; gap: 6px; }
+      .services-actions .btn { width: 42px; min-width: 42px; padding: 0; font-size: 0; border-radius: 12px !important; }
+      .services-actions .btn i { font-size: 0.9rem; margin: 0; }
+      .services-actions .btn span { display: none; }
+      .services-hero { border-radius: 18px; padding: 19px 16px 16px; margin-bottom: 16px; }
+      .hero-heading { font-size: 1.08rem; gap: 7px; line-height: 1.45; }
+      .hero-subtext { font-size: 0.78rem; line-height: 1.7; margin-bottom: 12px; }
+      .form-input-srv { height: 52px; font-size: 16px; border-radius: 14px; }
+      .filter-pills-container { margin: 0 -12px 16px; padding: 0 12px 8px; gap: 7px; scroll-snap-type: x proximity; }
+      .filter-pill { min-height: 42px; padding: 8px 13px; font-size: 0.74rem; scroll-snap-align: start; }
+      .services-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 22px; }
+      .service-card { min-height: 188px; border-radius: 18px; padding: 16px; box-shadow: 0 7px 18px rgba(0,0,0,.22); }
+      .service-card:active { transform: scale(.985); }
+      .service-card-top { margin-bottom: 10px; }
+      .service-icon-box { width: 46px; height: 46px; border-radius: 14px; font-size: 1.2rem; }
+      .service-check-indicator { width: 30px; height: 30px; }
+      .service-title { font-size: 1rem; margin-bottom: 6px; }
+      .service-desc { font-size: .78rem; line-height: 1.65; margin-bottom: 13px; }
+      .service-card-footer { padding-top: 10px; }
+      .service-select-btn { min-height: 36px; padding: 6px 12px; font-size: .75rem; }
+      .selected-summary-bar { top: 8px; padding: 11px 12px; border-radius: 16px; margin-bottom: 16px; }
+      .selected-summary-header { flex-wrap: nowrap; }
+      .selected-count-badge { font-size: .8rem; }
+      .selected-summary-header .btn { min-height: 42px !important; padding: 0 12px !important; font-size: .78rem !important; white-space: nowrap; }
+      .form-box { padding: 18px 14px; border-radius: 18px; }
+      .form-grid-2 { grid-template-columns: 1fr; gap: 0; }
+      .btn-submit-request { min-height: 54px; font-size: .96rem; }
+    }
+    @media (min-width: 769px) and (max-width: 980px) { .services-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+
+  <div class="services-page-container">
+
+    <!-- Top Bar Navigation -->
+    <div class="services-top-bar">
+      <div class="brand-guest-header">
+        <div class="brand-logo-small">
+          <img src="images/logo_clean.png" onerror="this.onerror=null; this.src='images/logo.png';" alt="رواسي عدن">
+        </div>
+        <div>
+          <h2 style="font-size: 1.15rem; font-weight: 900; color: #FFFFFF; line-height: 1.2;">شركة رواسي عدن</h2>
+          <span id="userModeBadge" class="mode-badge">
+            <i class="fa-solid fa-user-astronaut"></i> وضع الزائر
+          </span>
+        </div>
+      </div>
+
+      <div class="services-actions">
+        <button type="button" onclick="openTrackModal()" class="track-request-btn" aria-label="متابعة طلب الخدمة">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 4.2 4.2"></path></svg>
+          <span>متابعة الطلب</span>
+        </button>
+        <a href="index.html" class="btn btn-outline btn-sm" style="border-radius: 12px; font-size: 0.78rem;" title="العودة لصفحة الدخول">
+          <i class="fa-solid fa-right-to-bracket"></i> <span id="loginBackText">تسجيل الدخول</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- الخطوة 1: استعراض واختيار الخدمات (Services Selection Step) -->
+    <!-- ========================================================================= -->
+    <div id="stepServices" class="step-container active">
+
+      <!-- Hero Header -->
+      <div class="services-hero">
+        <h1 class="hero-heading">
+          <i class="fa-solid fa-compass-drafting text-gold"></i>
+          <span>خدمات مكتب الهندسة والمقاولات</span>
+        </h1>
+        <p class="hero-subtext">
+          اختر خدمة أو عدة خدمات من قائمة أعمالنا الهندسية والإنشائية، وأرسل طلبك مباشرة إلى الإدارة الهندسية لدراسته وتقديم عرض السعر الأمثل.
+        </p>
+
+        <details style="margin:16px auto;max-width:720px;text-align:right;background:rgba(255,255,255,.05);border:1px solid rgba(212,175,55,.35);border-radius:12px;padding:12px 16px;">
+          <summary style="cursor:pointer;font-weight:700;color:#e7c360;">كيف تتابع طلبك؟</summary>
+          <ol style="padding-right:20px;line-height:1.9;margin:10px 0 0;">
+            <li>اختر الخدمة وأرسل التفاصيل، ثم احتفظ برقم الطلب ورمز المتابعة.</li>
+            <li>تراجع خدمة العملاء الطلب وقد تعيّن مهندسًا مختصًا.</li>
+            <li>يظهر الرد أو عرض السعر بعد موافقة المدير عند الضغط على «متابعة طلب».</li>
+            <li>يمكنك إرسال رسالة، والموافقة على العرض أو طلب تعديله بملاحظة.</li>
+          </ol>
+        </details>
+
+        <!-- Search Input -->
+        <div style="position: relative; max-width: 480px;">
+          <input type="text" id="serviceSearchInput" placeholder="ابحث عن خدمة هندسية معينة..." class="form-input-srv" style="padding-right: 40px;" oninput="filterServices()">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 14px; top: 16px; color: var(--gold);"></i>
+        </div>
+      </div>
+
+      <!-- Categories Filter Pills -->
+      <div class="filter-pills-container">
+        <button class="filter-pill active" onclick="setCategoryFilter('all', this)">
+          <i class="fa-solid fa-border-all"></i> جميع الخدمات
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('design', this)">
+          <i class="fa-solid fa-pencil-ruler"></i> التصميم والإشراف
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('execution', this)">
+          <i class="fa-solid fa-trowel-bricks"></i> المقاولات والتنفيذ
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('finishing', this)">
+          <i class="fa-solid fa-paint-roller"></i> الترميم والتشطيبات
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('systems', this)">
+          <i class="fa-solid fa-bolt"></i> الأنظمة والطاقة
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('infrastructure', this)">
+          <i class="fa-solid fa-map-location-dot"></i> البنية التحتية والمساحة
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('consulting', this)">
+          <i class="fa-solid fa-clipboard-check"></i> الاستشارات والتراخيص
+        </button>
+        <button class="filter-pill" onclick="setCategoryFilter('supply', this)">
+          <i class="fa-solid fa-truck-fast"></i> التوريد والتركيب
+        </button>
+      </div>
+
+      <!-- Selected Services Sticky Summary Drawer -->
+      <div id="selectedSummaryBar" class="selected-summary-bar">
+        <div class="selected-summary-header">
+          <div class="selected-count-badge">
+            <i class="fa-solid fa-circle-check text-gold" style="font-size: 1.2rem;"></i>
+            <span>الخدمات التي اخترتها (<span id="selectedCountNumber">0</span>)</span>
+          </div>
+          <button onclick="goToFormStep()" class="btn btn-primary" style="height: 42px; padding: 0 18px; border-radius: 12px; font-weight: 800; font-size: 0.9rem;">
+            <span>متابعة الطلب</span>
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+        </div>
+        <div id="selectedChipsContainer" class="selected-chips-list">
+          <!-- Dynamic Chips -->
+        </div>
+      </div>
+
+      <!-- Services Grid Container -->
+      <div id="servicesGrid" class="services-grid">
+        <div class="sk-list" role="status" aria-busy="true" aria-label="جاري تحميل الخدمات الهندسية النشطة" style="grid-column: 1/-1;"><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div><div class="sk-card"><div class="sk-row"><span class="sk-line lg w-40"></span><span class="sk-line w-30"></span></div><span class="sk-line w-80"></span><span class="sk-line w-60"></span></div></div>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- الخطوة 2: نموذج إدخال بيانات الطلب (Request Details Form Step) -->
+    <!-- ========================================================================= -->
+    <div id="stepForm" class="step-container">
+      
+      <!-- Back to Services Button -->
+      <div style="margin-bottom: 16px;">
+        <button onclick="goToServicesStep()" class="btn btn-outline btn-sm" style="border-radius: 12px;">
+          <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الخدمات
+        </button>
+      </div>
+
+      <!-- Selected Services Review Summary Card -->
+      <div class="form-box" style="border-color: rgba(212, 175, 55, 0.4); background: rgba(21, 34, 56, 0.85);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 1rem; font-weight: 800; color: var(--gold); display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-list-check"></i>
+            <span>ملخص الخدمات المختارة للطلب (<span id="formSelectedCount">0</span>)</span>
+          </h3>
+          <button onclick="goToServicesStep()" style="background: none; border: none; color: #60a5fa; font-size: 0.8rem; font-weight: 700; cursor: pointer; text-decoration: underline;">
+            تعديل أو إضافة خدمات
+          </button>
+        </div>
+        <div id="formSelectedServicesList" style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <!-- Chips -->
+        </div>
+      </div>
+
+      <!-- Main Request Form -->
+      <div class="form-box">
+        <div class="form-section-title">
+          <i class="fa-solid fa-user-pen text-gold"></i>
+          <span>بيانات العميل والتواصل</span>
+        </div>
+
+        <form id="serviceRequestForm" onsubmit="handleFormSubmit(event)">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="clientNameInput">
+                <i class="fa-solid fa-user text-gold"></i>
+                <span>اسم العميل / المؤسسة</span>
+                <span class="required-star">*</span>
+              </label>
+              <input type="text" id="clientNameInput" required placeholder="مثال: م. أحمد صالح باعبيد" class="form-input-srv">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="phoneInput">
+                <i class="fa-solid fa-phone text-gold"></i>
+                <span>رقم الهاتف / الواتساب</span>
+                <span class="required-star">*</span>
+              </label>
+              <input type="tel" id="phoneInput" required placeholder="مثال: 777123456" class="form-input-srv" dir="ltr" style="text-align: right;">
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="emailInput">
+                <i class="fa-solid fa-envelope text-gold"></i>
+                <span>البريد الإلكتروني (إن توفر)</span>
+              </label>
+              <input type="email" id="emailInput" placeholder="client@example.com" class="form-input-srv" dir="ltr" style="text-align: right;">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="projectTypeInput">
+                <i class="fa-solid fa-shapes text-gold"></i>
+                <span>نوع المشروع</span>
+              </label>
+              <select id="projectTypeInput" class="form-input-srv">
+                <option value="سكني (فيلا / عمارة)">سكني (فيلا / عمارة سكنية)</option>
+                <option value="تجاري (برج / مول / مكاتب)">تجاري (برج / مركز تجاري / مكاتب)</option>
+                <option value="صناعي (مستودعات / هنجر / مصنع)">صناعي (مستودعات / هناجر / مصنع)</option>
+                <option value="بنية تحتية وشبكات">أعمال بنية تحتية وطرق وشبكات</option>
+                <option value="أعمال تشطيب وديكور">أعمال تشطيبات وديكور داخلي</option>
+                <option value="ترميم وتدعيم إنشائي">ترميم وتدعيم مبنى قائم</option>
+                <option value="أخرى">أخرى / غير محدد</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-section-title" style="margin-top: 20px;">
+            <i class="fa-solid fa-city text-gold"></i>
+            <span>تفاصيل المشروع والاحتياجات</span>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="projectNameInput">
+                <i class="fa-solid fa-signature text-gold"></i>
+                <span>اسم المشروع (إن وجد)</span>
+              </label>
+              <input type="text" id="projectNameInput" placeholder="مثال: فيلا حي السفارات - خورمكسر" class="form-input-srv">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="locationInput">
+                <i class="fa-solid fa-location-dot text-gold"></i>
+                <span>موقع المشروع أو عنوانه</span>
+              </label>
+              <input type="text" id="locationInput" placeholder="المدينة، المديرية، اسم الشارع" class="form-input-srv">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="descriptionInput">
+              <i class="fa-solid fa-align-right text-gold"></i>
+              <span>وصف احتياجات العميل وتفاصيل الطلب</span>
+            </label>
+            <textarea id="descriptionInput" placeholder="اشرح المتطلبات الهندسية أو المساحات أو المواصفات المرغوبة..." class="form-input-srv"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="notesInput">
+              <i class="fa-solid fa-note-sticky text-gold"></i>
+              <span>ملاحظات إضافية</span>
+            </label>
+            <input type="text" id="notesInput" placeholder="أي تفاصيل أو اشتراطات إضافية..." class="form-input-srv">
+          </div>
+
+          <!-- Attachments Upload Area -->
+          <div class="form-section-title" style="margin-top: 20px;">
+            <i class="fa-solid fa-paperclip text-gold"></i>
+            <span>إرفاق الصور والمخططات والملفات (اختياري)</span>
+          </div>
+
+          <div class="upload-dropzone" onclick="document.getElementById('fileUploadInput').click()">
+            <i class="fa-solid fa-cloud-arrow-up text-gold" style="font-size: 2.2rem; margin-bottom: 8px; display: block;"></i>
+            <p style="font-size: 0.9rem; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">اضغط هنا لاختيار المخططات أو الصور</p>
+            <p style="font-size: 0.76rem; color: var(--text-muted);">يدعم ملفات PDF, DWG, DXF, والصور (PNG, JPG) والملفات المضغوطة (أقصى حجم 25MB لكل ملف)</p>
+            <input type="file" id="fileUploadInput" multiple style="display: none;" onchange="handleFilesSelected(event)" accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip,.rar">
+          </div>
+
+          <div id="selectedFilesList" class="file-preview-list">
+            <!-- Dynamic Files Preview -->
+          </div>
+
+          <div style="margin-top: 28px;">
+            <button type="submit" id="btnSubmitRequest" class="btn-submit-request">
+              <i class="fa-solid fa-paper-plane"></i>
+              <span>إرسال الطلب إلى إدارة المكتب</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- الخطوة 3: شاشة نجاح إرسال الطلب (Success Confirmation Screen) -->
+    <!-- ========================================================================= -->
+    <div id="stepSuccess" class="step-container">
+      <div class="success-box">
+        <div class="success-icon-badge">
+          <i class="fa-solid fa-check"></i>
+        </div>
+        <h2 style="font-size: 1.5rem; font-weight: 900; color: #FFFFFF; margin-bottom: 6px;">تم استلام طلبكم بنجاح!</h2>
+        <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px;">
+          شكراً لتواصلكم مع شركة رواسي عدن للهندسة والمقاولات. تم تسجيل طلبكم وسيقوم مهندسونا بمراجعته والتواصل معكم في أقرب وقت.
+        </p>
+
+        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 20px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">رقم الطلب الفريد</div>
+          <div class="request-number-pill" id="successRequestNo">SR-2026-0001</div>
+
+          <div style="display: flex; justify-content: center; gap: 20px; font-size: 0.82rem; color: #cbd5e1; margin-top: 10px; flex-wrap: wrap;">
+            <div>رمز التحقق والمتابعة: <b id="successVerifyCode" style="color: var(--gold);">------</b></div>
+            <div>تاريخ التقديم: <span id="successDate">--</span></div>
+          </div>
+        </div>
+
+        <div id="successServicesSummary" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 24px; text-align: right; background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 12px; border: 1px solid var(--border);">
+          <b style="color: #FFFFFF; display: block; margin-bottom: 6px;">الخدمات المشمولة بالطلب:</b>
+          <ul id="successServicesList" style="padding-right: 20px; margin: 0; line-height: 1.8;"></ul>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+          <button onclick="printRequestSummary()" class="btn btn-outline" style="border-radius: 12px;">
+            <i class="fa-solid fa-print"></i> طباعة ملخص الطلب
+          </button>
+          <button onclick="resetAndNewRequest()" class="btn btn-primary" style="border-radius: 12px; font-weight: 800;">
+            <i class="fa-solid fa-plus"></i> تقديم طلب آخر
+          </button>
+          <a href="index.html" class="btn btn-outline" style="border-radius: 12px;">
+            <i class="fa-solid fa-house"></i> العودة للرئيسية
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal: Track Order -->
+  <div id="trackModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="trackModalTitle" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); justify-content: center;">
+    <div class="form-box track-modal-panel">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 id="trackModalTitle" style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-magnifying-glass text-gold"></i>
+          <span>متابعة حالة الطلب</span>
+        </h3>
+        <button type="button" aria-label="إغلاق متابعة الطلب" onclick="closeTrackModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">رقم الطلب</label>
+        <input type="text" id="trackRequestNoInput" placeholder="مثال: SR-2026-0001" class="form-input-srv" style="text-transform: uppercase;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">رمز التحقق (Verification Code)</label>
+        <input type="text" id="trackVerifyCodeInput" placeholder="رمز المتابعة الذي حصلت عليه عند تقديم الطلب" class="form-input-srv" dir="ltr" style="text-align: right;">
+      </div>
+
+      <p style="font-size:0.76rem;color:var(--text-muted);margin-top:10px">تتحدث الردود تلقائيًا أثناء فتح المتابعة. يمكنك أيضًا الضغط على فحص حالة الطلب.</p>
+      <button onclick="executeTrackRequest()" class="btn btn-primary" style="width: 100%; height: 46px; border-radius: 12px; font-weight: 800; margin-top: 10px;">
+        <i class="fa-solid fa-search"></i> فحص حالة الطلب
+      </button>
+
+      <div id="trackResultContainer" style="margin-top: 16px; display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/dialogs.js"></script>
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+
+  <script>
+    // State
+    let allServices = [];
+    let selectedServiceIds = new Set();
+    let currentCategoryFilter = 'all';
+    let uploadedFiles = [];
+    let isSubmitting = false;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await checkAuthMode();
+      await fetchServicesList();
+    });
+
+    // Check if user is logged in
+    async function checkAuthMode() {
+      try {
+        if (window.ClientAuth) {
+          const isAuth = await window.ClientAuth.isAuthenticated();
+          if (isAuth) {
+            const user = await window.ClientAuth.getUser();
+            if (user) {
+              const badge = document.getElementById('userModeBadge');
+              badge.className = 'mode-badge registered';
+              badge.innerHTML = `<i class="fa-solid fa-user-check"></i> ${user.full_name || 'عميل معتمد'}`;
+
+              // Prefill fields
+              if (user.full_name) document.getElementById('clientNameInput').value = user.full_name;
+              if (user.phone) document.getElementById('phoneInput').value = user.phone;
+              if (user.email) document.getElementById('emailInput').value = user.email;
+
+              const loginBtn = document.getElementById('loginBackText');
+              if (loginBtn) loginBtn.innerText = 'لوحة التحكم';
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Mode detection warning:', err);
+      }
+    }
+
+    // Fetch active services from API
+    async function fetchServicesList() {
+      const grid = document.getElementById('servicesGrid');
+      try {
+        let res;
+        if (window.ClientAPI) {
+          res = await window.ClientAPI.get('/services');
+        } else {
+          const fetchRes = await fetch('/api/client-portal/services');
+          res = await fetchRes.json();
+        }
+
+        if (res && res.success && Array.isArray(res.services)) {
+          const categoryRank = { design: 10, execution: 20, finishing: 30, systems: 40, infrastructure: 50, consulting: 60, supply: 70, general: 90 };
+          allServices = [...res.services].sort((a, b) => (categoryRank[a.category] || 90) - (categoryRank[b.category] || 90) || Number(a.display_order || 0) - Number(b.display_order || 0) || Number(a.id) - Number(b.id));
+          renderServices();
+        } else {
+          throw new Error(res?.message || 'تعذر تحميل الخدمات');
+        }
+      } catch (err) {
+        grid.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #fca5a5;">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size: 2rem; margin-bottom: 12px; display: block;"></i>
+            <p style="font-weight: 700;">تعذر تحميل قائمة الخدمات من الخادم (${err.message}).</p>
+            <button onclick="fetchServicesList()" class="btn btn-outline btn-sm" style="margin-top: 12px;">إعادة المحاولة</button>
+          </div>
+        `;
+      }
+    }
+
+    // Render Services Cards
+    function renderServices() {
+      const grid = document.getElementById('servicesGrid');
+      const searchTerm = (document.getElementById('serviceSearchInput').value || '').trim().toLowerCase();
+
+      const filtered = allServices.filter(s => {
+        const matchesCategory = currentCategoryFilter === 'all' || s.category === currentCategoryFilter;
+        const matchesSearch = !searchTerm || s.title.toLowerCase().includes(searchTerm) || (s.description && s.description.toLowerCase().includes(searchTerm));
+        return matchesCategory && matchesSearch;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+            <i class="fa-solid fa-folder-open" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
+            <p>لا توجد خدمات تطابق معايير البحث الحالية.</p>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(s => {
+        const isSelected = selectedServiceIds.has(s.id);
+        const iconClass = s.icon || 'fa-solid fa-compass-drafting';
+        const categoryLabel = getCategoryLabel(s.category);
+
+        return `
+          <div class="service-card ${isSelected ? 'selected' : ''}" onclick="toggleServiceSelection(${s.id})" id="card_srv_${s.id}">
+            <div class="service-card-top">
+              <div class="service-icon-box">
+                <i class="${iconClass}"></i>
+              </div>
+              <div class="service-check-indicator">
+                <i class="fa-solid fa-check"></i>
+              </div>
+            </div>
+
+            <h3 class="service-title">${escapeHtml(s.title)}</h3>
+            <p class="service-desc">${escapeHtml(s.description || 'خدمات هندسية احترافية وفق أعلى المعايير.')}</p>
+
+            <div class="service-card-footer">
+              <span class="service-category-tag">${categoryLabel}</span>
+              <button type="button" class="service-select-btn" onclick="event.stopPropagation(); toggleServiceSelection(${s.id})">
+                <span>${isSelected ? 'محددة ✓' : 'اختيار الخدمة'}</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      updateSummaryBar();
+    }
+
+    function getCategoryLabel(cat) {
+      switch(cat) {
+        case 'design': return 'تصميم وإشراف هندسي';
+        case 'execution': return 'مقاولات وتنفيذ مبانٍ';
+        case 'finishing': return 'ترميم وتشطيبات وديكور';
+        case 'systems': return 'أنظمة وطاقة وتكييف';
+        case 'infrastructure': return 'بنية تحتية ومساحة';
+        case 'consulting': return 'استشارات وتراخيص ومقايسات';
+        case 'supply': return 'توريد وتركيب';
+        default: return 'خدمات عامة';
+      }
+    }
+
+    // Toggle service selection
+    function toggleServiceSelection(id) {
+      if (selectedServiceIds.has(id)) {
+        selectedServiceIds.delete(id);
+      } else {
+        selectedServiceIds.add(id);
+      }
+      renderServices();
+    }
+
+    function removeServiceChip(id, event) {
+      if (event) event.stopPropagation();
+      selectedServiceIds.delete(id);
+      renderServices();
+    }
+
+    // Update Floating Summary Bar
+    function updateSummaryBar() {
+      const bar = document.getElementById('selectedSummaryBar');
+      const countEl = document.getElementById('selectedCountNumber');
+      const chipsEl = document.getElementById('selectedChipsContainer');
+
+      const count = selectedServiceIds.size;
+      countEl.innerText = count;
+
+      if (count > 0) {
+        bar.style.display = 'block';
+        const selectedList = allServices.filter(s => selectedServiceIds.has(s.id));
+        chipsEl.innerHTML = selectedList.map(s => `
+          <span class="service-chip">
+            <span>${escapeHtml(s.title)}</span>
+            <button class="chip-delete-btn" onclick="removeServiceChip(${s.id}, event)" title="إزالة">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </span>
+        `).join('');
+      } else {
+        bar.style.display = 'none';
+        chipsEl.innerHTML = '';
+      }
+    }
+
+    // Filters
+    function setCategoryFilter(cat, btn) {
+      currentCategoryFilter = cat;
+      document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderServices();
+    }
+
+    function filterServices() {
+      renderServices();
+    }
+
+    // Navigation Between Steps
+    function goToFormStep() {
+      if (selectedServiceIds.size === 0) {
+        alert('يرجى اختيار خدمة هندسية واحدة على الأقل للمتابعة.');
+        return;
+      }
+
+      document.getElementById('stepServices').classList.remove('active');
+      document.getElementById('stepForm').classList.add('active');
+      document.getElementById('stepSuccess').classList.remove('active');
+
+      // Update Form Summary
+      document.getElementById('formSelectedCount').innerText = selectedServiceIds.size;
+      const selectedList = allServices.filter(s => selectedServiceIds.has(s.id));
+      document.getElementById('formSelectedServicesList').innerHTML = selectedList.map(s => `
+        <span class="service-chip" style="font-size: 0.8rem; padding: 6px 12px;">
+          <i class="${s.icon || 'fa-solid fa-check'} text-gold"></i>
+          <span>${escapeHtml(s.title)}</span>
+          <button class="chip-delete-btn" onclick="removeServiceChip(${s.id}); goToFormStep();" title="إزالة">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </span>
+      `).join('');
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function goToServicesStep() {
+      document.getElementById('stepForm').classList.remove('active');
+      document.getElementById('stepServices').classList.add('active');
+      document.getElementById('stepSuccess').classList.remove('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Handle File Uploads (Base64 encoding)
+    async function handleFilesSelected(event) {
+      const files = Array.from(event.target.files || []);
+      for (const file of files) {
+        if (file.size > 25 * 1024 * 1024) {
+          alert(`الملف "${file.name}" يتجاوز الحد الأقصى المسموح (25MB).`);
+          continue;
+        }
+
+        const b64 = await toBase64(file);
+        uploadedFiles.push({
+          fileName: file.name,
+          size: file.size,
+          type: file.type,
+          contentBase64: b64
+        });
+      }
+      renderUploadedFilesList();
+      event.target.value = ''; // Reset input
+    }
+
+    function toBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+      });
+    }
+
+    function removeUploadedFile(index) {
+      uploadedFiles.splice(index, 1);
+      renderUploadedFilesList();
+    }
+
+    function renderUploadedFilesList() {
+      const container = document.getElementById('selectedFilesList');
+      if (uploadedFiles.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = uploadedFiles.map((f, i) => `
+        <div class="file-preview-item">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <i class="fa-solid fa-file-arrow-up text-gold"></i>
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; color: #FFFFFF;">${escapeHtml(f.fileName)}</span>
+            <span style="color: var(--text-muted); font-size: 0.72rem;">(${formatFileSize(f.size)})</span>
+          </div>
+          <button type="button" onclick="removeUploadedFile(${i})" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px;">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Submit Request to Server
+    async function handleFormSubmit(event) {
+      event.preventDefault();
+      if (isSubmitting) return;
+
+      if (selectedServiceIds.size === 0) {
+        alert('يرجى اختيار خدمة واحدة على الأقل قبل إرسال الطلب.');
+        goToServicesStep();
+        return;
+      }
+
+      const client_name = document.getElementById('clientNameInput').value.trim();
+      const phone = document.getElementById('phoneInput').value.trim();
+      if (!client_name || !phone) {
+        alert('يرجى إدخال اسم العميل ورقم الهاتف.');
+        return;
+      }
+
+      const submitBtn = document.getElementById('btnSubmitRequest');
+      isSubmitting = true;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>جاري إرسال الطلب وحفظ البيانات...</span>`;
+
+      try {
+        const payload = {
+          client_name,
+          phone,
+          email: document.getElementById('emailInput').value.trim() || null,
+          project_type: document.getElementById('projectTypeInput').value,
+          project_name: document.getElementById('projectNameInput').value.trim() || null,
+          location: document.getElementById('locationInput').value.trim() || null,
+          description: document.getElementById('descriptionInput').value.trim() || null,
+          notes: document.getElementById('notesInput').value.trim() || null,
+          service_ids: Array.from(selectedServiceIds),
+          attachments: uploadedFiles
+        };
+
+        let result;
+        if (window.ClientAPI) {
+          result = await window.ClientAPI.post('/services/requests', payload);
+        } else {
+          const res = await fetch('/api/client-portal/services/requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          result = await res.json();
+        }
+
+        if (!result || !result.success) {
+          throw new Error(result?.message || 'تعذر إرسال الطلب');
+        }
+
+        // Show Success Step
+        showSuccessView(result.data);
+
+      } catch (err) {
+        alert('حدث خطأ أثناء إرسال الطلب: ' + err.message);
+      } finally {
+        isSubmitting = false;
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>إرسال الطلب إلى إدارة المكتب</span>`;
+      }
+    }
+
+    function printRequestSummary() {
+      if (window.RawasiAndroid && typeof window.RawasiAndroid.printOrder === 'function') { window.RawasiAndroid.printOrder(); return; }
+      window.print();
+    }
+
+    function showSuccessView(data) {
+      document.getElementById('stepServices').classList.remove('active');
+      document.getElementById('stepForm').classList.remove('active');
+      document.getElementById('stepSuccess').classList.add('active');
+
+      document.getElementById('successRequestNo').innerText = data.request_no;
+      document.getElementById('successVerifyCode').innerText = data.verification_code || '---';
+      document.getElementById('successDate').innerText = new Date(data.created_at || Date.now()).toLocaleDateString('ar-YE');
+
+      const srvList = document.getElementById('successServicesList');
+      srvList.innerHTML = (data.services || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetAndNewRequest() {
+      selectedServiceIds.clear();
+      uploadedFiles = [];
+      document.getElementById('serviceRequestForm').reset();
+      renderUploadedFilesList();
+      goToServicesStep();
+      renderServices();
+    }
+
+    function keepTrackingFieldVisible() {
+      const panel=document.querySelector('#trackModal .track-modal-panel');
+      const field=document.activeElement;
+      if(!panel || !field || !panel.contains(field) || !/^(INPUT|TEXTAREA|SELECT)$/.test(field.tagName))return;
+      const box=panel.getBoundingClientRect(), target=field.getBoundingClientRect(), margin=16;
+      if(target.bottom > box.bottom-margin)panel.scrollTop+=target.bottom-box.bottom+margin;
+      else if(target.top < box.top+margin)panel.scrollTop-=box.top+margin-target.top;
+    }
+    function syncTrackingViewport() {
+      const modal=document.getElementById('trackModal');
+      if(!modal || modal.style.display!=='flex')return;
+      const viewport=window.visualViewport;
+      if(viewport){modal.style.top=viewport.offsetTop+'px';modal.style.bottom='auto';modal.style.height=viewport.height+'px';}
+      requestAnimationFrame(keepTrackingFieldVisible);
+    }
+    window.addEventListener('resize',syncTrackingViewport);
+    if(window.visualViewport){window.visualViewport.addEventListener('resize',syncTrackingViewport);window.visualViewport.addEventListener('scroll',syncTrackingViewport);}
+    document.addEventListener('focusin',event=>{if(document.getElementById('trackModal')?.contains(event.target)){setTimeout(syncTrackingViewport,150);setTimeout(syncTrackingViewport,400);}});
+
+    // Refresh only while tracking is open; never erase a draft being written.
+    let trackRefreshTimer = null;
+    let trackRequestSequence = 0;
+    async function openTrackModal() {
+      const modal=document.getElementById('trackModal');
+      modal.style.display = 'flex';
+      syncTrackingViewport();
+      document.getElementById('trackResultContainer').style.display = 'none';
+      if(trackRefreshTimer)clearInterval(trackRefreshTimer);
+      trackRefreshTimer=setInterval(()=>executeTrackRequest(true),30000);
+      try {
+        const res=await fetch('/api/client-portal/services/requests/guest-session',{credentials:'same-origin',cache:'no-store'});
+        if(!res.ok||modal.style.display!=='flex')return;
+        const saved=await res.json();
+        if(saved.success&&modal.style.display==='flex'){document.getElementById('trackRequestNoInput').value=saved.request_no;document.getElementById('trackVerifyCodeInput').value=saved.verification_code;await executeTrackRequest();}
+      } catch {}
+    }
+
+    function closeTrackModal() {
+      document.getElementById('trackModal').style.display = 'none';
+      if(trackRefreshTimer){clearInterval(trackRefreshTimer);trackRefreshTimer=null;}
+      trackRequestSequence++;
+    }
+
+    async function executeTrackRequest(silent = false) {
+      const requestNo = document.getElementById('trackRequestNoInput').value.trim();
+      const verifyCode = document.getElementById('trackVerifyCodeInput').value.trim();
+      const resContainer = document.getElementById('trackResultContainer');
+
+      if (!requestNo || !verifyCode) {
+        if (!silent) alert('يرجى إدخال رقم الطلب ورمز التحقق.');
+        return;
+      }
+      const draftMessage=document.getElementById('guestMessage')?.value || '';
+      const draftQuote=document.getElementById('guestQuoteNote')?.value || '';
+      if(silent && (draftMessage || draftQuote || (document.activeElement?.tagName==='TEXTAREA' && resContainer.contains(document.activeElement))))return;
+      const sequence=++trackRequestSequence;
+      resContainer.style.display = 'block';
+      if(!silent)resContainer.innerHTML = '<div style="text-align: center; color: var(--gold);"><i class="fa-solid fa-spinner fa-spin"></i> جاري فحص حالة الطلب...</div>';
+
+      try {
+        const url = `/api/client-portal/services/requests/track?request_no=${encodeURIComponent(requestNo)}&verification_code=${encodeURIComponent(verifyCode)}`;
+        const res = await fetch(url, {cache:'no-store', credentials:'same-origin'});
+        const data = await res.json();
+        if(sequence!==trackRequestSequence || document.getElementById('trackModal').style.display!=='flex' || document.getElementById('trackRequestNoInput').value.trim()!==requestNo || document.getElementById('trackVerifyCodeInput').value.trim()!==verifyCode)return;
+        if(silent && ((document.getElementById('guestMessage')?.value||'') || (document.getElementById('guestQuoteNote')?.value||'') || (document.activeElement?.tagName==='TEXTAREA' && resContainer.contains(document.activeElement))))return;
+
+        if (!data || !data.success || !data.request) {
+          throw new Error(data?.message || 'الطلب غير موجود');
+        }
+
+        const r = data.request;
+        const panel=document.querySelector('#trackModal .track-modal-panel');
+        const oldScroll=panel?.scrollTop||0;
+        const statusMap = {
+          'new': { text: 'طلب جديد (قيد المراجعة الأولية)', color: '#60a5fa' },
+          'under_review': { text: 'قيد المراجعة الفنية ودراسة المخططات', color: '#f59e0b' },
+          'pricing': { text: 'جاري إعداد عرض السعر وجداول الكميات', color: '#fbbf24' },
+          'pending_manager': { text: 'بانتظار موافقة الإدارة', color: '#fbbf24' },
+          'manager_changes': { text: 'قيد تعديل العرض', color: '#fbbf24' },
+          'client_changes': { text: 'أعيد بملاحظاتك', color: '#fbbf24' },
+          'client_accepted': { text: 'تمت الموافقة على العرض', color: '#34d399' },
+          'quoted': { text: 'تم إعداد عرض السعر والتواصل معكم', color: '#34d399' },
+          'converted': { text: 'تم اعتماده وتحويله لمشروع رسمي', color: '#10b981' },
+          'rejected': { text: 'ملغي أو معتذر عنه', color: '#f87171' }
+        };
+        const st = statusMap[r.status] || { text: r.status, color: '#94a3b8' };
+
+        resContainer.innerHTML = `
+          <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--gold); border-radius: 14px; padding: 14px; font-size: 0.82rem; text-align: right;">
+            <div style="font-weight: 800; color: #FFFFFF; font-size: 0.95rem; margin-bottom: 6px;">طلب رقم: <span style="color: var(--gold);">${escapeHtml(r.request_no)}</span></div>
+            <div style="margin-bottom: 4px;">العميل: <b>${escapeHtml(r.client_name)}</b></div>
+            <div style="margin-bottom: 4px;">الحالة: <b style="color: ${st.color};">${escapeHtml(st.text)}</b></div>
+            ${r.quoted_amount != null ? `<div style="margin-bottom: 4px;">مبلغ عرض السعر: <b style="color: #34d399;">${escapeHtml(r.quoted_amount)} ${escapeHtml(r.currency || 'YER')}</b></div>` : ''}
+            ${r.quote ? `<div style="white-space:pre-wrap;margin-top:10px">تفاصيل العرض: ${escapeHtml(r.quote.details)}<br>مدة التنفيذ: ${escapeHtml(r.quote.duration)}</div>${r.status === 'quoted' && r.source === 'guest' ? `<textarea id="guestQuoteNote" class="form-input-srv" placeholder="ملاحظاتك عند طلب التعديل"></textarea><button class="btn btn-primary" onclick="guestQuoteResponse(${Number(r.quote.id)},'accept')">الموافقة على العرض</button> <button class="btn btn-secondary" onclick="guestQuoteResponse(${Number(r.quote.id)},'changes')">إعادة العرض بملاحظات</button>` : ''}` : ''}
+            ${r.messages && r.source === 'guest' ? `<div><h4>مراسلات الطلب</h4>${r.messages.map(m=>`<p>${escapeHtml(m.actor_type==='guest'?'أنت':'رواسي عدن')}: ${escapeHtml(m.message)}</p>`).join('')}<textarea id="guestMessage" class="form-input-srv" maxlength="4000" aria-describedby="guestMessageFeedback" oninput="clearGuestMessageFeedback()" placeholder="رسالة إلى مشرف الخدمة"></textarea><p id="guestMessageFeedback" class="guest-message-feedback" role="status" aria-live="polite" hidden></p><button id="guestSendMessageBtn" type="button" class="btn btn-secondary" onclick="guestSendMessage()">إرسال الرسالة</button></div>` : ''}
+            <div style="margin-top: 8px; color: var(--text-muted); font-size: 0.75rem;">تاريخ التقديم: ${new Date(r.created_at).toLocaleString('ar-YE')}</div>
+          </div>
+        `;
+        if(silent && panel)panel.scrollTop=oldScroll;
+        if(document.getElementById('guestMessage'))document.getElementById('guestMessage').value=draftMessage;
+        if(document.getElementById('guestQuoteNote'))document.getElementById('guestQuoteNote').value=draftQuote;
+      } catch (err) {
+        if(silent || sequence!==trackRequestSequence)return;
+        resContainer.innerHTML = `
+          <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 10px; color: #fca5a5; font-size: 0.8rem; text-align: center;">
+            <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(err.message)}
+          </div>
+        `;
+      }
+    }
+
+    function clearGuestMessageFeedback() {
+      const feedback=document.getElementById('guestMessageFeedback');
+      const input=document.getElementById('guestMessage');
+      if(feedback){feedback.hidden=true;feedback.textContent='';}
+      if(input)input.removeAttribute('aria-invalid');
+    }
+
+    async function guestSendMessage() {
+      const input=document.getElementById('guestMessage');
+      const feedback=document.getElementById('guestMessageFeedback');
+      const button=document.getElementById('guestSendMessageBtn');
+      if(!input || !feedback || !button || button.disabled)return;
+      const message=input.value.trim();
+      if(!message){
+        feedback.textContent='يرجى كتابة رسالتك أولاً، فلا يمكن إرسال رسالة فارغة.';
+        feedback.hidden=false;input.setAttribute('aria-invalid','true');input.focus();return;
+      }
+      clearGuestMessageFeedback();button.disabled=true;
+      try {
+        const response=await fetch('/api/client-portal/services/requests/guest-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),message})});
+        const data=await response.json();
+        if(!response.ok || !data.success)throw new Error(data.message||'تعذر إرسال الرسالة');
+        input.value='';await executeTrackRequest();
+      } catch(err) {
+        feedback.textContent='تعذر إرسال الرسالة الآن. يرجى التحقق من الاتصال والمحاولة مجددًا.';
+        feedback.hidden=false;
+      } finally {button.disabled=false;}
+    }
+
+    async function guestQuoteResponse(quoteId,decision) {
+      const note=document.getElementById('guestQuoteNote').value.trim();
+      if(decision==='changes'&&!note){alert('يرجى كتابة الملاحظات');return;}
+      if(decision==='accept'&&!await UIDialog.confirm('تأكيد الموافقة على عرض السعر؟'))return;
+      try {
+        const response=await fetch('/api/client-portal/services/requests/guest-response',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_no:document.getElementById('trackRequestNoInput').value.trim(),verification_code:document.getElementById('trackVerifyCodeInput').value.trim(),decision,quote_id:quoteId,note})});
+        const data=await response.json();if(!data.success)throw new Error(data.message);await executeTrackRequest();
+      } catch(err){alert(err.message||'تعذر إرسال الرد');}
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+  </script>
+</body>
+</html>

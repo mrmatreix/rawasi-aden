@@ -18,6 +18,12 @@ const db = require('../../server/database/db');
 const app = require('../../server/server');
 const ProjectCostService = require('../../server/services/projectCostService');
 
+// test cleanup deletes posted entries: allowed only inside an explicit ledger maintenance unlock (stage 1 guards)
+async function withLedgerUnlock(db, fn) {
+  await db.run("INSERT INTO ledger_maintenance_unlock (reason) VALUES ('test cleanup')");
+  try { return await fn(); } finally { await db.run('DELETE FROM ledger_maintenance_unlock'); }
+}
+
 test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t) => {
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, resolve));
@@ -62,23 +68,27 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
   // SUGGESTION-6: الفواتير المحذوفة عبر API تُتتبع لتنظيف عكوس ذممها
   const deadPurchaseIds = [];
   const cleanup = async () => {
-    // أولاً: قيود النطاق المؤرخ (سطورها تشير للمشروع وتمنع حذفه FK — قبل حذف المشروع)
-    // عكوس الذمم بتاريخ اليوم تُنظف عبر deadPurchaseIds داخل الحلقة (بلا كنس شامل يهدد التوازي)
-    await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2032%')`);
-    await db.run(`DELETE FROM journal_entries WHERE date LIKE '2032%'`);
+    await db.run(`UPDATE expenses SET journal_entry_id = NULL, reversal_ref_id = NULL WHERE date LIKE '2032%' OR project_id IN (SELECT id FROM projects WHERE name = ?)`, [PROJECT_NAME]);
+    await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (SELECT id FROM journal_entries WHERE date LIKE '2032%')`));
+    await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE date LIKE '2032%'`));
     const projs = await db.query('SELECT id FROM projects WHERE name = ?', [PROJECT_NAME]);
     for (const p of projs) {
       await db.run('DELETE FROM cash_movements WHERE project_id = ?', [p.id]);
+      await db.run('UPDATE expenses SET journal_entry_id = NULL, reversal_ref_id = NULL WHERE project_id = ?', [p.id]);
       const exps = await db.query('SELECT id FROM expenses WHERE project_id = ?', [p.id]);
       const expIds = exps.map(e => e.id);
       if (expIds.length > 0) {
         const ph = expIds.map(() => '?').join(',');
-        const jes = await db.query(`SELECT id FROM journal_entries WHERE reference_id IN (${ph})`, expIds);
+        const jes = await db.query(
+          `SELECT id FROM journal_entries WHERE reference_id IN (${ph})
+           AND reference_type IN ('مصروف مرآة عمالة', 'مصروف مرآة مشتريات', 'قيد عكسي')`,
+          expIds
+        );
         const jeIds = jes.map(j => j.id);
         if (jeIds.length > 0) {
           const jph = jeIds.map(() => '?').join(',');
-          await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds);
-          await db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds);
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds));
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds));
         }
         await db.run(`DELETE FROM expenses WHERE id IN (${ph})`, expIds);
       }
@@ -96,8 +106,8 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
         const pjeIds = pjes.map(j => j.id);
         if (pjeIds.length > 0) {
           const pjph = pjeIds.map(() => '?').join(',');
-          await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds);
-          await db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds);
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds));
+          await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds));
         }
       }
       await db.run('DELETE FROM project_purchases WHERE project_id = ?', [p.id]);
@@ -117,7 +127,15 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
      VALUES (?, 'mirror_tester', ?, 'admin', 'مختبِر المرايا', 'active', '["*"]')`,
     [testerId, passwordHash]
   );
-  const acc = async (code) => (await db.get('SELECT id FROM accounts WHERE code = ?', [code])).id;
+  const acc = async (code) => {
+    let row = await db.get('SELECT id FROM accounts WHERE code = ? AND (is_posting = 1 OR is_posting IS NULL)', [code]);
+    if (!row) {
+      if (code === '511') row = await db.get("SELECT id FROM accounts WHERE code = '32101008' OR (type = 'expense' AND is_posting = 1) ORDER BY (code = '32101008') DESC LIMIT 1");
+      else if (code === '5') row = await db.get("SELECT id FROM accounts WHERE code = '32102005' OR (type = 'expense' AND is_posting = 1) ORDER BY (code = '32102005') DESC LIMIT 1");
+      else if (code === '111') row = await db.get("SELECT id FROM accounts WHERE code = '12101001' OR (type = 'asset' AND is_posting = 1 AND name LIKE '%صندوق%') ORDER BY (code = '12101001') DESC LIMIT 1");
+    }
+    return row ? row.id : null;
+  };
   const acc511 = await acc('511');
   const acc5 = await acc('5');
   const acc111 = await acc('111');
@@ -209,8 +227,9 @@ test('Mirror Journals - Post JE on Paid, Reverse on Delete, Backfill', async (t)
   assert.strictEqual(goneLab ?? null, null, 'سجل الأصل محذوف');
   const revMirror = await db.get('SELECT * FROM expenses WHERE id = ?', [mirrorLab.id]);
   assert.strictEqual(revMirror.status, 'reversed', 'المرآة معكوسة لا محذوفة');
-  const jeOrigAfter = await db.get('SELECT status FROM journal_entries WHERE id = ?', [jeLab.id]);
-  assert.strictEqual(jeOrigAfter.status, 'reversed', 'القيد الأصلي معكوس');
+  // المرحلة 1: القيد الأصلي يبقى مرحّلاً ويُعلَّم بمرجع العكس
+  const jeOrigAfter = await db.get('SELECT status, reversal_ref_id FROM journal_entries WHERE id = ?', [jeLab.id]);
+  assert.ok(jeOrigAfter.reversal_ref_id && jeOrigAfter.status === 'posted', 'القيد الأصلي معكوس');
   const revJe = await db.get(
     `SELECT * FROM journal_entries WHERE reference_id = ? AND reference_type = 'قيد عكسي' ORDER BY id DESC LIMIT 1`,
     [mirrorLab.id]

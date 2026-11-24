@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>الدفعات والمقبوضات - بوابة عملاء رواسي عدن</title>
+  <link rel="stylesheet" href="css/client-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div id="appHeader"></div>
+
+  <div class="app-container">
+    <div style="margin-bottom: 16px;">
+      <h2 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;">سجل الدفعات والمقبوضات</h2>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">سندات القبض المالية والمدفوعات المسجلة لصالح مشاريعه</p>
+    </div>
+
+    <!-- Summary Box -->
+    <div class="card" style="background: linear-gradient(135deg, #152238 0%, #0F172A 100%); border-color: rgba(16, 185, 129, 0.3);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-size: 0.72rem; color: var(--text-muted);">إجمالي المبالغ المسددة (سندات القبض)</div>
+          <div id="totalCollectedVal" style="font-size: 1.4rem; font-weight: 900; color: var(--success); margin: 4px 0;">0 ر.ي</div>
+        </div>
+        <div style="background: rgba(16, 185, 129, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--success); font-size: 1.3rem;">
+          <i class="fa-solid fa-receipt"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search / Filter -->
+    <div style="position: relative; margin-bottom: 16px;">
+      <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 12px; top: 14px; color: var(--text-muted);"></i>
+      <input type="text" id="paymentSearch" oninput="filterPayments()" placeholder="بحث برقم السند أو المشروع أو البنك..." class="form-input" style="padding-right: 36px;">
+    </div>
+
+    <!-- Payments List -->
+    <div id="paymentsContainer">
+      <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--gold); margin-bottom: 10px;"></i>
+        <p>جاري تحميل الدفعات...</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottomNav"></div>
+
+  <script src="js/secure-storage.js"></script>
+  <script src="js/client-api.js"></script>
+  <script src="js/client-auth.js"></script>
+  <script src="js/client-app.js"></script>
+  <script src="js/push-notifications.js"></script>
+
+  <script>
+    let allPayments = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      ClientApp.init('payments');
+      const isAuth = await ClientAuth.requireAuth();
+      if (!isAuth) return;
+
+      loadPayments();
+    });
+
+    async function loadPayments() {
+      try {
+        const data = await ClientAPI.get('/payments');
+        if (!data.success) throw new Error(data.message);
+
+        allPayments = data.payments || [];
+        document.getElementById('totalCollectedVal').innerText = ClientApp.formatMoney(data.total_collected || 0);
+        renderPayments(allPayments);
+      } catch (err) {
+        ClientApp.showToast(err.message || 'فشل تحميل الدفعات', 'error');
+      }
+    }
+
+    function renderPayments(payments) {
+      const container = document.getElementById('paymentsContainer');
+      if (!payments || payments.length === 0) {
+        container.innerHTML = `
+          <div class="card" style="text-align: center; padding: 40px 20px;">
+            <i class="fa-solid fa-money-check" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
+            <h3 style="font-size: 1rem; color: #FFFFFF; font-weight: bold;">لا توجد دفعات مسجلة</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">لم يتم تسجيل سندات قبض لصالح حسابك بعد</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = payments.map(p => {
+        let methodIcon = 'fa-money-bill';
+        if (p.payment_method === 'تحويل بنكي') methodIcon = 'fa-building-columns';
+        if (p.payment_method === 'شيك') methodIcon = 'fa-money-check-dollar';
+
+        return `
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+              <div>
+                <span style="font-size: 0.72rem; color: var(--gold); font-weight: bold;">${p.project_name || 'مشروع هندسي'}</span>
+                <h3 style="font-size: 1.05rem; font-weight: 800; color: #FFFFFF; margin: 2px 0;">سند رقم: ${p.receipt_no || p.id}</h3>
+                <div style="font-size: 0.72rem; color: var(--text-muted);">${ClientApp.formatDate(p.date)}</div>
+              </div>
+              <div style="text-align: left;">
+                <div style="font-size: 1.15rem; font-weight: 900; color: var(--success);">${ClientApp.formatMoney(p.amount, p.currency)}</div>
+                <span class="badge badge-approved" style="margin-top: 4px;"><i class="fa-solid fa-circle-check"></i> مؤكد ومحصل</span>
+              </div>
+            </div>
+
+            <div style="background: var(--bg-input); padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); margin-top: 8px; font-size: 0.78rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span style="color: var(--text-muted);"><i class="fa-solid ${methodIcon}"></i> طريقة الدفع:</span>
+                <span style="color: #FFFFFF; font-weight: bold;">${p.payment_method || 'نقدي'}</span>
+              </div>
+              ${p.bank_name ? `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="color: var(--text-muted);">البنك / المصرف:</span>
+                  <span style="color: #FFFFFF;">${p.bank_name}</span>
+                </div>
+              ` : ''}
+              ${p.check_no ? `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="color: var(--text-muted);">رقم الشيك:</span>
+                  <span style="color: var(--gold);">${p.check_no}</span>
+                </div>
+              ` : ''}
+              ${p.notes ? `
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); color: var(--text-muted);">
+                  <b>البيان:</b> ${p.notes}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterPayments() {
+      const q = document.getElementById('paymentSearch').value.toLowerCase().trim();
+      const filtered = allPayments.filter(p => {
+        return (p.receipt_no && p.receipt_no.toLowerCase().includes(q)) ||
+               (p.project_name && p.project_name.toLowerCase().includes(q)) ||
+               (p.bank_name && p.bank_name.toLowerCase().includes(q)) ||
+               (p.notes && p.notes.toLowerCase().includes(q));
+      });
+      renderPayments(filtered);
+    }
+  </script>
+</body>
+</html>
