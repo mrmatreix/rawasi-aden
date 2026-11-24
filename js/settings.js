@@ -2897,8 +2897,9 @@ const Settings = {
     this.selectAllPermissions(false);
 
     // Check user's assigned permissions
-    const perms = user.permissions_list || [];
-    if (user.username === 'admin' || perms.includes('all')) {
+    // الصيغ القديمة (manage/print/statement/journal...) تُعرض كما يطبّقها الخادم فعلاً، فلا تضيع عند الحفظ
+    const perms = (typeof SystemCatalog !== 'undefined' && SystemCatalog.expandLegacy) ? SystemCatalog.expandLegacy(user.permissions_list || []) : (user.permissions_list || []);
+    if (user.role === 'admin' || perms.includes('all') || perms.includes('*')) {
       this.selectAllPermissions(true);
     } else if (perms.length > 0) {
       perms.forEach(p => {

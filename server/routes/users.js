@@ -15,15 +15,10 @@ function normalizePermissions(value) {
   else if (typeof value === 'string' && value.trim()) {
     try { const parsed = JSON.parse(value); list = Array.isArray(parsed) ? parsed : value.split(','); } catch { list = value.split(','); }
   }
-  const clean = [], dropped = [];
-  for (const raw of list) {
-    const p = String(raw).trim();
-    if (!p) continue;
-    if (p === '*' || p === 'all') clean.push('*');
-    else if (KNOWN_PERMISSIONS.has(p)) clean.push(p);
-    else dropped.push(p);
-  }
-  return { list: [...new Set(clean)], dropped };
+  // الصيغ القديمة تُحوَّل لمفاتيح المصفوفة المكافئة (لا تُسقط صلاحية فعلية)، وما لا مقابل له يُسقط
+  const expanded = catalog.expandLegacy(list);
+  const dropped = list.map(p => String(p).trim()).filter(p => p && p !== '*' && p !== 'all' && !KNOWN_PERMISSIONS.has(p) && !catalog.expandLegacy([p]).length);
+  return { list: expanded, dropped };
 }
 
 /** لا يمنح أحد غير المدير العام دور المدير العام أو '*' أو صلاحية لا يملكها هو، ولا يعدّل حساب مدير عام */

@@ -205,6 +205,29 @@ const MIGRATIONS = [
         for (const id of parsed.projects) if (knownProjects.has(id)) grant.run(u.id, 'project', id);
       }
     }
+  },
+  {
+    id: '0009_preserve_accountant_implicit_permissions',
+    description: 'The implicit "accountant gets every financial permission" rule was removed; existing accountants get those permissions written explicitly so nothing changes for them (new accountants use the separated template)',
+    up(db) {
+      if (!columns(db, 'users').includes('permissions')) return;
+      const catalog = require('../../../js/system-catalog');
+      // الوحدات التي كان المحاسب يملكها كلها ضمنياً (كل العمليات والعمليات الإضافية)
+      const implicitModules = ['accounting', 'expenses', 'revenues', 'billing', 'reports', 'custody', 'cash', 'clients', 'suppliers', 'projects'];
+      // قالب الدخول القديم للمحاسب بلا صلاحيات محفوظة (خارج تلك الوحدات)
+      const oldTemplateExtras = ['dashboard:view', 'dashboard:export', 'hr:view', 'hr:payroll'];
+      const implicit = catalog.permissionKeys.filter(k => implicitModules.includes(k.split(':')[0]));
+      const update = db.prepare('UPDATE users SET permissions = ? WHERE id = ?');
+      for (const u of db.prepare("SELECT id, permissions FROM users WHERE role = 'accountant'").all()) {
+        let stored = [];
+        const raw = String(u.permissions || '').trim();
+        if (raw) { try { const p = JSON.parse(raw); stored = Array.isArray(p) ? p : raw.split(','); } catch { stored = raw.split(','); } }
+        if (stored.some(p => String(p).trim() === '*' || String(p).trim() === 'all')) continue;
+        const base = stored.length ? catalog.expandLegacy(stored) : catalog.expandLegacy(oldTemplateExtras);
+        const merged = [...new Set([...base, ...implicit])].sort();
+        update.run(JSON.stringify(merged), u.id);
+      }
+    }
   }
 ];
 

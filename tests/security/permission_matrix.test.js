@@ -34,6 +34,43 @@ test('every permission the server checks exists in the single catalog, and every
  assert.ok(!/value="accounting:view"[^>]*perm-chk|perm-chk[^>]*value="accounting:view"/.test(html),'module permissions are generated, not static');
 });
 
+test('legacy permission formats found in production expand to equivalent matrix keys instead of being lost',()=>{
+ const x=list=>catalog.expandLegacy(list).sort();
+ assert.deepEqual(x(['accounting:journal']),['accounting:create','accounting:edit']);
+ assert.deepEqual(x(['projects:manage']),['projects:create','projects:edit','projects:view']);
+ assert.deepEqual(x(['revenues:print']),['revenues:export']);
+ assert.deepEqual(x(['clients:statement']),['clients:export','clients:view']);
+ assert.deepEqual(x(['inventory:manage']),['inventory:create','inventory:issue','inventory:view']);
+ assert.deepEqual(x(['all']),['*']);
+ assert.ok(x(['accounting']).includes('accounting:post')&&x(['accounting']).includes('accounting:close_period'),'bare module = whole module');
+ assert.deepEqual(x(['custody:edit','nonsense']),[],'keys with no server meaning are dropped');
+ assert.deepEqual(x(['expenses:view','expenses:view']),['expenses:view']);
+});
+
+test('migration 0009 keeps existing accountants exactly as capable as before the implicit rule was removed',()=>{
+ const {MIGRATIONS,runMigrations}=require('../../server/database/migrations');
+ const m=MIGRATIONS.find(x=>x.id==='0009_preserve_accountant_implicit_permissions');assert.ok(m);
+ const {DatabaseSync:DB}=require('node:sqlite');const db=new DB(':memory:');
+ db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY, role TEXT, permissions TEXT)');
+ const prodLike=JSON.stringify(['dashboard:view','accounting:view','accounting:journal','expenses:approve','hr:view','custody:edit']);
+ db.prepare('INSERT INTO users VALUES (1,?,?)').run('accountant',prodLike);
+ db.prepare('INSERT INTO users VALUES (2,?,?)').run('accountant','');
+ db.prepare('INSERT INTO users VALUES (3,?,?)').run('auditor','["accounting:view"]');
+ db.prepare('INSERT INTO users VALUES (4,?,?)').run('accountant','["*"]');
+ runMigrations(db,[m]);
+ const perms=id=>JSON.parse(db.prepare('SELECT permissions FROM users WHERE id=?').get(id).permissions);
+ const a=perms(1);
+ for(const k of ['projects:view','accounting:post','accounting:close_period','billing:post','expenses:cancel','cash:export','suppliers:cancel'])assert.ok(a.includes(k),'kept implicit '+k);
+ for(const k of ['dashboard:view','hr:view','accounting:create','accounting:edit'])assert.ok(a.includes(k),'kept stored/legacy '+k);
+ assert.ok(!a.includes('custody:edit')&&!a.includes('accounting:journal'),'only matrix keys stored');
+ assert.ok(!a.some(k=>k.startsWith('hr:')&&k!=='hr:view'),'no new non-financial powers');
+ assert.ok(perms(2).includes('hr:payroll')&&perms(2).includes('accounting:post'),'empty accountant keeps old template + implicit');
+ assert.deepEqual(perms(3),['accounting:view'],'other roles untouched');
+ assert.deepEqual(perms(4),['*']);
+ const keys=new Set(catalog.permissionKeys);assert.ok(a.every(k=>keys.has(k)));
+ db.close();
+});
+
 test('every print function is mapped to an export permission (printing = export)',()=>{
  const auth=fs.readFileSync(path.join(root,'js','auth.js'),'utf8');
  const start=auth.indexOf('PRINT_PERMISSIONS: {');assert.ok(start>0,'PRINT_PERMISSIONS map exists');
@@ -95,6 +132,10 @@ test('role templates apply on the server; the accountant creates but cannot appr
   const ok=await api('/api/users',UM,'POST',{...base_user,username:'pm-x5',full_name:'x',role:'custom',permissions:['expenses:view','not:a_key']});
   assert.equal(ok.status,200,JSON.stringify(ok.data));
   assert.deepEqual(JSON.parse((await db.get("SELECT permissions FROM users WHERE username='pm-x5'")).permissions),['expenses:view'],'unknown keys dropped');
+  // صيغة قديمة تُحفظ بمقابلها في المصفوفة (المدير العام يحفظ مستخدماً قديماً دون أن يخسر صلاحية)
+  const legacy=await api('/api/users',A,'POST',{...base_user,username:'pm-legacy',full_name:'x',role:'custom',permissions:['accounting:journal','projects:manage']});
+  assert.equal(legacy.status,200);
+  assert.deepEqual(JSON.parse((await db.get("SELECT permissions FROM users WHERE username='pm-legacy'")).permissions).sort(),['accounting:create','accounting:edit','projects:create','projects:edit','projects:view']);
   const x5=Number(ok.data.data.id);
   assert.equal((await api('/api/users/'+x5,UM,'PUT',{full_name:'x',role:'custom',permissions:['expenses:view','accounting:post']})).status,403);
   // حساب بدور المدير العام: لا تعديل ولا تعطيل ولا حذف ولا فصل من غير المدير العام

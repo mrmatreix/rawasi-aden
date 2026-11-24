@@ -49,5 +49,26 @@
  const operations=[
  ['cash_projection','توقعات التدفق النقدي والسيولة'],['work_items','شجرة بنود الأعمال ومرجعية المقايسات'],['receipt','سند القبض'],['expense','سند الصرف'],['receipt_register','سجل سندات القبض'],['expense_register','سجل سندات الصرف'],['custody','سند العهدة والتصفية'],['journal','قيد اليومية'],['journal_register','سجل قيود اليومية'],['cash_movement','حركة الصندوق والبنك'],['account_movement','حركة الحساب'],['client_stmt','كشف حساب عميل'],['supplier_stmt','كشف حساب مورد'],['trial_balance','ميزان المراجعة'],['income_statement','قائمة الدخل'],['profit_loss','الأرباح والخسائر'],['balance_sheet','الميزانية العمومية'],['cash_flow','قائمة التدفقات النقدية'],['project_profitability','ربحية المشاريع'],['center_profitability','ربحية مراكز التكلفة'],['project_budget','موازنة المشروع: التقديري والفعلي'],['project_progress','تقرير المشروعات تحت التنفيذ'],['project','تقرير الحساب المالي للمشروع'],['contract','عقد المشروع'],['boq','جدول الكميات'],['client_boq','جدول كميات العميل'],['audit_boq','تدقيق جدول الكميات الداخلي'],['quotation','عرض السعر'],['integrated_quotation','التسعير المتكامل'],['invoice','فاتورة العميل'],['ipc','المستخلص وشهادة الدفع'],['change_order','أمر التغيير'],['daily_report','تقرير الموقع اليومي'],['weekly_report','تقرير الموقع الأسبوعي'],['handover','محضر الاستلام'],['correspondence','مراسلات المشروع'],['settlement','الحساب الختامي والمخالصة'],['project_package','حزمة مستندات المشروع'],['payroll','مسير الرواتب'],['payslip','قسيمة الراتب'],['inventory','جرد وتقييم المخزون']
  ].map(([id,label])=>({id,label}));
- const catalog={roles,clientActions,clientRestrictions,operations,actions,modules,permissionKeys};if(typeof module!=='undefined'&&module.exports)module.exports=catalog;root.SystemCatalog=catalog;
+ // تحويل الصيغ القديمة المحفوظة في الحسابات (manage/print/statement/journal/اسم الوحدة وحده/all) إلى مفاتيح المصفوفة،
+ // بنفس قواعد التوافق التي يطبّقها الخادم، حتى لا تضيع صلاحية فعلية عند فتح المستخدم وحفظه من المصفوفة الجديدة.
+ const known=new Set(permissionKeys);
+ const moduleOf=key=>modules.find(m=>m.key===key);
+ function expandLegacy(list){
+  const out=new Set();
+  for(const raw of Array.isArray(list)?list:[]){
+   const p=String(raw).trim();if(!p)continue;
+   if(p==='*'||p==='all'){out.add('*');continue;}
+   if(known.has(p)){out.add(p);continue;}
+   const [domain,action]=p.split(':');const mod=moduleOf(domain);
+   const add=acts=>{for(const a of acts){const k=domain+':'+a;if(known.has(k))out.add(k);}};
+   if(mod&&(!action||action==='*'))moduleKeys(mod).forEach(k=>out.add(k));
+   else if(p==='inventory:manage')add(['view','create','issue']);
+   else if(action==='manage')add(['view','create','edit']);
+   else if(action==='print')add(['export']);
+   else if(action==='statement')add(['view','export']);
+   else if(p==='accounting:journal')add(['create','edit']);
+  }
+  return [...out];
+ }
+ const catalog={roles,clientActions,clientRestrictions,operations,actions,modules,permissionKeys,expandLegacy};if(typeof module!=='undefined'&&module.exports)module.exports=catalog;root.SystemCatalog=catalog;
 })(typeof window!=='undefined'?window:globalThis);
