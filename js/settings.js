@@ -11,6 +11,7 @@ const Settings = {
   populateAdditionalRoles() {
     const select=document.getElementById('userRoleVal');
     for(const [id,role] of Object.entries(SystemCatalog.roles))if(![...select.options].some(option=>option.value===id))select.add(new Option(role.label,id),select.querySelector('option[value="custom"]'));
+    const adminOption=select.querySelector('option[value="admin"]');if(adminOption)adminOption.disabled=Auth.currentUser?.role!=='admin';
   },
   escapeText(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));},
   operationTitles(){return Object.fromEntries(SystemCatalog.operations.map(operation=>[operation.id,document.getElementById('operationTitle_'+operation.id)?.value||'']));},
@@ -57,7 +58,6 @@ const Settings = {
       this.loadDbConfig();
       this.loadAutoBackupSchedule();
       this.loadLogoutBackups();
-      this.loadMysqlStatus();
       this.loadCloudBackupStatus();
     }
   },
@@ -2286,8 +2286,152 @@ const Settings = {
       `;
     }
   },
+  // ================== طلبات «نسيت كلمة المرور» ==================
+  async loadPasswordResetRequests() {
+    const panel = document.getElementById('staffResetRequestsPanel');
+    const tbody = document.getElementById('staffResetRequestsBody');
+    if (!panel || !tbody) return;
+    try {
+      const res = await fetch('/api/staff-password-resets');
+      const json = await res.json().catch(() => ({}));
+      const rows = res.ok && json.success ? (json.data || []) : [];
+      const count = document.getElementById('staffResetRequestsCount');
+      if (count) count.textContent = String(rows.filter(r => r.status === 'pending').length);
+      panel.style.display = rows.length ? 'block' : 'none';
+      const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const fmt = v => { const d = new Date(v); return isNaN(d) ? esc(v) : esc(d.toLocaleString('ar-EG')); };
+      const statusLabel = r => r.status === 'pending'
+        ? '<span style="color: var(--color-warning, #fbbf24); font-weight: 700;">بانتظار الاعتماد</span>'
+        : `<span style="color: var(--color-success, #34d399); font-weight: 700;">معتمد — صالح حتى ${fmt(r.code_expires_at)}</span>${Number(r.reset_pin) ? '<br><small>مع إعادة ضبط PIN</small>' : ''}`;
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td dir="ltr" style="font-family: monospace; font-weight: 800; color: var(--text-gold); white-space: nowrap;">${esc(r.public_ref)}</td>
+          <td><strong>${esc(r.full_name || r.username)}</strong><br><small style="color: var(--text-muted);">${esc(r.username)}</small></td>
+          <td style="font-size: 0.8rem;">${fmt(r.requested_at)}</td>
+          <td style="font-size: 0.75rem; max-width: 220px; word-break: break-word;" dir="ltr">${esc(r.requested_ip)}<br><span style="color: var(--text-muted);">${esc(String(r.requested_user_agent || '').slice(0, 90))}</span></td>
+          <td style="font-size: 0.82rem; max-width: 200px; word-break: break-word;">${esc(r.requester_note || '—')}</td>
+          <td style="font-size: 0.8rem;">${statusLabel(r)}</td>
+          <td style="white-space: nowrap;">
+            ${r.is_self ? '<small style="color: var(--text-muted);">طلبك أنت — يعتمده مدير آخر</small>' : `
+            <button type="button" class="btn btn-sm btn-success" data-reset-action="approve" data-id="${Number(r.id)}" data-name="${esc(r.full_name || r.username)}" data-ref="${esc(r.public_ref)}">${r.status === 'approved' ? 'إصدار رمز جديد' : 'اعتماد'}</button>`}
+            ${r.status === 'approved' ? `<button type="button" class="btn btn-sm btn-secondary" data-reset-action="revoke" data-id="${Number(r.id)}">إلغاء الرمز</button>` : ''}
+            <button type="button" class="btn btn-sm btn-soft-danger" data-reset-action="reject" data-id="${Number(r.id)}">رفض</button>
+          </td>
+        </tr>`).join('');
+      tbody.querySelectorAll('[data-reset-action]').forEach(btn => btn.addEventListener('click', () => {
+        const { resetAction, id, name, ref } = btn.dataset;
+        if (resetAction === 'approve') this.approvePasswordReset(id, name, ref);
+        else this.closePasswordReset(id, resetAction);
+      }));
+    } catch (e) {
+      panel.style.display = 'none';
+    }
+  },
+
+  async approvePasswordReset(id, name, ref) {
+    if (!(await UIDialog.confirm(`تأكد من هوية (${name}) بالهاتف أو حضورياً، وطابِق رقم المرجع (${ref}) الذي يقرؤه لك قبل الاعتماد. هل تريد المتابعة؟`))) return;
+    const resetPin = await UIDialog.confirm('هل تريد إعادة ضبط رمز التحقق بخطوتين (PIN) أيضاً؟ اختر «إلغاء» للإبقاء على رمز الـ PIN الحالي للموظف.');
+    try {
+      const res = await fetch(`/api/staff-password-resets/${encodeURIComponent(id)}/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset_pin: !!resetPin })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) return App.showToast(data.message || 'تعذر اعتماد الطلب', 'error');
+      const until = new Date(data.expires_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      await UIDialog.alert(`رمز إعادة التعيين للمستخدم (${name}):\n\n🔑   ${data.code}   🔑\n\nصالح حتى ${until} ولمرة واحدة${data.reset_pin ? '، وسيُطلب من الموظف تعيين PIN جديد' : ''}. سلّمه للموظف شخصياً أو هاتفياً، ولا ترسله في مجموعة. لن يُعرض الرمز مرة أخرى.`);
+      await this.loadPasswordResetRequests();
+    } catch (e) {
+      App.showToast('خطأ في الاتصال بالخادم', 'error');
+    }
+  },
+
+  async closePasswordReset(id, action) {
+    const question = action === 'revoke' ? 'إلغاء الرمز المعتمد؟ لن يتمكن الموظف من استعماله.' : 'رفض طلب إعادة التعيين؟';
+    if (!(await UIDialog.confirm(question))) return;
+    try {
+      const res = await fetch(`/api/staff-password-resets/${encodeURIComponent(id)}/${action === 'revoke' ? 'revoke' : 'reject'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json().catch(() => ({}));
+      App.showToast(data.message || (res.ok ? 'تم' : 'تعذر تنفيذ الإجراء'), res.ok && data.success ? 'success' : 'error');
+      await this.loadPasswordResetRequests();
+    } catch (e) {
+      App.showToast('خطأ في الاتصال بالخادم', 'error');
+    }
+  },
+
+  // ================== إدارة الفروع والأقسام (المدير العام فقط) ==================
+  _orgEsc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
+
+  async openOrgUnitsManager() {
+    App.showDynamicModal('🏢 إدارة الفروع والأقسام', '<div id="orgUnitsManager" style="display: grid; gap: 16px;">جاري التحميل...</div>');
+    await this.renderOrgUnits();
+  },
+
+  async renderOrgUnits() {
+    const box = document.getElementById('orgUnitsManager');
+    if (!box) return;
+    const esc = v => this._orgEsc(v);
+    const load = kind => fetch('/api/org/' + kind).then(r => r.json()).catch(() => ({}));
+    const [branches, departments] = await Promise.all([load('branches'), load('departments')]);
+    if (!branches.success || !departments.success) { box.textContent = branches.message || departments.message || 'تعذر التحميل'; return; }
+    const section = (kind, label, extraLabel, extraKey, rows) => `
+      <section>
+        <h4 style="margin: 0 0 8px; color: var(--text-gold);">${label}</h4>
+        <div class="table-responsive"><table class="custom-table"><thead><tr><th>الرمز</th><th>الاسم</th><th>${extraLabel}</th><th>الحالة</th><th>الاستخدام</th><th>الإجراءات</th></tr></thead><tbody>
+        ${rows.map(r => {
+          const u = r.usage || {};
+          const locked = u.financialCount > 0;
+          const usage = [u.projects ? `${u.projects} مشروع` : '', u.financialCount ? `${u.financialCount} حركة مالية` : '', u.users ? `${u.users} مستخدم` : ''].filter(Boolean).join(' · ') || '<span style="color: var(--text-muted);">غير مستخدم</span>';
+          return `<tr data-org-row="${kind}:${Number(r.id)}">
+            <td><input class="form-control" data-f="code" value="${esc(r.code)}" ${locked ? 'disabled title="عليه حركات مالية: الاسم فقط قابل للتعديل"' : ''} style="height: 32px; font-size: 0.8rem; max-width: 110px;" dir="ltr"></td>
+            <td><input class="form-control" data-f="name" value="${esc(r.name)}" style="height: 32px; font-size: 0.8rem;"></td>
+            <td><input class="form-control" data-f="${extraKey}" value="${esc(r[extraKey])}" ${locked ? 'disabled' : ''} style="height: 32px; font-size: 0.8rem;"></td>
+            <td><select class="form-control" data-f="status" ${locked ? 'disabled' : ''} style="height: 32px; font-size: 0.8rem;"><option value="active" ${r.status === 'active' ? 'selected' : ''}>نشط</option><option value="inactive" ${r.status !== 'active' ? 'selected' : ''}>موقوف</option></select></td>
+            <td style="font-size: 0.78rem;">${usage}${locked ? '<div style="font-size: 0.7rem; color: var(--color-warning, #fbbf24);">🔒 الاسم فقط قابل للتعديل</div>' : ''}</td>
+            <td style="white-space: nowrap;">
+              <button type="button" class="btn btn-sm btn-success" data-org-save="${kind}:${Number(r.id)}">حفظ</button>
+              <button type="button" class="btn btn-sm btn-soft-danger" data-org-delete="${kind}:${Number(r.id)}">حذف</button>
+            </td></tr>`;
+        }).join('')}
+        <tr data-org-new="${kind}">
+          <td><input class="form-control" data-f="code" placeholder="مثال: ADN" style="height: 32px; font-size: 0.8rem; max-width: 110px;" dir="ltr"></td>
+          <td><input class="form-control" data-f="name" placeholder="اسم ${label === 'الفروع' ? 'الفرع' : 'القسم'} الجديد" style="height: 32px; font-size: 0.8rem;"></td>
+          <td><input class="form-control" data-f="${extraKey}" placeholder="${extraLabel}" style="height: 32px; font-size: 0.8rem;"></td>
+          <td colspan="2" style="font-size: 0.74rem; color: var(--text-muted);">إضافة جديد</td>
+          <td><button type="button" class="btn btn-sm btn-primary" data-org-add="${kind}">+ إضافة</button></td>
+        </tr></tbody></table></div>
+      </section>`;
+    box.innerHTML = section('branches', 'الفروع', 'العنوان', 'address', branches.data) + section('departments', 'الأقسام', 'المسؤول', 'manager_name', departments.data)
+      + '<p style="margin: 0; font-size: 0.76rem; color: var(--text-muted);">لا يُحذف فرع أو قسم عليه مشاريع أو مستخدمون أو حركات مالية. عند وجود حركات مالية يُعدَّل الاسم فقط.</p>';
+    const fields = row => Object.fromEntries([...row.querySelectorAll('[data-f]')].map(el => [el.dataset.f, el.value]));
+    const send = async (method, url, body) => {
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) { await UIDialog.alert(json.message || 'تعذر تنفيذ العملية'); return false; }
+      App.showToast(json.message, 'success');
+      this._scopesMeta = null;
+      await this.renderOrgUnits();
+      return true;
+    };
+    box.querySelectorAll('[data-org-add]').forEach(btn => btn.addEventListener('click', () => send('POST', '/api/org/' + btn.dataset.orgAdd, fields(btn.closest('tr')))));
+    box.querySelectorAll('[data-org-save]').forEach(btn => btn.addEventListener('click', () => {
+      const [kind, id] = btn.dataset.orgSave.split(':');
+      const row = btn.closest('tr'); const body = {};
+      row.querySelectorAll('[data-f]').forEach(el => { if (!el.disabled) body[el.dataset.f] = el.value; });
+      send('PUT', `/api/org/${kind}/${id}`, body);
+    }));
+    box.querySelectorAll('[data-org-delete]').forEach(btn => btn.addEventListener('click', async () => {
+      const [kind, id] = btn.dataset.orgDelete.split(':');
+      const name = btn.closest('tr').querySelector('[data-f="name"]').value;
+      if (!(await UIDialog.confirm(`حذف «${name}» نهائياً؟`))) return;
+      send('DELETE', `/api/org/${kind}/${id}`);
+    }));
+  },
+
   // ================== إدارة المستخدمين والصلاحيات ==================
   async loadUsers() {
+    this.loadPasswordResetRequests();
+    const orgBtn = document.getElementById('btnManageOrgUnits');
+    if (orgBtn) orgBtn.style.display = Auth.currentUser?.role === 'admin' ? '' : 'none';
     try {
       const res = await fetch('/api/users');
       const json = await res.json();
@@ -2336,10 +2480,17 @@ const Settings = {
           // Scope summary
           let scopeHtml = '';
           const scopeParts = [];
-          if (u.branch) scopeParts.push(`🏢 ${u.branch}`);
-          if (u.department) scopeParts.push(`📑 ${u.department}`);
-          if (u.allowed_projects && u.allowed_projects !== 'all' && u.allowed_projects !== '*' && u.allowed_projects !== '[]') {
-            scopeParts.push(`🏗️ مشاريع محددة`);
+          // نطاق الوصول الفعلي (من الخادم): كل المؤسسة، أو ملخص المنح
+          const sc = u.scope;
+          if (!sc || sc.mode === 'all' || u.role === 'admin') {
+            scopeParts.push('🌐 كل المؤسسة');
+          } else {
+            const bits = [];
+            if (sc.branches.length) bits.push(`${sc.branches.length} فرع`);
+            if (sc.departments.length) bits.push(`${sc.departments.length} قسم`);
+            if (sc.projects.length) bits.push(`${sc.projects.length} مشروع محدد`);
+            if (sc.general) bits.push('عام');
+            scopeParts.push(bits.length ? `🎯 ${bits.join(' + ')} (${this.projectsLabel(sc.effective_project_count)})` : '⛔ نطاق فارغ');
           }
           if (scopeParts.length > 0) {
             scopeHtml = `<div style="font-size: 0.72rem; color: var(--color-info, #38bdf8); margin-top: 2px; font-weight: 600;">${scopeParts.join(' | ')}</div>`;
@@ -2475,64 +2626,212 @@ const Settings = {
 
   async renderScopesControls(user = null) {
     const meta = await this.fetchScopesMeta();
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const branchSelect = document.getElementById('userBranchVal');
     const deptSelect = document.getElementById('userDepartmentVal');
-    const projectsList = document.getElementById('userProjectsCheckList');
-    const allProjChk = document.getElementById('userAllProjectsScopeChk');
-    const projContainer = document.getElementById('userProjectsScopeContainer');
+    // النطاق المحفوظ (من /api/users)، أو «كل المؤسسة» لمستخدم جديد
+    const scope = user?.scope || { mode: 'all', branches: [], departments: [], projects: [], general: true };
+    const has = (list, id) => (list || []).some(x => String(x) === String(id));
 
     if (branchSelect) {
-      const currentBranchId = user ? (user.branch_id || '') : '';
-      branchSelect.innerHTML = `<option value="">كافة الفروع (غير مقيد)</option>` +
-        (meta?.branches || []).map(b => `<option value="${b.id}" ${String(b.id) === String(currentBranchId) ? 'selected' : ''}>🏢 ${b.name} (${b.city || ''})</option>`).join('');
+      const isAdmin = Auth.currentUser?.role === 'admin';
+      const current = user ? (user.branch_id || '') : (isAdmin ? '' : (Auth.currentUser?.branch_id || ''));
+      branchSelect.innerHTML = `<option value="">— غير محدد —</option>` +
+        (meta?.branches || []).map(b => `<option value="${Number(b.id)}" ${String(b.id) === String(current) ? 'selected' : ''}>🏢 ${esc(b.name)}</option>`).join('');
+      // الفرع الأساسي يغيّره المدير العام فقط
+      branchSelect.disabled = !isAdmin;
+      branchSelect.title = isAdmin ? '' : 'تغيير الفرع الأساسي للمدير العام فقط';
+      const manage = document.getElementById('userBranchManageLink');
+      if (manage) manage.style.display = isAdmin ? '' : 'none';
     }
-
     if (deptSelect) {
-      const currentDeptId = user ? (user.department_id || '') : '';
-      deptSelect.innerHTML = `<option value="">كافة الأقسام (غير مقيد)</option>` +
-        (meta?.departments || []).map(d => `<option value="${d.id}" ${String(d.id) === String(currentDeptId) ? 'selected' : ''}>📑 ${d.name}</option>`).join('');
+      const current = user ? (user.department_id || '') : '';
+      deptSelect.innerHTML = `<option value="">— غير محدد —</option>` +
+        (meta?.departments || []).map(d => `<option value="${Number(d.id)}" ${String(d.id) === String(current) ? 'selected' : ''}>📑 ${esc(d.name)}</option>`).join('');
     }
 
-    if (projectsList) {
-      let allowedProjIds = [];
-      if (user && user.allowed_projects) {
-        try {
-          allowedProjIds = typeof user.allowed_projects === 'string' && (user.allowed_projects.startsWith('[') || user.allowed_projects.startsWith('{'))
-            ? JSON.parse(user.allowed_projects)
-            : String(user.allowed_projects).split(',').map(s => s.trim());
-        } catch (e) {
-          allowedProjIds = [String(user.allowed_projects)];
-        }
-      }
-
-      const isAll = !user || allowedProjIds.length === 0 || allowedProjIds.includes('*') || allowedProjIds.includes('all');
-      if (allProjChk) allProjChk.checked = isAll;
-      if (projContainer) projContainer.style.display = isAll ? 'none' : 'block';
-
-      projectsList.innerHTML = (meta?.projects || []).map(p => {
-        const checked = !isAll && allowedProjIds.some(id => String(id) === String(p.id));
-        return `
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text-primary, #f1f5f9); cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;">
-            <input type="checkbox" class="user-proj-scope-chk" value="${p.id}" ${checked ? 'checked' : ''} style="accent-color: #38bdf8;">
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</span>
-          </label>
-        `;
-      }).join('');
-    }
+    const checkbox = (cls, id, label, checked) => `
+      <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text-primary, #f1f5f9); cursor: pointer; background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 4px;" data-scope-label="${esc(label).toLowerCase()}">
+        <input type="checkbox" class="${cls}" value="${Number(id)}" ${checked ? 'checked' : ''} onchange="Settings.updateScopePreview()" style="accent-color: #38bdf8;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(label)}</span>
+      </label>`;
+    const limited = scope.mode === 'limited';
+    const branchesBox = document.getElementById('userScopeBranchesList');
+    if (branchesBox) branchesBox.innerHTML = (meta?.branches || []).map(b => checkbox('user-scope-branch-chk', b.id, b.name, limited && has(scope.branches, b.id))).join('') || '<span style="font-size:0.74rem;color:var(--text-muted);">لا توجد فروع</span>';
+    const deptsBox = document.getElementById('userScopeDeptsList');
+    if (deptsBox) deptsBox.innerHTML = (meta?.departments || []).map(d => checkbox('user-scope-dept-chk', d.id, d.name, limited && has(scope.departments, d.id))).join('') || '<span style="font-size:0.74rem;color:var(--text-muted);">لا توجد أقسام</span>';
+    const projectsBox = document.getElementById('userProjectsCheckList');
+    if (projectsBox) projectsBox.innerHTML = (meta?.projects || []).map(p => checkbox('user-proj-scope-chk', p.id, p.name, limited && has(scope.projects, p.id))).join('') || '<span style="font-size:0.74rem;color:var(--text-muted);">لا توجد مشاريع</span>';
+    const search = document.getElementById('userScopeProjectSearch');
+    if (search) search.value = '';
+    const general = document.getElementById('userScopeGeneralChk');
+    if (general) general.checked = limited ? Boolean(scope.general) : false;
+    const radio = document.getElementById(limited ? 'userScopeModeLimited' : 'userScopeModeAll');
+    if (radio) radio.checked = true;
+    this.onScopeModeChange();
   },
 
-  onAllProjectsScopeToggle(isAll) {
-    const projContainer = document.getElementById('userProjectsScopeContainer');
-    if (projContainer) {
-      projContainer.style.display = isAll ? 'none' : 'block';
-    }
-    if (isAll) {
-      document.querySelectorAll('.user-proj-scope-chk').forEach(c => c.checked = false);
-    }
+  /** الخطة الحالية من عناصر النافذة بنفس شكل واجهة /api/users/:id/scope */
+  readScopeForm() {
+    const ids = sel => Array.from(document.querySelectorAll(sel + ':checked')).map(c => Number(c.value));
+    if (!document.getElementById('userScopeModeLimited')?.checked) return { mode: 'all' };
+    return {
+      mode: 'limited',
+      branches: ids('.user-scope-branch-chk'),
+      departments: ids('.user-scope-dept-chk'),
+      projects: ids('.user-proj-scope-chk'),
+      general: Boolean(document.getElementById('userScopeGeneralChk')?.checked)
+    };
+  },
+
+  /** عدد المشاريع بصيغة عربية صحيحة */
+  projectsLabel(n) {
+    n = Number(n) || 0;
+    if (n === 0) return 'لا مشاريع';
+    if (n === 1) return 'مشروع واحد';
+    if (n === 2) return 'مشروعان';
+    if (n <= 10) return `${n} مشاريع`;
+    return `${n} مشروعاً`;
+  },
+
+  isScopeEmpty(scope) {
+    return scope.mode === 'limited' && !scope.branches.length && !scope.departments.length && !scope.projects.length && !scope.general;
+  },
+
+  onScopeModeChange() {
+    const limited = Boolean(document.getElementById('userScopeModeLimited')?.checked);
+    const box = document.getElementById('userScopeLimitedBox');
+    if (box) box.style.display = limited ? 'block' : 'none';
+    this.updateScopePreview();
+  },
+
+  filterScopeProjects(term) {
+    const q = String(term || '').trim().toLowerCase();
+    document.querySelectorAll('#userProjectsCheckList [data-scope-label]').forEach(el => {
+      el.style.display = !q || el.dataset.scopeLabel.includes(q) ? '' : 'none';
+    });
+  },
+
+  // معاينة حية من الخادم: عدد المشاريع التي سيصل إليها المستخدم وعبر أي منح
+  updateScopePreview() {
+    clearTimeout(this._scopePreviewTimer);
+    this._scopePreviewTimer = setTimeout(async () => {
+      const preview = document.getElementById('userScopePreview');
+      const warning = document.getElementById('userScopeWarning');
+      if (!preview) return;
+      const scope = this.readScopeForm();
+      const setWarning = text => { if (warning) { warning.textContent = text || ''; warning.style.display = text ? 'block' : 'none'; } };
+      if (scope.mode === 'all') { preview.textContent = 'يرى هذا المستخدم كل المؤسسة: كل الفروع والأقسام والمشاريع الحالية والمستقبلية.'; setWarning(''); return; }
+      if (this.isScopeEmpty(scope)) { preview.textContent = 'لم يُحدَّد أي فرع أو قسم أو مشروع.'; setWarning('⚠️ لن يرى هذا المستخدم أي مشروع ولا أي سجل.'); return; }
+      try {
+        const res = await fetch('/api/users/scope-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scope) });
+        const json = await res.json();
+        if (!res.ok || !json.success) { preview.textContent = json.message || 'تعذرت المعاينة'; return; }
+        const d = json.data;
+        const count = via => d.projects.filter(p => p.via === via).length;
+        const parts = [];
+        if (count('branch')) parts.push(`${count('branch')} عبر الفروع`);
+        if (count('department')) parts.push(`${count('department')} عبر الأقسام`);
+        if (count('project')) parts.push(`${count('project')} محددة بالاسم`);
+        preview.textContent = `سيصل هذا المستخدم إلى: ${this.projectsLabel(d.project_count)}${parts.length ? ' (' + parts.join('، ') + ')' : ''}${d.general ? '، والسجلات العامة غير المرتبطة بمشروع' : ''}.`;
+        setWarning(d.project_count === 0 && !d.general ? '⚠️ الفروع والأقسام المحددة لا تحتوي أي مشروع حالياً.' : '');
+      } catch (e) {
+        preview.textContent = 'تعذرت المعاينة (خطأ في الاتصال).';
+      }
+    }, 250);
+  },
+
+  // ================== مصفوفة العمليات والصلاحيات (من الكتالوج الموحّد) ==================
+  ensurePermissionMatrix() {
+    const box = document.getElementById('permMatrixGrid');
+    if (!box || box.dataset.ready === '1' || typeof SystemCatalog === 'undefined' || !SystemCatalog.modules) return;
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const acts = SystemCatalog.actions;
+    const risky = new Set(['approve', 'post', 'cancel']);
+    const chip = (value, label, { risk = false, extra = false } = {}) => `
+      <label class="pm-chip${extra ? ' pm-chip--extra' : ''}"${risk ? ' data-risk="high"' : ''}>
+        <input type="checkbox" class="perm-chk" name="userPerm" value="${esc(value)}">
+        <span class="pm-chip-face">${esc(label)}</span>
+      </label>`;
+    const cards = SystemCatalog.modules.map(m => {
+      const actionChips = acts.filter(a => m.actions.includes(a.id)).map(a => chip(m.key + ':' + a.id, a.label, { risk: risky.has(a.id) })).join('');
+      const extras = Object.entries(m.extra || {});
+      return `
+      <section class="pm-card" data-pm-module="${esc(m.key)}" data-pm-name="${esc(m.label)}">
+        <div class="pm-card-head">
+          <span class="pm-card-title">${esc(m.label)}</span>
+          <span class="pm-count" data-pm-count>0/0</span>
+          <label class="pm-switch" title="تفعيل أو إلغاء كل عمليات الوحدة">
+            <input type="checkbox" data-pm-all aria-label="كل عمليات ${esc(m.label)}">
+            <span class="pm-switch-track"></span>
+          </label>
+        </div>
+        <div class="pm-chips">${actionChips}</div>
+        ${extras.length ? `<div class="pm-extra-label">عمليات خاصة بالوحدة</div><div class="pm-chips">${extras.map(([k, label]) => chip(m.key + ':' + k, label, { extra: true })).join('')}</div>` : ''}
+      </section>`;
+    }).join('');
+    box.className = 'pm-wrap';
+    box.removeAttribute('style');
+    box.innerHTML = `
+      <div class="pm-toolbar">
+        <input type="search" class="pm-search" data-pm-search placeholder="🔍 ابحث عن وحدة..." aria-label="بحث في الوحدات">
+        <div class="pm-toolbar-group">
+          <span class="pm-toolbar-label">لكل الوحدات:</span>
+          ${acts.map(a => `<button type="button" class="pm-tool-btn" data-pm-action="${a.id}" title="تفعيل/إلغاء «${esc(a.label)}» في كل الوحدات">${esc(a.label)}</button>`).join('')}
+          <button type="button" class="pm-tool-btn" data-pm-viewonly title="عرض فقط في كل الوحدات، وإلغاء غيره">عرض فقط</button>
+        </div>
+        <span class="pm-summary" data-pm-summary></span>
+      </div>
+      <div class="pm-legend"><span class="pm-l-on">مفعّلة</span><span class="pm-l-risk">عملية حساسة مفعّلة (اعتماد، ترحيل، إلغاء)</span><span class="pm-l-extra">عملية خاصة بالوحدة</span></div>
+      <div class="pm-modules">${cards}</div>`;
+
+    const moduleBoxes = card => [...card.querySelectorAll('.perm-chk')];
+    box.addEventListener('change', e => {
+      const all = e.target.closest('[data-pm-all]');
+      if (all) moduleBoxes(all.closest('.pm-card')).forEach(b => { b.checked = all.checked; });
+      this.refreshPermissionMatrix();
+    });
+    box.querySelector('[data-pm-search]').addEventListener('input', e => {
+      const q = e.target.value.trim().toLowerCase();
+      box.querySelectorAll('.pm-card').forEach(card => { card.hidden = Boolean(q) && !card.dataset.pmName.toLowerCase().includes(q) && !card.dataset.pmModule.includes(q); });
+    });
+    box.querySelectorAll('[data-pm-action]').forEach(btn => btn.addEventListener('click', () => {
+      const list = [...box.querySelectorAll(`.pm-card .perm-chk[value$=":${btn.dataset.pmAction}"]`)];
+      const on = list.some(b => !b.checked);
+      list.forEach(b => { b.checked = on; });
+      this.refreshPermissionMatrix();
+    }));
+    box.querySelector('[data-pm-viewonly]').addEventListener('click', () => {
+      box.querySelectorAll('.pm-card .perm-chk').forEach(b => { b.checked = b.value.endsWith(':view'); });
+      this.refreshPermissionMatrix();
+    });
+    box.dataset.ready = '1';
+    this.refreshPermissionMatrix();
+  },
+
+  /** يحدّث العدّادات ومفاتيح «الكل» وحالة كل بطاقة بعد أي تغيير (يدوي أو قالب دور أو تحديد الكل) */
+  refreshPermissionMatrix() {
+    const box = document.getElementById('permMatrixGrid');
+    if (!box || box.dataset.ready !== '1') return;
+    let total = 0, on = 0;
+    box.querySelectorAll('.pm-card').forEach(card => {
+      const boxes = [...card.querySelectorAll('.perm-chk')];
+      const n = boxes.filter(b => b.checked).length;
+      total += boxes.length; on += n;
+      card.querySelector('[data-pm-count]').textContent = `${n}/${boxes.length}`;
+      const all = card.querySelector('[data-pm-all]');
+      all.checked = n === boxes.length && n > 0;
+      all.indeterminate = n > 0 && n < boxes.length;
+      card.classList.toggle('is-full', n === boxes.length && n > 0);
+      card.classList.toggle('is-partial', n > 0 && n < boxes.length);
+    });
+    const summary = box.querySelector('[data-pm-summary]');
+    if (summary) summary.innerHTML = `المفعّل: <strong>${on}</strong> من ${total}`;
   },
 
   // ================== نافذة إضافة مستخدم جديد ==================
   async openNewUserModal() {
+    this.ensurePermissionMatrix();
     this.populateAdditionalRoles();
     document.getElementById('userPasswordConfirm').value='';
     document.getElementById('userPasswordConfirm').required=true;
@@ -2593,6 +2892,7 @@ const Settings = {
 
   // ================== نافذة تعديل مستخدم ==================
   async openEditUserModal(userId, focus2Fa = false) {
+    this.ensurePermissionMatrix();
     const user = this._cachedUsers.find(u => u.id === userId);
     if (!user) {
       App.showToast('لم يتم العثور على بيانات المستخدم', 'error');
@@ -2663,14 +2963,16 @@ const Settings = {
     this.selectAllPermissions(false);
 
     // Check user's assigned permissions
-    const perms = user.permissions_list || [];
-    if (user.username === 'admin' || perms.includes('all')) {
+    // الصيغ القديمة (manage/print/statement/journal...) تُعرض كما يطبّقها الخادم فعلاً، فلا تضيع عند الحفظ
+    const perms = (typeof SystemCatalog !== 'undefined' && SystemCatalog.expandLegacy) ? SystemCatalog.expandLegacy(user.permissions_list || []) : (user.permissions_list || []);
+    if (user.role === 'admin' || perms.includes('all') || perms.includes('*')) {
       this.selectAllPermissions(true);
     } else if (perms.length > 0) {
       perms.forEach(p => {
         const chk = document.querySelector(`.perm-chk[value="${p}"]`);
         if (chk) chk.checked = true;
       });
+      this.refreshPermissionMatrix();
       // إذا كانت الصلاحيات مخصصة، نظهر الدور كـ "مخصص" في القائمة
       const totalCheckboxes = document.querySelectorAll('.perm-chk').length;
       if (roleSelect && perms.length < totalCheckboxes && ![...roleSelect.options].some(option => option.value === user.role)) {
@@ -2950,81 +3252,24 @@ const Settings = {
     }
   },
 
+  // قالب الدور من الكتالوج الموحّد (نفس ما يطبّقه الخادم عند خلو صلاحيات المستخدم)
   applyRolePermissionsPreset(role) {
+    this.ensurePermissionMatrix();
     this.selectAllPermissions(false);
-    if (SystemCatalog.roles[role]) {
-      for (const permission of SystemCatalog.roles[role].permissions) { const box=document.querySelector(`.perm-chk[value="${permission}"]`); if(box)box.checked=true; }
-      return;
+    const template = (typeof SystemCatalog !== 'undefined' && SystemCatalog.roles[role]) ? SystemCatalog.roles[role].permissions : [];
+    if (template.includes('*')) { this.selectAllPermissions(true); return; }
+    for (const permission of template) {
+      const box = document.querySelector(`.perm-chk[value="${permission}"]`);
+      if (box) box.checked = true;
     }
-
-    let permsToSelect = [];
-
-    switch (role) {
-      case 'admin':
-        this.selectAllPermissions(true);
-        return;
-      case 'accountant':
-        permsToSelect = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-          'custody:view', 'custody:create', 'custody:export',
-          'clients:view', 'clients:create', 'clients:export',
-          'suppliers:view', 'suppliers:create', 'suppliers:export',
-          'cash:view',
-          'hr:view',
-          'reports:view', 'reports:export'
-        ];
-        break;
-      case 'auditor':
-        permsToSelect = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-          'expenses:view', 'expenses:approve', 'expenses:export',
-          'revenues:view', 'revenues:approve', 'revenues:export',
-          'billing:view', 'billing:approve', 'billing:export',
-          'custody:view', 'custody:approve', 'custody:export',
-          'projects:view', 'projects:export',
-          'inventory:view', 'inventory:export',
-          'purchases:view', 'purchases:approve', 'purchases:export',
-          'hr:view', 'hr:approve', 'hr:export',
-          'reports:view', 'reports:export',
-          'cash:view'
-        ];
-        break;
-      case 'project_manager':
-        permsToSelect = [
-          'dashboard:view',
-          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export',
-          'expenses:view', 'expenses:create',
-          'custody:view',
-          'inventory:view', 'inventory:issue',
-          'reports:view'
-        ];
-        break;
-      case 'storekeeper':
-        permsToSelect = [
-          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export',
-          'purchases:view',
-          'projects:view'
-        ];
-        break;
-      default:
-        return;
-    }
-
-    permsToSelect.forEach(val => {
-      const chk = document.querySelector(`.perm-chk[value="${val}"]`);
-      if (chk) chk.checked = true;
-    });
+    this.refreshPermissionMatrix();
   },
 
   selectAllPermissions(select) {
     document.querySelectorAll('.perm-chk').forEach(chk => {
       chk.checked = !!select;
     });
+    this.refreshPermissionMatrix();
   },
 
   // ================== حفظ المستخدم والصلاحيات ==================
@@ -3196,11 +3441,17 @@ const Settings = {
     // قراءة وتحديد نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects)
     const branch_id = document.getElementById('userBranchVal')?.value || null;
     const department_id = document.getElementById('userDepartmentVal')?.value || null;
-    const allProjScope = document.getElementById('userAllProjectsScopeChk')?.checked;
-    let allowed_projects = 'all';
-    if (!allProjScope) {
-      const selectedProjIds = Array.from(document.querySelectorAll('.user-proj-scope-chk:checked')).map(c => Number(c.value));
-      allowed_projects = selectedProjIds;
+    const scope = this.readScopeForm();
+    if (this.isScopeEmpty(scope)) {
+      if (!(await UIDialog.confirm('النطاق المحدد فارغ: لن يرى هذا المستخدم أي مشروع ولا أي سجل. هل تريد الحفظ هكذا؟'))) return;
+      scope.allow_empty = true;
+    }
+    if (scope.mode === 'limited') {
+      const ledgerPerms = ['*', 'all', 'accounting:view', 'accounting:*', 'accounting', 'cash:view', 'cash:*', 'cash'];
+      const permsList = Array.isArray(finalPerms) ? finalPerms : String(finalPerms || '').split(',');
+      if (finalRole === 'accountant' || permsList.some(p => ledgerPerms.includes(String(p).trim()))) {
+        if (!(await UIDialog.confirm('تنبيه: صلاحيات الدفاتر والصناديق (القيود، الحسابات، الصندوق) تعرض بيانات كل المؤسسة بغض النظر عن النطاق المحدد. هل تريد المتابعة؟'))) return;
+      }
     }
 
     const payload = {
@@ -3212,9 +3463,10 @@ const Settings = {
       status,
       permissions: finalPerms,
       two_factor_enabled: twoFactorEnabled,
-      branch_id: branch_id ? Number(branch_id) : null,
+      // غير المدير لا يرسل الفرع الأساسي (الخادم يرفض تغييره)
+      ...(Auth.currentUser?.role === 'admin' ? { branch_id: branch_id ? Number(branch_id) : null } : {}),
       department_id: department_id ? Number(department_id) : null,
-      allowed_projects
+      scope
     };
 
     // On edit, omit a blank PIN so the database keeps the existing secret.
@@ -4514,204 +4766,6 @@ const Settings = {
       pathInp.value = pathInp.dataset.defaultPath || 'server/database/backups';
       App.showToast('تم استعادة المسار الافتراضي للنسخ الاحتياطية', 'info');
       this.testStoragePath();
-    }
-  },
-
-  // ================== إدارة ومزامنة خادم MySQL ==================
-  async loadMysqlStatus() {
-    try {
-      const res = await fetch('/api/settings/mysql-status');
-      const json = await res.json();
-      if (json && json.success) {
-        const d = json.data;
-        const statusBox = document.getElementById('mysqlStatusBox');
-        const hostInput = document.getElementById('mysqlHost');
-        const portInput = document.getElementById('mysqlPort');
-        const userInput = document.getElementById('mysqlUser');
-        const dbInput = document.getElementById('mysqlDatabase');
-
-        if (d.mysqlConfig) {
-          if (hostInput && !hostInput.value) hostInput.value = d.mysqlConfig.host || 'localhost';
-          if (portInput && !portInput.value) portInput.value = d.mysqlConfig.port || 3306;
-          if (userInput && !userInput.value) userInput.value = d.mysqlConfig.user || 'root';
-          if (dbInput && !dbInput.value) dbInput.value = d.mysqlConfig.database || 'rawasi_aden';
-        }
-
-        if (statusBox) {
-          const isMySqlActive = d.activeEngine === 'mysql';
-          const isConnected = d.isConnected;
-          let badgeClass = 'badge-warning';
-          let badgeText = 'محرك SQLite المحلي نشط (نمط الطوارئ / أوفلاين)';
-
-          if (isMySqlActive && isConnected) {
-            badgeClass = 'badge-active';
-            badgeText = `خادم MySQL نشط ومتصل بنجاح (${d.serverVersion || 'v8.x'}) 🟢`;
-          } else if (isConnected) {
-            badgeClass = 'badge-info';
-            badgeText = 'خادم MySQL متصل وجاهز للتبديل ✅';
-          }
-
-          statusBox.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-              <span>المحرك النشط حالياً: <strong class="badge ${badgeClass}">${badgeText}</strong></span>
-              <span>الإصدار: <strong>${d.serverVersion || 'SQLite 3.x'}</strong></span>
-            </div>
-            <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;">${d.message}</div>
-          `;
-        }
-      }
-    } catch (e) {
-      console.error('Error loading MySQL status:', e);
-    }
-  },
-
-  async testMysqlConnection() {
-    const host = document.getElementById('mysqlHost')?.value.trim() || 'localhost';
-    const port = document.getElementById('mysqlPort')?.value.trim() || 3306;
-    const user = document.getElementById('mysqlUser')?.value.trim() || 'root';
-    const password = document.getElementById('mysqlPassword')?.value || '';
-    const database = document.getElementById('mysqlDatabase')?.value.trim() || 'rawasi_aden';
-    const resultBox = document.getElementById('mysqlTestResult');
-    const btn = document.getElementById('btnTestMysql');
-
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = 'جاري اختبار الاتصال بقاعدة MySQL... ⏳';
-    }
-    if (resultBox) {
-      resultBox.style.display = 'block';
-      resultBox.innerHTML = '<span style="color: var(--text-secondary);">جاري محاولة الاتصال بـ MySQL عبر المنفذ ' + port + '...</span>';
-    }
-
-    try {
-      const res = await fetch('/api/settings/test-mysql-conn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host, port, user, password, database })
-      });
-      const json = await res.json();
-
-      if (json.success) {
-        App.showToast('تم الاتصال بنجاح بخادم MySQL 🚀', 'success');
-        if (resultBox) {
-          resultBox.innerHTML = `
-            <div style="color: var(--accent-green); font-weight: 700; margin-bottom: 4px;">✅ تم الاتصال بنجاح بخادم MySQL (${json.latencyMs} ms)</div>
-            <div style="font-size: 0.82rem; color: var(--text-secondary);">${json.message} | إصدار الخادم: ${json.version || 'غير محدد'} | المستخدم: ${json.user || user}</div>
-          `;
-        }
-      } else {
-        App.showToast('تعذر الاتصال بـ MySQL: ' + json.message, 'error');
-        if (resultBox) {
-          resultBox.innerHTML = `
-            <div style="color: var(--accent-red); font-weight: 700; margin-bottom: 4px;">⚠️ فشل الاتصال بخادم MySQL</div>
-            <div style="font-size: 0.82rem; color: var(--text-secondary);">${json.message}</div>
-            <div style="font-size: 0.78rem; color: var(--text-gold); margin-top: 6px;">💡 تلميح: تأكد من تشغيل خادم MySQL (مثل XAMPP أو WampServer أو خدمة MySQL)، أو فحص كلمة المرور واسم المستخدم.</div>
-          `;
-        }
-      }
-    } catch (e) {
-      if (resultBox) {
-        resultBox.innerHTML = `<div style="color: var(--accent-red);">خطأ أثناء محاولة الفحص: ${e.message}</div>`;
-      }
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = 'اختبار الاتصال بـ MySQL 🔍';
-      }
-    }
-  },
-
-  async saveMysqlSettings(e) {
-    if (e) e.preventDefault();
-    const host = document.getElementById('mysqlHost')?.value.trim() || 'localhost';
-    const port = document.getElementById('mysqlPort')?.value.trim() || 3306;
-    const user = document.getElementById('mysqlUser')?.value.trim() || 'root';
-    const password = document.getElementById('mysqlPassword')?.value || '';
-    const database = document.getElementById('mysqlDatabase')?.value.trim() || 'rawasi_aden';
-    const btn = document.getElementById('btnSaveMysql');
-
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = 'جاري الحفظ والتطبيق... ⏳';
-    }
-
-    try {
-      const res = await fetch('/api/settings/save-mysql-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host, port, user, password, database })
-      });
-      const json = await res.json();
-      if (json.success) {
-        App.showToast(json.message || 'تم حفظ إعدادات MySQL بنجاح ✅', 'success');
-        await this.loadMysqlStatus();
-      } else {
-        App.showToast(json.message || 'حدث خطأ أثناء حفظ الإعدادات', 'error');
-      }
-    } catch (err) {
-      App.showToast('خطأ في حفظ الإعدادات: ' + err.message, 'error');
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = 'حفظ الإعدادات وتفعيل المحرك 💾';
-      }
-    }
-  },
-
-  async runMysqlMigration() {
-    const isConfirmed = await UIDialog.confirm(
-      "هل أنت متأكد من رغبتك في بدء ترحيل كافة الجداول والبيانات من SQLite إلى MySQL الآن؟\n\n" +
-      "• سيتم نسخ كافة المشاريع، الفواتير، السندات، الحسابات، والعملاء.\n" +
-      "• لن يتم حذف بياناتك القديمة من SQLite بل ستبقى محفوظة بأمان كنسخة احتياطية."
-    );
-    if (!isConfirmed) return;
-
-    const resultBox = document.getElementById('mysqlMigrationResult');
-    const btn = document.getElementById('btnRunMigration');
-
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = 'جاري الترحيل الشامل للجداول والبيانات... ⏳';
-    }
-    if (resultBox) {
-      resultBox.style.display = 'block';
-      resultBox.innerHTML = '<div style="color: var(--text-gold);">جاري قراءة الجداول من SQLite وتحويلها إلى MySQL، يرجى الانتظار بضع ثوانٍ... ⏳</div>';
-    }
-
-    try {
-      const res = await fetch('/api/settings/run-migration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const json = await res.json();
-      if (json.success) {
-        App.showToast('تم ترحيل كافة البيانات إلى MySQL بنجاح باهر! 🎉', 'success');
-        if (resultBox) {
-          resultBox.innerHTML = `
-            <div style="color: var(--accent-green); font-weight: 700; margin-bottom: 4px;">🎉 اكتملت عملية الترحيل بنجاح تام!</div>
-            <div style="font-size: 0.85rem; color: var(--text-secondary);">${json.message}</div>
-          `;
-        }
-        await this.loadMysqlStatus();
-      } else {
-        App.showToast('فشل الترحيل: ' + json.message, 'error');
-        if (resultBox) {
-          resultBox.innerHTML = `
-            <div style="color: var(--accent-red); font-weight: 700; margin-bottom: 4px;">⚠️ تعذر إتمام الترحيل</div>
-            <div style="font-size: 0.85rem; color: var(--text-secondary);">${json.message}</div>
-          `;
-        }
-      }
-    } catch (err) {
-      App.showToast('خطأ أثناء عملية الترحيل: ' + err.message, 'error');
-      if (resultBox) {
-        resultBox.innerHTML = `<div style="color: var(--accent-red);">خطأ غير متوقع: ${err.message}</div>`;
-      }
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = 'بدء ترحيل البيانات الآن (Migrate SQLite to MySQL) 🚀';
-      }
     }
   },
 

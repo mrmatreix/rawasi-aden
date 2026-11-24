@@ -411,6 +411,7 @@ const Auth = {
     const conflictBox = document.getElementById('loginConflictBox');
     const conflictText = document.getElementById('loginConflictText');
     const submitBtn = document.getElementById('btnLoginSubmit');
+    this._showBox('loginSuccessMsg', '');
 
     const username = (this._pendingCredentials && force) ? this._pendingCredentials.username : usernameInput?.value?.trim();
     const password = (this._pendingCredentials && force) ? this._pendingCredentials.password : passwordInput?.value;
@@ -649,6 +650,130 @@ const Auth = {
   },
 
   // تطبيع وتوحيد مدخلات رمز التحقق بخطوتين (تحويل الأرقام العربية إلى إنجليزية ومنع الرموز)
+  // ================== نسيت كلمة المرور ==================
+  _showBox(id, text) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.textContent = text || '';
+    box.style.display = text ? 'block' : 'none';
+  },
+
+  openForgotPassword() {
+    const modal = document.getElementById('forgotPasswordModal');
+    if (!modal) return;
+    const typed = document.getElementById('loginUsername')?.value || '';
+    const input = document.getElementById('forgotUsername');
+    if (input && !input.value) input.value = typed.trim();
+    this._showBox('forgotPasswordErrorMsg', '');
+    const result = document.getElementById('forgotPasswordResult');
+    if (result) result.style.display = 'none';
+    modal.style.display = 'flex';
+    setTimeout(() => input?.focus(), 50);
+  },
+
+  closeForgotPassword() {
+    const modal = document.getElementById('forgotPasswordModal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  async submitForgotPassword(event) {
+    if (event) event.preventDefault();
+    const username = (document.getElementById('forgotUsername')?.value || '').trim();
+    const note = (document.getElementById('forgotNote')?.value || '').trim();
+    const btn = document.getElementById('btnSubmitForgot');
+    this._showBox('forgotPasswordErrorMsg', '');
+    if (!username) return this._showBox('forgotPasswordErrorMsg', 'يرجى إدخال اسم المستخدم');
+    if (btn) { btn.disabled = true; btn.textContent = 'جاري الإرسال...'; }
+    try {
+      const res = await fetch('/api/auth/password-reset/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, note })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) return this._showBox('forgotPasswordErrorMsg', data.message || 'تعذر إرسال الطلب حالياً');
+      const result = document.getElementById('forgotPasswordResult');
+      const text = document.getElementById('forgotPasswordResultText');
+      const ref = document.getElementById('forgotPasswordRef');
+      if (text) text.textContent = data.message || '';
+      if (ref) ref.textContent = data.ref || '';
+      if (result) result.style.display = 'block';
+    } catch (e) {
+      this._showBox('forgotPasswordErrorMsg', 'خطأ في الاتصال بالخادم');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'إرسال الطلب'; }
+    }
+  },
+
+  openResetWithCode() {
+    const forgot = document.getElementById('forgotUsername')?.value || document.getElementById('loginUsername')?.value || '';
+    this.closeForgotPassword();
+    const modal = document.getElementById('resetWithCodeModal');
+    if (!modal) return;
+    const user = document.getElementById('resetUsername');
+    if (user && !user.value) user.value = forgot.trim();
+    this._showBox('resetWithCodeErrorMsg', '');
+    modal.style.display = 'flex';
+    setTimeout(() => (user && user.value ? document.getElementById('resetCode') : user)?.focus(), 50);
+  },
+
+  closeResetWithCode() {
+    const modal = document.getElementById('resetWithCodeModal');
+    if (modal) modal.style.display = 'none';
+    ['resetCode', 'resetCurrentPin', 'resetNewPin', 'resetNewPassword', 'resetNewPasswordConfirm'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const pinGroup = document.getElementById('resetNewPinGroup');
+    if (pinGroup) pinGroup.style.display = 'none';
+  },
+
+  async submitResetWithCode(event) {
+    if (event) event.preventDefault();
+    const val = id => document.getElementById(id)?.value || '';
+    const payload = {
+      username: val('resetUsername').trim(),
+      code: val('resetCode'),
+      current_pin: val('resetCurrentPin'),
+      new_pin: val('resetNewPin'),
+      new_password: val('resetNewPassword'),
+      new_password_confirm: val('resetNewPasswordConfirm')
+    };
+    this._showBox('resetWithCodeErrorMsg', '');
+    if (payload.new_password.length < 8) return this._showBox('resetWithCodeErrorMsg', 'كلمة المرور الجديدة يجب أن تكون 8 خانات على الأقل.');
+    if (payload.new_password !== payload.new_password_confirm) return this._showBox('resetWithCodeErrorMsg', 'كلمة المرور وتأكيدها غير متطابقين.');
+    const btn = document.getElementById('btnSubmitResetWithCode');
+    if (btn) { btn.disabled = true; btn.textContent = 'جاري التحقق...'; }
+    try {
+      const res = await fetch('/api/auth/password-reset/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        if (data.requiresNewPin) {
+          const pinGroup = document.getElementById('resetNewPinGroup');
+          if (pinGroup) pinGroup.style.display = 'block';
+          document.getElementById('resetNewPin')?.focus();
+        }
+        return this._showBox('resetWithCodeErrorMsg', data.message || 'تعذر تغيير كلمة المرور');
+      }
+      const username = payload.username;
+      this.closeResetWithCode();
+      const loginUser = document.getElementById('loginUsername');
+      const loginPass = document.getElementById('loginPassword');
+      if (loginUser) loginUser.value = username;
+      if (loginPass) { loginPass.value = ''; loginPass.focus(); }
+      this._showBox('loginErrorMsg', '');
+      if (document.getElementById('loginSuccessMsg')) this._showBox('loginSuccessMsg', data.message);
+      else if (window.App?.showToast) App.showToast(data.message, 'success');
+    } catch (e) {
+      this._showBox('resetWithCodeErrorMsg', 'خطأ في الاتصال بالخادم');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'تغيير كلمة المرور'; }
+    }
+  },
+
   normalize2FaInput(input) {
     if (!input) return;
     let val = String(input.value || '')
@@ -995,7 +1120,7 @@ const Auth = {
     if (!this.currentUser) return false;
 
     // مدير النظام الرئيسي (Super Admin) يملك كافة الصلاحيات دائماً
-    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') {
+    if (this.currentUser.role === 'admin') {
       return true;
     }
 
@@ -1008,58 +1133,10 @@ const Auth = {
       }
     }
 
-    // إذا كانت الصلاحيات فارغة تماماً ولم تُخصص، نطبق الصلاحيات الافتراضية حسب الدور
+    // صلاحيات فارغة: قالب الدور من الكتالوج الموحّد (نفس ما يطبّقه الخادم)
     if (!perms || perms.length === 0) {
-      if (this.currentUser.role === 'admin') {
-        return true;
-      }
-      if (this.currentUser.role === 'accountant') {
-        perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-          'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-          'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-          'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-          'custody:view', 'custody:create', 'custody:manage', 'custody:export',
-          'clients:view', 'clients:create', 'clients:manage', 'clients:statement',
-          'suppliers:view', 'suppliers:create', 'suppliers:manage', 'suppliers:statement',
-          'cash:view',
-          'hr:view', 'hr:payroll',
-          'reports:view', 'reports:export'
-        ];
-      } else if (this.currentUser.role === 'auditor') {
-        perms = [
-          'dashboard:view', 'dashboard:export',
-          'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-          'expenses:view', 'expenses:approve', 'expenses:export',
-          'revenues:view', 'revenues:approve', 'revenues:export',
-          'billing:view', 'billing:approve', 'billing:export',
-          'custody:view', 'custody:approve', 'custody:export',
-          'projects:view', 'projects:export',
-          'inventory:view', 'inventory:export',
-          'purchases:view', 'purchases:approve', 'purchases:export',
-          'hr:view', 'hr:approve', 'hr:export',
-          'reports:view', 'reports:export',
-          'cash:view'
-        ];
-      } else if (this.currentUser.role === 'project_manager') {
-        perms = [
-          'dashboard:view',
-          'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export', 'projects:manage', 'projects:print',
-          'expenses:view', 'expenses:create',
-          'custody:view',
-          'inventory:view', 'inventory:issue',
-          'reports:view'
-        ];
-      } else if (this.currentUser.role === 'storekeeper') {
-        perms = [
-          'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export', 'inventory:manage',
-          'purchases:view',
-          'projects:view'
-        ];
-      } else {
-        perms = ['dashboard:view'];
-      }
+      const template = typeof SystemCatalog !== 'undefined' && SystemCatalog.roles?.[this.currentUser.role];
+      perms = template ? template.permissions : ['dashboard:view'];
     }
 
     if (Array.isArray(perms) && (perms.includes('*') || perms.includes('all'))) {
@@ -1087,11 +1164,9 @@ const Auth = {
   },
 
   // التحقق الأمني من صلاحية المستخدم للوصول لشاشة معينة لمنع التلاعب بالـ DOM
-  canAccessView(viewId) {
-    if (!this.currentUser) return false;
-    if (this.currentUser.username === 'admin' || this.currentUser.role === 'admin') return true;
-
-    const viewPermMap = {
+  // صلاحية العرض المطلوبة لكل شاشة (مصدر واحد للعرض والتصدير)
+  viewPermissions() {
+    return {
       'dashboard': 'dashboard:view',
       'projects': 'projects:view',
       'projectHub': 'projects:view',
@@ -1118,6 +1193,75 @@ const Auth = {
       'settings': 'settings:users,settings:company,settings:backup',
       'clientApp': 'client_app:view'
     };
+  },
+
+  // التصدير إلى Excel يتطلب صلاحية «تصدير» للوحدة التي تُعرض شاشتها حالياً
+  // الطباعة = تصدير: كل دالة طباعة تتطلب صلاحية «تصدير» للوحدة التي يخصها المستند.
+  // null = معفاة (معاينة إعدادات الطباعة نفسها). أي دالة print* جديدة يجب أن تُضاف هنا (اختبار يتحقق من ذلك).
+  PRINT_PERMISSIONS: {
+    Accounting: {
+      printJournalListPdf: 'accounting:export', printJournalEntryById: 'accounting:export', printCurrentJournalEntry: 'accounting:export',
+      printCashMovement: 'cash:export,accounting:export', printExpenseReceipt: 'expenses:export,accounting:export',
+      printReceipt: 'revenues:export,accounting:export', printCustodyReceipt: 'custody:export,accounting:export', printTestReceipt: null
+    },
+    HR: { printComprehensivePayroll: 'hr:export' },
+    ProjectCloseout: { printCurrentView: 'projects:export,reports:export', printReport: 'projects:export,reports:export', printClientBoQ: 'projects:export', printInternalAuditBoQ: 'projects:export' },
+    ProjectHub: {
+      printOfficialContract: 'projects:export', printOfficialIPC: 'billing:export,projects:export', printFinalSettlementDoc: 'billing:export,projects:export',
+      printQuotationDoc: 'projects:export', printChangeOrderSlip: 'projects:export', printDailyReportDoc: 'projects:export', printWeeklyReportDoc: 'projects:export',
+      printHandoverDoc: 'projects:export', printCorrespondenceDoc: 'projects:export', printIntegratedQuotationOfficialDoc: 'projects:export'
+    },
+    Projects: { printCurrentProjectDetails: 'projects:export,reports:export', printProjectReport: 'projects:export,reports:export' },
+    Reports: { printSupplierStatement: 'suppliers:export,reports:export', printActiveReport: 'reports:export' },
+    Settings: { printCurrentPreviewDoc: null }
+  },
+
+  /** يلفّ دوال الطباعة في الوحدات المحمّلة بفحص صلاحية التصدير (مرة واحدة لكل دالة) */
+  guardPrintFunctions() {
+    // الوحدات معرّفة بـ const في سكربتات مستقلة (ليست خصائص window)، وCSP تمنع eval، لذا مراجع صريحة
+    const modules = {
+      Accounting: typeof Accounting !== 'undefined' ? Accounting : undefined,
+      HR: typeof HR !== 'undefined' ? HR : undefined,
+      ProjectCloseout: typeof ProjectCloseout !== 'undefined' ? ProjectCloseout : undefined,
+      ProjectHub: typeof ProjectHub !== 'undefined' ? ProjectHub : undefined,
+      Projects: typeof Projects !== 'undefined' ? Projects : undefined,
+      Reports: typeof Reports !== 'undefined' ? Reports : undefined,
+      Settings: typeof Settings !== 'undefined' ? Settings : undefined
+    };
+    for (const [objectName, methods] of Object.entries(this.PRINT_PERMISSIONS)) {
+      const target = modules[objectName];
+      if (!target) continue;
+      for (const [method, permission] of Object.entries(methods)) {
+        const original = target[method];
+        if (!permission || typeof original !== 'function' || original.__printGuarded) continue;
+        const guarded = function (...args) {
+          if (!Auth.hasPermission(permission)) {
+            if (typeof App !== 'undefined' && App.showToast) App.showToast('⛔ لا تملك صلاحية الطباعة والتصدير لهذا المستند', 'error');
+            return undefined;
+          }
+          return original.apply(this, args);
+        };
+        guarded.__printGuarded = true;
+        target[method] = guarded;
+      }
+    }
+  },
+
+  canExportCurrentView() {
+    if (!this.currentUser) return false;
+    if (this.currentUser.role === 'admin') return true;
+    const view = (typeof App !== 'undefined' && App.activeView) || 'dashboard';
+    const viewPerm = this.viewPermissions()[view];
+    if (!viewPerm) return true;
+    const exportPerm = viewPerm.split(',').map(p => p.trim().split(':')[0] + ':export').join(',');
+    return this.hasPermission(exportPerm);
+  },
+
+  canAccessView(viewId) {
+    if (!this.currentUser) return false;
+    if (this.currentUser.role === 'admin') return true;
+
+    const viewPermMap = this.viewPermissions();
 
     const perm = viewPermMap[viewId];
     if (!perm) return true;

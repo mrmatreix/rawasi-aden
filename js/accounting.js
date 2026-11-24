@@ -162,7 +162,7 @@ const Accounting = {
     const byId = new Map([...(this.allAccounts || []), ...(this.accounts || [])].map(account => [String(account.id), account]));
     return (this.accounts || []).filter(account => {
       if (kind !== 'expense' && kind !== 'receipt') return true;
-      let receiptAllowed = false;
+      // سند القبض: أي حساب غير نقدي (ذمم العملاء، الدفعات المقدمة، المحتجزات، الإيرادات)؛ الصندوق والبنك طرف التسوية فقط
       const seen = new Set();
       for (let current = account; current && !seen.has(current); current = byId.get(String(current.parent_id))) {
         seen.add(current);
@@ -171,9 +171,9 @@ const Accounting = {
         const code = String(current.code || current.account_code || '');
         const revenue = /ايراد|revenue|income/.test(text) || code.startsWith('4');
         if (kind === 'expense' && revenue) return false;
-        if (revenue || code.startsWith('11101') || code.startsWith('11102') || ['cash', 'bank'].includes(current.analytical_type)) receiptAllowed = true;
+        if (kind === 'receipt' && (code.startsWith('11101') || code.startsWith('11102') || ['cash', 'bank'].includes(current.analytical_type))) return false;
       }
-      return kind === 'receipt' ? receiptAllowed : true;
+      return true;
     });
   },
 
@@ -340,6 +340,26 @@ const Accounting = {
     }
   },
 
+  // يختار الحساب الواجب لسند القبض من الخادم (تحصيل مستخلص ← ذمم العميل، دفعة مقدمة ← الدفعات المقدمة، إفراج محتجز ← المحتجزات)
+  async applyRequiredReceiptAccount() {
+    const select = document.getElementById('modalRcAccountSelect');
+    if (!select) return;
+    const category = document.getElementById('modalRcCategory')?.value || 'general';
+    const billId = document.getElementById('modalRcBillSelect')?.value || '';
+    const clientId = document.getElementById('modalRcClientSelect')?.value || '';
+    try {
+      const params = new URLSearchParams({ category, bill_id: billId, client_id: clientId });
+      const json = await fetch('/api/payments/receipt-account?' + params).then(r => r.json());
+      const account = json?.success ? json.data : null;
+      if (!account) { select.disabled = false; return; }
+      if (![...select.options].some(o => String(o.value) === String(account.id))) select.add(new Option(`${account.code} - ${account.name}`, account.id));
+      select.value = String(account.id);
+      select.disabled = true;
+    } catch (err) {
+      select.disabled = false;
+    }
+  },
+
   onReceiptCategoryChange(category) {
     const billRow = document.getElementById('modalRcBillRow');
     const notes = document.getElementById('modalRcNotes');
@@ -352,6 +372,7 @@ const Accounting = {
     } else {
       if (billRow) billRow.style.display = 'block';
     }
+    this.applyRequiredReceiptAccount();
   },
 
   // مزامنة حقول الشاشات السريعة في لوحة التحكم عند اختيار المشروع
@@ -576,6 +597,7 @@ const Accounting = {
   },
 
   onReceiptBillChange(billId) {
+    this.applyRequiredReceiptAccount();
     if (!billId) return;
     const bill = (this.receiptClientBills || []).find(b => b.id == billId);
     if (!bill) return;
@@ -1226,6 +1248,7 @@ const Accounting = {
       this.handlePaymentMethodChange(payMethodSelect, 'modalRcCheckRow');
     }
 
+    await this.applyRequiredReceiptAccount();
     App.openModal('newReceiptModal');
   },
 
@@ -5363,7 +5386,7 @@ const Accounting = {
 
     if (!periodId) return;
     if (!password || !password.trim()) {
-      if (window.UI && UI.Toast) UI.Toast.error('يرجى إدخال كلمة مرور المدير لإقرار إقفال الفترة');
+      if (window.UI && UI.Toast) UI.Toast.error('يرجى إدخال كلمة مرور حسابك لتأكيد إقفال الفترة');
       return;
     }
 
@@ -5373,9 +5396,15 @@ const Accounting = {
       const res = await fetch(`/api/accounting/periods/${periodId}/close`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_password: password.trim(), notes: notes?.trim() })
+        body: JSON.stringify({ password: password.trim(), notes: notes?.trim() })
       });
-      const json = await res.json();
+      let json = await res.json();
+      // الفترة تتضمن نهاية السنة: يُرحَّل قيد الإقفال السنوي (الإيرادات والمصروفات إلى الأرباح المحتجزة) ثم يُعاد الإقفال
+      if (!json.success && json.code === 'YEAR_CLOSING_REQUIRED' && await UIDialog.confirm(`${json.message}\n\nترحيل قيد الإقفال السنوي لسنة ${json.fiscal_year} الآن ثم إقفال الفترة؟`)) {
+        const yc = await fetch(`/api/accounting/fiscal-years/${json.fiscal_year}/closing`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password.trim() }) }).then(r => r.json());
+        if (!yc.success) json = yc;
+        else json = await fetch(`/api/accounting/periods/${periodId}/close`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password.trim(), notes: notes?.trim() }) }).then(r => r.json());
+      }
 
       if (json.success) {
         if (window.UI && UI.Toast) UI.Toast.success(json.message);

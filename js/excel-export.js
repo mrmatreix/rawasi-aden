@@ -59,6 +59,10 @@ const ExcelExporter = {
 
   // تنزيل ملف Excel بتنسيق XML/HTML Spreadsheet المعتمد من Microsoft Office
   download(htmlBody, filename, worksheetName = 'التقرير المالي', includeFinancialContext = true) {
+    if (typeof Auth !== 'undefined' && typeof Auth.canExportCurrentView === 'function' && !Auth.canExportCurrentView()) {
+      if (typeof App !== 'undefined' && App.showToast) App.showToast('⛔ لا تملك صلاحية التصدير في هذا القسم', 'error');
+      return false;
+    }
     if(includeFinancialContext&&typeof Settings!=='undefined'&&Settings.getOperationTitle&&typeof Reports!=='undefined'){
       const tab=Reports.activeReportTab,id=({'projects-profitability':'project_profitability','cost-centers-profitability':'center_profitability','client-statement':'client_stmt','supplier-statement':'supplier_stmt'})[tab]||String(tab||'').replace(/-/g,'_');
       const title=Settings.getOperationTitle(id,'');if(title)htmlBody=htmlBody.replace(/(<td[^>]*class="hdr-title"[^>]*>)[\s\S]*?(<\/td>)/,(match,start,end)=>start+String(title).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))+end);

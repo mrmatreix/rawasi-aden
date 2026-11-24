@@ -18,6 +18,45 @@ const CashFlowReportService = require('../../server/services/cashFlowReportServi
 const ContractingAccountingService = require('../../server/services/contractingAccountingService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'rawasi_aden_secret_key_2024';
+
+// The suite was written for the old short chart, whose codes now mean other accounts (12101001 was the cash box and
+// is office furniture today). Each old code is resolved to the account with the same meaning on the standard chart.
+const OLD_CODE_MEANING = {
+  '12101001': { role: 'CASH_DEFAULT' },
+  '12201001': { role: 'BANK_DEFAULT' },
+  '12301001': { role: 'ACCOUNTS_RECEIVABLE' },
+  '22101001': { role: 'SUPPLIERS_PAYABLE' },
+  '11101001': { path: [['12', 'الاصول الثابتة', 'asset'], ['121', 'الاثاث والتجهيزات', 'asset'], ['12101', 'الاثاث المكتبي', 'asset'], ['12101001', 'الاثاث المكتبي', 'asset']] },
+  '21101001': { path: [['22', 'التزامات طويلة الاجل', 'liability'], ['221', 'حقوق الملكية', 'equity'], ['22101', 'راس المال', 'equity'], ['22101001', 'راس المال', 'equity']] },
+  '22201001': { path: [['22', 'التزامات طويلة الاجل', 'liability'], ['222', 'القروض', 'liability'], ['22201', 'قروض طويلة الاجل', 'liability'], ['22201001', 'قرض بنكي طويل الاجل', 'liability']] }
+};
+async function ensureStandardAccounts() {
+  const db = require('../../server/database/db');
+  const SystemAccounts = require('../../server/services/systemAccountService');
+  const mapped = await require('../fixtures/roleAccounts').ensureRoleAccounts(db, ['CASH_DEFAULT', 'BANK_DEFAULT', 'ACCOUNTS_RECEIVABLE', 'SUPPLIERS_PAYABLE', 'CONTRACT_REVENUE', 'PROJECT_MATERIAL_COST']);
+  const id = async code => (await get('SELECT id FROM accounts WHERE code = ?', [code]))?.id;
+  await SystemAccounts.setMapping('CASH_GROUP', await id('11101'));
+  await SystemAccounts.setMapping('BANK_GROUP', await id('11102'));
+  for (const meaning of Object.values(OLD_CODE_MEANING)) {
+    if (!meaning.path) continue;
+    let parent = null;
+    for (const [code, name, type] of meaning.path) {
+      if (!await id(code)) {
+        const level = { 2: 2, 3: 3, 5: 4, 8: 5 }[code.length];
+        await run('INSERT INTO accounts (code, name, type, parent_id, level, is_posting, status) VALUES (?, ?, ?, ?, ?, ?, ?)', [code, name, type, parent ? await id(parent) : null, level, level === 5 ? 1 : 0, 'active']);
+      }
+      parent = code;
+    }
+  }
+  return mapped;
+}
+async function acct(oldCode) {
+  const meaning = OLD_CODE_MEANING[oldCode];
+  if (!meaning) throw new Error('unmapped old account code ' + oldCode);
+  if (meaning.role) return get('SELECT a.* FROM accounts a JOIN system_account_mappings m ON m.account_id = a.id WHERE m.role = ?', [meaning.role]);
+  return get('SELECT * FROM accounts WHERE code = ?', [meaning.path[meaning.path.length - 1][0]]);
+}
+
 let server = null;
 let BASE_URL = 'http://127.0.0.1:3000';
 
@@ -62,10 +101,13 @@ async function createTestJournalEntry({ entry_no, date, lines, status = 'posted'
 // دالة مساعدة لحذف القيود التجريبية
 async function cleanupTestEntries(prefix = 'TEST_') {
   const entries = await query(`SELECT id FROM journal_entries WHERE entry_no LIKE ?`, [`${prefix}%`]);
+  // test data only: posted entries are locked, so the cleanup unlocks explicitly like the maintenance scripts
+  await run(`INSERT INTO ledger_maintenance_unlock (reason) VALUES ('reporting suite cleanup')`);
   for (const e of entries) {
     await run(`DELETE FROM journal_entry_lines WHERE entry_id = ?`, [e.id]);
     await run(`DELETE FROM journal_entries WHERE id = ?`, [e.id]);
   }
+  await run(`DELETE FROM ledger_maintenance_unlock`);
 }
 
 test('Setup & Account Discovery for Reporting Tests', async () => {
@@ -75,23 +117,24 @@ test('Setup & Account Discovery for Reporting Tests', async () => {
   BASE_URL = `http://127.0.0.1:${port}`;
 
   await cleanupTestEntries('TEST_');
+  await ensureStandardAccounts();
 
   // جلب حسابات طرفية صالحة
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
-  const bankAcc = await get("SELECT * FROM accounts WHERE code = '12201001'");
-  const arAcc = await get("SELECT * FROM accounts WHERE code = '12301001'");
-  const apAcc = await get("SELECT * FROM accounts WHERE code = '22101001'");
-  const fixedAssetAcc = await get("SELECT * FROM accounts WHERE code = '11101001'");
-  const equityAcc = await get("SELECT * FROM accounts WHERE code = '21101001'");
+  const cashAcc = await acct('12101001');
+  const bankAcc = await acct('12201001');
+  const arAcc = await acct('12301001');
+  const apAcc = await acct('22101001');
+  const fixedAssetAcc = await acct('11101001');
+  const equityAcc = await acct('21101001');
   const expAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات', 'تكاليف')) LIMIT 1");
   const revAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '4%' OR type IN ('revenue', 'إيرادات')) LIMIT 1");
   const parentAcc = await get("SELECT * FROM accounts WHERE id IN (SELECT parent_id FROM accounts WHERE parent_id IS NOT NULL) LIMIT 1");
 
-  assert.ok(cashAcc, 'حساب الصندوق 12101001 يجب أن يكون موجوداً');
-  assert.ok(bankAcc, 'حساب البنك 12201001 يجب أن يكون موجوداً');
-  assert.ok(arAcc, 'حساب العملاء 12301001 يجب أن يكون موجوداً');
-  assert.ok(apAcc, 'حساب الموردين 22101001 يجب أن يكون موجوداً');
-  assert.ok(fixedAssetAcc, 'حساب أصل ثابت 11101001 يجب أن يكون موجوداً');
+  assert.ok(cashAcc, 'حساب الصندوق يجب أن يكون موجوداً');
+  assert.ok(bankAcc, 'حساب البنك يجب أن يكون موجوداً');
+  assert.ok(arAcc, 'حساب العملاء يجب أن يكون موجوداً');
+  assert.ok(apAcc, 'حساب الموردين يجب أن يكون موجوداً');
+  assert.ok(fixedAssetAcc, 'حساب أصل ثابت يجب أن يكون موجوداً');
   assert.ok(expAcc, 'حساب مصروف طرفي يجب أن يكون موجوداً');
   assert.ok(revAcc, 'حساب إيراد طرفي يجب أن يكون موجوداً');
   assert.ok(parentAcc, 'حساب أب يجب أن يكون متوفراً لاختبار المنع');
@@ -103,7 +146,7 @@ test('Setup & Account Discovery for Reporting Tests', async () => {
 // P&L expense = 100,000, Cash Flow operating outflow = 100,000, Cash decreases 100,000
 // =========================================================================
 test('الاختبار 1: قيد مصروف نقدي وتأثيره على الأرباح والخسائر والتدفقات النقدية', async () => {
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
+  const cashAcc = await acct('12101001');
   const expAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات')) LIMIT 1");
 
   const testDate = '2028-01-02';
@@ -135,8 +178,8 @@ test('الاختبار 1: قيد مصروف نقدي وتأثيره على ال�
 // Cash Flow = +100,000, AR decreases, Revenue NOT increased simply on collection
 // =========================================================================
 test('الاختبار 2: قبض من عميل - يزيد السيولة ويخفض الذمم دون تضخيم الإيرادات', async () => {
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
-  const arAcc = await get("SELECT * FROM accounts WHERE code = '12301001'");
+  const cashAcc = await acct('12101001');
+  const arAcc = await acct('12301001');
 
   const testDate = '2028-01-03';
   await createTestJournalEntry({
@@ -164,7 +207,7 @@ test('الاختبار 2: قبض من عميل - يزيد السيولة ويخ�
 // Income Statement Revenue = +100,000, Cash Flow = 0
 // =========================================================================
 test('الاختبار 3: الاعتراف بالإيراد الاستحقاقي دون قبض نقدية - لا يؤثر على التدفق النقدي', async () => {
-  const arAcc = await get("SELECT * FROM accounts WHERE code = '12301001'");
+  const arAcc = await acct('12301001');
   const revAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '4%' OR type IN ('revenue', 'إيرادات')) LIMIT 1");
 
   const testDate = '2028-01-04';
@@ -192,8 +235,8 @@ test('الاختبار 3: الاعتراف بالإيراد الاستحقاقي
 // Net Cash Flow = 0, No Revenue, No Expense
 // =========================================================================
 test('الاختبار 4: التحويل الداخلي بين البنك والصندوق أثره الصافي على التدفق النقدي = 0', async () => {
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
-  const bankAcc = await get("SELECT * FROM accounts WHERE code = '12201001'");
+  const cashAcc = await acct('12101001');
+  const bankAcc = await acct('12201001');
 
   const testDate = '2028-01-05';
   await createTestJournalEntry({
@@ -221,8 +264,8 @@ test('الاختبار 4: التحويل الداخلي بين البنك وال
 // Balance Sheet Asset +100k, Cash Flow Investing -100k, P&L = 0
 // =========================================================================
 test('الاختبار 5: شراء أصل ثابت - تدفق استثماري خارج، زيادة الأصول، وانعدام أثر P&L', async () => {
-  const fixedAssetAcc = await get("SELECT * FROM accounts WHERE code = '11101001'");
-  const bankAcc = await get("SELECT * FROM accounts WHERE code = '12201001'");
+  const fixedAssetAcc = await acct('11101001');
+  const bankAcc = await acct('12201001');
 
   const testDate = '2028-01-06';
   await createTestJournalEntry({
@@ -250,8 +293,8 @@ test('الاختبار 5: شراء أصل ثابت - تدفق استثماري �
 // Cash Flow Financing +100k, Liability +100k, P&L = 0
 // =========================================================================
 test('الاختبار 6: الحصول على تمويل - تدفق تمويلي داخل، زيادة الخصوم، و P&L = 0', async () => {
-  const bankAcc = await get("SELECT * FROM accounts WHERE code = '12201001'");
-  const liabAcc = await get("SELECT * FROM accounts WHERE code = '22201001' OR (is_posting = 1 AND type IN ('liability', 'خصوم')) LIMIT 1");
+  const bankAcc = await acct('12201001');
+  const liabAcc = await acct('22201001');
 
   const testDate = '2028-01-07';
   await createTestJournalEntry({
@@ -278,7 +321,7 @@ test('الاختبار 6: الحصول على تمويل - تدفق تمويلي
 // =========================================================================
 test('الاختبار 7: الحماية المحاسبية - رفض التسجيل على حساب أب بواسطة الـ Trigger و الـ Validation', async () => {
   const parentAcc = await get("SELECT * FROM accounts WHERE id IN (SELECT parent_id FROM accounts WHERE parent_id IS NOT NULL) LIMIT 1");
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
+  const cashAcc = await acct('12101001');
 
   assert.ok(parentAcc, 'يجب وجود حساب أب للاختبار');
 
@@ -300,7 +343,7 @@ test('الاختبار 7: الحماية المحاسبية - رفض التسج�
 // =========================================================================
 test('الاختبار 8: منع الحساب المزدوج - الاعتماد على الأستاذ العام كمصدر وحيد للأرقام', async () => {
   const expAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات')) LIMIT 1");
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
+  const cashAcc = await acct('12101001');
 
   const testDate = '2028-01-08';
   // تسجيل قيد بـ 50,000
@@ -325,8 +368,8 @@ test('الاختبار 8: منع الحساب المزدوج - الاعتماد 
 // 2026-10-09 لا تظهر، وحركة 2025 تدخل في Opening Balance فقط
 // =========================================================================
 test('الاختبار 9: عزل الحدود الزمنية بدقة بين الرصيد الافتتاحي وحركة الفترة والمستقبل', async () => {
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
-  const equityAcc = await get("SELECT * FROM accounts WHERE code = '21101001'");
+  const cashAcc = await acct('12101001');
+  const equityAcc = await acct('21101001');
 
   const tbPre = await ReportingService.getTrialBalance({ from_date: '2028-02-01', to_date: '2028-02-28' });
   const preOpening = tbPre.data.accounts.find(a => a.id === cashAcc.id)?.opening_balance || 0;
@@ -376,7 +419,7 @@ test('الاختبار 9: عزل الحدود الزمنية بدقة بين ا�
 // اختبار 10 — معالجة القيود المعكوسة (Reversal Entries Handling)
 // =========================================================================
 test('الاختبار 10: معالجة القيود المعكوسة وعدم احتساب القيود الملغاة في القوائم الرسمية', async () => {
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
+  const cashAcc = await acct('12101001');
   const expAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات')) LIMIT 1");
 
   const testDate = '2028-01-10';
@@ -457,12 +500,13 @@ test('الاختبار 14: التوافق التام لصافي الربح بي�
 test('الاختبار 15: ربحية المشاريع المحاسبية تعتمد على الإيراد والتكلفة المعترف بها من الأستاذ العام', async () => {
   const revAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '4%' OR type IN ('revenue', 'إيرادات')) LIMIT 1");
   const expAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات', 'تكاليف')) LIMIT 1");
-  const arAcc = await get("SELECT * FROM accounts WHERE code = '12301001'");
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
+  const arAcc = await acct('12301001');
+  const cashAcc = await acct('12101001');
 
   // مشروع تجريبي
-  const testProject = await get("SELECT id FROM projects LIMIT 1");
-  const projId = testProject ? testProject.id : 1;
+  // its own project: a fresh fixture has none, and sharing another suite's project would mix its figures in
+  await run("INSERT OR IGNORE INTO projects (code, name, contract_value, status) VALUES ('TEST-RPT-15', 'TEST مشروع ربحية التقارير', 1000000, 'active')");
+  const projId = (await get("SELECT id FROM projects WHERE code = 'TEST-RPT-15'")).id;
   const testDate = '2028-01-15';
 
   // إيراد مشروع معترف به: 600,000
@@ -501,7 +545,7 @@ test('الاختبار 15: ربحية المشاريع المحاسبية تعت
 // =========================================================================
 test('الاختبار 16: مركز التكلفة يحسب التكاليف من قيود الأستاذ العام فقط دون تكرار', async () => {
   const expAcc = await get("SELECT * FROM accounts WHERE is_posting = 1 AND (code LIKE '5%' OR type IN ('expense', 'مصروفات', 'تكاليف')) LIMIT 1");
-  const cashAcc = await get("SELECT * FROM accounts WHERE code = '12101001'");
+  const cashAcc = await acct('12101001');
 
   const testCc = await get("SELECT id FROM cost_centers LIMIT 1");
   const ccId = testCc ? testCc.id : 1;
@@ -566,7 +610,8 @@ test('الاختبار 18: فحص كافة مسارات API للتقارير و�
     const json = await res.json();
     assert.strictEqual(json.success, true, `Endpoint ${ep} must return success: true`);
     assert.ok(json.meta, `Endpoint ${ep} must have meta object`);
-    assert.ok(json.meta.source === 'General Ledger', `Endpoint ${ep} source must be 'General Ledger'`);
+    // filtered statements label their source in Arabic ("دفتر الأستاذ — بعد الترحيل"); the rest say 'General Ledger'
+    assert.match(String(json.meta.source), /^(General Ledger|دفتر الأستاذ)/, `Endpoint ${ep} must be sourced from the general ledger`);
   }
 
   // فحص النزاهة المحاسبية

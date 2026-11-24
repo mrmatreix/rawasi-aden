@@ -1,9 +1,10 @@
 const express = require('express');
+const Numbering = require('../services/numberingService');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, projectScopeSql } = require('../middleware/security');
 
 // جلب جميع المواد مع حالة المخزون وتنبيهات النواقص
 router.get('/items', requirePermission('inventory:view'), async (req, res) => {
@@ -65,12 +66,7 @@ router.get('/transactions', requirePermission('inventory:view'), async (req, res
     const conditions = [];
 
     // التحقق من نطاق المشاريع المصرح بها
-    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
-    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-      const placeholders = allowedProjects.map(() => '?').join(',');
-      conditions.push(`(it.project_id IS NULL OR it.project_id IN (${placeholders}))`);
-      params.push(...allowedProjects);
-    }
+    { const scopeSql = projectScopeSql(req.user, 'it.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (project_id) {
       conditions.push('it.project_id = ?');
@@ -128,8 +124,8 @@ router.post('/transactions', (req, res, next) => {
     const parsedQty = Number(quantity);
 
     const refPrefix = type === 'out' ? 'MAT-OUT' : 'MAT-IN';
-    const countRes = await get('SELECT COUNT(*) as cnt FROM inventory_transactions WHERE type = ?', [type]);
-    const reference_no = `${refPrefix}-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const reference_no = await Numbering.next(require('../database/db'), refPrefix, { table: 'inventory_transactions', column: 'reference_no', date: new Date().toISOString().slice(0, 10) });
 
     const txResult = await transaction(async (tx) => {
       const item = await tx.get('SELECT * FROM items WHERE id = ?', [item_id]);

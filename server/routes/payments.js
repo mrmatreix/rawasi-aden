@@ -1,4 +1,6 @@
 const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
+const Numbering = require('../services/numberingService');
+const VoucherRules = require('../services/vouchers/voucherRules');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
 const router = express.Router();
@@ -6,9 +8,13 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { openPeriodCondition } = require('../services/operationVisibility');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, hasUserPermission, recordScopeParam, projectScopeSql } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam(req => (req.path.startsWith('/transactions/') ? 'payment_transactions' : 'payments')));
+
 const AccountingService = require('../services/accountingService');
 const PaymentService = require('../services/paymentService');
+const { verifyWebhookSignature } = require('../services/webhookSignatureService');
 const FinancialControlService = {
   ...require('../services/financialControlService')
 };
@@ -64,7 +70,9 @@ router.get('/documents', async (req, res) => {
 });
 
 // --- 2. إدارة المعاملات المالية الخماسية ---
-router.post('/transactions', async (req, res) => {
+router.post('/transactions', requirePermission('revenues:create,expenses:create,accounting:create'), async (req, res) => {
+  // H5: الترحيل الفوري يحتاج صلاحية الترحيل؛ بدونها تُحفظ المعاملة مسودة
+  if (req.body && req.body.status !== 'draft' && !hasUserPermission(req.user, 'accounting:post')) req.body.status = 'draft';
   try {
     const result = await PaymentService.createPaymentTransaction(req.body, req.user, req);
     res.json({ success: true, ...result });
@@ -74,7 +82,7 @@ router.post('/transactions', async (req, res) => {
   }
 });
 
-router.get('/transactions', async (req, res) => {
+router.get('/transactions', requirePermission('revenues:view,expenses:view,accounting:view'), async (req, res) => {
   try {
     const result = await PaymentService.getTransactions(req.query);
     res.json({ success: true, ...result });
@@ -83,7 +91,7 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
-router.get('/transactions/:id', async (req, res) => {
+router.get('/transactions/:id', requirePermission('revenues:view,expenses:view,accounting:view'), async (req, res) => {
   try {
     const data = await PaymentService.getTransactionById(req.params.id);
     res.json({ success: true, data });
@@ -92,7 +100,7 @@ router.get('/transactions/:id', async (req, res) => {
   }
 });
 
-router.put('/transactions/:id', async (req, res) => {
+router.put('/transactions/:id', requirePermission('revenues:create,expenses:create,accounting:create'), async (req, res) => {
   try {
     const tx = await PaymentService.getTransactionById(req.params.id);
     if (tx.status !== 'draft') {
@@ -109,7 +117,7 @@ router.put('/transactions/:id', async (req, res) => {
   }
 });
 
-router.post('/transactions/:id/approve', async (req, res) => {
+router.post('/transactions/:id/approve', requirePermission('accounting:post'), async (req, res) => {
   try {
     const result = await PaymentService.approveTransaction(req.params.id, req.user, req);
     res.json(result);
@@ -118,7 +126,7 @@ router.post('/transactions/:id/approve', async (req, res) => {
   }
 });
 
-router.post('/transactions/:id/clear', async (req, res) => {
+router.post('/transactions/:id/clear', requirePermission('accounting:post'), async (req, res) => {
   try {
     const result = await PaymentService.clearTransaction(req.params.id, req.user, req);
     res.json(result);
@@ -127,7 +135,7 @@ router.post('/transactions/:id/clear', async (req, res) => {
   }
 });
 
-router.post('/transactions/:id/bounce', async (req, res) => {
+router.post('/transactions/:id/bounce', requirePermission('accounting:post'), async (req, res) => {
   try {
     const reason = req.body.reason || 'شيك مرجع / رفض التحويل';
     const result = await PaymentService.bounceTransaction(req.params.id, reason, req.user, req);
@@ -137,7 +145,7 @@ router.post('/transactions/:id/bounce', async (req, res) => {
   }
 });
 
-router.post('/transactions/:id/reverse', async (req, res) => {
+router.post('/transactions/:id/reverse', requirePermission('accounting:approve'), async (req, res) => {
   try {
     const reason = req.body.reason || 'عكس معاملة بطلب المستخدم';
     const result = await PaymentService.reverseTransaction(req.params.id, reason, req.user, req);
@@ -171,6 +179,11 @@ router.get('/financial-accounts', async (req, res) => {
 router.post('/webhook/:gateway', async (req, res) => {
   try {
     const gateway = req.params.gateway;
+    try {
+      verifyWebhookSignature({ gateway, headers: req.headers, rawBody: req.rawBody });
+    } catch (err) {
+      return res.status(err.statusCode || 401).json({ success: false, message: err.message });
+    }
     const signature = req.headers['x-signature'] || req.headers['x-webhook-signature'] || req.headers['stripe-signature'];
     const result = await PaymentService.processWebhook({
       gateway,
@@ -273,17 +286,7 @@ router.get('/', requirePermission('revenues:view,expenses:view,accounting:view')
     const conditions = [openPeriodCondition('p.date', req.query.include_closed)];
 
     // تطبيق نطاق المشاريع المصرح بها
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
-      const allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
-      if (!allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-        if (allowedProjects.length === 0) {
-          return res.json({ success: true, data: [] });
-        }
-        const placeholders = allowedProjects.map(() => '?').join(',');
-        conditions.push(`(p.project_id IS NULL OR p.project_id IN (${placeholders}))`);
-        params.push(...allowedProjects.map(Number));
-      }
-    }
+    { const scopeSql = projectScopeSql(req.user, 'p.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (type) {
       conditions.push('p.type = ?');
@@ -377,6 +380,11 @@ router.post('/', (req, res, next) => {
 
     // التحقق الصارم من الحساب المالي المختار أنه حساب فرعي أخير
     const leafAccount = await AccountingService.assertVoucherAccount(type === 'قبض' ? 'سند قبض' : 'سند صرف', account_id);
+    if (type === 'قبض') {
+      // M9: لا قبض نقدية مقابل نقدية، وتحصيل المستخلص يُقفل ذمة العميل لا يُسجل إيراداً
+      await VoucherRules.assertReceiptAccount({ accountId: leafAccount.id, category: req.body.receipt_category || 'general',
+        billId: req.body.bill_id ? Number(req.body.bill_id) : null, clientId: client_id ? Number(client_id) : null });
+    }
 
     if (!payment_method) {
       return res.status(400).json({ success: false, message: 'يرجى تحديد طريقة الدفع / القبض (نقدي / تحويل بنكي / شيك)' });
@@ -422,15 +430,8 @@ router.post('/', (req, res, next) => {
       : Math.round(parsedAmount * finalExchangeRate * 100) / 100;
 
     // توليد رقم السند
-    const prefix = type === 'قبض' ? 'RC' : 'PV';
-    const currentYear = new Date().getFullYear();
-    const countRes = await get('SELECT COUNT(*) as cnt FROM payments WHERE type = ?', [type]);
-    let seq = (countRes ? countRes.cnt : 0) + 1;
-    let receipt_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM payments WHERE receipt_no = ?', [receipt_no])) {
-      seq++;
-      receipt_no = `${prefix}-${currentYear}-${String(seq).padStart(4, '0')}`;
-    }
+    // رقم السند من خدمة الترقيم بسنة تاريخ السند
+    const receipt_no = await Numbering.next(require('../database/db'), type === 'قبض' ? 'RC' : 'PV', { table: 'payments', column: 'receipt_no', date });
 
     let bId = req.body.bill_id && req.body.bill_id !== '' ? Number(req.body.bill_id) : null;
     let cntId = req.body.contract_id && req.body.contract_id !== '' ? Number(req.body.contract_id) : null;
@@ -495,7 +496,9 @@ router.post('/', (req, res, next) => {
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
     const creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
-    const finalStatus = (requestedStatus === 'draft') ? 'draft' : 'posted';
+    // H5: الترحيل (عند الإنشاء أو لاحقاً) يحتاج صلاحية الترحيل؛ بدونها يُحفظ السند مسودة لمن يملكها
+    const postingDeferred = requestedStatus !== 'draft' && !hasUserPermission(req.user, 'accounting:post');
+    const finalStatus = (requestedStatus === 'draft' || postingDeferred) ? 'draft' : 'posted';
     const cleanReceiptCategory = req.body.receipt_category || 'general';
     let createdJe = null;
 
@@ -564,7 +567,7 @@ router.post('/', (req, res, next) => {
           }
         } else if (type === 'صرف' && sId) {
           await tx.run(`
-            UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?
+            UPDATE suppliers SET balance = balance - ? WHERE id = ?
           `, [finalLocalAmount, sId]);
         }
 
@@ -599,6 +602,7 @@ router.post('/', (req, res, next) => {
         // توليد قيد يومي تلقائي متزن بدقة عبر الخدمة المحاسبية الموحدة
         const voucherType = type === 'قبض' ? 'سند قبض' : 'سند صرف';
         createdJe = await AccountingService.createVoucherJournalEntry({
+          sourceTable: 'payments',
           voucherType,
           voucherId: paymentId,
           receiptNo: receipt_no,
@@ -611,6 +615,8 @@ router.post('/', (req, res, next) => {
           bankName: cleanBankName || resolvedBank?.bankRecord?.bank_name || null,
           costCenterId: finalCcId,
           projectId: pId,
+          partyType: type === 'قبض' ? (validClientId ? 'client' : null) : (validSupplierId ? 'supplier' : null),
+          partyId: type === 'قبض' ? validClientId : validSupplierId,
           notes: notes || (type === 'قبض' ? 'سند قبض إيرادات' : 'سند صرف مورد'),
           user: req.user,
           req
@@ -631,7 +637,10 @@ router.post('/', (req, res, next) => {
 
     res.json({
       success: true,
-      message: finalStatus === 'draft'
+      requires_posting: postingDeferred,
+      message: postingDeferred
+        ? `تم حفظ سند ${type} برقم ${receipt_no} كمسودة: ترحيل السندات يحتاج صلاحية الترحيل (المحاسب أو المدقق)`
+        : finalStatus === 'draft'
         ? `تم حفظ مسودة سند ${type} بنجاح برقم ${receipt_no} وهي جاهزة للمراجعة`
         : `تم تسجيل وترحيل سند ال${type} بنجاح برقم ${receipt_no} وحفظ القيد اليومي التلقائي`,
       receipt_no,
@@ -644,6 +653,17 @@ router.post('/', (req, res, next) => {
     console.error('Payment transaction error:', err);
     const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('مغلقة') || err.message.includes('الحساب') || err.message.includes('غير متزن') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message, error: err.message });
+  }
+});
+
+// الحساب الواجب لسند القبض بحسب نوعه (للواجهة): تحصيل مستخلص / دفعة مقدمة / إفراج محتجز
+router.get('/receipt-account', requirePermission('revenues:create,revenues:view,accounting:view'), async (req, res) => {
+  try {
+    const account = await VoucherRules.requiredReceiptAccount({ category: req.query.category || 'general',
+      billId: req.query.bill_id ? Number(req.query.bill_id) : null, clientId: req.query.client_id ? Number(req.query.client_id) : null });
+    res.json({ success: true, data: account ? { id: account.id, code: account.code, name: account.name, label: account.rule.label } : null });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 
@@ -731,9 +751,7 @@ router.post('/:id/approve', (req, res, next) => {
 });
 
 // ترحيل السند المالي لدفتر الأستاذ والصندوق (Post to GL)
-router.post('/:id/post', (req, res, next) => {
-  return requirePermission('accounting:post,revenues:create,expenses:create')(req, res, next);
-}, async (req, res) => {
+router.post('/:id/post', requirePermission('accounting:post'), async (req, res) => {
   try {
     const { id } = req.params;
     const pay = await get('SELECT * FROM payments WHERE id = ?', [id]);
@@ -752,6 +770,9 @@ router.post('/:id/post', (req, res, next) => {
       return res.status(400).json({ success: false, message: `لا يمكن ترحيل سند ${pay.type} بدون تحديد حساب مالي صالح في الدليل` });
     }
     const leafAcc = await AccountingService.assertVoucherAccount(pay.type === 'قبض' ? 'سند قبض' : 'سند صرف', pay.account_id);
+    if (pay.type === 'قبض') {
+      await VoucherRules.assertReceiptAccount({ accountId: leafAcc.id, category: pay.receipt_category || 'general', billId: pay.bill_id, clientId: pay.client_id });
+    }
 
     const rawPosterId = req.user?.id || null;
     const posterId = await FinancialControlService.resolveValidUserId(rawPosterId);
@@ -769,7 +790,7 @@ router.post('/:id/post', (req, res, next) => {
         if (pay.bill_id) await require('../services/clientChainService').applyPaymentToBill(pay.bill_id, parsedAmount, tx);
       } else if (pay.type === 'صرف' && pay.supplier_id) {
         await tx.run(`
-          UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?
+          UPDATE suppliers SET balance = balance - ? WHERE id = ?
         `, [parsedAmount, pay.supplier_id]);
       }
 
@@ -798,6 +819,7 @@ router.post('/:id/post', (req, res, next) => {
       // 3. قيد اليومية التلقائي المتزن بدقة عبر الخدمة المحاسبية الموحدة مع منع التكرار
       const voucherType = pay.type === 'قبض' ? 'سند قبض' : 'سند صرف';
       await AccountingService.createVoucherJournalEntry({
+        sourceTable: 'payments',
         voucherType,
         voucherId: pay.id,
         receiptNo: pay.receipt_no,
@@ -810,6 +832,8 @@ router.post('/:id/post', (req, res, next) => {
         bankName: pay.bank_name || null,
         costCenterId: pay.cost_center_id,
         projectId: pay.project_id,
+        partyType: pay.type === 'قبض' ? (pay.client_id ? 'client' : null) : (pay.supplier_id ? 'supplier' : null),
+        partyId: pay.type === 'قبض' ? pay.client_id : pay.supplier_id,
         notes: pay.notes || (pay.type === 'قبض' ? 'سند قبض إيرادات' : 'سند صرف مورد'),
         user: req.user,
         req
@@ -834,7 +858,7 @@ router.post('/:id/post', (req, res, next) => {
 
     res.json({ success: true, message: `تم ترحيل سند ${pay.type} (${pay.receipt_no}) بنجاح وتوليد القيد المحاسبي`, status: 'posted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء ترحيل السند: ' + err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: 'خطأ أثناء ترحيل السند: ' + err.message });
   }
 });
 

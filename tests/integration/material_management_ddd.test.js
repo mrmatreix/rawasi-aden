@@ -29,6 +29,9 @@ test('🏛️ Enterprise Material Management Suite (DDD, EDA, ACID, & Cryptograp
 
   // إعداد بيانات الاختبار
   await t.test('0. Setup test warehouses, items, and projects', async () => {
+    // inventory postings go through system account roles; the minimal fixture chart lacks those accounts
+    await require('../fixtures/roleAccounts').ensureRoleAccounts(require('../../server/database/db'),
+      ['INVENTORY', 'INVENTORY_SHRINKAGE_LOSS', 'INVENTORY_SURPLUS_GAIN', 'PROJECT_MATERIAL_COST']);
     // التأكد من وجود مستودع
     let wh = await get('SELECT id FROM warehouses LIMIT 1');
     if (!wh) {
@@ -92,7 +95,7 @@ test('🏛️ Enterprise Material Management Suite (DDD, EDA, ACID, & Cryptograp
     const p1 = await get('SELECT id FROM projects WHERE id = 1');
     if (!p1) {
       await run(`
-        INSERT INTO projects (id, code, name, status, budget, actual_cost)
+        INSERT INTO projects (id, code, name, status, contract_value, actual_cost)
         VALUES (1, 'PRJ-01', 'مشروع برج رواسي عدن', 'active', 50000000, 2000000)
       `);
     } else {
@@ -101,7 +104,7 @@ test('🏛️ Enterprise Material Management Suite (DDD, EDA, ACID, & Cryptograp
     const p2 = await get('SELECT id FROM projects WHERE id = 2');
     if (!p2) {
       await run(`
-        INSERT INTO projects (id, code, name, status, budget, actual_cost)
+        INSERT INTO projects (id, code, name, status, contract_value, actual_cost)
         VALUES (2, 'PRJ-02', 'مشروع مجمع خور مكسر السكني', 'active', 80000000, 1000000)
       `);
     } else {

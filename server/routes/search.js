@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
   if (!terms.length || terms.join('').length < 2) return res.json({ success: true, results: [] });
 
   const user = req.user;
-  const isAdmin = user.role === 'admin' || user.username === 'admin';
+  const isAdmin = user.role === 'admin';
   const results = [];
 
   if (hasUserPermission(user, PROJECT_PERMS)) {

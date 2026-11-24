@@ -1,4 +1,5 @@
 const { financialSave, lockFinancialDocument } = require('../middleware/financialSave');
+const Numbering = require('../services/numberingService');
 const { saveDocuments } = require('../services/supportingDocumentService');
 const express = require('express');
 const router = express.Router();
@@ -6,7 +7,10 @@ const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
 const { openPeriodCondition } = require('../services/operationVisibility');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, hasUserPermission, recordScopeParam, projectScopeSql } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam('expenses'));
+
 const AccountingService = require('../services/accountingService');
 const ProjectCostService = require('../services/projectCostService');
 const CashBoxService = require('../services/cashBoxService');
@@ -36,17 +40,7 @@ router.get('/', requirePermission('expenses:view'), async (req, res) => {
     const conditions = [openPeriodCondition('e.date', req.query.include_closed)];
 
     // تطبيق نطاق المشاريع للمستخدم
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
-      const allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
-      if (!allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-        if (allowedProjects.length === 0) {
-          return res.json({ success: true, data: [] });
-        }
-        const placeholders = allowedProjects.map(() => '?').join(',');
-        conditions.push(`(e.project_id IS NULL OR e.project_id IN (${placeholders}))`);
-        params.push(...allowedProjects.map(Number));
-      }
-    }
+    { const scopeSql = projectScopeSql(req.user, 'e.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (project_id) {
       conditions.push(`e.project_id = ?`);
@@ -140,12 +134,13 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
 
     let account_id = rawAccountId && rawAccountId !== '' ? Number(rawAccountId) : null;
     if (!account_id) {
+      // linked settlements debit the same payable the accrual credited (system account roles, legacy fallback)
       if (link_purchase_id) {
-        const apRow = await get("SELECT id FROM accounts WHERE code = '21101001' AND is_posting = 1 LIMIT 1");
-        account_id = apRow ? apRow.id : null;
+        account_id = await ProjectCostService.resolvePayableAccounts(require('../database/db'))
+          .then(a => a.apAccId).catch(() => null);
       } else if (link_labor_id) {
-        const wpRow = await get("SELECT id FROM accounts WHERE code = '21401001' AND is_posting = 1 LIMIT 1");
-        account_id = wpRow ? wpRow.id : null;
+        account_id = await ProjectCostService.resolveWageAccounts(require('../database/db'))
+          .then(a => a.wagesPayableAccId).catch(() => null);
       } else {
         const defRow = await get("SELECT id FROM accounts WHERE (code = '5' AND (is_posting = 1 OR is_posting IS NULL)) OR code = '32102005' OR (type = 'expense' AND is_posting = 1) ORDER BY (code = '5' AND is_posting = 1) DESC, (code = '32102005') DESC LIMIT 1");
         account_id = defRow ? defRow.id : null;
@@ -183,14 +178,8 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
     }
 
     // توليد رقم سند الصرف
-    const countRes = await get('SELECT COUNT(*) as cnt FROM expenses');
-    let seq = ((countRes ? countRes.cnt : 0) || 0) + 1;
     const currentYear = new Date().getFullYear();
-    let receipt_no = `EP-${currentYear}-${String(seq).padStart(4, '0')}`;
-    while (await get('SELECT id FROM expenses WHERE receipt_no = ?', [receipt_no])) {
-      seq++;
-      receipt_no = `EP-${currentYear}-${String(seq).padStart(4, '0')}`;
-    }
+    const receipt_no = await Numbering.next(require('../database/db'), 'EP', { table: 'expenses', column: 'receipt_no', date: date || new Date().toISOString().slice(0, 10) });
 
     const parsedAmount = Number(amount);
     const selectedCurrency = currency || 'ر.ي';
@@ -240,7 +229,9 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
     const rawCreatorId = req.user?.id || null;
     const creatorId = await FinancialControlService.resolveValidUserId(rawCreatorId);
     const creatorName = req.user?.username || req.user?.full_name || 'مسؤول مالي';
-    const finalStatus = (requestedStatus === 'draft') ? 'draft' : 'posted';
+    // H5: الترحيل (عند الإنشاء أو لاحقاً) يحتاج صلاحية الترحيل؛ بدونها يُحفظ السند مسودة لمن يملكها
+    const postingDeferred = requestedStatus !== 'draft' && !hasUserPermission(req.user, 'accounting:post');
+    const finalStatus = (requestedStatus === 'draft' || postingDeferred) ? 'draft' : 'posted';
     let createdJe = null;
 
     const txResult = await transaction(async (tx) => {
@@ -312,7 +303,7 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
             'UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?',
             [newPaid, newStatus, settlePurchase.id]
           );
-          await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [finalLocalAmount, settlePurchase.supplier_id]);
+          await tx.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [finalLocalAmount, settlePurchase.supplier_id]);
         } else {
           if (linkedLaborRow) {
             const newPaid = (Number(linkedLaborRow.paid_amount) || 0) + finalLocalAmount;
@@ -367,6 +358,8 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
           bankName: cleanBankName || resolvedBank?.bankRecord?.bank_name || null,
           costCenterId: finalCcId,
           projectId: pId,
+          partyType: sId ? 'supplier' : null,
+          partyId: sId || null,
           notes: notes || finalExpenseType,
           user: req.user,
           req
@@ -387,7 +380,10 @@ router.post('/', requirePermission('expenses:create'), financialSave, async (req
 
     res.json({
       success: true,
-      message: finalStatus === 'draft' 
+      requires_posting: postingDeferred,
+      message: postingDeferred
+        ? `تم حفظ سند الصرف برقم ${receipt_no} كمسودة: ترحيل السندات يحتاج صلاحية الترحيل (المحاسب أو المدقق)`
+        : finalStatus === 'draft'
         ? `تم حفظ مسودة سند الصرف بنجاح برقم ${receipt_no} وهي جاهزة للمراجعة والاعتماد`
         : `تم حفظ وترحيل سند الصرف بنجاح برقم ${receipt_no} وتحديث الحسابات ومراكز التكلفة داخل معاملة ذرية آمنة`,
       receipt_no,
@@ -487,7 +483,7 @@ router.post('/:id/approve', requirePermission('expenses:approve'), async (req, r
 });
 
 // ترحيل سند الصرف لدفتر الأستاذ والصندوق (Post to GL)
-router.post('/:id/post', requirePermission('expenses:post,accounting:post'), async (req, res) => {
+router.post('/:id/post', requirePermission('accounting:post'), async (req, res) => {
   try {
     const { id } = req.params;
     const exp = await get('SELECT * FROM expenses WHERE id = ?', [id]);
@@ -525,7 +521,7 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         if (exp.supplier_id && Number(exp.supplier_id) !== Number(purchase.supplier_id)) throw new Error('المورد لا يطابق مورد الفاتورة المرتبطة');
         const paid = (Number(purchase.paid_amount) || 0) + parsedAmount;
         await tx.run('UPDATE project_purchases SET paid_amount = ?, payment_status = ? WHERE id = ?', [paid, Number(purchase.total_amount) - paid <= 0.005 ? 'مدفوع' : 'جزئي', purchase.id]);
-        await tx.run('UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?', [parsedAmount, purchase.supplier_id]);
+        await tx.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [parsedAmount, purchase.supplier_id]);
       } else {
         let wageAccrual = null;
         if (labor) {
@@ -566,6 +562,8 @@ router.post('/:id/post', requirePermission('expenses:post,accounting:post'), asy
         bankName: exp.bank_name || null,
         costCenterId: exp.cost_center_id,
         projectId: exp.project_id,
+        partyType: exp.supplier_id ? 'supplier' : null,
+        partyId: exp.supplier_id || null,
         notes: exp.notes || exp.expense_type,
         user: req.user,
         req
@@ -615,13 +613,14 @@ router.put('/:id', requirePermission('expenses:edit'), async (req, res) => {
     const newAmount = amount !== undefined ? Number(amount) : Number(exp.amount);
     const method = req.body.payment_method ?? exp.payment_method;
     const accountId = Number(req.body.account_id ?? exp.account_id);
-    const settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id);
+    // a draft saved without a settlement account must not become account 0 (FK failure): resolve the default below
+    let settlementId = Number(req.body.settlement_account_id ?? exp.settlement_account_id) || null;
     const costCenterId = await AccountingService.resolveAccountOperationCenter(await AccountingService.assertLeafAccount(accountId),
       req.body.cost_center_id !== undefined ? req.body.cost_center_id : exp.cost_center_id);
     if (!Number.isFinite(newAmount) || newAmount <= 0 || !['نقدي', 'تحويل بنكي'].includes(method)) return res.status(400).json({ success: false, message: 'المبلغ وطريقة الدفع غير صالحين' });
     try {
       await AccountingService.assertVoucherAccount('سند صرف', accountId);
-      await AccountingService.resolveVoucherSettlementAccount(method, settlementId);
+      settlementId = Number((await AccountingService.resolveVoucherSettlementAccount(method, settlementId))?.id) || null;
       if (accountId === settlementId) throw new Error('يجب أن يختلف حساب السند عن حساب الصندوق أو البنك');
     } catch (err) { return res.status(400).json({ success: false, message: err.message }); }
 

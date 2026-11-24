@@ -85,12 +85,16 @@ async function cleanSnapshot(sourcePath, outputDirectory, reviewPath) {
     fs.writeFileSync(path.join(directory, 'archived-records.json'), JSON.stringify(archived, null, 2));
     const expected = new Map(tables.map(table => [table, allRows.get(table).filter(row => !selected(table, row.__archive_rowid__))]));
     const sequencesBefore = db.prepare('SELECT * FROM sqlite_sequence ORDER BY name').all();
+    db.exec('CREATE TABLE IF NOT EXISTS ledger_maintenance_unlock (reason TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
     db.exec('BEGIN IMMEDIATE; PRAGMA defer_foreign_keys=ON');
     try {
+      // أرشفة سجلات الاختبار المراجعة تحذف قيوداً مرحّلة عمداً؛ فتح القفل داخل هذه المعاملة فقط
+      db.prepare('INSERT INTO ledger_maintenance_unlock (reason) VALUES (?)').run('archive_reviewed_test_records');
       for (const [table, ids] of plan) {
         const remove = db.prepare('DELETE FROM ' + quote(table) + ' WHERE rowid=?');
         for (const id of ids) assert.equal(remove.run(id).changes, 1);
       }
+      db.exec('DELETE FROM ledger_maintenance_unlock');
       assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0, 'Remaining orphan references');
       const badEntries = db.prepare(`SELECT j.id FROM journal_entries j LEFT JOIN journal_entry_lines l ON l.entry_id=j.id GROUP BY j.id HAVING COUNT(l.id)<2 OR ABS(COALESCE(SUM(l.debit),0)-COALESCE(SUM(l.credit),0))>0.001 OR ABS(COALESCE(SUM(l.debit),0)-j.total_debit)>0.001 OR ABS(COALESCE(SUM(l.credit),0)-j.total_credit)>0.001`).all();
       assert.equal(badEntries.length, 0, 'Remaining journals must be balanced and match header totals');

@@ -1,369 +1,130 @@
+/**
+ * Contracting accounting under the company policy (2026-11-22): revenue is recognised when an approved bill (IPC)
+ * is posted — never from cash, never a second time from percentage of completion.
+ * 1. An advance receipt is a contract liability (CUSTOMER_ADVANCES), not revenue.
+ * 2. Approved change orders revise the contract value; pending ones stay out.
+ * 3. Cost-to-cost completion is computed for display, but a POC revenue entry is refused (no duplicate revenue).
+ * 4. Posting the approved bill books the compound entry: Dr receivable (net) + retention + advance amortised /
+ *    Cr contract revenue (gross), after maker-checker approval.
+ * 5. The contracting matrix and the company dashboard read those figures from the ledger.
+ * Runs on its own fresh fixture.
+ */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const db = require('../../server/database/db');
 const app = require('../../server/server');
-const { db, query, run } = require('../../server/database/db');
-const JWT_SECRET = process.env.JWT_SECRET || 'rawasi_aden_secret_key_2024';
+const { ensureRoleAccounts } = require('../fixtures/roleAccounts');
 
-test('Contracting Accounting Engine - IFRS 15 Revenue Recognition & 8-Pillars Separation Matrix', async (t) => {
-  let server;
-  let baseUrl;
-  let adminToken;
-  let adminHeaders;
-  let testProjectId;
-  let testClientId;
+test('Contracting accounting - revenue at billing, advances as liabilities, POC for display only', async (t) => {
+  const server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { if (server.closeAllConnections) server.closeAllConnections(); server.close(); });
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
-  // 1. تشغيل خادم الاختبار
-  await new Promise((resolve) => {
-    server = http.createServer(app);
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      baseUrl = `http://127.0.0.1:${port}`;
-      resolve();
-    });
-  });
-
-  t.after(async () => {
-    if (server) await new Promise((res) => server.close(res));
-    // تنظيف بيانات الاختبار المعزولة
-    if (testProjectId) {
-      try {
-        await run('DELETE FROM journal_entry_lines WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM contract_revenue_recognitions WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM project_change_orders WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM project_contracts WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM bills WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM payments WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM expenses WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM cost_centers WHERE project_id = ?', [testProjectId]);
-        await run('DELETE FROM projects WHERE id = ?', [testProjectId]);
-      } catch (e) {
-        console.warn('Cleanup warning:', e.message);
-      }
-    }
-    if (testClientId) {
-      try {
-        await run('DELETE FROM clients WHERE id = ?', [testClientId]);
-      } catch (e) {
-        console.warn('Cleanup warning:', e.message);
-      }
-    }
-  });
-
-  // الحصول على توكن CSRF رسمي
-  const csrfRes = await fetch(`${baseUrl}/api/auth/csrf-token`);
-  const csrfData = await csrfRes.json();
-  const csrfToken = csrfData.csrfToken || 'test-csrf-token-12345678901234567890123456789012';
-
-  // إعداد مستخدم مدير الحسابات والتوكن
-  const adminUser = await query("SELECT * FROM users WHERE role = 'admin' LIMIT 1");
-  const authUser = adminUser[0] || { id: 1, username: 'admin', role: 'admin' };
-  adminToken = jwt.sign(
-    { id: authUser.id, username: authUser.username, role: authUser.role },
-    JWT_SECRET,
-    { expiresIn: '1h' }
-  );
-  adminHeaders = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${adminToken}`,
-    'X-CSRF-Token': csrfToken,
-    'X-Requested-With': 'XMLHttpRequest'
+  const { JWT_SECRET } = require('../../server/middleware/security');
+  const hash = await bcrypt.hash('test123', 4);
+  const user = async (id, username) => {
+    await db.run(`INSERT OR REPLACE INTO users (id, username, password_hash, role, full_name, status, permissions, two_factor_enabled)
+      VALUES (?, ?, ?, 'admin', ?, 'active', '["*"]', 0)`, [id, username, hash, username]);
+    const token = jwt.sign({ id, username, role: 'admin', permissions: ['*'] }, JWT_SECRET, { expiresIn: '1h' });
+    return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, 'X-CSRF-Token': 'ifrs-test-csrf-token-1234567890123456', 'X-Requested-With': 'XMLHttpRequest', Connection: 'close' };
+  };
+  const maker = await user(7401, 'ifrs_maker');
+  const checker = await user(7402, 'ifrs_checker');
+  const call = async (headers, method, path, body) => {
+    const res = await fetch(baseUrl + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, data: await res.json().catch(() => ({})) };
   };
 
-  // تنظيف أي مشاريع سابقة متبقية
-  const existingOldProjects = await query("SELECT id FROM projects WHERE code LIKE 'PRJ-IFRS%'");
-  for (const op of existingOldProjects) {
-    try {
-      await run('DELETE FROM journal_entry_lines WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM contract_revenue_recognitions WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM project_change_orders WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM project_contracts WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM bills WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM payments WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM expenses WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM cost_centers WHERE project_id = ?', [op.id]);
-      await run('DELETE FROM projects WHERE id = ?', [op.id]);
-    } catch {}
-  }
+  const acc = await ensureRoleAccounts(db, ['CASH_DEFAULT', 'BANK_DEFAULT', 'ACCOUNTS_RECEIVABLE', 'RETENTION_RECEIVABLE', 'CUSTOMER_ADVANCES', 'CONTRACT_REVENUE', 'PROJECT_MATERIAL_COST']);
+  const clientId = (await db.run("INSERT INTO clients (name, company, phone, current_balance) VALUES ('شركة الأفق الإنشائية - عميل اختباري', 'مجموعة الأفق', '770000001', 0)")).lastInsertRowid;
+  const projectId = (await db.run(`INSERT INTO projects (code, name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status)
+    VALUES ('PRJ-IFRS-1', 'مشروع مجمع الأفق التجاري', ?, 400000, 200000, 0, 0, 'active')`, [clientId])).lastInsertRowid;
+  await db.run("INSERT INTO cost_centers (code, name, type, project_id, status) VALUES ('CC-IFRS', 'مركز مشروع الأفق', 'project', ?, 'active')", [projectId]);
+  await db.run(`INSERT INTO project_contracts (project_id, contract_no, title, contract_value, advance_payment_pct, advance_payment_amount, retention_pct, status)
+    VALUES (?, 'CNT-IFRS-001', 'عقد تنفيذ مجمع الأفق التجاري', 400000, 25, 100000, 10, 'ساري')`, [projectId]);
+  const matrix = async () => {
+    const r = await call(maker, 'GET', `/api/billing/contracting-matrix/${projectId}`);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    return r.data.data;
+  };
+  const ledgerRevenue = async () => Number((await db.get(`SELECT COALESCE(SUM(l.credit - l.debit), 0) AS r FROM journal_entry_lines l
+    JOIN journal_entries je ON je.id = l.entry_id WHERE je.status = 'posted' AND l.account_id = ? AND l.project_id = ?`, [acc.CONTRACT_REVENUE, projectId])).r);
 
-  // تهيئة عميل ومشروع اختباري معزول
-  const clientRes = await run(`
-    INSERT INTO clients (name, company, phone, current_balance)
-    VALUES ('شركة الأفق الإنشائية - عميل اختباري', 'مجموعة الأفق', '770000001', 0)
-  `);
-  testClientId = clientRes.lastInsertRowid || clientRes.insertId;
+  // 1. Advance received: credited to customer advances (a liability), no revenue
+  let r = await call(maker, 'POST', '/api/payments', { type: 'قبض', client_id: clientId, project_id: projectId, amount: 100000, receipt_category: 'advance_payment', account_id: acc.CUSTOMER_ADVANCES, payment_method: 'تحويل بنكي', date: '2026-09-01', notes: 'دفعة مقدمة 25%' });
+  assert.equal(r.status, 200, 'advance receipt: ' + JSON.stringify(r.data));
+  const advLines = await db.query(`SELECT l.account_id, l.debit, l.credit FROM journal_entries je JOIN journal_entry_lines l ON l.entry_id = je.id
+    WHERE je.reference_type = 'سند قبض' AND je.reference_id = ?`, [r.data.id]);
+  assert.ok(advLines.find(l => l.account_id === acc.CUSTOMER_ADVANCES && Number(l.credit) === 100000), 'Cr customer advances: ' + JSON.stringify(advLines));
+  assert.equal(await ledgerRevenue(), 0, 'cash is not revenue');
+  let m = await matrix();
+  assert.equal(m.cash_receipts.total, 100000);
+  assert.equal(m.advance_payments.unamortized_liability, 100000);
+  assert.equal(m.recognized_revenue.cumulative, 0, 'no revenue despite 100k in cash');
 
-  const uniqueCode = `PRJ-IFRS-${Date.now()}`;
-  const projRes = await run(`
-    INSERT INTO projects (code, name, client_id, contract_value, estimated_cost, actual_cost, progress_percentage, status)
-    VALUES (?, 'مشروع مجمع الأفق التجاري (IFRS 15)', ?, 400000, 200000, 0, 0, 'active')
-  `, [uniqueCode, testClientId]);
-  testProjectId = projRes.lastInsertRowid || projRes.insertId;
+  // 2. Change orders: approved ones revise the contract value, pending ones do not
+  await db.run("INSERT INTO project_change_orders (project_id, change_no, title, amount, status, request_date, approval_date) VALUES (?, 'CO-01', 'مصاعد بانورامية', 50000, 'معتمد', '2026-09-02', '2026-09-05')", [projectId]);
+  await db.run("INSERT INTO project_change_orders (project_id, change_no, title, amount, status, request_date) VALUES (?, 'CO-02', 'واجهات زجاجية', 30000, 'قيد المراجعة', '2026-09-06')", [projectId]);
+  m = await matrix();
+  assert.equal(m.base_contract_value, 400000);
+  assert.equal(m.variation_orders.approved_amount, 50000);
+  assert.equal(m.variation_orders.pending_amount, 30000);
+  assert.equal(m.revised_contract_value, 450000);
 
-  // عقد المشروع مع شرط دفعة مقدمة 25% (100,000) ومحتجز ضمان 10%
-  await run(`
-    INSERT INTO project_contracts (
-      project_id, contract_no, title, contract_value, 
-      advance_payment_pct, advance_payment_amount, retention_pct, status
-    ) VALUES (?, 'CNT-IFRS-001', 'عقد تنفيذ مجمع الأفق التجاري', 400000, 25, 100000, 10, 'ساري')
-  `, [testProjectId]);
+  // 3. Site cost; completion is shown, but a POC revenue entry is refused by policy
+  r = await call(maker, 'POST', '/api/expenses', { project_id: projectId, amount: 47500, expense_type: 'مواد بناء', recipient: 'مصنع الخرسانة', payment_method: 'نقدي', date: '2026-09-10', account_id: acc.PROJECT_MATERIAL_COST });
+  assert.equal(r.status, 200, 'site cost: ' + JSON.stringify(r.data));
+  m = await matrix();
+  assert.equal(m.cumulative_actual_cost, 47500);
+  // display only: the revised estimate adds approved change orders at full value (200,000 + 50,000)
+  assert.equal(m.revised_estimated_cost, 250000);
+  assert.equal(m.cost_to_cost_poc_pct, 19, 'completion = 47,500 / 250,000');
+  const entriesBefore = (await db.get('SELECT COUNT(*) AS n FROM journal_entries')).n;
+  r = await call(maker, 'POST', '/api/billing/recognize-revenue', { project_id: projectId, period_date: '2026-09-10' });
+  assert.ok(r.status >= 400 && r.status < 500, 'POC revenue entry refused: ' + JSON.stringify(r.data));
+  assert.match(r.data.message, /المستخلص/, 'the refusal explains the billing policy');
+  assert.equal((await db.get('SELECT COUNT(*) AS n FROM journal_entries')).n, entriesBefore, 'nothing posted');
+  assert.equal(await ledgerRevenue(), 0);
 
-  // =========================================================================
-  // الاختبار 1: استلام دفعة مقدمة من العميل وتأكيد أنها التزام تعاقدي وليست إيراداً
-  // =========================================================================
-  await t.test('1. Advance Payment is Contract Liability, NOT Revenue', async () => {
-    const resAdvance = await fetch(`${baseUrl}/api/payments`, {
-      method: 'POST',
-      headers: adminHeaders,
-      body: JSON.stringify({
-        type: 'قبض',
-        client_id: testClientId,
-        project_id: testProjectId,
-        amount: 100000,
-        receipt_category: 'advance_payment',
-        payment_method: 'تحويل بنكي',
-        date: '2026-09-01',
-        notes: 'استلام دفعة مقدمة تعاقدية 25% لبدء تجهيزات الموقع'
-      })
-    });
+  // 4. Bill: created as a draft, approved by a checker, then posted as one compound entry
+  r = await call(maker, 'POST', '/api/billing', { bill_type: 'مستخلص جاري رقم 1', project_id: projectId, client_id: clientId, amount: 70000, advance_deduction: 17500, retention_deduction: 7000, status: 'معتمد', date: '2026-09-15' });
+  assert.equal(r.status, 200, 'bill: ' + JSON.stringify(r.data));
+  const billId = r.data.id;
+  assert.equal(r.data.status, 'draft', 'creation never posts');
+  assert.equal((await call(maker, 'POST', `/api/billing/${billId}/approve`)).status, 403, 'the maker cannot approve their own bill');
+  r = await call(checker, 'POST', `/api/billing/${billId}/approve`, { notes: 'تدقيق واعتماد' });
+  assert.equal(r.status, 200, 'approve: ' + JSON.stringify(r.data));
+  r = await call(checker, 'POST', `/api/billing/${billId}/post`);
+  assert.equal(r.status, 200, 'post: ' + JSON.stringify(r.data));
+  const bill = await db.get('SELECT net_amount, journal_entry_id FROM bills WHERE id = ?', [billId]);
+  assert.equal(Number(bill.net_amount), 45500, '70,000 - 17,500 advance - 7,000 retention');
+  const lines = await db.query('SELECT account_id, debit, credit FROM journal_entry_lines WHERE entry_id = ?', [bill.journal_entry_id]);
+  const side = (accountId, k) => lines.filter(l => l.account_id === accountId).reduce((s, l) => s + Number(l[k]), 0);
+  assert.equal(side(acc.ACCOUNTS_RECEIVABLE, 'debit'), 45500, 'Dr receivable by the net');
+  assert.equal(side(acc.RETENTION_RECEIVABLE, 'debit'), 7000, 'Dr retention receivable');
+  assert.equal(side(acc.CUSTOMER_ADVANCES, 'debit'), 17500, 'Dr advances amortised');
+  assert.equal(side(acc.CONTRACT_REVENUE, 'credit'), 70000, 'Cr revenue by the gross');
+  assert.equal(lines.reduce((s, l) => s + Number(l.debit), 0), lines.reduce((s, l) => s + Number(l.credit), 0), 'balanced');
+  assert.equal(await ledgerRevenue(), 70000, 'revenue = the posted bill, once');
 
-    assert.strictEqual(resAdvance.status, 200);
-    const advJson = await resAdvance.json();
-    assert.strictEqual(advJson.success, true);
-
-    // فحص القيد المحاسبي المتولد
-    const je = await query(`
-      SELECT je.*, jel.account_id, jel.debit, jel.credit 
-      FROM journal_entries je
-      JOIN journal_entry_lines jel ON je.id = jel.entry_id
-      WHERE je.reference_type = 'سند قبض' AND je.reference_id = ?
-    `, [advJson.id]);
-
-    assert.ok(je.length >= 2, 'Should create balanced entry with debit and credit lines');
-    const creditLine = je.find(l => Number(l.credit) > 0);
-    assert.strictEqual(Number(creditLine.account_id), 18, 'Must credit Account 18 (2105 - Customer Advances Liability)');
-
-    // التحقق عبر مصفوفة الفصل المالي
-    const resMatrix = await fetch(`${baseUrl}/api/billing/contracting-matrix/${testProjectId}`, {
-      headers: adminHeaders
-    });
-    const matrix = (await resMatrix.json()).data;
-
-    assert.strictEqual(matrix.cash_receipts.total, 100000, 'Cash receipts must be 100,000');
-    assert.strictEqual(matrix.cash_receipts.advance_received, 100000, 'Advance received must be 100,000');
-    assert.strictEqual(matrix.advance_payments.unamortized_liability, 100000, 'Unamortized liability must be 100,000');
-    assert.strictEqual(matrix.recognized_revenue.cumulative, 0, 'CRITICAL: Recognized Revenue MUST BE ZERO despite having 100,000 in cash!');
-  });
-
-  // =========================================================================
-  // الاختبار 2: أوامر التغيير (Approved Changes affect Revenue, Pending Isolated)
-  // =========================================================================
-  await t.test('2. Approved Change Orders Increase Contract Value, Pending Isolated', async () => {
-    // أمر تغيير معتمد بقيمة 50,000 (يعدل قيمة العقد لتصبح 450,000)
-    await run(`
-      INSERT INTO project_change_orders (project_id, change_no, title, amount, status, request_date, approval_date)
-      VALUES (?, 'CO-01', 'إضافة مصاعد بانورامية وتوسعة المدخل الرئيسي', 50000, 'معتمد', '2026-09-02', '2026-09-05')
-    `, [testProjectId]);
-
-    // أمر تغيير معلق بقيمة 30,000 (لا يؤثر في الإيراد)
-    await run(`
-      INSERT INTO project_change_orders (project_id, change_no, title, amount, status, request_date)
-      VALUES (?, 'CO-02', 'طلب تعديل واجهات زجاجية قيد الدراسة', 30000, 'قيد المراجعة', '2026-09-06')
-    `, [testProjectId]);
-
-    const resMatrix = await fetch(`${baseUrl}/api/billing/contracting-matrix/${testProjectId}`, {
-      headers: adminHeaders
-    });
-    const matrix = (await resMatrix.json()).data;
-
-    assert.strictEqual(matrix.base_contract_value, 400000);
-    assert.strictEqual(matrix.variation_orders.approved_amount, 50000);
-    assert.strictEqual(matrix.variation_orders.pending_amount, 30000);
-    assert.strictEqual(matrix.revised_contract_value, 450000, 'Revised contract value must be 400,000 + 50,000 approved = 450,000');
-  });
-
-  // =========================================================================
-  // الاختبار 3: تنفيذ تكاليف واحتساب نسبة الإنجاز POC والإيراد المعترف به (IFRS 15)
-  // =========================================================================
-  await t.test('3. Cost-to-Cost POC and Revenue Recognition Entry', async () => {
-    // صرف تكاليف موقع بقيمة 47,500 (خرسانة وحديد)
-    const resExp = await fetch(`${baseUrl}/api/expenses`, {
-      method: 'POST',
-      headers: adminHeaders,
-      body: JSON.stringify({
-        project_id: testProjectId,
-        amount: 47500,
-        expense_type: 'مواد بناء',
-        recipient: 'مصنع الخرسانة الجاهزة',
-        payment_method: 'نقدي',
-        date: '2026-09-10',
-        status: 'posted',
-        notes: 'صب قواعد مجمع الأفق التجاري'
-      })
-    });
-    assert.strictEqual(resExp.status, 200);
-
-    // فحص المقاييس المحاسبية
-    // Revised Estimated Cost = 200,000 + (50,000 * 0.75) = 237,500
-    // POC = 47,500 / 237,500 = 20%
-    // Recognized Revenue = 450,000 * 20% = 90,000 YER
-    // True Net Profit = 90,000 - 47,500 = 42,500 YER
-    const resMatrix = await fetch(`${baseUrl}/api/billing/contracting-matrix/${testProjectId}`, {
-      headers: adminHeaders
-    });
-    const matrix = (await resMatrix.json()).data;
-
-    assert.strictEqual(matrix.cumulative_actual_cost, 47500);
-    assert.strictEqual(matrix.cost_to_cost_poc_pct, 20, 'POC % must be 20%');
-    assert.strictEqual(matrix.recognized_revenue.cumulative, 90000, 'Recognized Revenue must be 90,000');
-    assert.strictEqual(matrix.financial_analysis.true_recognized_profit, 42500, 'True Net Profit must be 42,500');
-
-    // إثبات الإيراد دورياً بقيد يومية رسمي (POST /api/billing/recognize-revenue)
-    const resRec = await fetch(`${baseUrl}/api/billing/recognize-revenue`, {
-      method: 'POST',
-      headers: adminHeaders,
-      body: JSON.stringify({
-        project_id: testProjectId,
-        period_date: '2026-09-10',
-        notes: 'إثبات إيراد إنجاز أعمال القواعد الخرسانية (20%) وفق IFRS 15'
-      })
-    });
-    assert.strictEqual(resRec.status, 200);
-    const recJson = await resRec.json();
-    assert.strictEqual(recJson.success, true);
-    assert.strictEqual(recJson.period_recognized_revenue, 90000);
-    assert.ok(recJson.journal_entry_no, 'Must return generated journal entry number');
-
-    // التحقق من اتزان قيد إثبات الإيراد
-    const je = await query('SELECT * FROM journal_entries WHERE id = ?', [recJson.journal_entry_id]);
-    assert.strictEqual(Number(je[0].total_debit), Number(je[0].total_credit), 'JE must be balanced');
-    assert.strictEqual(Number(je[0].total_debit), 90000);
-  });
-
-  // =========================================================================
-  // الاختبار 4: اعتماد مستخلص أعمال مع استقطاع الدفعة والضمان (IPC Compound Entry)
-  // =========================================================================
-  await t.test('4. Progress Billing with Advance Amortization & Retention Deduction', async () => {
-    // إصدار مستخلص جاري رقم 1:
-    // إجمالي الأعمال المنجزة = 70,000
-    // استقطاع استهلاك دفعة مقدمة = 17,500 (25%)
-    // استقطاع محتجز ضمان = 7,000 (10%)
-    // صافي المستخلص المطلوب سداده = 45,500
-    const resBill = await fetch(`${baseUrl}/api/billing`, {
-      method: 'POST',
-      headers: adminHeaders,
-      body: JSON.stringify({
-        bill_type: 'مستخلص جاري رقم 1',
-        project_id: testProjectId,
-        client_id: testClientId,
-        amount: 70000,
-        advance_deduction: 17500,
-        retention_deduction: 7000,
-        status: 'معتمد',
-        date: '2026-09-15',
-        notes: 'مستخلص أعمال الحفر والقواعد الخرسانية'
-      })
-    });
-
-    assert.strictEqual(resBill.status, 200);
-    const billJson = await resBill.json();
-    assert.strictEqual(billJson.success, true);
-    assert.strictEqual(billJson.gross_amount, 70000);
-    assert.strictEqual(billJson.net_amount, 45500);
-
-    // فحص القيد المركب المتزن
-    const je = await query(`
-      SELECT je.*, jel.account_id, jel.debit, jel.credit 
-      FROM journal_entries je
-      JOIN journal_entry_lines jel ON je.id = jel.entry_id
-      WHERE je.entry_no = ?
-    `, [billJson.journal_entry_no]);
-
-    assert.ok(je.length >= 4, 'Must have at least 4 lines for compound IPC entry');
-    const totalDebit = je.reduce((sum, l) => sum + Number(l.debit), 0);
-    const totalCredit = je.reduce((sum, l) => sum + Number(l.credit), 0);
-    assert.strictEqual(totalDebit, totalCredit, 'IPC Compound Entry must be perfectly balanced');
-    assert.strictEqual(totalDebit, 70000, 'Total debit must match gross bill amount');
-
-    // التحقق من أسطر القيد الفردية:
-    const arLine = je.find(l => Number(l.account_id) === 4);
-    assert.strictEqual(Number(arLine.debit), 45500, 'Accounts Receivable must be debited by net amount');
-
-    const retLine = je.find(l => Number(l.account_id) === 16);
-    assert.strictEqual(Number(retLine.debit), 7000, 'Retention Receivable must be debited by retention amount');
-
-    const advLine = je.find(l => Number(l.account_id) === 18);
-    assert.strictEqual(Number(advLine.debit), 17500, 'Customer Advances Liability must be debited by advance amortized');
-
-    const billCreditLine = je.find(l => Number(l.account_id) === 17);
-    assert.strictEqual(Number(billCreditLine.credit), 70000, 'Contract Billings/WIP must be credited by gross bill');
-  });
-
-  // =========================================================================
-  // الاختبار 5: فحص ركائز WIP والأصول والالتزامات التعاقدية (IFRS 15 Pillars)
-  // =========================================================================
-  await t.test('5. Verification of WIP (Contract Assets) and Remaining Liabilities', async () => {
-    const resMatrix = await fetch(`${baseUrl}/api/billing/contracting-matrix/${testProjectId}`, {
-      headers: adminHeaders
-    });
-    const matrix = (await resMatrix.json()).data;
-
-    // 1. الإيراد المعترف به (90,000) > الأعمال المفوترة (70,000)
-    // أعمال تحت التنفيذ / إيراد مستحق غير مفوتر = 20,000 YER (Contract Asset / WIP)
-    assert.strictEqual(
-      matrix.contract_assets_and_liabilities.contract_asset_wip,
-      20000,
-      'Unbilled WIP / Contract Asset must be 90,000 - 70,000 = 20,000'
-    );
-
-    // 2. الدفعة المقدمة غير المستهلكة = 100,000 مستلمة - 17,500 مستهلكة = 82,500 YER (Contract Liability)
-    assert.strictEqual(
-      matrix.advance_payments.unamortized_liability,
-      82500,
-      'Remaining Advance Liability must be 82,500'
-    );
-
-    // 3. محتجز الضمان القائم = 7,000 YER (Active Contract Asset)
-    assert.strictEqual(
-      matrix.retention_money.active_retention_asset,
-      7000,
-      'Active retention asset must be 7,000'
-    );
-
-    // 4. المقارنة الصارمة: السيولة النقدية مقابل الربح المحاسبي
-    // Cash Receipts = 100,000
-    // Actual Cost = 47,500
-    // Net Cash Flow = 100,000 - 47,500 = 52,500
-    // Recognized Profit = 90,000 - 47,500 = 42,500
-    assert.strictEqual(matrix.financial_analysis.net_cash_flow, 52500);
-    assert.strictEqual(matrix.financial_analysis.true_recognized_profit, 42500);
-    assert.strictEqual(matrix.financial_analysis.liquidity_vs_profit_gap, 10000, 'Gap = 100,000 Cash - 90,000 Revenue = +10,000');
-  });
-
-  // =========================================================================
-  // الاختبار 6: فحص تقرير لوحة التحكم ومصفوفة الشركة ككل
-  // =========================================================================
-  await t.test('6. Company-Wide Dashboard & Financial Separation Report', async () => {
-    const resDash = await fetch(`${baseUrl}/api/reports/dashboard`, {
-      headers: adminHeaders
-    });
-    assert.strictEqual(resDash.status, 200);
-    const dashJson = await resDash.json();
-
-    assert.ok(dashJson.data.kpis.recognized_revenue > 0, 'Dashboard must expose recognized_revenue');
-    assert.ok(dashJson.data.kpis.cash_receipts > 0, 'Dashboard must expose cash_receipts');
-    assert.ok(dashJson.data.kpis.true_net_profit !== undefined, 'Dashboard must expose true_net_profit');
-    assert.ok(dashJson.data.kpis.net_cash_flow !== undefined, 'Dashboard must expose net_cash_flow');
-    assert.ok(dashJson.data.contracting_summary, 'Dashboard must include contracting_summary');
-
-    const resSeparation = await fetch(`${baseUrl}/api/reports/contracting-financial-separation`, {
-      headers: adminHeaders
-    });
-    assert.strictEqual(resSeparation.status, 200);
-    const sepJson = await resSeparation.json();
-    assert.strictEqual(sepJson.success, true);
-    assert.ok(sepJson.summary.total_recognized_revenue > 0);
-    assert.ok(sepJson.projects.length > 0);
-  });
+  // 5. Matrix and dashboard read the ledger
+  m = await matrix();
+  assert.equal(m.recognized_revenue.cumulative, 70000);
+  assert.equal(m.advance_payments.unamortized_liability, 82500, '100,000 received - 17,500 amortised');
+  assert.equal(m.retention_money.active_retention_asset, 7000);
+  r = await call(maker, 'GET', '/api/reports/dashboard');
+  assert.equal(r.status, 200);
+  const kpis = r.data.data.kpis;
+  assert.equal(kpis.recognized_revenue, 70000, 'dashboard revenue = the ledger: ' + JSON.stringify(kpis));
+  assert.equal(kpis.net_profit, 22500, '70,000 revenue - 47,500 cost');
+  // the advance is a liability: the client owes the bill's net (45,500), not net minus the whole advance again
+  assert.equal(kpis.client_receivables, 45500, 'receivable = bill net; the advance is not deducted twice');
+  r = await call(maker, 'GET', '/api/reports/contracting-financial-separation');
+  assert.equal(r.status, 200);
+  assert.ok(r.data.data.projects.some(p => Number(p.project_id ?? p.id) === projectId), 'the project is in the separation report');
+  assert.equal(r.data.data.summary.total_recognized_revenue, 70000, 'company-wide revenue = the ledger, not the POC estimate');
 });

@@ -37,7 +37,7 @@ router.get('/in-progress',requirePermission('projects:view,reports:view'),async(
  try{
   const date=req.query.as_of_date||new Date().toISOString().slice(0,10);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date)throw fail('تاريخ التقرير غير صالح');
-  const allowed=req.user?.role==='admin'||req.user?.username==='admin'?['*']:parseScopeArray(req.user?.scope?.allowed_projects||req.user?.allowed_projects);
+  const allowed=req.user?.role==='admin'?['*']:parseScopeArray(req.user?.scope?.allowed_projects||req.user?.allowed_projects);
   const postedDb={query:(sql,args)=>db.query(sql.replace("je.status='posted'","je.status IN ('posted','closed')"),args)};
   const budget=await require('../services/projectBudgetReportService').getProjectBudget({as_of_date:date,allowedProjects:allowed},postedDb);
   const projects=await db.query('SELECT id,status,progress_percentage FROM projects');

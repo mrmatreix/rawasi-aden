@@ -1,16 +1,7 @@
 const { createHash } = require('node:crypto');
 const db = require('../database/db');
-let schema;
-
-function ensureSchema() {
-  if (!schema) schema = db.run(`CREATE TABLE IF NOT EXISTS financial_save_requests (
-    request_id VARCHAR(64) PRIMARY KEY,
-    fingerprint VARCHAR(64) NOT NULL,
-    status_code INTEGER,
-    response_json TEXT
-  )`).catch(error => { schema = null; throw error; });
-  return schema;
-}
+// financial_save_requests is created by migration 0006 at boot — no DDL inside the first financial request
+function ensureSchema() { return Promise.resolve(); }
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);

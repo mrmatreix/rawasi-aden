@@ -11,15 +11,14 @@
  */
 
 const { query, get, run, transaction } = require('../database/db');
+const PostingService = require('./ledger/postingService');
+const SystemAccounts = require('./systemAccountService');
+const Numbering = require('./numberingService');
 const { logAudit } = require('./auditService');
 const { assertPeriodOpen, resolveValidUserId } = require('./financialControlService');
 
-const BANK_ACCOUNTS = {
-  BANK_GL_ACCOUNT: 3,         // 111 - حـ/ الصندوق والبنك الرئيسي
-  BANK_CHARGES_EXPENSE: 26,   // 5210 - عمولات ومصاريف بنكية عامة
-  CHEQUES_UNDER_COLLECTION: 4, // ذمم مدينة / أوراق قبض
-  SUPPLIER_PAYABLES: 7        // ذمم دائنة / موردين
-};
+// المعرفات الثابتة أزيلت: الحسابات من أدوار حسابات النظام وحساب البنك في الدليل (المرحلة 4.6)
+const BANK_ACCOUNTS = Object.freeze({});
 
 const BankReconciliationService = {
   BANK_ACCOUNTS,
@@ -185,32 +184,17 @@ const BankReconciliationService = {
       if (!bankAcct) throw new Error('الحساب البنكي غير موجود');
 
       // 1. توليد قيد اليومية: من حـ/ عمولات ومصاريف بنكية (5210) إلى حـ/ البنك
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'عمولة بنكية', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, date, `إثبات ${fee_type} لحساب (${bankAcct.bank_name}) - ${notes || reference_no || ''}`,
-        parsedAmount, parsedAmount, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      // سطر مدين: مصاريف وعمولات بنكية
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [entryId, BANK_ACCOUNTS.BANK_CHARGES_EXPENSE, parsedAmount, `مدين: ${fee_type}`]);
-
-      // سطر دائن: تخفيض رصيد البنك
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, 0, ?, ?)
-      `, [entryId, bankAcct.account_id || BANK_ACCOUNTS.BANK_GL_ACCOUNT, parsedAmount, `دائن: خصم من رصيد البنك`]);
+      // مدين عمولات ومصاريف بنكية / دائن حساب البنك في الدليل (لا معرفات ثابتة)
+      const bankGl = bankAcct.account_id || (await SystemAccounts.resolve('BANK_DEFAULT', tx)).id;
+      const posted = await PostingService.post(tx, {
+        date, series: 'JV', user, source: { type: 'عمولة بنكية', id: Number(bank_account_id), no: reference_no || null },
+        description: `إثبات ${fee_type} لحساب (${bankAcct.bank_name}) - ${notes || reference_no || ''}`,
+        lines: [
+          { role: 'BANK_CHARGES', debit: parsedAmount, notes: `مدين: ${fee_type}` },
+          { accountId: bankGl, credit: parsedAmount, notes: 'دائن: خصم من رصيد البنك' }
+        ]
+      });
+      const entry_no = posted.entry_no;
 
       // 2. تحديث رصيد الحساب البنكي
       await tx.run('UPDATE bank_accounts SET current_balance = current_balance - ? WHERE id = ?', [parsedAmount, bank_account_id]);
@@ -312,52 +296,25 @@ const BankReconciliationService = {
 
     return await transaction(async (tx) => {
       // 1. توليد قيد عكسي للشيك المرتجع
-      const entryCount = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-${new Date().getFullYear()}-${String(((entryCount ? entryCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'شيك مرتجع', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, bounce_date, `قيد شيك مرتجع رقم (${cheque.cheque_no}) - السبب: ${bounce_reason}`,
-        cheque.amount, cheque.amount, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      if (cheque.type === 'received') {
-        // شيك وارد من عميل ارتد: إعادة فتح مديونية العميل (مدين) وتخفيض البنك/أوراق القبض (دائن)
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?)
-        `, [entryId, BANK_ACCOUNTS.CHEQUES_UNDER_COLLECTION, cheque.amount, `مدين: إعادة إثبات مديونية العميل بسبب ارتداد الشيك ${cheque.cheque_no}`]);
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, 0, ?, ?)
-        `, [entryId, BANK_ACCOUNTS.BANK_GL_ACCOUNT, cheque.amount, `دائن: تخفيض رصيد البنك المحصل مؤقتاً`]);
-
-        if (cheque.client_id) {
-          await tx.run('UPDATE clients SET current_balance = current_balance + ? WHERE id = ?', [cheque.amount, cheque.client_id]);
-        }
-      } else {
-        // شيك صادر لمورد ارتد: زيادة البنك (مدين) وإعادة إثبات التزام المورد (دائن)
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, ?, 0, ?)
-        `, [entryId, BANK_ACCOUNTS.BANK_GL_ACCOUNT, cheque.amount, `مدين: استعادة رصيد البنك للشيك المرتجع ${cheque.cheque_no}`]);
-
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-          VALUES (?, ?, 0, ?, ?)
-        `, [entryId, BANK_ACCOUNTS.SUPPLIER_PAYABLES, cheque.amount, `دائن: إعادة إثبات استحقاق المورد`]);
-
-        if (cheque.supplier_id) {
-          await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [cheque.amount, cheque.supplier_id]);
-        }
-      }
+      // شيك وارد ارتد: مدين ذمم العملاء / دائن البنك. شيك صادر ارتد: مدين البنك / دائن الموردين
+      const chequeBank = cheque.bank_account_id ? await tx.get('SELECT account_id FROM bank_accounts WHERE id = ?', [cheque.bank_account_id]) : null;
+      const bankGl = chequeBank?.account_id || (await SystemAccounts.resolve('BANK_DEFAULT', tx)).id;
+      const received = cheque.type === 'received';
+      const posted = await PostingService.post(tx, {
+        date: bounce_date, series: 'JV', user, source: { type: 'شيك مرتجع', id: Number(chequeId), no: cheque.cheque_no },
+        description: `قيد شيك مرتجع رقم (${cheque.cheque_no}) - السبب: ${bounce_reason}`,
+        lines: received ? [
+          { role: 'ACCOUNTS_RECEIVABLE', debit: cheque.amount, projectId: cheque.project_id, partyType: cheque.client_id ? 'client' : null, partyId: cheque.client_id, notes: `مدين: إعادة إثبات مديونية العميل بسبب ارتداد الشيك ${cheque.cheque_no}` },
+          { accountId: bankGl, credit: cheque.amount, notes: 'دائن: تخفيض رصيد البنك المحصل مؤقتاً' }
+        ] : [
+          { accountId: bankGl, debit: cheque.amount, notes: `مدين: استعادة رصيد البنك للشيك المرتجع ${cheque.cheque_no}` },
+          { role: 'SUPPLIERS_PAYABLE', credit: cheque.amount, projectId: cheque.project_id, partyType: cheque.supplier_id ? 'supplier' : null, partyId: cheque.supplier_id, notes: 'دائن: إعادة إثبات استحقاق المورد' }
+        ]
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
+      if (received && cheque.client_id) await tx.run('UPDATE clients SET current_balance = current_balance + ? WHERE id = ?', [cheque.amount, cheque.client_id]);
+      if (!received && cheque.supplier_id) await tx.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [cheque.amount, cheque.supplier_id]);
 
       // 2. تحديث حالة الشيك
       await tx.run(`
@@ -436,8 +393,8 @@ const BankReconciliationService = {
     const variance = adjustedBankBalance - adjustedBookBalance;
     const isBalanced = Math.abs(variance) < 0.01;
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM bank_reconciliations');
-    const reconciliation_no = `BRS-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const reconciliation_no = await Numbering.next(require('../database/db'), 'BRS', { table: 'bank_reconciliations', column: 'reconciliation_no', date: new Date().toISOString().slice(0, 10) });
 
     const userId = user ? await resolveValidUserId(user?.id) : null;
 

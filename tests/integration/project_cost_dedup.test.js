@@ -14,6 +14,12 @@ const jwt = require('jsonwebtoken');
 const db = require('../../server/database/db');
 const app = require('../../server/server');
 
+// test cleanup deletes posted entries: allowed only inside an explicit ledger maintenance unlock (stage 1 guards)
+async function withLedgerUnlock(db, fn) {
+  await db.run("INSERT INTO ledger_maintenance_unlock (reason) VALUES ('test cleanup')");
+  try { return await fn(); } finally { await db.run('DELETE FROM ledger_maintenance_unlock'); }
+}
+
 test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, resolve));
@@ -70,8 +76,8 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
           const jeIds = jes.map(j => j.id);
           if (jeIds.length > 0) {
             const jph = jeIds.map(() => '?').join(',');
-            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds);
-            await db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds);
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${jph})`, jeIds));
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${jph})`, jeIds));
           }
           await db.run(`DELETE FROM expenses WHERE id IN (${ph})`, expIds);
         }
@@ -90,8 +96,8 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
           const ljeIds = ljes.map(j => j.id);
           if (ljeIds.length > 0) {
             const ljph = ljeIds.map(() => '?').join(',');
-            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${ljph})`, ljeIds);
-            await db.run(`DELETE FROM journal_entries WHERE id IN (${ljph})`, ljeIds);
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${ljph})`, ljeIds));
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${ljph})`, ljeIds));
           }
         }
         await db.run('DELETE FROM project_labor_expenses WHERE project_id = ?', [p.id]);
@@ -109,8 +115,8 @@ test('Project Cost Dedup - Link Absorption & Duplicate Warnings', async (t) => {
           const pjeIds = pjes.map(j => j.id);
           if (pjeIds.length > 0) {
             const pjph = pjeIds.map(() => '?').join(',');
-            await db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds);
-            await db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds);
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entry_lines WHERE entry_id IN (${pjph})`, pjeIds));
+            await withLedgerUnlock(db, () => db.run(`DELETE FROM journal_entries WHERE id IN (${pjph})`, pjeIds));
           }
         }
         await db.run('DELETE FROM project_purchases WHERE project_id = ?', [p.id]);

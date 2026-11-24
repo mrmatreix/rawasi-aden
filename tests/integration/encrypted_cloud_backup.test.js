@@ -74,14 +74,22 @@ describe('Encrypted Cloud Backup & System Vault Suite', () => {
   });
 
   it('5. should test cloud connection and sync archive', async () => {
-    const testResult = await cloudService.testCloudConnection({ provider: 'cloud_vault' });
-    assert.equal(testResult.success, true);
-    assert.equal(testResult.provider, 'cloud_vault');
+    // a vault folder on the same server is not an offsite copy: an unconfigured destination must fail loudly
+    const none = await cloudService.testCloudConnection({ provider: 'not_configured' });
+    assert.equal(none.success, false);
+
+    // development only: a synced local folder (e.g. a cloud-drive client) is an accepted destination
+    const syncedFolder = path.join(require('os').tmpdir(), 'rawasi-cloud-sync-' + Date.now());
+    const config = { enabled: true, provider: 'local_cloud_folder', syncedFolder };
+    const testResult = await cloudService.testCloudConnection(config);
+    assert.equal(testResult.success, true, JSON.stringify(testResult));
+    assert.equal(testResult.provider, 'local_cloud_folder');
 
     const vaultItems = cloudService.listVaultItems();
     if (vaultItems.length > 0) {
-      const syncResult = await cloudService.syncArchiveToCloud(vaultItems[0].fileName, { provider: 'cloud_vault' });
-      assert.equal(syncResult.success, true);
+      const syncResult = await cloudService.syncArchiveToCloud(vaultItems[0].fileName, config);
+      assert.equal(syncResult.success, true, JSON.stringify(syncResult));
     }
+    fs.rmSync(syncedFolder, { recursive: true, force: true });
   });
 });

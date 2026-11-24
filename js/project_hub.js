@@ -1150,6 +1150,7 @@ const ProjectHub = {
 
   // 2. تصدير جدول الكميات الحالي إلى ملف Excel رسمي
   async exportBoqToExcel() {
+    if (typeof Auth !== 'undefined' && !Auth.hasPermission('projects:export')) return App.showToast('⛔ لا تملك صلاحية تصدير بيانات المشاريع', 'error');
     try {
       try { await window.loadXlsx(); } catch (_) { /* يُستخدم تصدير الخادم بديلاً */ }
       if (!this.currentProjectId) {

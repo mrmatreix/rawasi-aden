@@ -45,6 +45,9 @@ class ClientChainService {
       WHERE client_id = ? 
         AND type = 'قبض' 
         AND (status IN ('posted', 'cleared', 'approved') OR status IS NULL)
+        -- an advance is a contract liability, amortised through the bills' net (advance_deduction): counting the
+        -- receipt here as well deducted the amortised part twice and showed the liability as a negative receivable
+        AND COALESCE(receipt_category, 'general') <> 'advance_payment'
     `, [clientId]);
     const totalPaid = Number(payRes ? payRes.total_paid : 0) || 0;
 
@@ -134,6 +137,9 @@ class ClientChainService {
 
     const bill = await executor.get('SELECT id, net_amount, paid_amount, status FROM bills WHERE id = ?', [billId]);
     if (!bill) return null;
+    if (!['posted', 'معتمد', 'محصل جزئي', 'محصل كامل', 'closed'].includes(String(bill.status))) {
+      throw Object.assign(new Error(`لا يمكن تحصيل مستخلص غير مرحّل (الحالة: ${bill.status}). يجب اعتماد المستخلص وترحيله أولاً.`), { statusCode: 400 });
+    }
 
     const currentPaid = Number(bill.paid_amount) || 0;
     const netAmount = Number(bill.net_amount) || 0;

@@ -46,7 +46,9 @@ function askHidden(question) {
   }
 
   const hash = bcrypt.hashSync(pass1, 10);
-  await db.run('UPDATE users SET password_hash = ?, failed_login_count = 0, login_locked_until = NULL' + (pin ? ', two_factor_pin = ?' : '') + ' WHERE id = ?', pin ? [hash, pin, user.id] : [hash, user.id]);
+  // تغيير كلمة المرور ينهي كل الجلسات المفتوحة على الحساب (active_sessions + session_token)
+  await db.run("UPDATE users SET password_hash = ?, failed_login_count = 0, login_locked_until = NULL, is_logged_in = 0, session_token = NULL, active_sessions = '[]', last_heartbeat = NULL, password_changed_at = CURRENT_TIMESTAMP" + (pin ? ', two_factor_pin = ?' : '') + ' WHERE id = ?', pin ? [hash, pin, user.id] : [hash, user.id]);
+  try { await db.run("UPDATE staff_password_resets SET status = 'used', used_at = CURRENT_TIMESTAMP, code_hash = NULL, close_reason = 'console_reset' WHERE user_id = ? AND status IN ('pending','approved')", [user.id]); } catch {}
   try { await db.run("INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, created_at) VALUES (?, 'PASSWORD_RESET_CONSOLE', 'user', ?, ?, CURRENT_TIMESTAMP)", [user.id, user.id, JSON.stringify({ username: user.username, pinReset: !!pin })]); } catch {}
   rl.close();
   console.log(`Done: password${pin ? ' and 2FA PIN' : ''} reset for "${user.username}" (status: ${user.status}). Lock cleared.`);

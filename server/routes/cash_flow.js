@@ -13,49 +13,11 @@
 const express = require('express');
 const router = express.Router();
 const CashFlowProjectionService = require('../services/cashFlowProjectionService');
-const CashFlowReportService = require('../services/cashFlowReportService');
 const { requirePermission } = require('../middleware/security');
 
-/**
- * @route   GET /api/cash-flow/
- * @desc    قائمة التدفقات النقدية الفعلية الرسمية من دفتر الأستاذ العام
- * @access  خاص (محاسبة / تقارير / صندوق)
- */
-router.get('/', requirePermission('accounting:view,reports:view,cash:view'), async (req, res) => {
-  try {
-    const { from_date, to_date } = req.query;
-    const data = await CashFlowReportService.getCashFlow({ from_date, to_date });
-    res.json(data);
-  } catch (error) {
-    console.error('❌ [CashFlow API] خطأ أثناء جلب قائمة التدفقات النقدية الفعلية:', error);
-    res.status(error.statusCode || 500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'تعذر جلب قائمة التدفقات النقدية الفعلية',
-      error: error.message
-    });
-  }
-});
-
-/**
- * @route   GET /api/cash-flow/statement
- * @desc    مرادف رسمي صريح لقائمة التدفقات النقدية الفعلية
- */
-router.get('/statement', requirePermission('accounting:view,reports:view,cash:view'), async (req, res) => {
-  try {
-    const { from_date, to_date } = req.query;
-    const data = await CashFlowReportService.getCashFlow({ from_date, to_date });
-    res.json(data);
-  } catch (error) {
-    console.error('❌ [CashFlow API] خطأ أثناء جلب بيان التدفق النقدي:', error);
-    res.status(error.statusCode || 500).json({
-      success: false,
-      code: 'REPORT_ERROR',
-      message: 'تعذر جلب بيان التدفق النقدي',
-      error: error.message
-    });
-  }
-});
+// The official cash-flow statement is GET /api/reports/cash-flow (reportingService.getCashFlow, ledger based).
+// GET /api/cash-flow/ and /api/cash-flow/statement called a function that does not exist (always 500) and nothing
+// used them; they were removed. This router serves the projections and scenarios only.
 
 /**
  * @route   GET /api/cash-flow/projection?from=YYYY-MM&to=YYYY-MM

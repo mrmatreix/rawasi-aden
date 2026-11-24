@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { get, query, run, connectionManager } = require('../database/db');
+const { get, query, run } = require('../database/db');
 const {
   loginRateLimiter,
   recordFailedLogin,
@@ -25,57 +25,10 @@ router.post('/realtime-ticket',requireAuth,(req,res)=>res.json({success:true,tic
 router.post('/session-cookie',requireAuth,(req,res)=>{const {token,source}=getStaffToken(req);if(source!=='header')return res.json({success:true,cookieSession:true});setStaffCookie(req,res,token);let tokenExpiresAt=null;try{const {exp}=jwt.decode(token)||{};if(exp)tokenExpiresAt=new Date(exp*1000).toISOString();}catch{}res.json({success:true,cookieSession:true,tokenExpiresAt});});
 router.get('/staff-access',requireAuth,require('../middleware/security').requirePermission('client_app:staff_login'),(req,res)=>res.json({success:true}));
 
+// قالب صلاحيات الدور من الكتالوج الموحّد (js/system-catalog.js): نفس المصدر الذي تقرأ منه الواجهة وrequireAuth
 function getRoleDefaultPermissions(role) {
-  switch (role) {
-    case 'admin':
-      return ['*'];
-    case 'accountant':
-      return [
-        'dashboard:view', 'dashboard:export',
-        'accounting:view', 'accounting:create', 'accounting:edit', 'accounting:export',
-        'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:export',
-        'revenues:view', 'revenues:create', 'revenues:edit', 'revenues:export',
-        'billing:view', 'billing:create', 'billing:edit', 'billing:export',
-        'custody:view', 'custody:create', 'custody:edit', 'custody:export',
-        'clients:view', 'clients:create', 'clients:edit', 'clients:export',
-        'suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:export',
-        'cash:view',
-        'hr:view', 'hr:payroll',
-        'reports:view', 'reports:export'
-      ];
-    case 'auditor':
-      return [
-        'dashboard:view', 'dashboard:export',
-        'accounting:view', 'accounting:approve', 'accounting:post', 'accounting:export',
-        'expenses:view', 'expenses:approve', 'expenses:export',
-        'revenues:view', 'revenues:approve', 'revenues:export',
-        'billing:view', 'billing:approve', 'billing:export',
-        'custody:view', 'custody:approve', 'custody:export',
-        'projects:view', 'projects:export',
-        'inventory:view', 'inventory:export',
-        'purchases:view', 'purchases:approve', 'purchases:export',
-        'hr:view', 'hr:approve', 'hr:export',
-        'reports:view', 'reports:export',
-        'cash:view'
-      ];
-    case 'project_manager':
-      return [
-        'dashboard:view',
-        'projects:view', 'projects:create', 'projects:edit', 'projects:approve', 'projects:export',
-        'expenses:view', 'expenses:create',
-        'custody:view',
-        'inventory:view', 'inventory:issue',
-        'reports:view'
-      ];
-    case 'storekeeper':
-      return [
-        'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:issue', 'inventory:export',
-        'purchases:view',
-        'projects:view'
-      ];
-    default:
-      return ['dashboard:view'];
-  }
+  const template = require('../../js/system-catalog').roles[role];
+  return template ? [...template.permissions] : ['dashboard:view'];
 }
 
 function parseUserPermissions(user) {
@@ -113,6 +66,19 @@ function verifyAdmin(req,res,next) {
     if(req.user.role!=='admin')return res.status(403).json({success:false,message:'هذه العملية متاحة للمدير العام فقط'});
     req.adminUser=req.user;next();
   });
+}
+
+// الساعة الحالية بتوقيت الشركة (عدن افتراضياً) لا بتوقيت الخادم: Railway يعمل بتوقيت UTC،
+// فكانت فترة 08:00–16:00 تُطبَّق فعلياً 11:00–19:00 بتوقيت عدن.
+function companyClock(date = new Date()) {
+  const tz = process.env.APP_TIMEZONE || 'Asia/Aden';
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
+    const get = t => Number(parts.find(p => p.type === t)?.value);
+    return { h: get('hour'), m: get('minute') };
+  } catch {
+    return { h: date.getHours(), m: date.getMinutes() };
+  }
 }
 
 // دالة مساعدة لتنسيق الوقت بالعربية
@@ -234,7 +200,6 @@ router.get('/2fa-status', verifyAdmin, async (req, res) => {
     const row2fa = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_enabled'");
     const rowPin = await get("SELECT value FROM settings WHERE `key` = 'admin_2fa_pin'");
     const isEnabled = row2fa ? (row2fa.value === '1' || row2fa.value === 'true') : true;
-    const pin = rowPin && rowPin.value ? rowPin.value : '123456';
     res.json({ success: true, enabled: isEnabled, pinConfigured:Boolean(rowPin?.value) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -272,12 +237,10 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   const secSettings = await getSecuritySettings(user);
 
   // فحص فترة وساعات العمل
-  if (user.username !== 'admin' && (secSettings.jwt_token_expiry === 'custom' || secSettings.work_hours_enabled)) {
+  if (user.role !== 'admin' && (secSettings.jwt_token_expiry === 'custom' || secSettings.work_hours_enabled)) {
     const startTime = secSettings.work_start_time || '08:00';
     const endTime = secSettings.work_end_time || '16:00';
-    const now = new Date();
-    const currentH = now.getHours();
-    const currentM = now.getMinutes();
+    const { h: currentH, m: currentM } = companyClock();
     const currentTimeStr = `${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`;
 
     let isAllowed = false;
@@ -301,9 +264,7 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   if (tokenExpiry === 'custom') {
     const startTime = secSettings.work_start_time || '08:00';
     const endTime = secSettings.work_end_time || '16:00';
-    const now = new Date();
-    const currentH = now.getHours();
-    const currentM = now.getMinutes();
+    const { h: currentH, m: currentM } = companyClock();
     const [endH, endM] = endTime.split(':').map(Number);
 
     let remainingMins = (endH * 60 + endM) - (currentH * 60 + currentM);
@@ -352,7 +313,7 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   const incomingDeviceName = String(deviceName || deviceInfo || 'جهاز النظام').trim();
 
   if (overflowAction === 'lock_device') {
-    const isSuperAdmin = (user.username === 'admin');
+    const isSuperAdmin = (user.role === 'admin');
 
     if (!secSettings.authorized_device_id) {
       if (incomingDeviceId) {
@@ -388,7 +349,8 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
   }
 
   if (activeSessions.length >= maxDevices) {
-    if (overflowAction === 'block_new' && !force) {
+    // «منع الجلسة الجديدة» لا يتجاوزه إلا المدير العام؛ كان أي مستخدم يرسل force=true فيُبطل السياسة
+    if (overflowAction === 'block_new' && !(force && user.role === 'admin')) {
       const policyDesc = isSingleMode ? 'جلسة واحدة صارمة' : `سقف الجلسات المتعددة (${maxDevices} أجهزة)`;
       return res.status(409).json({
         success: false,
@@ -469,7 +431,9 @@ async function completeLoginSession(user, req, res, { force, deviceInfo, deviceI
     WHERE id = ?
   `, [sessionId, JSON.stringify(activeSessions), nowIsoDb, nowIsoDb, String(clientIp), String(deviceStr).substring(0, 250), user.id]);
 
-  let dbStatus = connectionManager ? connectionManager.getStatus() : { isOnline: false, mode: 'offline' };
+  // the login itself just read and wrote the database: report the same status as /api/settings/db-status
+  // (the old connection manager always answered "offline", so the badge flickered offline -> online after login)
+  const dbStatus = { isOnline: true, mode: 'online', activeDb: 'sqlite', statusMessage: 'متصل بخادم النظام وقاعدة البيانات تعمل بشكل طبيعي' };
 
   // نجاح الدخول - تصفير محاولات Rate Limit
   resetLoginAttempts(req);
@@ -944,6 +908,7 @@ router.post('/unlock', async (req, res) => {
 });
 
 router.verifyAdmin = verifyAdmin;
+router.companyClock = companyClock;
 router.getSecuritySettings = getSecuritySettings;
 router.JWT_SECRET = JWT_SECRET;
 

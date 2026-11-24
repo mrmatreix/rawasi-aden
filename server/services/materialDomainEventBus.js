@@ -112,17 +112,6 @@ class MaterialDomainEventBus extends EventEmitter {
   }
 
   /**
-   * جلب سجل أحداث كيان معين مرتبة زمنياً
-   */
-  async getAggregateHistory(aggregateType, aggregateId) {
-    return await query(`
-      SELECT * FROM material_domain_events 
-      WHERE aggregate_type = ? AND aggregate_id = ?
-      ORDER BY id ASC
-    `, [aggregateType, String(aggregateId)]);
-  }
-
-  /**
    * جلب أحدث الأحداث العامة
    */
   async getRecentEvents(limit = 50) {

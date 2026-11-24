@@ -17,7 +17,12 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
   let prId, rfqId, poId, grnId, stmtId, chequeId, billId, guaranteeId;
 
   before(async () => {
-    // 1. عميل ومورد
+    // the minimal fixture chart lacks the role accounts and the warehouses these postings use
+    const fixtures = require('../fixtures/roleAccounts');
+    const db = require('../../server/database/db');
+    await fixtures.ensureRoleAccounts(db);
+    await fixtures.ensureInventoryBasics(db);
+    await fixtures.ensureBankAccount(db);    // 1. عميل ومورد
     const clientRes = await run(`
       INSERT INTO clients (name, company, phone, current_balance, tax_number)
       VALUES (?, 'مجموعة الأفق', '770000001', 0, ?)
@@ -411,7 +416,9 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     assert.ok(configs.configs.some(c => c.type === 'wht_contracting' && Number(c.rate_percentage) === 3.0));
   });
 
-  await t.test('4.2. Process Bill Tax Deduction with compound balanced GL entry', async () => {
+  // Revenue-at-billing policy: tax on an approved (not yet posted) bill only re-computes the bill; the small
+  // WHT entry (Dr WHT receivable / Cr client) is posted with the bill — covered by billing_lifecycle.test.js
+  await t.test('4.2. Process Bill Tax Deduction re-computes the bill and records the withholding', async () => {
     const billCount = await get('SELECT COUNT(*) as cnt FROM bills');
     const bill_no = `IPC-TAX-${testSuffix}`;
 
@@ -429,11 +436,12 @@ test('Enterprise Accounting & Contracting Suite: Procurement, Valuation, Banking
     assert.equal(taxResult.tax_wht_rate, 3.0);
     assert.equal(taxResult.tax_wht_amount, 600000); // 3% من 20 مليون
     assert.equal(taxResult.net_amount, 15400000); // 20M - 2M - 2M - 0.6M = 15.4M
-    assert.ok(taxResult.journal_entry_no.startsWith('JV-TAX-'));
-
-    const jv = await get('SELECT total_debit, total_credit FROM journal_entries WHERE entry_no = ?', [taxResult.journal_entry_no]);
-    assert.equal(Number(jv.total_debit), 20000000);
-    assert.equal(Number(jv.total_credit), 20000000);
+    assert.equal(taxResult.journal_entry_no, null, 'no ledger entry before the bill is posted');
+    assert.equal(taxResult.posted_now, false);
+    const bill = await get('SELECT tax_wht_amount, net_amount FROM bills WHERE id = ?', [billId]);
+    assert.equal(Number(bill.tax_wht_amount), 600000);
+    assert.equal(Number(bill.net_amount), 15400000);
+    assert.ok(taxResult.withholding_no, 'withholding certificate recorded');
   });
 
   await t.test('4.3. Periodic Tax Declaration report aggregates WHT certificates', async () => {

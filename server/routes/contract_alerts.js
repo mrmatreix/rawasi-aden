@@ -49,8 +49,8 @@ router.get(['/alerts/stream', '/stream'], requirePermission('projects:view'), (r
   const eventBus = ContractAlertsService.getEventBus();
   const alertListener = (alertData) => {
     const security=require('../middleware/security');
-    const projects=security.parseScopeArray(req.user.allowed_projects);
-    if(req.user.role!=='admin'&&req.user.username!=='admin'&&!projects.includes('*')&&!projects.map(String).includes(String(alertData.project_id)))return;
+    const projects=security.parseScopeArray(req.user.scope?.allowed_projects ?? req.user.allowed_projects);
+    if(req.user.role!=='admin'&&!projects.includes('*')&&!projects.map(String).includes(String(alertData.project_id)))return;
     res.write(`data: ${JSON.stringify(alertData)}\n\n`);
   };
 

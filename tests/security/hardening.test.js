@@ -91,8 +91,8 @@ test('security boundaries and durable SQLite operations use an isolated syntheti
    const restored=new DatabaseSync(snapshot);try{assert.equal(restored.prepare('PRAGMA integrity_check').get().integrity_check,'ok');assert.equal(restored.prepare('PRAGMA foreign_key_check').all().length,0);assert.equal(restored.prepare('SELECT value FROM security_concurrency WHERE id=3').get().value,'durable');}finally{restored.close();}
    const {safePath}=require('../../server/middleware/fileAccess');assert.throws(()=>safePath(temp,path.join(temp+'-outside','secret'),{existing:false}));assert.throws(()=>safePath(temp,'../secret',{existing:false}));
   });
-  await t.test('MySQL connection failure never creates or switches to SQLite',()=>{
-   const fallback=path.join(temp,'must-not-exist.db');const result=spawnSync(process.execPath,['-e',"const d=require('./server/database/db');d.ready.then(()=>process.exit(2)).catch(()=>d.closeDatabase().then(()=>process.exit(0)))"],{cwd:path.resolve(__dirname,'../..'),env:{...process.env,DB_ENGINE:'mysql',MYSQL_HOST:'127.0.0.1',MYSQL_PORT:'1',RAWASI_DB_PATH:fallback},timeout:15000,encoding:'utf8',windowsHide:true});assert.equal(result.status,0,result.stderr);assert.equal(fs.existsSync(fallback),false);
+  await t.test('DB_ENGINE=mysql is refused at boot and never creates or switches to SQLite',()=>{
+   const fallback=path.join(temp,'must-not-exist.db');const result=spawnSync(process.execPath,['-e',"const d=require('./server/database/db');d.ready.then(()=>process.exit(2)).catch(()=>d.closeDatabase().then(()=>process.exit(0)))"],{cwd:path.resolve(__dirname,'../..'),env:{...process.env,DB_ENGINE:'mysql',MYSQL_HOST:'127.0.0.1',MYSQL_PORT:'1',RAWASI_DB_PATH:fallback},timeout:15000,encoding:'utf8',windowsHide:true});assert.notEqual(result.status,0,'the boot must stop');assert.match(result.stderr,/not supported|غير مدعوم/);assert.equal(fs.existsSync(fallback),false);
   });
   await t.test('full bundle restores database and attachments, boots twice and rejects corrupt archives',async()=>{
    const config=require('../../server/config/environment');

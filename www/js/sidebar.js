@@ -59,6 +59,8 @@ const Sidebar = {
     if (typeof Auth !== 'undefined' && permission && !Auth.hasPermission(permission)) return App.showToast('لا تملك صلاحية الوصول إلى هذه العملية', 'error');
     try {
       if (action === 'connection') { App.showConnectionModal(); return; }
+      // the unified payment wizard is a standalone page (views/payment-wizard.html) using the same session cookie
+      if (action === 'payment-wizard') { window.location.href = '/views/payment-wizard.html'; return; }
       if (tab) { if (await App.navigateDeep(view, tab) === false) return; } else if (await App.navigate(view) === false) return;
       if (action === 'client') Accounting.openNewClientModal();
       if (action === 'supplier') Accounting.openNewSupplierModal();

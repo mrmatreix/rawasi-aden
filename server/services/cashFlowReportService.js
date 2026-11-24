@@ -11,6 +11,7 @@
  */
 
 const { query, get } = require('./reportingLedger');
+const { normalizeAccountType } = require('./chartOfAccountsRules');
 
 class CashFlowReportService {
   /**
@@ -132,9 +133,10 @@ class CashFlowReportService {
         if (!activity) {
           const code = String(line.account_code || '');
           const type = String(line.account_type || '');
-          if (code.startsWith('111') || type === 'أصول ثابتة') {
+          // 12 = الأصول الثابتة (111 هي النقدية نفسها)، حقوق الملكية والالتزامات طويلة الأجل وأوراق الدفع = تمويل
+          if (code.startsWith('12') || type === 'أصول ثابتة') {
             activity = 'investing';
-          } else if (code.startsWith('22') || code.startsWith('212') || type === 'حقوق ملكية' || type === 'قروض') {
+          } else if (normalizeAccountType(type) === 'equity' || (code.startsWith('22') && normalizeAccountType(type) !== 'asset') || code.startsWith('212') || type === 'قروض') {
             activity = 'financing';
           } else {
             activity = 'operating';

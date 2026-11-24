@@ -15,10 +15,9 @@ const dataDir = process.env.RAWASI_DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_
 const persistent = dataDir ? resolve(dataDir) : null;
 const dbPath = resolve(process.env.RAWASI_DB_PATH || (isStaging ? 'server/database/rawasi_aden_staging.db' : persistent ? path.join(persistent, 'rawasi_aden.db') : legacy.dbPath || 'server/database/rawasi_aden.db'));
 const engine = (process.env.DB_ENGINE || (isProd ? '' : legacy.dbEngine) || 'sqlite').toLowerCase();
-if (!['sqlite', 'mysql'].includes(engine)) throw new Error('DB_ENGINE must be sqlite or mysql');
-const oldMysql = legacy.mysql || {};
-const mysql = { ...oldMysql, host: process.env.MYSQL_HOST || oldMysql.host || 'localhost', port: Number(process.env.MYSQL_PORT || oldMysql.port || 3306), user: process.env.MYSQL_USER || oldMysql.user || 'root', password: process.env.MYSQL_PASSWORD ?? oldMysql.password ?? '', database: process.env.MYSQL_DATABASE || oldMysql.database || 'rawasi_aden', connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT || 10) };
-if (!/^[a-zA-Z0-9_]+$/.test(mysql.database)) throw new Error('Invalid MySQL database name');
+// SQLite is the only engine (MySQL support removed 2026-11-23: it ran neither the numbered migrations nor the
+// ledger rules, and no test covered it). Fail loudly instead of starting on an engine the books are not built for.
+if (engine !== 'sqlite') throw new Error(`DB_ENGINE "${engine}" is not supported: the system runs on SQLite only. Remove DB_ENGINE or set it to sqlite.`);
 const storage = {
   data: persistent,
   uploads: resolve(process.env.RAWASI_UPLOAD_DIR || (persistent ? path.join(persistent, 'uploads') : 'uploads')),
@@ -62,4 +61,4 @@ function validateProduction() {
   }
 }
 let version = require('../../package.json').version;
-module.exports = { env, isProd, isStaging, isDev: !isProd && !isStaging, rootDir, port: Number(process.env.PORT || (isStaging ? 3001 : 3000)), dbPath, database: { dbEngine: engine, dbPath, mysql }, storage, secret, contained, validateProduction, version, appName: 'نظام رواسي عدن للهندسة والمقاولات', allowedOrigins: (process.env.CORS_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean), schedulersEnabled: process.env.ENABLE_SCHEDULERS !== 'false', logging: {level:isProd?'warn':'info'} };
+module.exports = { env, isProd, isStaging, isDev: !isProd && !isStaging, rootDir, port: Number(process.env.PORT || (isStaging ? 3001 : 3000)), dbPath, database: { dbEngine: engine, dbPath }, storage, secret, contained, validateProduction, version, appName: 'نظام رواسي عدن للهندسة والمقاولات', allowedOrigins: (process.env.CORS_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean), schedulersEnabled: process.env.ENABLE_SCHEDULERS !== 'false', logging: {level:isProd?'warn':'info'} };

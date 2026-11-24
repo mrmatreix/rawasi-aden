@@ -3,7 +3,122 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { query, get, run } = require('../database/db');
 const { verifyAdmin, getSecuritySettings } = require('./auth');
-const { requirePermission } = require('../middleware/security');
+const { requirePermission, revokeAllStaffSessions, hasUserPermission } = require('../middleware/security');
+const scopeService = require('../services/scopeService');
+
+// الصلاحيات المقبولة = مفاتيح الكتالوج الموحّد فقط (و'*' للمدير العام)؛ أي مفتاح آخر يُسقط ويُبلَّغ عنه
+const catalog = require('../../js/system-catalog');
+const KNOWN_PERMISSIONS = new Set(catalog.permissionKeys);
+function normalizePermissions(value) {
+  let list = [];
+  if (Array.isArray(value)) list = value;
+  else if (typeof value === 'string' && value.trim()) {
+    try { const parsed = JSON.parse(value); list = Array.isArray(parsed) ? parsed : value.split(','); } catch { list = value.split(','); }
+  }
+  // الصيغ القديمة تُحوَّل لمفاتيح المصفوفة المكافئة (لا تُسقط صلاحية فعلية)، وما لا مقابل له يُسقط
+  const expanded = catalog.expandLegacy(list);
+  const dropped = list.map(p => String(p).trim()).filter(p => p && p !== '*' && p !== 'all' && !KNOWN_PERMISSIONS.has(p) && !catalog.expandLegacy([p]).length);
+  return { list: expanded, dropped };
+}
+
+/** لا يمنح أحد غير المدير العام دور المدير العام أو '*' أو صلاحية لا يملكها هو، ولا يعدّل حساب مدير عام */
+function escalationError(granter, { role, permissions, target }) {
+  if (granter.role === 'admin') return null;
+  if (target && (target.role === 'admin' || target.username === 'admin')) return '⛔ تعديل حساب المدير العام للمدير العام فقط.';
+  if (role === 'admin') return '⛔ منح دور المدير العام للمدير العام فقط.';
+  const effective = permissions && permissions.length ? permissions : (catalog.roles[role]?.permissions || []);
+  if (effective.includes('*')) return '⛔ منح كل الصلاحيات (*) للمدير العام فقط.';
+  const missing = effective.filter(p => !hasUserPermission(granter, p));
+  return missing.length ? `⛔ لا يمكنك منح صلاحيات لا تملكها: ${missing.slice(0, 8).join('، ')}${missing.length > 8 ? '…' : ''}` : null;
+}
+
+// أسماء الفرع والقسم من جداولهما (للحقلين النصيين branch/department)، مع رفض رقم غير موجود
+async function orgNames(branchId, departmentId) {
+  const out = {};
+  if (branchId) {
+    const b = await get('SELECT name FROM branches WHERE id = ?', [branchId]);
+    if (!b) return { error: 'الفرع المحدد غير موجود.' };
+    out.branch = b.name;
+  }
+  if (departmentId) {
+    const d = await get('SELECT name FROM departments WHERE id = ?', [departmentId]);
+    if (!d) return { error: 'القسم المحدد غير موجود.' };
+    out.department = d.name;
+  }
+  return out;
+}
+
+// يحفظ نطاق الوصول ويسجّل التغيير في التدقيق (قبل/بعد)
+async function saveScopeAudited(req, userId, plan, before) {
+  await scopeService.savePlan(userId, plan, req.user?.id);
+  const after = await scopeService.describe(userId);
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    await require('../services/auditService').logAudit(req, {
+      action: 'USER_SCOPE_CHANGE', entity_type: 'user', entity_id: userId,
+      old_values: before, new_values: after
+    });
+  }
+  return after;
+}
+
+// أي تعديل على حساب مدير عام (حالة، حذف، فصل، فك قفل، نطاق، أمان...) للمدير العام فقط
+router.param('id', async (req, res, next, id) => {
+  try {
+    if (req.user?.role === 'admin' || req.method === 'GET') return next();
+    const target = await get('SELECT role, username FROM users WHERE id = ?', [id]);
+    if (target && (target.role === 'admin' || target.username === 'admin')) {
+      return res.status(403).json({ success: false, message: '⛔ تعديل حساب المدير العام للمدير العام فقط.' });
+    }
+    next();
+  } catch (err) { next(err); }
+});
+
+// نطاق وصول مستخدم: الخطة المحفوظة + عدد المشاريع الفعلية
+router.get('/:id/scope', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const scope = await scopeService.describe(Number.parseInt(req.params.id, 10));
+    if (!scope) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    res.json({ success: true, data: scope });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في جلب نطاق المستخدم' });
+  }
+});
+
+// تعديل نطاق الوصول وحده: { mode: 'all' | 'limited', branches, departments, projects, general, allow_empty }
+router.put('/:id/scope', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const userId = Number.parseInt(req.params.id, 10);
+    const before = await scopeService.describe(userId);
+    if (!before) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    const plan = scopeService.planFromBody({ scope: req.body || {} });
+    if (!plan || plan.error) return res.status(400).json({ success: false, message: plan?.error || 'نطاق غير صالح' });
+    const check = await scopeService.validatePlan(plan, req.user);
+    if (check.error) return res.status(check.status).json({ success: false, emptyScope: check.emptyScope, message: check.error });
+    const after = await saveScopeAudited(req, userId, plan, before);
+    res.json({ success: true, message: 'تم حفظ نطاق الوصول.', data: after });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في حفظ نطاق المستخدم' });
+  }
+});
+
+// معاينة حية: كم مشروعاً سيصل إليه المستخدم بهذه الخطة، وعبر أي منح
+router.post('/scope-preview', requirePermission('settings:users'), async (req, res) => {
+  try {
+    const plan = scopeService.planFromBody({ scope: req.body || {} });
+    if (!plan || plan.error) return res.status(400).json({ success: false, message: plan?.error || 'نطاق غير صالح' });
+    const resolved = await scopeService.resolvePlan(plan);
+    if (resolved.all) return res.json({ success: true, data: { all: true, general: true, project_count: null, projects: [] } });
+    const ids = resolved.projectIds;
+    const rows = ids.length ? await query(`SELECT id, name, branch_id, department_id FROM projects WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY name`, ids) : [];
+    const projects = rows.map(p => ({
+      id: p.id, name: p.name,
+      via: plan.projects.includes(Number(p.id)) ? 'project' : plan.branches.includes(Number(p.branch_id)) ? 'branch' : 'department'
+    }));
+    res.json({ success: true, data: { all: false, general: resolved.general, project_count: projects.length, projects } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'خطأ في معاينة النطاق' });
+  }
+});
 
 // جلب بيانات الفروع والأقسام والمشاريع لنطاق الصلاحيات
 router.get('/scopes-meta', requirePermission('settings:users'), async (req, res) => {
@@ -99,6 +214,9 @@ router.get('/', requirePermission('settings:users'), async (req, res) => {
       };
     });
 
+    // ملخص نطاق الوصول لكل مستخدم (للعمود «النطاق» في الجدول)
+    for (const u of parsedUsers) u.scope = await scopeService.describe(u.id);
+
     const roles = await query('SELECT * FROM roles ORDER BY id ASC');
     res.json({ success: true, data: parsedUsers, roles });
   } catch (err) {
@@ -139,7 +257,10 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       if (roleObj) roleIdVal = roleObj.id;
     }
 
-    const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions || '');
+    const permsNorm = normalizePermissions(permissions);
+    const escalation = escalationError(req.user, { role: roleName, permissions: permsNorm.list });
+    if (escalation) return res.status(403).json({ success: false, message: escalation });
+    const permsString = permissions === undefined || permissions === null || permissions === '' ? '' : JSON.stringify(permsNorm.list);
     const secString = security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null;
 
     const allowedProjectsStr = Array.isArray(allowed_projects) 
@@ -158,6 +279,19 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'يتطلب التحقق بخطوتين رمز PIN خاصاً من 6 أرقام.' });
     }
 
+    // نطاق الوصول: بلا scope ولا allowed_projects = «كل المؤسسة» كما كان سابقاً، ويخضع لقاعدة عدم منح أوسع من نطاق المانح
+    // الفرع الأساسي لمستخدم جديد: المدير العام يختار أي فرع؛ غيره يُنشئ في فرعه هو فقط
+    if (branch_id && req.user.role !== 'admin' && Number(branch_id) !== Number(req.user.branch_id || 0)) {
+      return res.status(403).json({ success: false, message: '⛔ تعيين الفرع الأساسي لفرع آخر للمدير العام فقط.' });
+    }
+    const orgCreate = await orgNames(branch_id, department_id);
+    if (orgCreate.error) return res.status(400).json({ success: false, message: orgCreate.error });
+
+    const scopePlan = scopeService.planFromBody(req.body) || { mode: 'all' };
+    if (scopePlan.error) return res.status(400).json({ success: false, message: scopePlan.error });
+    const scopeCheck = await scopeService.validatePlan(scopePlan, req.user);
+    if (scopeCheck.error) return res.status(scopeCheck.status).json({ success: false, emptyScope: scopeCheck.emptyScope, message: scopeCheck.error });
+
     const result = await run(`
       INSERT INTO users (
         username, password_hash, full_name, role_id, role, email, phone, status, 
@@ -168,7 +302,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
     `, [
       cleanUsername, password_hash, full_name.trim(), roleIdVal || null, roleName, email || '', phone || '', status,
       permsString, secString, cleanPin, tfaEnabled,
-      branch_id || 1, branch || 'المركز الرئيسي', department_id || 1, department || 'الإدارة العامة',
+      branch_id || 1, orgCreate.branch || branch || 'المركز الرئيسي', department_id || 1, orgCreate.department || department || 'الإدارة العامة',
       allowedProjectsStr, allowedBranchesStr, allowedDepartmentsStr
     ]);
 
@@ -180,6 +314,7 @@ router.post('/', requirePermission('settings:users'), async (req, res) => {
     }
 
     const newId = result.insertId || result.lastInsertRowid;
+    await saveScopeAudited(req, Number(newId), scopePlan, null);
     const insertedUser = await get(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
              u.branch_id, u.branch, u.department_id, u.department, u.allowed_projects, u.allowed_branches, u.allowed_departments,
@@ -241,7 +376,13 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
       if (roleObj) roleName = roleObj.name;
     }
 
-    const permsString = Array.isArray(permissions) ? JSON.stringify(permissions) : (permissions !== undefined ? permissions : user.permissions);
+    const permsNorm = permissions !== undefined ? normalizePermissions(permissions) : null;
+    const roleChanged = roleName !== user.role;
+    if (permsNorm || roleChanged || req.user.role !== 'admin') {
+      const escalation = escalationError(req.user, { role: roleName, permissions: permsNorm ? permsNorm.list : normalizePermissions(user.permissions).list, target: user });
+      if (escalation) return res.status(403).json({ success: false, message: escalation });
+    }
+    const permsString = permsNorm ? JSON.stringify(permsNorm.list) : user.permissions;
 
     const secString = security_settings !== undefined
       ? (security_settings ? (typeof security_settings === 'string' ? security_settings : JSON.stringify(security_settings)) : null)
@@ -257,10 +398,16 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
       ? (Array.isArray(allowed_departments) ? JSON.stringify(allowed_departments) : allowed_departments)
       : user.allowed_departments;
 
+    // الفرع الأساسي يغيّره المدير العام فقط؛ والاسم النصي يتبع الفرع/القسم المختار
+    if (branch_id !== undefined && req.user.role !== 'admin' && Number(branch_id || 0) !== Number(user.branch_id || 0)) {
+      return res.status(403).json({ success: false, message: '⛔ تغيير الفرع الأساسي للمستخدم للمدير العام فقط.' });
+    }
+    const org = await orgNames(branch_id, department_id);
+    if (org.error) return res.status(400).json({ success: false, message: org.error });
     const branchIdVal = branch_id !== undefined ? branch_id : (user.branch_id || 1);
-    const branchVal = branch !== undefined ? branch : (user.branch || 'المركز الرئيسي');
+    const branchVal = branch_id !== undefined && org.branch ? org.branch : (branch !== undefined ? branch : (user.branch || 'المركز الرئيسي'));
     const deptIdVal = department_id !== undefined ? department_id : (user.department_id || 1);
-    const deptVal = department !== undefined ? department : (user.department || 'الإدارة العامة');
+    const deptVal = department_id !== undefined && org.department ? org.department : (department !== undefined ? department : (user.department || 'الإدارة العامة'));
 
     // A blank PIN on edit means "keep the existing PIN".  It must never be
     // silently converted to a public default.
@@ -276,6 +423,15 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'لا يمكن تفعيل التحقق بخطوتين قبل تعيين رمز PIN خاص من 6 أرقام.' });
     }
 
+    // نطاق الوصول (scope الجديد أو allowed_projects القديم): يُتحقق منه قبل أي حفظ
+    const scopePlan = scopeService.planFromBody(req.body);
+    if (scopePlan?.error) return res.status(400).json({ success: false, message: scopePlan.error });
+    const scopeBefore = scopePlan ? await scopeService.describe(userId) : null;
+    if (scopePlan) {
+      const check = await scopeService.validatePlan(scopePlan, req.user);
+      if (check.error) return res.status(check.status).json({ success: false, emptyScope: check.emptyScope, message: check.error });
+    }
+
     if (password && password.trim().length > 0) {
       const salt = bcrypt.genSaltSync(10);
       const password_hash = bcrypt.hashSync(password, salt);
@@ -285,7 +441,7 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
             permissions = ?, security_settings = ?, two_factor_pin = ?, two_factor_enabled = ?,
             branch_id = ?, branch = ?, department_id = ?, department = ?, 
             allowed_projects = ?, allowed_branches = ?, allowed_departments = ?,
-            failed_login_count = 0, login_locked_until = NULL
+            failed_login_count = 0, login_locked_until = NULL, password_changed_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [
         username ? username.trim() : user.username,
@@ -309,6 +465,8 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
         allowedDepartmentsStr,
         userId
       ]);
+      // تغيير كلمة المرور ينهي كل جلسات الحساب المفتوحة (ويُبقي جلسة المدير الحالية إن غيّر كلمته بنفسه)
+      await revokeAllStaffSessions(userId, { keepSessionId: Number(req.user.id) === Number(userId) ? (req.user.sessionId || null) : null });
     } else {
       await run(`
         UPDATE users
@@ -346,6 +504,8 @@ router.put('/:id', requirePermission('settings:users'), async (req, res) => {
         await run("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES ('admin_2fa_enabled', ?)", [String(tfaEnabled)]);
       } catch (e) {}
     }
+
+    if (scopePlan) await saveScopeAudited(req, userId, scopePlan, scopeBefore);
 
     const updatedUser = await get(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.permissions, u.security_settings, u.two_factor_pin, u.two_factor_enabled, u.created_at,
@@ -464,7 +624,8 @@ router.post('/:id/disconnect', requirePermission('settings:users'), async (req, 
       return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
-    await run("UPDATE users SET is_logged_in = 0, session_token = NULL, last_heartbeat = NULL WHERE id = ?", [userId]);
+    // تفريغ active_sessions أيضاً، وإلا يظل requireAuth يقبل الجلسة المسجّلة فيها
+    await revokeAllStaffSessions(userId);
     res.json({
       success: true,
       message: `تم إنهاء جلسة المستخدم (${user.full_name || user.username}) وفصله عن النظام بنجاح.`

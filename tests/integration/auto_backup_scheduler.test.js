@@ -59,7 +59,8 @@ test('Automated Backup Scheduler Test Suite', async (t) => {
     
     const result = await scheduler.executeBackup('test_trigger', 'admin');
     assert.strictEqual(result.success, true, 'Backup execution should report success');
-    assert.ok(result.fileName.startsWith('backup_auto_'), 'Filename should have backup_auto_ prefix');
+    // the scheduler delegates to the unified engine: a full bundle (database + project files), restore-tested
+    assert.match(result.fileName, /^rawasi_bundle_manual_.+\.(zip|rawasi\.enc)$/, 'unified full-bundle file name');
     assert.ok(fs.existsSync(result.filePath), 'File should exist on disk at configured path');
     assert.ok(result.fileSize > 0, 'File size should be greater than 0');
 

@@ -11,21 +11,15 @@
  */
 
 const { query, get, run, transaction } = require('../database/db');
+const PostingService = require('./ledger/postingService');
+const SystemAccounts = require('./systemAccountService');
+const { projectCostCenter } = require('./ledger/costCenters');
+const Numbering = require('./numberingService');
 const { logAudit } = require('./auditService');
 const { assertPeriodOpen, resolveValidUserId } = require('./financialControlService');
 
-const TAX_GL_ACCOUNTS = {
-  BANK_GL_ACCOUNT: 3,                 // 111 - الصندوق والبنك
-  CLIENT_RECEIVABLES: 4,             // 112 - العملاء (الذمم المدينة)
-  SUPPLIER_PAYABLES: 7,              // 211 - الموردون (الذمم الدائنة)
-  RETENTION_RECEIVABLE: 16,          // 1125 - محتجزات ضمان لدى العملاء
-  CUSTOMER_ADVANCES: 18,             // 2105 - دفعات مقدمة من العملاء
-  CONTRACT_REVENUE: 20,              // 4101 - إيرادات عقود المقاولات المعترف بها
-  CASH_MARGIN_GUARANTEES: 22,        // 1115 - غطاء خطابات ضمان لدى البنوك (أصل مقيد)
-  WHT_RECEIVABLE_ASSET: 23,          // 1130 - ضرائب مخصومة من المنبع للشركة (رصيد ضريبي مدين)
-  WHT_PAYABLE_LIABILITY: 24,         // 2130 - ضرائب مستحقة الدفع - مصلحة الضرائب (التزام دائن)
-  GUARANTEE_COMMISSION_EXPENSE: 25   // 5205 - رسوم وعمولات خطابات الضمان البنكية
-};
+// أرقام الحسابات الثابتة أزيلت: كل القيود تستخدم أدوار حسابات النظام (المرحلة 4.6)
+const TAX_GL_ACCOUNTS = Object.freeze({});
 
 const LEGAL_DISCLAIMER = 'تنبيه مهني وقانوني: النسب والآليات المالية المضمنة في هذا النظام هي للاسترشاد ومبنية على التطبيق العملي الشائع لقانون ضرائب الدخل اليمني رقم 17 لسنة 2010 وتعديلاته، ويجب مراجعة وتحديث النسب دورياً بالتنسيق مع المحاسب القانوني المعتمد للشركة ومصلحة الضرائب.';
 
@@ -49,122 +43,13 @@ const TaxAndGuaranteeService = {
    * يولد القيد المحاسبي المتزن شاملاً كافة الاستقطاعات التعاقدية والضريبية
    */
   async processBillTaxDeduction(billId, taxRate = 3.0, user = null, req = null) {
-    const bill = await get('SELECT b.*, p.name as project_name FROM bills b JOIN projects p ON b.project_id = p.id WHERE b.id = ?', [billId]);
-    if (!bill) throw new Error('المستخلص غير موجود في النظام');
-
-    const grossAmount = Number(bill.gross_amount) || Number(bill.amount) || 0;
-    const advanceDeduction = Number(bill.advance_deduction) || 0;
-    const retentionDeduction = Number(bill.retention_deduction) || (grossAmount * 0.10);
-    const parsedTaxRate = Number(taxRate) || 3.0; // 3% ضريبة أرباح تجارية ومقاولات حسب القانون اليمني
-
-    // احتساب مبلغ ضريبة الخصم من المنبع من إجمالي الأعمال المنجزة
-    const taxAmount = (grossAmount * parsedTaxRate) / 100;
-
-    // صافي المستحق نقداً بعد كافة الاستقطاعات
-    const netPayable = grossAmount - advanceDeduction - retentionDeduction - taxAmount;
-
-    await assertPeriodOpen(bill.date);
-    const userId = user ? await resolveValidUserId(user?.id) : null;
-
-    return await transaction(async (tx) => {
-      // 1. تحديث المستخلص
-      await tx.run(`
-        UPDATE bills
-        SET tax_wht_rate = ?, tax_wht_amount = ?, net_amount = ?, deduction = ?
-        WHERE id = ?
-      `, [parsedTaxRate, taxAmount, netPayable, (advanceDeduction + retentionDeduction + taxAmount), billId]);
-
-      // 2. توليد قيد اليومية المتزن الشامل لكافة أطراف المستخلص
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-TAX-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, reference_id,
-          total_debit, total_credit, status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'مستخلص ضريبي', ?, ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, bill.date, `قيد إثبات مستخلص (${bill.bill_no}) لمشروع [${bill.project_name}] شاملاً ضريبة الخصم ${parsedTaxRate}%`,
-        billId, grossAmount, grossAmount, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      // سطر مدين 1: ذمة العميل بالصافي القابل للتحصيل
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, ?, 0, ?)
-      `, [entryId, TAX_GL_ACCOUNTS.CLIENT_RECEIVABLES, bill.project_id, netPayable, `مدين: صافي مستحق من العميل لمستخلص ${bill.bill_no}`]);
-
-      // سطر مدين 2: رصيد ضريبة الخصم من المنبع المسددة مقدماً (أصل ضريبي مدين للشركة)
-      if (taxAmount > 0) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?)
-        `, [entryId, TAX_GL_ACCOUNTS.WHT_RECEIVABLE_ASSET, bill.project_id, taxAmount, `مدين: ضريبة مخصومة من المنبع (${parsedTaxRate}%) - قانون ضرائب الدخل اليمني`]);
-      }
-
-      // سطر مدين 3: محتجزات ضمان لدى العميل (أصل تعاقدي)
-      if (retentionDeduction > 0) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?)
-        `, [entryId, TAX_GL_ACCOUNTS.RETENTION_RECEIVABLE, bill.project_id, retentionDeduction, `مدين: محتجز ضمان حسن تنفيذ لمستخلص ${bill.bill_no}`]);
-      }
-
-      // سطر مدين 4: استهلاك الدفعة المقدمة (تخفيض التزام تعاقدي)
-      if (advanceDeduction > 0) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?)
-        `, [entryId, TAX_GL_ACCOUNTS.CUSTOMER_ADVANCES, bill.project_id, advanceDeduction, `مدين: استهلاك دفعة مقدمة تعاقدية لمستخلص ${bill.bill_no}`]);
-      }
-
-      // سطر دائن وحيد: إجمالي إيرادات أعمال المشروع المعتمدة
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?, ?)
-      `, [entryId, TAX_GL_ACCOUNTS.CONTRACT_REVENUE, bill.project_id, grossAmount, `دائن: إيراد عقود المقاولات المعتمد لمستخلص ${bill.bill_no}`]);
-
-      // 3. ربط القيد بالمستخلص
-      await tx.run('UPDATE bills SET journal_entry_id = ? WHERE id = ?', [entryId, billId]);
-
-      // 4. تسجيل شهادة الخصم في جدول الضرائب (tax_withholdings)
-      const whtCount = await tx.get('SELECT COUNT(*) as cnt FROM tax_withholdings');
-      const withholding_no = `WHT-REC-${new Date().getFullYear()}-${String(((whtCount ? whtCount.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-      const taxPeriod = bill.date.substring(0, 7); // YYYY-MM
-
-      await tx.run(`
-        INSERT INTO tax_withholdings (
-          withholding_no, type, project_id, client_id, source_doc_type, source_doc_id,
-          base_amount, tax_rate, tax_amount, tax_period, date, journal_entry_id, status
-        ) VALUES (?, 'deducted_from_client', ?, ?, 'bill', ?, ?, ?, ?, ?, ?, ?, 'pending')
-      `, [
-        withholding_no, bill.project_id, bill.client_id, billId,
-        grossAmount, parsedTaxRate, taxAmount, taxPeriod, bill.date, entryId
-      ]);
-
-      if (req) {
-        await logAudit(req, {
-          action: 'PROCESS_BILL_TAX',
-          entity_type: 'bill_tax',
-          entity_id: bill.bill_no,
-          details: { billId, grossAmount, taxAmount, netPayable, entry_no, withholding_no }
-        });
-      }
-
-      return {
-        bill_no: bill.bill_no,
-        gross_amount: grossAmount,
-        advance_deduction: advanceDeduction,
-        retention_deduction: retentionDeduction,
-        tax_wht_rate: parsedTaxRate,
-        tax_wht_amount: taxAmount,
-        net_amount: netPayable,
-        journal_entry_no: entry_no,
-        withholding_no
-      };
-    });
+    // سياسة الإيراد عند اعتماد المستخلص: الضريبة قيد صغير مستقل (مدين ضريبة مخصومة / دائن ذمة العميل)
+    // ولا تُنشئ قيد مستخلص ثانياً ولا إيراداً مكرراً ولا محتجزاً مفترضاً.
+    const result = await require('./billing/billingService').applyWithholdingTax(billId, taxRate, user);
+    if (req) {
+      await logAudit(req, { action: 'PROCESS_BILL_TAX', entity_type: 'bill_tax', entity_id: result.bill_no, details: { billId, ...result } });
+    }
+    return result;
   },
 
   /**
@@ -248,40 +133,19 @@ const TaxAndGuaranteeService = {
       //  حـ/ غطاء خطابات ضمان (أصل متداول مقيد 1115) بمبلغ الغطاء
       //  حـ/ رسوم وعمولات خطابات الضمان (مصروف 5205) بمبلغ العمولة
       // إلى حـ/ البنك الجاري (3) بإجمالي المسحوب
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-LG-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'خطاب ضمان بنكي', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, issue_date, `إثبات غطاء خطاب ضمان بنكي (${guarantee_no}) لدى ${issuing_bank}`,
-        totalBankDeduction, totalBankDeduction, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      // سطر مدين 1: غطاء خطابات الضمان (نقد مقيد)
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, ?, 0, ?)
-      `, [entryId, TAX_GL_ACCOUNTS.CASH_MARGIN_GUARANTEES, project_id, cashMarginAmount, `مدين: غطاء نقدي بنسبة ${marginPct}% لخطاب الضمان ${guarantee_no}`]);
-
-      // سطر مدين 2: عمولة إصدار الضمان البنكية
-      if (parsedCommission > 0) {
-        await tx.run(`
-          INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-          VALUES (?, ?, ?, ?, 0, ?)
-        `, [entryId, TAX_GL_ACCOUNTS.GUARANTEE_COMMISSION_EXPENSE, project_id, parsedCommission, `مدين: عمولة ومصاريف إصدار خطاب الضمان ${guarantee_no}`]);
-      }
-
-      // سطر دائن: خصم من رصيد البنك الجاري
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, 0, ?, ?)
-      `, [entryId, TAX_GL_ACCOUNTS.BANK_GL_ACCOUNT, totalBankDeduction, `دائن: خصم الغطاء والعمولة لخطاب الضمان ${guarantee_no}`]);
+      // مدين غطاء خطابات الضمان (نقد مقيد) + عمولة الإصدار / دائن حساب البنك في الدليل
+      const bankRow = bank_account_id ? await tx.get('SELECT account_id FROM bank_accounts WHERE id = ?', [bank_account_id]) : null;
+      const bankGl = bankRow?.account_id || (await SystemAccounts.resolve('BANK_DEFAULT', tx)).id;
+      const lgCenter = await projectCostCenter(tx, project_id);
+      const lines = [{ role: 'GUARANTEE_CASH_MARGIN', debit: cashMarginAmount, projectId: project_id, notes: `مدين: غطاء نقدي بنسبة ${marginPct}% لخطاب الضمان ${guarantee_no}` }];
+      if (parsedCommission > 0) lines.push({ role: 'GUARANTEE_COMMISSION_EXPENSE', debit: parsedCommission, projectId: project_id, costCenterId: lgCenter, notes: `مدين: عمولة ومصاريف إصدار خطاب الضمان ${guarantee_no}` });
+      lines.push({ accountId: bankGl, credit: totalBankDeduction, notes: `دائن: خصم الغطاء والعمولة لخطاب الضمان ${guarantee_no}` });
+      const posted = await PostingService.post(tx, {
+        date: issue_date, series: 'JV-LG', user, source: { type: 'خطاب ضمان بنكي', no: guarantee_no },
+        description: `إثبات غطاء خطاب ضمان بنكي (${guarantee_no}) لدى ${issuing_bank}`, lines
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
 
       // 2. تحديث رصيد الحساب البنكي
       await tx.run('UPDATE bank_accounts SET current_balance = current_balance - ? WHERE id = ?', [totalBankDeduction, bank_account_id]);
@@ -338,32 +202,19 @@ const TaxAndGuaranteeService = {
     return await transaction(async (tx) => {
       // 1. توليد قيد استرداد الغطاء النقدي:
       // من حـ/ البنك الجاري (3) إلى حـ/ غطاء خطابات الضمان (1115)
-      const countRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      const entry_no = `JV-REL-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
-
-      const jvRes = await tx.run(`
-        INSERT INTO journal_entries (
-          entry_no, date, description, reference_type, total_debit, total_credit,
-          status, created_by, created_by_name, posted_by, posted_by_name, posted_at
-        ) VALUES (?, ?, ?, 'استرداد غطاء ضمان', ?, ?, 'posted', ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        entry_no, release_date, `استرداد الغطاء النقدي لخطاب الضمان المفرج عنه (${lg.guarantee_no})`,
-        marginToRefund, marginToRefund, userId, user?.username || 'المحاسب', userId, user?.username || 'المحاسب'
-      ]);
-
-      const entryId = jvRes.lastInsertRowid || jvRes.insertId;
-
-      // سطر مدين: إعادة إيداع الغطاء في البنك الجاري
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?)
-      `, [entryId, TAX_GL_ACCOUNTS.BANK_GL_ACCOUNT, marginToRefund, `مدين: استرداد غطاء خطاب الضمان ${lg.guarantee_no}`]);
-
-      // سطر دائن: إقفال حساب غطاء خطابات الضمان
-      await tx.run(`
-        INSERT INTO journal_entry_lines (entry_id, account_id, project_id, debit, credit, notes)
-        VALUES (?, ?, ?, 0, ?, ?)
-      `, [entryId, TAX_GL_ACCOUNTS.CASH_MARGIN_GUARANTEES, lg.project_id, marginToRefund, `دائن: إقفال الغطاء المسترد لخطاب الضمان ${lg.guarantee_no}`]);
+      // مدين حساب البنك / دائن غطاء خطابات الضمان
+      const bankRow = lg.bank_account_id ? await tx.get('SELECT account_id FROM bank_accounts WHERE id = ?', [lg.bank_account_id]) : null;
+      const bankGl = bankRow?.account_id || (await SystemAccounts.resolve('BANK_DEFAULT', tx)).id;
+      const posted = await PostingService.post(tx, {
+        date: release_date, series: 'JV-REL', user, source: { type: 'استرداد غطاء ضمان', id: Number(guaranteeId), no: lg.guarantee_no },
+        description: `استرداد الغطاء النقدي لخطاب الضمان المفرج عنه (${lg.guarantee_no})`,
+        lines: [
+          { accountId: bankGl, debit: marginToRefund, notes: `مدين: استرداد غطاء خطاب الضمان ${lg.guarantee_no}` },
+          { role: 'GUARANTEE_CASH_MARGIN', credit: marginToRefund, projectId: lg.project_id, notes: `دائن: إقفال الغطاء المسترد لخطاب الضمان ${lg.guarantee_no}` }
+        ]
+      });
+      const entry_no = posted.entry_no;
+      const entryId = posted.id;
 
       // 2. إعادة الغطاء لرصيد الحساب البنكي
       if (lg.bank_account_id) {

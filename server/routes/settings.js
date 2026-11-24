@@ -2,13 +2,11 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
-const mysql = require('mysql2/promise');
 const {
   query, run, get, backupDatabase, restoreDatabase, listBackups,
-  createLogoutBackup, listLogoutBackups, connectionManager,
-  getActiveEngine, getMysqlConfig, dbPath, initializeDatabase
+  createLogoutBackup, listLogoutBackups,
+  getActiveEngine, dbPath, initializeDatabase
 } = require('../database/db');
-const { runMigration } = require('../database/migrate_to_mysql');
 const { requirePermission } = require('../middleware/security');
 const unifiedBackupEngine = require('../services/unifiedBackupEngine');
 
@@ -17,7 +15,7 @@ const runtime=require('../config/environment');
 const secretSetting=key=>/(password|passphrase|credential|secret|token|api.?key|private.?key|encryption.?key|online_db_key)/i.test(key);
 const publicCloudConfig=config=>({...config,authToken:'',authTokenConfigured:Boolean(config.authToken)});
 router.use((req,res,next)=>{
-  if((runtime.isProd||runtime.isStaging)&&req.method!=='GET'&&['/save-mysql-config','/run-migration','/restore-local','/restore-upload','/backup/restore-production','/cloud-backup/restore'].includes(req.path))return res.status(409).json({success:false,message:'هذه العملية تتطلب صيانة منفصلة واعتماداً خارج واجهة الإنتاج'});
+  if((runtime.isProd||runtime.isStaging)&&req.method!=='GET'&&['/restore-local','/restore-upload','/backup/restore-production','/cloud-backup/restore'].includes(req.path))return res.status(409).json({success:false,message:'هذه العملية تتطلب صيانة منفصلة واعتماداً خارج واجهة الإنتاج'});
   next();
 });
 // جلب إعدادات الشركة
@@ -63,24 +61,13 @@ router.post('/', requirePermission('settings:company'), async (req, res) => {
 // Saved print-template profiles. They complement the global printing settings
 // with reusable official/internal/customer layouts and an auditable history.
 async function ensurePrintTemplateTables() {
-  if (getActiveEngine() === 'mysql') {
-    await run(`CREATE TABLE IF NOT EXISTS print_template_profiles (
-      id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE,
-      config TEXT NOT NULL, created_by VARCHAR(100), created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )`);
-    await run(`CREATE TABLE IF NOT EXISTS print_template_audit (
-      id INT AUTO_INCREMENT PRIMARY KEY, profile_name VARCHAR(100), action VARCHAR(30), actor VARCHAR(100), created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-  } else {
-    await run(`CREATE TABLE IF NOT EXISTS print_template_profiles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, config TEXT NOT NULL,
-      created_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    await run(`CREATE TABLE IF NOT EXISTS print_template_audit (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, profile_name TEXT, action TEXT, actor TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-  }
+  await run(`CREATE TABLE IF NOT EXISTS print_template_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, config TEXT NOT NULL,
+    created_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await run(`CREATE TABLE IF NOT EXISTS print_template_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, profile_name TEXT, action TEXT, actor TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 }
 
 router.get('/print-profiles', requirePermission('settings:company'), async (req, res) => {
@@ -462,135 +449,6 @@ router.post('/restore-upload', requirePermission('settings:backup'), express.raw
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message, error: err.message });
-  }
-});
-
-// =================== مسارات فحص وضبط MySQL ===================
-
-// جلب حالة إعدادات ومحرك MySQL
-router.get('/mysql-status', requirePermission('settings:view,settings:company'), async (req, res) => {
-  try {
-    const activeEngine = getActiveEngine();
-    const mysqlCfg = getMysqlConfig();
-    let isConnected = false;
-    let message = '';
-    let serverVersion = null;
-
-    try {
-      const conn = await mysql.createConnection({
-        host: mysqlCfg.host,
-        port: mysqlCfg.port,
-        user: mysqlCfg.user,
-        password: mysqlCfg.password,
-        connectTimeout: 2000
-      });
-      const [vRows] = await conn.query('SELECT VERSION() as ver;');
-      serverVersion = vRows && vRows[0] ? vRows[0].ver : null;
-      await conn.end();
-      isConnected = true;
-      message = 'خادم MySQL متصل وجاهز للعمل ✅';
-    } catch (e) {
-      isConnected = false;
-      message = `خادم MySQL غير متاح حالياً (${e.message}). النظام يعمل بنمط الاحتياط الذكي.`;
-    }
-
-    res.json({
-      success: true,
-      data: {
-        activeEngine,
-        isConnected,
-        serverVersion,
-        message,
-        mysqlConfig: {
-          host: mysqlCfg.host,
-          port: mysqlCfg.port,
-          user: mysqlCfg.user,
-          database: mysqlCfg.database
-        }
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// فحص اتصال مخصص بخادم MySQL
-router.post('/test-mysql-conn', requirePermission('settings:company'), async (req, res) => {
-  try {
-    const { host = 'localhost', port = 3306, user = 'root', password = '', database = 'rawasi_aden' } = req.body;
-    const startTime = Date.now();
-
-    const conn = await mysql.createConnection({
-      host,
-      port: Number(port) || 3306,
-      user,
-      password,
-      connectTimeout: 3000
-    });
-
-    const [vRows] = await conn.query('SELECT VERSION() as ver, CURRENT_USER() as cur_user;');
-    const latencyMs = Date.now() - startTime;
-    await conn.end();
-
-    res.json({
-      success: true,
-      message: `تم الاتصال بنجاح بخادم MySQL (${host}:${port}) في ${latencyMs}ms 🚀`,
-      version: vRows[0]?.ver,
-      user: vRows[0]?.cur_user,
-      latencyMs
-    });
-  } catch (err) {
-    res.status(400).json({
-      success: false,
-      message: `تعذر الاتصال بخادم MySQL: ${err.message}`
-    });
-  }
-});
-
-// حفظ إعدادات MySQL في config.json وإعادة الاتصال
-router.post('/save-mysql-config', requirePermission('settings:company'), async (req, res) => {
-  try {
-    const { host, port, user, password, database } = req.body;
-    const configPath = path.join(__dirname, '..', 'database', 'config.json');
-    let cfg = {};
-    if (fs.existsSync(configPath)) {
-      try { cfg = JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '')); } catch {}
-    }
-
-    cfg.dbEngine = 'mysql';
-    cfg.mysql = Object.assign(cfg.mysql || {}, {
-      host: host || 'localhost',
-      port: Number(port) || 3306,
-      user: user || 'root',
-      password: password !== undefined ? password : '',
-      database: database || 'rawasi_aden'
-    });
-
-    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
-
-    // إعادة تهيئة المحرك
-    await initializeDatabase();
-
-    res.json({
-      success: true,
-      message: 'تم حفظ إعدادات MySQL بنجاح وتحديث المحرك النشط للنظام.',
-      activeEngine: getActiveEngine()
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ في حفظ إعدادات MySQL: ' + err.message });
-  }
-});
-
-// ترحيل البيانات الحالية من SQLite إلى MySQL
-router.post('/run-migration', requirePermission('settings:company'), async (req, res) => {
-  try {
-    await runMigration();
-    res.json({
-      success: true,
-      message: 'تم ترحيل كافة الجداول والبيانات إلى MySQL بنجاح وبأعلى دقة.'
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'خطأ أثناء الترحيل: ' + err.message });
   }
 });
 

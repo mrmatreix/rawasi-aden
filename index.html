@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="رواسي عدن">
   <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.json?v=1.0.0.20261025-djqd">
-  <link rel="stylesheet" href="css/style.css?v=1.0.0.20261025-djqd">
+  <link rel="stylesheet" href="css/style.css?v=matrix-ui-20261124">
   <link rel="stylesheet" href="css/sidebar.css?v=1.0.0.20261025-djqd">
   <link rel="icon" type="image/svg+xml" href="images/icon.svg">
   <link rel="apple-touch-icon" href="images/icon.svg">
@@ -68,6 +68,7 @@
       </div>
 
       <div id="loginErrorMsg" class="login-error-box"></div>
+      <div id="loginSuccessMsg" role="status" style="display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; font-size: 0.86rem; line-height: 1.6; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.45); color: var(--color-success, #34d399);"></div>
 
       <!-- صندوق مؤشر الحظر ومحدد المحاولات المرئي (Rate Limiting Box) -->
       <div id="loginRateLimitBox" class="login-ratelimit-box" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1.5px solid var(--accent-red); padding: 14px; border-radius: var(--radius-md); margin-bottom: 16px; text-align: center;">
@@ -122,6 +123,10 @@
           <svg class="icon" width="18" height="18"><use href="#icon-logout"></use></svg>
         </button>
 
+        <div style="text-align: center; margin: 4px 0 2px;">
+          <button type="button" id="btnForgotPassword" onclick="Auth.openForgotPassword()" style="background: none; border: none; color: var(--text-gold, #d4af37); font-size: 0.88rem; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 4px 8px;">نسيت كلمة المرور؟</button>
+        </div>
+
         <button type="button" id="btnLoginShutdown" class="login-btn-shutdown" onclick="Auth.confirmShutdownApp()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
           <span>إغلاق البرنامج وإنهاء العمل</span>
@@ -164,6 +169,77 @@
           <button type="submit" id="btnSubmit2FA" class="btn btn-primary" style="flex: 2; padding: 12px; background: linear-gradient(135deg, var(--gold-primary), #997825); font-weight: bold;">
             ✓ تأكيد ودخول
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================== نسيت كلمة المرور: طلب إعادة التعيين ================== -->
+  <div id="forgotPasswordModal" class="login-screen-overlay" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle" style="display: none; z-index: 200011; background: rgba(5, 10, 20, 0.94); backdrop-filter: blur(10px);">
+    <div class="login-card" style="max-width: 460px; text-align: right; border: 1.5px solid var(--gold-primary); box-shadow: 0 20px 60px rgba(0,0,0,0.85);">
+      <h3 id="forgotPasswordTitle" style="color: var(--text-gold); margin-bottom: 6px; font-weight: 800; font-size: 1.2rem; text-align: center;">استعادة الوصول إلى الحساب</h3>
+      <p style="font-size: 0.86rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6;">
+        أدخل اسم المستخدم. سيصل طلبك إلى مدير النظام، وبعد التحقق من هويتك يسلّمك رمز إعادة تعيين لمرة واحدة.
+      </p>
+      <div id="forgotPasswordErrorMsg" class="login-error-box" style="display: none; margin-bottom: 14px;"></div>
+      <div id="forgotPasswordResult" style="display: none; margin-bottom: 14px; font-size: 0.88rem; line-height: 1.7; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.35); border-radius: 8px; padding: 12px 14px; color: var(--text-primary);">
+        <div id="forgotPasswordResultText"></div>
+        <div style="margin-top: 8px;">رقم المرجع: <strong id="forgotPasswordRef" style="font-family: monospace; font-size: 1.1rem; letter-spacing: 2px; color: var(--text-gold);" dir="ltr"></strong></div>
+      </div>
+      <form id="forgotPasswordForm" class="login-form" onsubmit="Auth.submitForgotPassword(event)">
+        <div class="form-group">
+          <label for="forgotUsername">اسم المستخدم</label>
+          <input type="text" id="forgotUsername" class="login-input" maxlength="80" required autocomplete="username" placeholder="أدخل اسم المستخدم">
+        </div>
+        <div class="form-group">
+          <label for="forgotNote">ملاحظة للمدير (اختياري)</label>
+          <input type="text" id="forgotNote" class="login-input" maxlength="200" placeholder="مثال: رقم هاتفك أو القسم">
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary" onclick="Auth.closeForgotPassword()" style="flex: 1; padding: 12px;">إلغاء</button>
+          <button type="submit" id="btnSubmitForgot" class="btn btn-primary" style="flex: 2; padding: 12px; background: linear-gradient(135deg, var(--gold-primary), #997825); font-weight: bold;">إرسال الطلب</button>
+        </div>
+        <button type="button" onclick="Auth.openResetWithCode()" style="margin-top: 12px; width: 100%; background: none; border: 1px dashed var(--gold-primary); color: var(--text-gold); border-radius: 8px; padding: 10px; cursor: pointer; font-weight: 700;">لديّ رمز إعادة تعيين</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================== نسيت كلمة المرور: تعيين كلمة مرور جديدة بالرمز ================== -->
+  <div id="resetWithCodeModal" class="login-screen-overlay" role="dialog" aria-modal="true" aria-labelledby="resetWithCodeTitle" style="display: none; z-index: 200012; background: rgba(5, 10, 20, 0.94); backdrop-filter: blur(10px);">
+    <div class="login-card" style="max-width: 460px; text-align: right; border: 1.5px solid var(--gold-primary); box-shadow: 0 20px 60px rgba(0,0,0,0.85); max-height: 94vh; overflow-y: auto;">
+      <h3 id="resetWithCodeTitle" style="color: var(--text-gold); margin-bottom: 14px; font-weight: 800; font-size: 1.2rem; text-align: center;">تعيين كلمة مرور جديدة</h3>
+      <div id="resetWithCodeErrorMsg" class="login-error-box" style="display: none; margin-bottom: 14px;"></div>
+      <form id="resetWithCodeForm" class="login-form" onsubmit="Auth.submitResetWithCode(event)">
+        <div class="form-group">
+          <label for="resetUsername">اسم المستخدم</label>
+          <input type="text" id="resetUsername" class="login-input" maxlength="80" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="resetCode">رمز إعادة التعيين</label>
+          <input type="text" id="resetCode" class="login-input" maxlength="16" required autocomplete="one-time-code" dir="ltr" placeholder="XXXXX-XXXXX" style="text-align: center; font-family: monospace; letter-spacing: 2px; text-transform: uppercase;">
+        </div>
+        <div class="form-group">
+          <label for="resetCurrentPin">رمز الأمان الحالي (PIN)</label>
+          <input type="password" id="resetCurrentPin" class="login-input" maxlength="6" inputmode="numeric" autocomplete="off" dir="ltr" style="text-align: center; letter-spacing: 6px;" oninput="Auth.normalize2FaInput(this)">
+          <small style="color: var(--text-muted); font-size: 0.75rem;">إن كان حسابك مفعّلاً له التحقق بخطوتين.</small>
+        </div>
+        <div class="form-group" id="resetNewPinGroup" style="display: none;">
+          <label for="resetNewPin">رمز PIN جديد (6 أرقام)</label>
+          <input type="password" id="resetNewPin" class="login-input" maxlength="6" inputmode="numeric" autocomplete="off" dir="ltr" style="text-align: center; letter-spacing: 6px;" oninput="Auth.normalize2FaInput(this)">
+          <small style="color: var(--text-muted); font-size: 0.75rem;">طلب المدير تعيين رمز أمان جديد لحسابك.</small>
+        </div>
+        <div class="form-group">
+          <label for="resetNewPassword">كلمة المرور الجديدة</label>
+          <input type="password" id="resetNewPassword" class="login-input" minlength="8" maxlength="128" required autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="resetNewPasswordConfirm">تأكيد كلمة المرور</label>
+          <input type="password" id="resetNewPasswordConfirm" class="login-input" minlength="8" maxlength="128" required autocomplete="new-password">
+          <small style="color: var(--text-muted); font-size: 0.75rem;">8 خانات على الأقل، ولا تطابق اسم المستخدم أو كلمة المرور السابقة.</small>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="Auth.closeResetWithCode()" style="flex: 1; padding: 12px;">إلغاء</button>
+          <button type="submit" id="btnSubmitResetWithCode" class="btn btn-primary" style="flex: 2; padding: 12px; background: linear-gradient(135deg, var(--gold-primary), #997825); font-weight: bold;">تغيير كلمة المرور</button>
         </div>
       </form>
     </div>
@@ -345,7 +421,7 @@
 
       <div class="sidebar-navigation-heading"><span>مساحة العمل</span><span id="sidebarGroupCount">8 أقسام</span></div>
       <div class="sidebar-search-wrap"><svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg><input type="search" id="sidebarSearch" placeholder="ابحث عن عملية أو تقرير..." aria-label="البحث في القائمة"><button type="button" id="sidebarSearchClear" aria-label="مسح البحث" hidden>×</button></div>
-      <nav aria-label="القائمة الرئيسية"><ul class="sidebar-nav" id="sidebarNavList"><li class="nav-home" data-perm="dashboard:view"><a class="nav-item active" data-view="dashboard" href="#dashboard" onclick="event.preventDefault(); Sidebar.open(this)"><svg class="icon" aria-hidden="true"><use href="#icon-dashboard"></use></svg><span>لوحة التحكم الرئيسية</span></a></li><li class="nav-group" id="groupSystemSettings" data-perm="settings:company,settings:users,settings:backup"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupSystemSettingsList" onclick="App.toggleNavGroup('groupSystemSettings')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">01</span>الإعدادات وتهيئة النظام</span><span class="nav-group-description">الشركة والصلاحيات والنسخ الاحتياطي</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupSystemSettingsList"><li class="nav-sub-section"><span class="nav-sub-header">تهيئة النظام</span><ul><li data-perm="settings:company" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="company" data-nav-action="" href="#settings/company" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>بيانات الشركة والترويسة</span></a></li><li data-perm="settings:company" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="print" data-nav-action="" href="#settings/print" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قوالب الطباعة والتقارير</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">المستخدمون والحماية</span><ul><li data-perm="settings:users" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="users" data-nav-action="" href="#settings/users" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المستخدمون والصلاحيات</span></a></li><li data-perm="settings:backup" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="backup" data-nav-action="" href="#settings/backup" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>النسخ الاحتياطي والأمان</span></a></li><li data-perm="settings:backup" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="" data-nav-action="connection" href="#settings" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حالة الاتصال وقاعدة البيانات</span></a></li></ul></li></ul></li><li class="nav-group" id="groupClientApp" data-perm="client_app:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupClientAppList" onclick="App.toggleNavGroup('groupClientApp')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-user"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">02</span>إدارة تطبيق العملاء</span><span class="nav-group-description">حسابات وتطبيقات العملاء</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupClientAppList"><li class="nav-sub-section"><span class="nav-sub-header">إدارة تطبيق العملاء</span><ul><li data-perm="client_app:view" data-nav-leaf><a class="nav-sub-item" data-view="clientApp" data-tab="" data-nav-action="" href="#clientApp" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حسابات وصلاحيات تطبيق العملاء</span></a></li></ul></li></ul></li><li class="nav-group" id="groupAccounting" data-perm="accounting:view,projects:view,expenses:view,revenues:view,accounting:view,accounting:journal,cash:view,custody:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupAccountingList" onclick="App.toggleNavGroup('groupAccounting')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-money"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">03</span>إدارة الحسابات</span><span class="nav-group-description">السندات والقيود والأدلة</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupAccountingList"><li class="nav-sub-section"><span class="nav-sub-header">تهيئة الحسابات</span><ul><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="chartOfAccounts" data-tab="" data-nav-action="" href="#chartOfAccounts" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>دليل الحسابات</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="costCenters" data-tab="" data-nav-action="" href="#costCenters" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مراكز التكلفة</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="currencies" data-tab="" data-nav-action="" href="#currencies" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>العملات وأسعار الصرف</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="cashFlow" data-tab="" data-nav-action="" href="#cashFlow" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تخطيط التدفقات النقدية</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="budgets" data-nav-action="" href="#projectHub/budgets" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>بنود الميزانية الخاصة للمشاريع</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="chartOfAccounts" data-tab="" data-nav-action="periods" href="#chartOfAccounts" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تهيئة الفترة المحاسبية (فتح وإغلاق)</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">سجل الأستاذ</span><ul><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="journalPosting" data-tab="" data-nav-action="" href="#journalPosting" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>اعتماد وترحيل قيود اليومية</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">العمليات اليومية</span><ul><li data-perm="expenses:view" data-nav-leaf><a class="nav-sub-item" data-view="expenses" data-tab="" data-nav-action="" href="#expenses" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سندات الصرف</span></a></li><li data-perm="revenues:view" data-nav-leaf><a class="nav-sub-item" data-view="revenues" data-tab="" data-nav-action="" href="#revenues" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سندات القبض</span></a></li><li data-perm="accounting:view,accounting:journal" data-nav-leaf><a class="nav-sub-item" data-view="journal" data-tab="" data-nav-action="" href="#journal" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قيود اليومية</span></a></li><li data-perm="cash:view" data-nav-leaf><a class="nav-sub-item" data-view="cash" data-tab="cash" data-nav-action="" href="#cash/cash" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حركة الصناديق</span></a></li><li data-perm="cash:view" data-nav-leaf><a class="nav-sub-item" data-view="cash" data-tab="bank" data-nav-action="" href="#cash/bank" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حركة البنوك</span></a></li><li data-perm="custody:view" data-nav-leaf><a class="nav-sub-item" data-view="custody" data-tab="" data-nav-action="" href="#custody" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>العهد والنثريات</span></a></li></ul></li></ul></li><li class="nav-group" id="groupProjects" data-perm="projects:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupProjectsList" onclick="App.toggleNavGroup('groupProjects')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-projects"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">04</span>إدارة المشاريع</span><span class="nav-group-description">التنفيذ والمتابعة والمستندات</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupProjectsList"><li class="nav-sub-section"><span class="nav-sub-header">تهيئة المشاريع</span><ul><li data-perm="projects:create" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="" data-nav-action="project" href="#projects" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إنشاء مشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectWorkItems" data-tab="" data-nav-action="" href="#projectWorkItems" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>هيكلة شجرة بنود الأعمال ومرجعية المقايسات</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="boq" data-nav-action="" href="#projectHub/boq" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>جدول الكميات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">المشاريع</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="budgets" data-nav-action="estimates" href="#projectHub/budgets" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التكاليف التقديرية للمشاريع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="change-orders" data-nav-action="" href="#projectHub/change-orders" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>أوامر التغيير</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="under_study" data-nav-action="" href="#projects/under_study" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مشاريع تحت الدراسة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="active_completed" data-nav-action="" href="#projects/active_completed" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المشاريع الجارية والمنفذة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="all" data-nav-action="" href="#projects/all" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>كافة المشاريع</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">تقارير المشاريع</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="projects-profitability" data-nav-action="project-report" href="#reports/projects-profitability" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقرير ربحية المشاريع</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="project-budget" data-nav-action="project-report" href="#reports/project-budget" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقارير موازنة المشروع: مقارنة التقديري بالفعلي</span></a></li><li data-perm="projects:view,reports:view" data-nav-leaf><a class="nav-sub-item" data-view="projectProgressReport" data-tab="" data-nav-action="" href="#projectProgressReport" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقرير مشروعات تحت التنفيذ</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="smart-completion" data-nav-action="" href="#projectHub/smart-completion" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>معيار نسبة الإنجاز</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">مستندات المشروع والتكلفة</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="" data-nav-action="" href="#projectHub" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مركز مستندات المشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="drawings" data-nav-action="" href="#projectHub/drawings" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المخططات</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="purchases" data-nav-action="" href="#projectHub/purchases" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مشتريات المشروع والفواتير</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="labor" data-nav-action="" href="#projectHub/labor" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>العمالة والمصروفات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">التنفيذ والرقابة</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="daily-reports" data-nav-action="" href="#projectHub/daily-reports" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التقارير اليومية</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="weekly-reports" data-nav-action="" href="#projectHub/weekly-reports" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التقارير الأسبوعية</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="handovers" data-nav-action="" href="#projectHub/handovers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>محاضر الاستلام</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="correspondence" data-nav-action="" href="#projectHub/correspondence" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مراسلات المشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="project-files" data-nav-action="" href="#projectHub/project-files" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ملفات المشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="wbs-schedule" data-nav-action="" href="#projectHub/wbs-schedule" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الجدول الزمني والمسار الحرج</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="evm-control" data-nav-action="" href="#projectHub/evm-control" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>القيمة المكتسبة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="risks-claims" data-nav-action="" href="#projectHub/risks-claims" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المخاطر والمطالبات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الإقفال</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="settlement" data-nav-action="" href="#projectHub/settlement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الحساب الختامي والمخالصة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectCloseout" data-tab="" data-nav-action="" href="#projectCloseout" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إقفال وتسليم المشروع</span></a></li></ul></li></ul></li><li class="nav-group" id="groupSales" data-perm="projects:view,billing:create"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupSalesList" onclick="App.toggleNavGroup('groupSales')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-money"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">05</span>المبيعات</span><span class="nav-group-description">عروض الأسعار والفواتير والعقود</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupSalesList"><li class="nav-sub-section"><span class="nav-sub-header">إنشاء مستند مبيعات</span><ul><li data-perm="projects:create,projects:edit" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="" data-nav-action="quotation" href="#projectHub" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إنشاء عرض سعر</span></a></li><li data-perm="billing:create" data-nav-leaf><a class="nav-sub-item" data-view="clients" data-tab="" data-nav-action="invoice" href="#clients" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إنشاء فاتورة</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">دورة المبيعات</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="contract" data-nav-action="" href="#projectHub/contract" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>عقود المشاريع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="quotations" data-nav-action="" href="#projectHub/quotations" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>عروض الأسعار</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="integrated-quotation" data-nav-action="" href="#projectHub/integrated-quotation" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التسعير المتكامل</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="invoices" data-nav-action="" href="#projectHub/invoices" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المستخلصات والمطالبات</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="contractLifecycle" data-tab="" data-nav-action="" href="#contractLifecycle" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>دورة حياة العقود والتنبيهات</span></a></li></ul></li></ul></li><li class="nav-group" id="groupParties" data-perm="clients:view,clients:create,suppliers:view,suppliers:create"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupPartiesList" onclick="App.toggleNavGroup('groupParties')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-user"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">06</span>العملاء والموردون</span><span class="nav-group-description">البيانات والملفات والتعاملات</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupPartiesList"><li class="nav-sub-section"><span class="nav-sub-header">العملاء</span><ul><li data-perm="clients:view" data-nav-leaf><a class="nav-sub-item" data-view="clients" data-tab="" data-nav-action="" href="#clients" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل العملاء وملفاتهم</span></a></li><li data-perm="clients:create" data-nav-leaf><a class="nav-sub-item" data-view="clients" data-tab="" data-nav-action="client" href="#clients" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إضافة عميل جديد</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الموردون</span><ul><li data-perm="suppliers:view" data-nav-leaf><a class="nav-sub-item" data-view="suppliers" data-tab="" data-nav-action="" href="#suppliers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل الموردين وملفاتهم</span></a></li><li data-perm="suppliers:create" data-nav-leaf><a class="nav-sub-item" data-view="suppliers" data-tab="" data-nav-action="supplier" href="#suppliers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إضافة مورد جديد</span></a></li></ul></li></ul></li><li class="nav-group" id="groupInventory" data-perm="inventory:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupInventoryList" onclick="App.toggleNavGroup('groupInventory')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-doc"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">07</span>المخزون والمواد</span><span class="nav-group-description">الأصناف والجرد وحركة المواد</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupInventoryList"><li class="nav-sub-section"><span class="nav-sub-header">الأصناف والحركات</span><ul><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="items" data-nav-action="" href="#inventory/items" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>دليل المواد والأصناف</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="returns" data-nav-action="" href="#inventory/returns" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مرتجعات الموقع وفحص الجودة</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="transfers" data-nav-action="" href="#inventory/transfers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التحويلات بين المشاريع</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الجرد والرقابة</span><ul><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="audits" data-nav-action="" href="#inventory/audits" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الجرد والتسويات</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="quarantine" data-nav-action="" href="#inventory/quarantine" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المواد التالفة والحجر</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="events" data-nav-action="" href="#inventory/events" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل أحداث المخزون</span></a></li></ul></li></ul></li><li class="nav-group" id="groupHR" data-perm="hr:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupHRList" onclick="App.toggleNavGroup('groupHR')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-user"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">08</span>الموارد البشرية</span><span class="nav-group-description">الموظفون والدوام والرواتب</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupHRList"><li class="nav-sub-section"><span class="nav-sub-header">الموظفون والدوام</span><ul><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="employees" data-nav-action="" href="#hr/employees" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل الموظفين</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="attendance" data-nav-action="" href="#hr/attendance" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الحضور والانصراف</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="leaves" data-nav-action="" href="#hr/leaves" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>طلبات الإجازات</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="leaveTypes" data-nav-action="" href="#hr/leaveTypes" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>أنواع وسياسات الإجازات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الرواتب والأداء</span><ul><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="advances" data-nav-action="" href="#hr/advances" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سلف الموظفين</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="payroll" data-nav-action="" href="#hr/payroll" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مسيرات الرواتب والترحيل</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="evaluations" data-nav-action="" href="#hr/evaluations" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقييم الأداء والحوافز</span></a></li></ul></li></ul></li><li class="nav-group" id="groupReports" data-perm="reports:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupReportsList" onclick="App.toggleNavGroup('groupReports')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-barchart"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">09</span>التقارير والتحليل</span><span class="nav-group-description">القوائم المالية ومؤشرات الأداء</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupReportsList"><li class="nav-sub-section"><span class="nav-sub-header">التقارير المالية</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="trial-balance" data-nav-action="" href="#reports/trial-balance" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ميزان المراجعة</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="income-statement" data-nav-action="" href="#reports/income-statement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قائمة الدخل</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="account-movement" data-nav-action="" href="#reports/account-movement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حركة الحساب</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="balance-sheet" data-nav-action="" href="#reports/balance-sheet" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الميزانية العمومية</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="cash-flow" data-nav-action="" href="#reports/cash-flow" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قائمة التدفقات النقدية</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">تحليل المشاريع</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="project-budget" data-nav-action="" href="#reports/project-budget" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>موازنة المشروع: التقديري والفعلي</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="projects-profitability" data-nav-action="" href="#reports/projects-profitability" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ربحية المشاريع</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="cost-centers-profitability" data-nav-action="" href="#reports/cost-centers-profitability" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ربحية مراكز التكلفة</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">كشوف الحسابات</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="client-statement" data-nav-action="" href="#reports/client-statement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>كشف حساب عميل</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="supplier-statement" data-nav-action="" href="#reports/supplier-statement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>كشف حساب مورد</span></a></li></ul></li></ul></li><li class="nav-logout"><a class="nav-item nav-logout" href="#logout" onclick="event.preventDefault(); Auth.logout()"><svg class="icon" aria-hidden="true"><use href="#icon-logout"></use></svg><span>تسجيل خروج</span></a></li></ul></nav>
+      <nav aria-label="القائمة الرئيسية"><ul class="sidebar-nav" id="sidebarNavList"><li class="nav-home" data-perm="dashboard:view"><a class="nav-item active" data-view="dashboard" href="#dashboard" onclick="event.preventDefault(); Sidebar.open(this)"><svg class="icon" aria-hidden="true"><use href="#icon-dashboard"></use></svg><span>لوحة التحكم الرئيسية</span></a></li><li class="nav-group" id="groupSystemSettings" data-perm="settings:company,settings:users,settings:backup"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupSystemSettingsList" onclick="App.toggleNavGroup('groupSystemSettings')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">01</span>الإعدادات وتهيئة النظام</span><span class="nav-group-description">الشركة والصلاحيات والنسخ الاحتياطي</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupSystemSettingsList"><li class="nav-sub-section"><span class="nav-sub-header">تهيئة النظام</span><ul><li data-perm="settings:company" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="company" data-nav-action="" href="#settings/company" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>بيانات الشركة والترويسة</span></a></li><li data-perm="settings:company" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="print" data-nav-action="" href="#settings/print" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قوالب الطباعة والتقارير</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">المستخدمون والحماية</span><ul><li data-perm="settings:users" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="users" data-nav-action="" href="#settings/users" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المستخدمون والصلاحيات</span></a></li><li data-perm="settings:backup" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="backup" data-nav-action="" href="#settings/backup" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>النسخ الاحتياطي والأمان</span></a></li><li data-perm="settings:backup" data-nav-leaf><a class="nav-sub-item" data-view="settings" data-tab="" data-nav-action="connection" href="#settings" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حالة الاتصال وقاعدة البيانات</span></a></li></ul></li></ul></li><li class="nav-group" id="groupClientApp" data-perm="client_app:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupClientAppList" onclick="App.toggleNavGroup('groupClientApp')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-user"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">02</span>إدارة تطبيق العملاء</span><span class="nav-group-description">حسابات وتطبيقات العملاء</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupClientAppList"><li class="nav-sub-section"><span class="nav-sub-header">إدارة تطبيق العملاء</span><ul><li data-perm="client_app:view" data-nav-leaf><a class="nav-sub-item" data-view="clientApp" data-tab="" data-nav-action="" href="#clientApp" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حسابات وصلاحيات تطبيق العملاء</span></a></li></ul></li></ul></li><li class="nav-group" id="groupAccounting" data-perm="accounting:view,projects:view,expenses:view,revenues:view,revenues:view,expenses:view,accounting:view,accounting:view,accounting:journal,cash:view,custody:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupAccountingList" onclick="App.toggleNavGroup('groupAccounting')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-money"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">03</span>إدارة الحسابات</span><span class="nav-group-description">السندات والقيود والأدلة</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupAccountingList"><li class="nav-sub-section"><span class="nav-sub-header">تهيئة الحسابات</span><ul><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="chartOfAccounts" data-tab="" data-nav-action="" href="#chartOfAccounts" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>دليل الحسابات</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="costCenters" data-tab="" data-nav-action="" href="#costCenters" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مراكز التكلفة</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="currencies" data-tab="" data-nav-action="" href="#currencies" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>العملات وأسعار الصرف</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="cashFlow" data-tab="" data-nav-action="" href="#cashFlow" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تخطيط التدفقات النقدية</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="budgets" data-nav-action="" href="#projectHub/budgets" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>بنود الميزانية الخاصة للمشاريع</span></a></li><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="chartOfAccounts" data-tab="" data-nav-action="periods" href="#chartOfAccounts" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تهيئة الفترة المحاسبية (فتح وإغلاق)</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">سجل الأستاذ</span><ul><li data-perm="accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="journalPosting" data-tab="" data-nav-action="" href="#journalPosting" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>اعتماد وترحيل قيود اليومية</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">العمليات اليومية</span><ul><li data-perm="expenses:view" data-nav-leaf><a class="nav-sub-item" data-view="expenses" data-tab="" data-nav-action="" href="#expenses" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سندات الصرف</span></a></li><li data-perm="revenues:view" data-nav-leaf><a class="nav-sub-item" data-view="revenues" data-tab="" data-nav-action="" href="#revenues" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سندات القبض</span></a></li><li data-perm="revenues:view,expenses:view,accounting:view" data-nav-leaf><a class="nav-sub-item" data-view="paymentWizard" data-tab="" data-nav-action="payment-wizard" href="#paymentWizard" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>معالج الدفع الموحد</span></a></li><li data-perm="accounting:view,accounting:journal" data-nav-leaf><a class="nav-sub-item" data-view="journal" data-tab="" data-nav-action="" href="#journal" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قيود اليومية</span></a></li><li data-perm="cash:view" data-nav-leaf><a class="nav-sub-item" data-view="cash" data-tab="cash" data-nav-action="" href="#cash/cash" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حركة الصناديق</span></a></li><li data-perm="cash:view" data-nav-leaf><a class="nav-sub-item" data-view="cash" data-tab="bank" data-nav-action="" href="#cash/bank" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حركة البنوك</span></a></li><li data-perm="custody:view" data-nav-leaf><a class="nav-sub-item" data-view="custody" data-tab="" data-nav-action="" href="#custody" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>العهد والنثريات</span></a></li></ul></li></ul></li><li class="nav-group" id="groupProjects" data-perm="projects:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupProjectsList" onclick="App.toggleNavGroup('groupProjects')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-projects"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">04</span>إدارة المشاريع</span><span class="nav-group-description">التنفيذ والمتابعة والمستندات</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupProjectsList"><li class="nav-sub-section"><span class="nav-sub-header">تهيئة المشاريع</span><ul><li data-perm="projects:create" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="" data-nav-action="project" href="#projects" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إنشاء مشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectWorkItems" data-tab="" data-nav-action="" href="#projectWorkItems" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>هيكلة شجرة بنود الأعمال ومرجعية المقايسات</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="boq" data-nav-action="" href="#projectHub/boq" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>جدول الكميات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">المشاريع</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="budgets" data-nav-action="estimates" href="#projectHub/budgets" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التكاليف التقديرية للمشاريع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="change-orders" data-nav-action="" href="#projectHub/change-orders" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>أوامر التغيير</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="under_study" data-nav-action="" href="#projects/under_study" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مشاريع تحت الدراسة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="active_completed" data-nav-action="" href="#projects/active_completed" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المشاريع الجارية والمنفذة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projects" data-tab="all" data-nav-action="" href="#projects/all" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>كافة المشاريع</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">تقارير المشاريع</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="projects-profitability" data-nav-action="project-report" href="#reports/projects-profitability" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقرير ربحية المشاريع</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="project-budget" data-nav-action="project-report" href="#reports/project-budget" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقارير موازنة المشروع: مقارنة التقديري بالفعلي</span></a></li><li data-perm="projects:view,reports:view" data-nav-leaf><a class="nav-sub-item" data-view="projectProgressReport" data-tab="" data-nav-action="" href="#projectProgressReport" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقرير مشروعات تحت التنفيذ</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="smart-completion" data-nav-action="" href="#projectHub/smart-completion" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>معيار نسبة الإنجاز</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">مستندات المشروع والتكلفة</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="" data-nav-action="" href="#projectHub" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مركز مستندات المشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="drawings" data-nav-action="" href="#projectHub/drawings" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المخططات</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="purchases" data-nav-action="" href="#projectHub/purchases" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مشتريات المشروع والفواتير</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="labor" data-nav-action="" href="#projectHub/labor" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>العمالة والمصروفات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">التنفيذ والرقابة</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="daily-reports" data-nav-action="" href="#projectHub/daily-reports" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التقارير اليومية</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="weekly-reports" data-nav-action="" href="#projectHub/weekly-reports" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التقارير الأسبوعية</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="handovers" data-nav-action="" href="#projectHub/handovers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>محاضر الاستلام</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="correspondence" data-nav-action="" href="#projectHub/correspondence" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مراسلات المشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="project-files" data-nav-action="" href="#projectHub/project-files" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ملفات المشروع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="wbs-schedule" data-nav-action="" href="#projectHub/wbs-schedule" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الجدول الزمني والمسار الحرج</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="evm-control" data-nav-action="" href="#projectHub/evm-control" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>القيمة المكتسبة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="risks-claims" data-nav-action="" href="#projectHub/risks-claims" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المخاطر والمطالبات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الإقفال</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="settlement" data-nav-action="" href="#projectHub/settlement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الحساب الختامي والمخالصة</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectCloseout" data-tab="" data-nav-action="" href="#projectCloseout" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إقفال وتسليم المشروع</span></a></li></ul></li></ul></li><li class="nav-group" id="groupSales" data-perm="projects:view,billing:create"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupSalesList" onclick="App.toggleNavGroup('groupSales')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-money"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">05</span>المبيعات</span><span class="nav-group-description">عروض الأسعار والفواتير والعقود</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupSalesList"><li class="nav-sub-section"><span class="nav-sub-header">إنشاء مستند مبيعات</span><ul><li data-perm="projects:create,projects:edit" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="" data-nav-action="quotation" href="#projectHub" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إنشاء عرض سعر</span></a></li><li data-perm="billing:create" data-nav-leaf><a class="nav-sub-item" data-view="clients" data-tab="" data-nav-action="invoice" href="#clients" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إنشاء فاتورة</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">دورة المبيعات</span><ul><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="contract" data-nav-action="" href="#projectHub/contract" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>عقود المشاريع</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="quotations" data-nav-action="" href="#projectHub/quotations" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>عروض الأسعار</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="integrated-quotation" data-nav-action="" href="#projectHub/integrated-quotation" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التسعير المتكامل</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="projectHub" data-tab="invoices" data-nav-action="" href="#projectHub/invoices" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المستخلصات والمطالبات</span></a></li><li data-perm="projects:view" data-nav-leaf><a class="nav-sub-item" data-view="contractLifecycle" data-tab="" data-nav-action="" href="#contractLifecycle" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>دورة حياة العقود والتنبيهات</span></a></li></ul></li></ul></li><li class="nav-group" id="groupParties" data-perm="clients:view,clients:create,suppliers:view,suppliers:create"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupPartiesList" onclick="App.toggleNavGroup('groupParties')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-user"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">06</span>العملاء والموردون</span><span class="nav-group-description">البيانات والملفات والتعاملات</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupPartiesList"><li class="nav-sub-section"><span class="nav-sub-header">العملاء</span><ul><li data-perm="clients:view" data-nav-leaf><a class="nav-sub-item" data-view="clients" data-tab="" data-nav-action="" href="#clients" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل العملاء وملفاتهم</span></a></li><li data-perm="clients:create" data-nav-leaf><a class="nav-sub-item" data-view="clients" data-tab="" data-nav-action="client" href="#clients" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إضافة عميل جديد</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الموردون</span><ul><li data-perm="suppliers:view" data-nav-leaf><a class="nav-sub-item" data-view="suppliers" data-tab="" data-nav-action="" href="#suppliers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل الموردين وملفاتهم</span></a></li><li data-perm="suppliers:create" data-nav-leaf><a class="nav-sub-item" data-view="suppliers" data-tab="" data-nav-action="supplier" href="#suppliers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>إضافة مورد جديد</span></a></li></ul></li></ul></li><li class="nav-group" id="groupInventory" data-perm="inventory:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupInventoryList" onclick="App.toggleNavGroup('groupInventory')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-doc"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">07</span>المخزون والمواد</span><span class="nav-group-description">الأصناف والجرد وحركة المواد</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupInventoryList"><li class="nav-sub-section"><span class="nav-sub-header">الأصناف والحركات</span><ul><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="items" data-nav-action="" href="#inventory/items" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>دليل المواد والأصناف</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="returns" data-nav-action="" href="#inventory/returns" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مرتجعات الموقع وفحص الجودة</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="transfers" data-nav-action="" href="#inventory/transfers" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>التحويلات بين المشاريع</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الجرد والرقابة</span><ul><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="audits" data-nav-action="" href="#inventory/audits" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الجرد والتسويات</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="quarantine" data-nav-action="" href="#inventory/quarantine" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>المواد التالفة والحجر</span></a></li><li data-perm="inventory:view" data-nav-leaf><a class="nav-sub-item" data-view="inventory" data-tab="events" data-nav-action="" href="#inventory/events" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل أحداث المخزون</span></a></li></ul></li></ul></li><li class="nav-group" id="groupHR" data-perm="hr:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupHRList" onclick="App.toggleNavGroup('groupHR')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-user"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">08</span>الموارد البشرية</span><span class="nav-group-description">الموظفون والدوام والرواتب</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupHRList"><li class="nav-sub-section"><span class="nav-sub-header">الموظفون والدوام</span><ul><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="employees" data-nav-action="" href="#hr/employees" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سجل الموظفين</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="attendance" data-nav-action="" href="#hr/attendance" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الحضور والانصراف</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="leaves" data-nav-action="" href="#hr/leaves" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>طلبات الإجازات</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="leaveTypes" data-nav-action="" href="#hr/leaveTypes" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>أنواع وسياسات الإجازات</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">الرواتب والأداء</span><ul><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="advances" data-nav-action="" href="#hr/advances" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>سلف الموظفين</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="payroll" data-nav-action="" href="#hr/payroll" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>مسيرات الرواتب والترحيل</span></a></li><li data-perm="hr:view" data-nav-leaf><a class="nav-sub-item" data-view="hr" data-tab="evaluations" data-nav-action="" href="#hr/evaluations" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>تقييم الأداء والحوافز</span></a></li></ul></li></ul></li><li class="nav-group" id="groupReports" data-perm="reports:view"><button type="button" class="nav-group-header" aria-expanded="false" aria-controls="groupReportsList" onclick="App.toggleNavGroup('groupReports')"><span class="nav-group-icon"><svg class="icon" aria-hidden="true"><use href="#icon-barchart"></use></svg></span><span class="nav-group-copy"><span class="nav-group-name"><span class="nav-group-number">09</span>التقارير والتحليل</span><span class="nav-group-description">القوائم المالية ومؤشرات الأداء</span></span><span class="nav-group-count" aria-label="عدد العمليات"></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button><ul class="nav-sub-list" id="groupReportsList"><li class="nav-sub-section"><span class="nav-sub-header">التقارير المالية</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="trial-balance" data-nav-action="" href="#reports/trial-balance" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ميزان المراجعة</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="income-statement" data-nav-action="" href="#reports/income-statement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قائمة الدخل</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="account-movement" data-nav-action="" href="#reports/account-movement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>حركة الحساب</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="balance-sheet" data-nav-action="" href="#reports/balance-sheet" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>الميزانية العمومية</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="cash-flow" data-nav-action="" href="#reports/cash-flow" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>قائمة التدفقات النقدية</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">تحليل المشاريع</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="project-budget" data-nav-action="" href="#reports/project-budget" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>موازنة المشروع: التقديري والفعلي</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="projects-profitability" data-nav-action="" href="#reports/projects-profitability" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ربحية المشاريع</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="cost-centers-profitability" data-nav-action="" href="#reports/cost-centers-profitability" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>ربحية مراكز التكلفة</span></a></li></ul></li><li class="nav-sub-section"><span class="nav-sub-header">كشوف الحسابات</span><ul><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="client-statement" data-nav-action="" href="#reports/client-statement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>كشف حساب عميل</span></a></li><li data-perm="reports:view" data-nav-leaf><a class="nav-sub-item" data-view="reports" data-tab="supplier-statement" data-nav-action="" href="#reports/supplier-statement" onclick="event.preventDefault(); Sidebar.open(this)"><span class="nav-item-dot" aria-hidden="true"></span><span>كشف حساب مورد</span></a></li></ul></li></ul></li><li class="nav-logout"><a class="nav-item nav-logout" href="#logout" onclick="event.preventDefault(); Auth.logout()"><svg class="icon" aria-hidden="true"><use href="#icon-logout"></use></svg><span>تسجيل خروج</span></a></li></ul></nav>
       <p id="sidebarEmpty" class="sidebar-empty" role="status" hidden>لا توجد عمليات مطابقة للبحث</p>
     </aside>
 
@@ -748,7 +824,7 @@
               </div>
               <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <label style="margin-bottom: 0;">الحساب المالي (العهدة / الصندوق)</label>
+                  <label style="margin-bottom: 0;">الحساب المالي (عند الصرف: العهدة أو الصندوق — عند التصفية: حساب المصروف)</label>
                   <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('quickCustodyAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ إضافة حساب</a>
                 </div>
                 <select id="quickCustodyAccountSelect" class="form-control">
@@ -2611,7 +2687,10 @@
               </button>
               <button class="btn btn-success" style="height: 38px; display: inline-flex; align-items: center; gap: 6px;" onclick="HR.postPayrollToJournal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-                <span>2. ترحيل إلى قيد يومية متزن ⚡</span>
+                <span>2. ترحيل قيد الاستحقاق ⚡</span>
+              </button>
+              <button class="btn btn-primary" style="height: 38px; display: inline-flex; align-items: center; gap: 6px;" onclick="HR.payPayroll()">
+                <span>3. صرف الرواتب المستحقة 💵</span>
               </button>
               <button class="btn btn-secondary" onclick="HR.exportPayrollToExcel()" title="تصدير كشف الراتب الشامل إلى Excel" style="height:38px;display:inline-flex;align-items:center;gap:6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
@@ -2731,7 +2810,7 @@
     <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
       <div class="form-group"><label for="financialDisplayLevel">كيفية عرض الحسابات</label><select id="financialDisplayLevel" class="form-control" onchange="Reports.applyFinancialFilters()"><option value="subsidiary">حسابات فرعية</option><option value="main">حسابات رئيسية</option><option value="main_and_subsidiary">حسابات رئيسية وفرعية</option></select></div>
       <div class="form-group"><label for="financialCostCenter">استخدام مراكز التكلفة لهذا الحساب</label><select id="financialCostCenter" class="form-control" onchange="Reports.applyFinancialFilters()"><option value="">كل مراكز التكلفة</option></select></div>
-      <div class="form-group"><label for="financialPostingStatus">حالة الترحيل</label><select id="financialPostingStatus" class="form-control" onchange="Reports.applyFinancialFilters()"><option value="all">كلي — قبل وبعد الترحيل</option><option value="unposted">قبل الترحيل فقط</option><option value="posted">بعد الترحيل فقط</option></select></div>
+      <div class="form-group"><label for="financialPostingStatus">حالة الترحيل</label><select id="financialPostingStatus" class="form-control" onchange="Reports.applyFinancialFilters()"><option value="posted" selected>بعد الترحيل فقط</option><option value="all">كلي — قبل وبعد الترحيل</option><option value="unposted">قبل الترحيل فقط</option></select></div>
       <div class="form-group"><label for="financialCurrency">نوع العملة / عملة عرض التقرير</label><select id="financialCurrency" class="form-control" onchange="Reports.applyFinancialFilters()"><option value="YER">YER - ريال يمني</option></select></div>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><input type="checkbox" id="financialHideZero" onchange="Reports.applyFinancialFilters()"> إخفاء الحسابات الصفرية</label>
       <button class="btn btn-primary" onclick="Reports.applyFinancialFilters()">عرض التقرير</button>
@@ -3982,7 +4061,29 @@
                 <button type="button" class="btn btn-sm btn-soft-danger" onclick="Auth.logout()" title="تسجيل الخروج مع أخذ نسخة احتياطية فورية لقاعدة البيانات">
                   🚪 تسجيل خروج (نسخ احتياطي)
                 </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnManageOrgUnits" onclick="Settings.openOrgUnitsManager()" style="display: none;" title="إضافة وتعديل وحذف الفروع والأقسام (المدير العام فقط)">🏢 الفروع والأقسام</button>
                 <button class="btn btn-primary btn-sm" onclick="Settings.openNewUserModal()">+ إضافة مستخدم جديد</button>
+              </div>
+            </div>
+            <!-- طلبات «نسيت كلمة المرور» من شاشة الدخول -->
+            <div id="staffResetRequestsPanel" style="display: none; margin-bottom: 16px; background: rgba(245, 158, 11, 0.07); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; padding: 12px 14px;">
+              <h4 style="margin: 0 0 6px; color: var(--color-warning, #fbbf24); font-size: 0.98rem;">🔑 طلبات إعادة تعيين كلمة المرور <span id="staffResetRequestsCount" class="badge" style="background: rgba(245,158,11,0.25); color: var(--color-warning, #fbbf24);">0</span></h4>
+              <p style="margin: 0 0 10px; font-size: 0.8rem; color: var(--text-muted);">تأكد من هوية الموظف بالهاتف أو حضورياً، وطابِق رقم المرجع الذي يقرؤه لك قبل الاعتماد.</p>
+              <div class="table-responsive">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>المرجع</th>
+                      <th>المستخدم</th>
+                      <th>وقت الطلب</th>
+                      <th>IP / الجهاز</th>
+                      <th>الملاحظة</th>
+                      <th>الحالة</th>
+                      <th>الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody id="staffResetRequestsBody"></tbody>
+                </table>
               </div>
             </div>
             <div class="table-responsive">
@@ -4706,78 +4807,6 @@
                 </button>
               </div>
             </form>
-          </div>
-
-          <!-- بطاقة مميزة: إدارة وترحيل قاعدة بيانات MySQL (MySQL Enterprise & Migration) -->
-          <div class="panel-card card-accent-gold" style="margin-bottom: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-              <h3 style="color: var(--text-gold); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 0;">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 4.02 2 6.5s4.48 4.5 10 4.5 10-2.02 10-4.5S17.52 2 12 2zm0 6c-3.86 0-7-1.34-7-3s3.14-3 7-3 7 1.34 7 3-3.14 3-7 3zm0 4.5c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5zm0 6c-5.52 0-10-2.02-10-4.5v3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v-3c0 2.48-4.48 4.5-10 4.5z"/></svg>
-                <span>إدارة وترحيل قاعدة بيانات MySQL الاحترافية (Enterprise MySQL Database)</span>
-              </h3>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="Settings.loadMysqlStatus()">تحديث حالة MySQL 🔄</button>
-            </div>
-
-            <!-- مربع حالة اتصال ومحرك MySQL النشط -->
-            <div id="mysqlStatusBox" style="background: var(--bg-sunken, rgba(0,0,0,0.25)); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px;">
-              <!-- يتم تحديثه ديناميكياً عبر Settings.loadMysqlStatus() -->
-              <div style="color: var(--text-secondary); font-size: 0.85rem;">جاري فحص حالة خادم ومحرك MySQL...</div>
-            </div>
-
-            <!-- نموذج ضبط بيانات الاتصال بـ MySQL -->
-            <form onsubmit="Settings.saveMysqlSettings(event)">
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px;">
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="mysqlHost">خادم MySQL (Host)</label>
-                  <input type="text" id="mysqlHost" class="form-control" placeholder="localhost" value="localhost" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="mysqlPort">المنفذ (Port)</label>
-                  <input type="number" id="mysqlPort" class="form-control" placeholder="3306" value="3306" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="mysqlUser">المستخدم (Username)</label>
-                  <input type="text" id="mysqlUser" class="form-control" placeholder="root" value="root" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="mysqlPassword">كلمة المرور (Password)</label>
-                  <input type="password" id="mysqlPassword" class="form-control" placeholder="اتركه فارغاً إن لم توجد">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="mysqlDatabase">اسم قاعدة البيانات</label>
-                  <input type="text" id="mysqlDatabase" class="form-control" placeholder="rawasi_aden" value="rawasi_aden" required>
-                </div>
-              </div>
-
-              <!-- مربع نتيجة فحص الاتصال -->
-              <div id="mysqlTestResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid var(--border-light); margin-bottom: 16px;"></div>
-
-              <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 20px;">
-                <button type="button" id="btnTestMysql" class="btn btn-secondary" onclick="Settings.testMysqlConnection()">
-                  <span>اختبار الاتصال بـ MySQL 🔍</span>
-                </button>
-                <button type="submit" id="btnSaveMysql" class="btn btn-primary">
-                  <span>حفظ الإعدادات وتفعيل المحرك 💾</span>
-                </button>
-              </div>
-            </form>
-
-            <hr style="border: 0; border-top: 1px dashed var(--border-light); margin: 20px 0;">
-
-            <!-- قسم ترحيل البيانات من SQLite إلى MySQL -->
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: rgba(255, 255, 255, 0.02); padding: 16px; border-radius: var(--radius-sm); border: 1px solid rgba(212, 175, 55, 0.2);">
-              <div style="max-width: 650px;">
-                <h4 style="color: var(--text-gold); margin: 0 0 6px 0; font-size: 0.95rem;">ترحيل شامل للبيانات من SQLite إلى MySQL (Data Migration Tool)</h4>
-                <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0; line-height: 1.5;">
-                  ينقل هذا الخيار كافة الجداول الـ 31 (المشاريع، المستخلصات، العقود، قيود اليومية، السندات المالية، المخزون، والمستخدمين) من قاعدة SQLite إلى خادم MySQL المنشأ، مع الحفاظ الكامل على المفاتيح الأجنبية وأرصدة الحسابات دون المساس بالبيانات القديمة.
-                </p>
-              </div>
-              <button type="button" id="btnRunMigration" class="btn btn-primary" onclick="Settings.runMysqlMigration()" style="white-space: nowrap;">
-                <span>بدء ترحيل البيانات الآن (Migrate to MySQL) 🚀</span>
-              </button>
-            </div>
-
-            <div id="mysqlMigrationResult" style="display: none; padding: 12px; border-radius: var(--radius-sm); background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid var(--border-light); margin-top: 16px;"></div>
           </div>
 
           <!-- بطاقة: الجدولة التلقائية للنسخ الاحتياطي ومسار التخزين المعتمد -->
@@ -6558,7 +6587,7 @@
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <label style="margin-bottom: 0;">الحساب المالي (العهد / الصندوق) <span style="color: var(--accent-red);">*</span></label>
+              <label style="margin-bottom: 0;">الحساب المالي (عند الصرف: العهدة أو الصندوق — عند التصفية: حساب المصروف) <span style="color: var(--accent-red);">*</span></label>
               <a href="javascript:void(0)" onclick="Accounting.openNewAccountModal('modalCustodyAccountSelect')" style="font-size: 0.75rem; color: var(--color-info, #38bdf8); text-decoration: underline;">+ إضافة حساب</a>
             </div>
             <select id="modalCustodyAccountSelect" class="form-control">
@@ -7310,47 +7339,78 @@
           </div>
         </div>
 
-        <!-- نطاق الصلاحيات الجغرافي والإداري (المشروع، الفرع، القسم) -->
+        <!-- نطاق الوصول: كل المؤسسة أو منح محددة (فروع / أقسام / مشاريع / السجلات العامة) -->
         <div class="user-scope-card" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.06), rgba(15, 23, 42, 0.75)); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-sm); padding: 12px 16px; margin: 12px 0 16px 0;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
             <span style="font-size: 1.25rem;">🌐</span>
             <div>
-              <h4 style="margin: 0; font-size: 0.92rem; color: var(--color-info, #38bdf8); font-weight: 700;">نطاق الصلاحيات الجغرافي والإداري (Branch / Dept / Projects Scope)</h4>
+              <h4 style="margin: 0; font-size: 0.92rem; color: var(--color-info, #38bdf8); font-weight: 700;">نطاق الوصول (الفروع / الأقسام / المشاريع)</h4>
               <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">
-                تحديد الفرع، القسم، والمشاريع المصرح للمستخدم بالوصول إليها. منع الوصول افتراضياً Deny by Default لأي مشروع خارج النطاق.
+                يحدد المشاريع التي يرى المستخدم بياناتها. الصلاحيات تحدد ماذا يفعل، والنطاق يحدد أين.
               </div>
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 4px;">
             <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">🏢 الفرع الجغرافي المصرح به:</label>
-              <select id="userBranchVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
-                <option value="">كافة الفروع (غير مقيد)</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">📑 القسم الإداري:</label>
-              <select id="userDepartmentVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
-                <option value="">كافة الأقسام (غير مقيد)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 0;">🏗️ نطاق المشاريع المعتمدة (Project Scope):</label>
-              <label style="display: flex; align-items: center; gap: 4px; font-size: 0.74rem; cursor: pointer; color: var(--text-gold);">
-                <input type="checkbox" id="userAllProjectsScopeChk" checked onchange="Settings.onAllProjectsScopeToggle(this.checked)" style="accent-color: var(--gold-primary);">
-                <span>الوصول لكافة المشاريع الحالية والمستقبلية (*)</span>
+              <label for="userBranchVal" style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); display: flex; justify-content: space-between; gap: 8px;">
+                <span>🏢 الفرع الأساسي</span>
+                <button type="button" id="userBranchManageLink" onclick="Settings.openOrgUnitsManager()" style="display: none; background: none; border: none; color: var(--color-info, #38bdf8); font-size: 0.72rem; cursor: pointer; text-decoration: underline; padding: 0;">إدارة الفروع والأقسام</button>
               </label>
+              <select id="userBranchVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
+                <option value="">— غير محدد —</option>
+              </select>
             </div>
-            <div id="userProjectsScopeContainer" style="display: none; max-height: 120px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px;">
-              <div id="userProjectsCheckList" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                <!-- تُعبأ المشاريع برمجياً بواسطة JS -->
-              </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="userDepartmentVal" style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">📑 القسم الأساسي</label>
+              <select id="userDepartmentVal" class="form-control" style="font-size: 0.82rem; height: 36px;">
+                <option value="">— غير محدد —</option>
+              </select>
             </div>
           </div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 12px;">الفرع والقسم الأساسيان للتعريف والتقارير فقط، ولا يحددان ما يراه المستخدم.</div>
+
+          <div role="radiogroup" aria-label="نوع النطاق" style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; font-size: 0.82rem;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="userScopeMode" id="userScopeModeAll" value="all" checked onchange="Settings.onScopeModeChange()" style="accent-color: #38bdf8;">
+              <span><strong>كل المؤسسة</strong> — كل الفروع والأقسام والمشاريع</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="userScopeMode" id="userScopeModeLimited" value="limited" onchange="Settings.onScopeModeChange()" style="accent-color: #38bdf8;">
+              <span><strong>نطاق محدد</strong></span>
+            </label>
+          </div>
+
+          <div id="userScopeLimitedBox" style="display: none;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 10px;">
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 4px;">الفروع المسموحة</div>
+                <div id="userScopeBranchesList" style="max-height: 120px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 6px 10px; display: grid; gap: 4px;"></div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">يشمل كل مشاريع الفرع الحالية والمستقبلية.</div>
+              </div>
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1); margin-bottom: 4px;">الأقسام المسموحة</div>
+                <div id="userScopeDeptsList" style="max-height: 120px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 6px 10px; display: grid; gap: 4px;"></div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">يشمل كل مشاريع القسم في أي فرع.</div>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
+                <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary, #cbd5e1);">مشاريع إضافية محددة</span>
+                <input type="search" id="userScopeProjectSearch" class="form-control" placeholder="بحث عن مشروع..." oninput="Settings.filterScopeProjects(this.value)" style="font-size: 0.78rem; height: 32px; max-width: 220px;">
+              </div>
+              <div id="userProjectsCheckList" style="max-height: 140px; overflow-y: auto; background: var(--bg-sunken, rgba(0,0,0,0.3)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-sm); padding: 8px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px;"></div>
+            </div>
+
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; margin-bottom: 10px;">
+              <input type="checkbox" id="userScopeGeneralChk" onchange="Settings.updateScopePreview()" style="accent-color: #38bdf8;">
+              <span>السجلات العامة غير المرتبطة بمشروع (مصروفات وسندات وفواتير عامة)</span>
+            </label>
+          </div>
+
+          <div id="userScopePreview" role="status" style="font-size: 0.8rem; line-height: 1.6; padding: 8px 12px; border-radius: var(--radius-sm); background: rgba(56, 189, 248, 0.08); color: var(--color-info, #38bdf8);">يرى هذا المستخدم كل المؤسسة.</div>
+          <div id="userScopeWarning" style="display: none; font-size: 0.78rem; line-height: 1.6; padding: 8px 12px; margin-top: 6px; border-radius: var(--radius-sm); background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.35); color: var(--color-warning, #fbbf24);"></div>
         </div>
 
         <!-- التحقق بخطوتين (2FA) - رمز الأمان (PIN) للمدير العام والمستخدمين -->
@@ -7403,316 +7463,9 @@
           </div>
 
           <div class="perm-grid">
-            <!-- 1. لوحة التحكم -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">📊 لوحة التحكم والإحصائيات</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="dashboard:view" class="perm-chk">
-                <span>عرض المؤشرات المالية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="dashboard:export" class="perm-chk">
-                <span>تصدير وطباعة لوحة التحكم</span>
-              </label>
-            </div>
-
+            <!-- مصفوفة العمليات (تُولَّد من js/system-catalog.js: كل وحدة × عرض/إنشاء/تعديل/اعتماد/ترحيل/إلغاء/تصدير) -->
+            <div id="permMatrixGrid" style="grid-column: 1 / -1; overflow-x: auto;"></div>
             <div class="perm-group-card"><div class="perm-group-title">📱 إدارة تطبيق العملاء وحساباتهم</div><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:staff_login"><span>دخول فريق العمل في التطبيق</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:view"><span>عرض حسابات تطبيق العملاء</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:create"><span>إنشاء حساب عميل</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:edit"><span>تعديل وإيقاف الحسابات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:permissions"><span>تعيين المشاريع والصلاحيات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:reset_password"><span>إعادة تعيين كلمة المرور</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:sessions"><span>إلغاء الجلسات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:invite"><span>معاينة وإرسال الدعوات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:delete"><span>حذف الحسابات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:services"><span>إدارة دليل الخدمات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:messages"><span>الرسائل والردود</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:requests_view"><span>عرض طلبات الخدمات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:requests_edit"><span>تحديث طلبات الخدمات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:requests_review"><span>اعتماد مراجعة طلبات الخدمات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:requests_convert"><span>تحويل الطلب إلى مشروع</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:requests_assign_supervisor"><span>تحديد مشرف الاستقبال وإسناد الطلبات للمشرفين</span></label><label class="perm-checkbox-item" title="عند التفعيل لا يرى الموظف طلبات الزوار ولا ردودهم إلا بعد أن تسندها إليه خدمة العملاء أو المدير العام، ولا يستطيع إسناد الطلبات لنفسه. بقية صلاحياته لا تتأثر." style="border:1px dashed rgba(245,158,11,.55);border-radius:8px;"><input class="perm-chk" name="userPerm" type="checkbox" value="client_app:supervisor"><span>🛡️ مشرف — يرى طلبات وردود الزوار المسندة إليه فقط</span></label></div>
-<div class="perm-group-card"><div class="perm-group-title">الصلاحيات الإجرائية الإضافية</div><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="revenues:export"><span>تصدير وطباعة سندات القبض</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="revenues:edit"><span>تعديل سندات القبض</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="clients:edit"><span>تعديل بيانات العملاء</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="billing:edit"><span>تعديل الفواتير والمستخلصات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="purchases:edit"><span>تعديل المشتريات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="purchases:export"><span>تصدير وطباعة المشتريات</span></label><label class="perm-checkbox-item"><input class="perm-chk" name="userPerm" type="checkbox" value="suppliers:edit"><span>تعديل بيانات الموردين</span></label></div>
-<!-- 2. المشاريع -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">🏗️ إدارة المشاريع والمقاولات</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:view" class="perm-chk">
-                <span>عرض قائمة وتفاصيل المشاريع</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:create" class="perm-chk">
-                <span>إضافة مشروع جديد وتحديد العقد</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:edit" class="perm-chk">
-                <span>تعديل بيانات المشروع والمراحل</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:approve" class="perm-chk">
-                <span>اعتماد مستخلصات ومراحل الإنجاز</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:cancel" class="perm-chk">
-                <span>إلغاء أو حذف المشاريع</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="projects:export" class="perm-chk">
-                <span>تصدير وطباعة تقارير ومستندات المشاريع</span>
-              </label>
-            </div>
-
-            <!-- 3. المحاسبة والقيود -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">📒 الحسابات والقيود والمالية</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:view" class="perm-chk">
-                <span>عرض الدليل المحاسبي وميزان المراجعة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:create" class="perm-chk">
-                <span>إنشاء قيود يومية وحسابات جديدة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:edit" class="perm-chk">
-                <span>تعديل القيود ومراكز التكلفة والعملات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:approve" class="perm-chk">
-                <span>اعتماد التسويات وإغلاق/إعادة فتح الفترات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:post" class="perm-chk">
-                <span>ترحيل القيود لسجل اليومية العامة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:close_period" class="perm-chk">
-                <span>إغلاق وإعادة فتح الفترات المحاسبية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="accounting:export" class="perm-chk">
-                <span>تصدير القوائم المالية والميزانيات</span>
-              </label>
-            </div>
-
-            <!-- 4. الإيرادات والمستخلصات -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">💰 الإيرادات وسندات القبض والمستخلصات</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:view" class="perm-chk">
-                <span>عرض الفواتير وسندات القبض والمستخلصات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:create" class="perm-chk">
-                <span>إصدار مستخلص أو فاتورة إيراد جديدة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="revenues:create" class="perm-chk">
-                <span>إصدار وتسجيل سند قبض نقدي أو شيك</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="revenues:view" class="perm-chk">
-                <span>عرض سندات القبض والإيرادات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="revenues:approve" class="perm-chk">
-                <span>اعتماد سندات القبض قبل الترحيل</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:approve" class="perm-chk">
-                <span>اعتماد المستخلصات وفواتير العملاء</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="revenues:cancel" class="perm-chk">
-                <span>إلغاء سندات القبض أو المستخلصات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="billing:export" class="perm-chk">
-                <span>طباعة وتصدير المستخلصات وسندات القبض</span>
-              </label>
-            </div>
-
-            <!-- 5. المصروفات -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">💸 المصروفات وسندات الصرف</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:view" class="perm-chk">
-                <span>استعراض سجل المصروفات وسندات الصرف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:create" class="perm-chk">
-                <span>تسجيل وإصدار سند صرف جديد</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:edit" class="perm-chk">
-                <span>تعديل بيانات وتفاصيل سند الصرف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:approve" class="perm-chk">
-                <span>اعتماد وصرف سندات نفقات المشاريع</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:cancel" class="perm-chk">
-                <span>إلغاء وحذف سند صرف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:post" class="perm-chk">
-                <span>ترحيل سند الصرف إلى القيود المحاسبية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="expenses:export" class="perm-chk">
-                <span>طباعة وتصدير كشوفات وسندات الصرف</span>
-              </label>
-            </div>
-
-            <!-- 6. العهد والنثريات -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">💼 النثريات والعهد الميدانية</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:view" class="perm-chk">
-                <span>استعراض سجل العهد والمصروفات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:create" class="perm-chk">
-                <span>صرف وتسجيل عهدة ميدانية جديدة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:approve" class="perm-chk">
-                <span>اعتماد تسوية وتصفية العهد الميدانية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="custody:export" class="perm-chk">
-                <span>تصدير وطباعة كشوفات العهد</span>
-              </label>
-            </div>
-
-            <!-- 7. المخزون ومواد البناء -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">📦 المخزون ومواد البناء</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:view" class="perm-chk">
-                <span>استعراض رصيد وحركات وأسعار المواد</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:create" class="perm-chk">
-                <span>إضافة وتوريد أصناف مواد جديدة للمخزن</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:edit" class="perm-chk">
-                <span>تعديل بيانات وحدات وأسعار المواد</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:issue" class="perm-chk">
-                <span>إذن صرف مواد للمشاريع وتحديث التكلفة</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="inventory:export" class="perm-chk">
-                <span>تصدير جرد المخزون وحركات الصرف</span>
-              </label>
-            </div>
-
-            <!-- 8. المشتريات والموردين -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">🏢 المشتريات والموردين</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="purchases:view" class="perm-chk">
-                <span>عرض فواتير المشتريات والموردين</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="purchases:create" class="perm-chk">
-                <span>تسجيل فاتورة شراء مواد وتوريدها</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="purchases:approve" class="perm-chk">
-                <span>اعتماد ومصادقة أوامر وفواتير الشراء</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="purchases:post" class="perm-chk">
-                <span>ترحيل فاتورة الشراء بعد الاعتماد</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:view" class="perm-chk">
-                <span>عرض الموردين ومقاولي الباطن وكشوف حساباتهم</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:create" class="perm-chk">
-                <span>إضافة وتعديل بيانات الموردين ومقاولي الباطن</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="suppliers:export" class="perm-chk">
-                <span>كشف حساب مورد مفصل وطباعته وتصديره</span>
-              </label>
-            </div>
-
-            <!-- 9. العملاء -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">👥 دليل العملاء والمستثمرين</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="clients:view" class="perm-chk">
-                <span>عرض سجل العملاء وأرصدتهم</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="clients:create" class="perm-chk">
-                <span>إضافة وتعديل بيانات العملاء</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="clients:export" class="perm-chk">
-                <span>كشف حساب عميل مفصل وطباعته وتصديره</span>
-              </label>
-            </div>
-
-            <!-- 10. الموارد البشرية والرواتب -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">👔 الموارد البشرية والرواتب (HR)</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:view" class="perm-chk">
-                <span>عرض الموظفين والحضور ومسيرات الرواتب</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:create" class="perm-chk">
-                <span>إضافة موظفين وتسجيل الحضور والسلف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:edit" class="perm-chk">
-                <span>تعديل بيانات ورواتب الموظفين</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:approve" class="perm-chk">
-                <span>اعتماد طلبات الإجازات والسلف</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:post" class="perm-chk">
-                <span>ترحيل مسير الرواتب إلى القيود المحاسبية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="hr:export" class="perm-chk">
-                <span>تصدير وطباعة كشوفات الرواتب والحضور</span>
-              </label>
-            </div>
-
-            <!-- 11. الصندوق والبنك -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">🏦 حركة الصندوق والبنك</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="cash:view" class="perm-chk">
-                <span>استعراض حركة التدفقات النقدية للصندوق</span>
-              </label>
-            </div>
-
-            <!-- 12. التقارير -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">📑 مركز التقارير والأرباح</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="reports:view" class="perm-chk">
-                <span>استعراض تقارير الأرباح والميزانية العمومية</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="reports:export" class="perm-chk">
-                <span>تصدير التقارير المالية إلى Excel و PDF</span>
-              </label>
-            </div>
-
-            <!-- 13. إعدادات النظام -->
-            <div class="perm-group-card">
-              <div class="perm-group-title">⚙️ إعدادات النظام والأمان</div>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="settings:company" class="perm-chk">
-                <span>تعديل بيانات وإعدادات الشركة ومحرك البيانات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="settings:users" class="perm-chk">
-                <span>إدارة المستخدمين ومنح الصلاحيات والنطاقات</span>
-              </label>
-              <label class="perm-checkbox-item">
-                <input type="checkbox" name="userPerm" value="settings:backup" class="perm-chk">
-                <span>النسخ الاحتياطي واستعادة البيانات</span>
-              </label>
-            </div>
 
             <!-- 12. الأمان والجلسات المخصصة للمستخدم (المكان الأخضر) -->
             <div class="perm-group-card" id="userModalSecurityCard" style="border: 1px solid rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.04); border-radius: var(--radius-sm); padding: 10px 12px; transition: var(--transition);">
@@ -10004,23 +9757,23 @@
   <script src="js/ui-ux.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/tafqeet.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/financial-labels.js"></script>
-  <script src="js/excel-export.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/system-catalog.js?v=staff-access-20261116"></script>
-  <script src="js/auth.js?v=client-separation-20261114"></script>
+  <script src="js/excel-export.js?v=perm-matrix-20261124"></script>
+  <script src="js/system-catalog.js?v=legacy-perms-20261124"></script>
+  <script src="js/auth.js?v=print-guard-20261124"></script>
   <script src="js/events.js"></script>
   <script src="js/reports.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/projects.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/project_control_ui.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/project_hub.js?v=1.0.0.20261025-djqd"></script>
+  <script src="js/project_hub.js?v=perm-matrix-20261124"></script>
   <script src="js/accounting.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/journal-posting.js?v=1.0.0.20261025-djqd"></script>
+  <script src="js/journal-posting.js?v=perm-matrix-20261124"></script>
   <script src="js/inventory.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/hr.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/settings.js?v=client-separation-20261114"></script>
+  <script src="js/settings.js?v=matrix-ui-20261124"></script>
   <script src="js/print-designer.js"></script>
   <script src="js/contracts_cashflow.js?v=1.0.0.20261025-djqd"></script>
   <script src="js/sidebar.js?v=1.0.0.20261025-djqd"></script>
-  <script src="js/app.js?v=guest-replies-20261114"></script>
+  <script src="js/app.js?v=print-guard-20261124"></script>
 
   <!-- تسجيل PWA Service Worker للهواتف والأندرويد مع التحديث الفوري للكاش -->
   <script>
@@ -10110,8 +9863,8 @@
         <input type="hidden" id="closePeriodId">
 
         <div class="form-group" style="margin-bottom: 14px;">
-          <label style="color: var(--text-gold, #f3cf65); font-weight: 700;">كلمة مرور المدير المالي / المشرف (إلزامية للتفويض) *</label>
-          <input type="password" id="closePeriodManagerPassword" class="form-control" required placeholder="أدخل كلمة مرور الإدارة للمصادقة" autocomplete="current-password">
+          <label style="color: var(--text-gold, #f3cf65); font-weight: 700;">كلمة مرور حسابك (لتأكيد هويتك قبل الإقفال) *</label>
+          <input type="password" id="closePeriodManagerPassword" class="form-control" required placeholder="كلمة مرور حسابك الحالي" autocomplete="current-password">
         </div>
 
         <div class="form-group" style="margin-bottom: 16px;">

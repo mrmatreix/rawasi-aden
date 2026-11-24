@@ -54,3 +54,7 @@ server/database/.development-secrets.json
 server/database/backups/
 backups_archive/
 .rawasi-data/
+# production-data cleanup reports: client names, balances, local paths — never committed
+ops/**/trial_report_*.md
+ops/**/report.md
+ops/**/report.json

@@ -38,7 +38,12 @@ test('period journal list includes every entry; approval, posting and period loc
   assert.equal((await request('journal-entries/'+ids[1]+'/approve',{},'POST',reviewToken)).status,400);
   assert.equal((await request('journal-entries/'+ids[1]+'/post',{})).status,400);
   assert.equal((await request('periods/'+period.body.id+'/close',{manager_password:'wrong'},'PUT')).status,401);
+  // H11 (stage 6): a period with unposted entries cannot be closed
+  const blocked=await request('periods/'+period.body.id+'/close',{manager_password:password,notes:'QA close'},'PUT');
+  assert.equal(blocked.status,409,JSON.stringify(blocked.body));assert.equal(blocked.body.code,'PERIOD_HAS_PENDING');assert.equal(blocked.body.pending.journal_entries,103);
+  await db.run("UPDATE journal_entries SET status='cancelled' WHERE date BETWEEN '2099-01-01' AND '2099-01-31' AND status='draft'");
   assert.equal((await request('periods/'+period.body.id+'/close',{manager_password:password,notes:'QA close'},'PUT')).status,200);
+  await db.run("UPDATE journal_entries SET status='draft' WHERE id=?",[ids[2]]); // a draft left behind by an older path
   const closedPost=await request('journal-entries/'+ids[2]+'/post',{});assert.equal(closedPost.status,400,JSON.stringify(closedPost));
   assert.equal((await request(route+'&all=true&include_closed=true',null,'GET')).body.data.length,105,'closed period remains readable');
   assert.equal((await request('periods/'+period.body.id+'/reopen',{},'PUT')).status,400);

@@ -41,8 +41,10 @@ app.use('/api/client-portal', (req, res, next) => {
 
 // أرشفة الماسح الضوئي ترسل PDF/صورة بصيغة Base64 (حتى 25MB)،
 // لذلك نحتاج هامشاً فوق الحجم الأصلي بسبب زيادة Base64 بنحو الثلث.
-app.use(express.json({ limit: '40mb' }));
-app.use(express.text({ type: ['text/plain', 'application/json'], limit: '40mb' }));
+// إشعارات بوابات الدفع تُتحقق بتوقيع HMAC على البايتات الأصلية، لذا نحتفظ بها لذلك المسار فقط
+const keepWebhookRawBody = (req, _res, buf) => { if (req.originalUrl.startsWith('/api/payments/webhook/')) req.rawBody = buf; };
+app.use(express.json({ limit: '40mb', verify: keepWebhookRawBody }));
+app.use(express.text({ type: ['text/plain', 'application/json'], limit: '40mb', verify: keepWebhookRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '40mb' }));
 
 // أخطاء قراءة جسم الطلب: رد JSON واضح بدل صفحة HTML الافتراضية
@@ -55,6 +57,10 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+
+// طبقة الأخطاء الموحدة (المرحلة 5): لا تصل تفاصيل SQL أو أخطاء التنفيذ إلى المستخدم
+const { safeErrorResponses, errorHandler } = require('./middleware/errors');
+app.use(safeErrorResponses);
 
 app.use((req, res, next) => {
   if (typeof req.body === 'string') {
@@ -100,8 +106,11 @@ app.get('/api/settings/db-status', async (_req, res) => {
 });
 
 // مسارات واجهات برمجة التطبيقات (API Routes) مع التحقق الأمني
+app.use('/api/auth/password-reset', require('./routes/staff_password_reset').publicRouter);
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/staff-password-resets', requireAuth, require('./routes/staff_password_reset').adminRouter);
 app.use('/api/users', requireAuth, require('./routes/users'));
+app.use('/api/org', requireAuth, require('./routes/org_units'));
 app.use('/api/projects', requireAuth, require('./routes/projects'));
 app.use('/api/inventory', requireAuth, require('./routes/inventory'));
 app.use('/api/purchases', requireAuth, require('./routes/purchases'));
@@ -285,11 +294,7 @@ app.get(['/ws/alerts', '/ws/contracts', '/ws'], requireAuth, (req, res) => {
 });
 
 app.use((_req,res)=>res.status(404).json({success:false,message:'المسار غير موجود'}));
-app.use((error,_req,res,_next)=>{
-  const status=Number(error.statusCode||error.status)||500;
-  if(status>=500)console.error('Request failed:',error.code||error.name);
-  if(!res.headersSent)res.status(status).json({success:false,message:status>=500?'تعذر إتمام الطلب':'الطلب غير صالح'});
-});
+app.use(errorHandler);
 
 if (require.main === module) {
   const http = require('http');

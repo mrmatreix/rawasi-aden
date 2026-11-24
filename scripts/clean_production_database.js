@@ -137,6 +137,9 @@ const operationalTables = [
 console.log('🔄 [2/4] جاري تفريغ الجداول التشغيلية مع الحفاظ على البيانات التأسيسية...');
 
 db.exec('PRAGMA foreign_keys = OFF;');
+// تفريغ دفتر الأستاذ التجريبي يتطلب فتح قفل القيود المرحّلة صراحة طوال عملية التنظيف
+db.exec('CREATE TABLE IF NOT EXISTS ledger_maintenance_unlock (reason TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+db.prepare('INSERT INTO ledger_maintenance_unlock (reason) VALUES (?)').run('clean_production_database');
 
 let totalDeletedRecords = 0;
 const summary = [];
@@ -171,6 +174,7 @@ try {
   summary.push({ table: 'users (test accounts)', deleted: testUsersBefore });
 } catch (e) {}
 
+db.exec('DELETE FROM ledger_maintenance_unlock');
 console.log(`✅ تم تفريغ إجمالي (${totalDeletedRecords}) سجل تجريبي من مختلف الأقسام.`);
 
 // 3. تصفير عدادات الترقيم التلقائي

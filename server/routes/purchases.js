@@ -1,9 +1,13 @@
 const express = require('express');
+const Numbering = require('../services/numberingService');
 const router = express.Router();
 const { query, get, run, transaction } = require('../database/db');
 const { logAudit } = require('../services/auditService');
 const { checkPeriodOpen } = require('../services/periodService');
-const { requirePermission, parseScopeArray } = require('../middleware/security');
+const { requirePermission, parseScopeArray, recordScopeParam, projectScopeSql } = require('../middleware/security');
+// كل مسار يحمل :id يفحص مشروع السجل المخزَّن نفسه أولاً (المستخدم المقيّد لا يصل إلى سجل مشروع آخر برقمه)
+router.param('id', recordScopeParam('purchases'));
+
 
 // جلب فواتير المشتريات
 router.get('/', requirePermission('purchases:view'), async (req, res) => {
@@ -21,12 +25,7 @@ router.get('/', requirePermission('purchases:view'), async (req, res) => {
     const conditions = [];
 
     // التحقق من نطاق المشاريع المصرح بها للمستخدم
-    const allowedProjects = parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
-    if (allowedProjects.length > 0 && !allowedProjects.includes('*') && !allowedProjects.includes('all')) {
-      const placeholders = allowedProjects.map(() => '?').join(',');
-      conditions.push(`(pu.project_id IS NULL OR pu.project_id IN (${placeholders}))`);
-      params.push(...allowedProjects);
-    }
+    { const scopeSql = projectScopeSql(req.user, 'pu.project_id'); if (scopeSql) { conditions.push(scopeSql.sql); params.push(...scopeSql.params); } }
 
     if (supplier_id) {
       conditions.push('pu.supplier_id = ?');
@@ -80,8 +79,8 @@ router.post('/', requirePermission('purchases:create'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'يرجى تحديد المورد والمبلغ الإجمالي' });
     }
 
-    const countRes = await get('SELECT COUNT(*) as cnt FROM purchases');
-    const invoice_no = `PO-${new Date().getFullYear()}-${String(((countRes ? countRes.cnt : 0) || 0) + 1).padStart(4, '0')}`;
+    // رقم فريد عبر خدمة الترقيم (لا COUNT+1: يتصادم بعد أي حذف)
+    const invoice_no = await Numbering.next(require('../database/db'), 'PO', { table: 'purchases', column: 'invoice_no', date: new Date().toISOString().slice(0, 10) });
 
     const parsedTotal = Number(total_amount);
     const parsedPaid = Number(paid_amount);
@@ -352,7 +351,7 @@ router.post('/:id/reverse', requirePermission('purchases:approve,accounting:appr
 
     res.json(result);
   } catch (err) {
-    const status = err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500;
+    const status = err.statusCode || (err.message.includes('لا يمكن') || err.message.includes('يجب كتابة') || err.message.includes('مغلقة') ? 400 : 500);
     res.status(status).json({ success: false, message: err.message });
   }
 });

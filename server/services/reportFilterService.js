@@ -4,7 +4,7 @@ const financialLabels = require('../../js/financial-labels');
 const round = n => Math.round((Number(n) || 0) * 100) / 100;
 function parseFilters(input = {}) {
  if (input.hide_zero !== undefined && !['true','false',true,false,'1','0'].includes(input.hide_zero)) throw Object.assign(new Error('خيار الحسابات الصفرية غير صالح'), { statusCode: 400 });
- const filters = { display_level: input.display_level || 'subsidiary', posting_status: input.posting_status || 'all', cost_center_id: input.cost_center_id ? Number(input.cost_center_id) : null, currency: input.currency || 'YER' };
+ const filters = { display_level: input.display_level || 'subsidiary', posting_status: input.posting_status || 'posted' /* القوائم المالية الرسمية = المرحّل فقط؛ غيره بطلب صريح */, cost_center_id: input.cost_center_id ? Number(input.cost_center_id) : null, currency: input.currency || 'YER' };
  if (!['main','subsidiary','main_and_subsidiary'].includes(filters.display_level) || !['all','posted','unposted'].includes(filters.posting_status) || (filters.cost_center_id !== null && (!Number.isInteger(filters.cost_center_id) || filters.cost_center_id <= 0)) || typeof filters.currency !== 'string') throw Object.assign(new Error('خيارات التقرير غير صالحة'), { statusCode: 400 });
  filters.hide_zero = [true,'true','1'].includes(input.hide_zero);
  return filters;

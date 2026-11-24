@@ -130,7 +130,7 @@ function handleReportError(err, res, contextName) {
 router.get('/dashboard', requirePermission('dashboard:view,reports:view'), async (req, res) => {
   try {
     let allowedProjects = ['*'];
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
     }
 
@@ -261,7 +261,7 @@ router.get('/project-budget', requirePermission('projects:view,reports:view'), a
     const as_of_date = validateDate(req.query.as_of_date || req.query.to_date, 'تاريخ تقرير الموازنة');
     const project_id = req.query.project_id ? Number(req.query.project_id) : null;
     if (req.query.project_id && (!Number.isInteger(project_id) || project_id<=0)) return res.status(400).json({success:false,message:'المشروع المحدد غير صالح'});
-    const allowedProjects = req.user?.role === 'admin' || req.user?.username === 'admin' ? ['*'] : parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
+    const allowedProjects = req.user?.role === 'admin' ? ['*'] : parseScopeArray(req.user?.scope?.allowed_projects || req.user?.allowed_projects);
     res.json(await require('../services/projectBudgetReportService').getProjectBudget({as_of_date,project_id,allowedProjects}));
   } catch(error) { if(error.statusCode) return res.status(error.statusCode).json({success:false,message:error.message}); handleReportError(error,res,'موازنة المشروع'); }
 });
@@ -272,7 +272,7 @@ router.get('/projects-profitability', requirePermission('projects:view,reports:v
     const project_id = req.query.project_id ? Number(req.query.project_id) : null;
 
     let allowedProjects = ['*'];
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
     }
 
@@ -371,7 +371,7 @@ router.get('/supplier-statement/:id', requirePermission('suppliers:view,reports:
 router.get('/contracting-financial-separation', requirePermission('reports:view,accounting:view,projects:view'), async (req, res) => {
   try {
     let allowedProjects = ['*'];
-    if (req.user && req.user.role !== 'admin' && req.user.username !== 'admin') {
+    if (req.user && req.user.role !== 'admin') {
       allowedProjects = parseScopeArray(req.user.scope?.allowed_projects || req.user.allowed_projects);
     }
 

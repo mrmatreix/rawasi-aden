@@ -15,8 +15,31 @@
  */
 
 const { query, get, run, transaction } = require('../database/db');
+const REVENUE_RECOGNITION_POLICY = 'billing'; // 'billing' | 'poc' — قرار الإدارة 2026-11-22
+const Numbering = require('./numberingService');
 const { logAudit } = require('./auditService');
 const { checkPeriodOpen } = require('./periodService');
+
+// Revenue the general ledger recognised for a project (posted lines on revenue accounts; storno reversals net out).
+async function ledgerProjectRevenue(projectId) {
+  const { normalizeAccountType } = require('./chartOfAccountsRules');
+  const rows = await query(`SELECT a.type, COALESCE(SUM(l.credit - l.debit), 0) AS amount FROM journal_entry_lines l
+    JOIN journal_entries je ON je.id = l.entry_id JOIN accounts a ON a.id = l.account_id
+    WHERE je.status = 'posted' AND l.project_id = ? GROUP BY a.type`, [projectId]);
+  const total = rows.filter(r => normalizeAccountType(r.type) === 'revenue').reduce((s, r) => s + Number(r.amount), 0);
+  return Math.round(total * 100) / 100;
+}
+
+// Cost the general ledger booked on a project (posted lines on expense / cost accounts). A labor line settled by
+// a linked voucher counts once (the voucher debits the payable, not the expense) and custody settlements count.
+async function ledgerProjectCost(projectId) {
+  const { normalizeAccountType } = require('./chartOfAccountsRules');
+  const rows = await query(`SELECT a.type, COALESCE(SUM(l.debit - l.credit), 0) AS amount FROM journal_entry_lines l
+    JOIN journal_entries je ON je.id = l.entry_id JOIN accounts a ON a.id = l.account_id
+    WHERE je.status = 'posted' AND l.project_id = ? GROUP BY a.type`, [projectId]);
+  const total = rows.filter(r => normalizeAccountType(r.type) === 'expense').reduce((s, r) => s + Number(r.amount), 0);
+  return Math.round(total * 100) / 100;
+}
 
 // معرفات الحسابات المعيارية لعقود المقاولات في دليل الحسابات
 const CONTRACT_ACCOUNTS = {
@@ -101,7 +124,10 @@ const ContractingAccountingService = {
                                   (purchasesRow ? Number(purchasesRow.total) : 0) +
                                   (laborRow ? Number(laborRow.total) : 0);
 
-    const cumulativeActualCost = Math.max(Number(proj.actual_cost) || 0, directCostFromRecords);
+    // Ledger first (same source as recognised revenue): adding vouchers, labor lines and purchases counted a labor
+    // line twice once a voucher settled it, and missed custody settlements. The operational sum stays as
+    // records_cost for comparison only.
+    const cumulativeActualCost = await ledgerProjectCost(pId);
 
     // تقدير التكلفة الإجمالية المنقحة (Revised Estimated Total Cost)
     // بدون أي نسب افتراضية مصطنعة (Zero Magic Numbers)
@@ -124,9 +150,14 @@ const ContractingAccountingService = {
     }
 
     // 5. الإيراد المعترف به تراكمياً وفق نسبة الإنجاز والمعيار الدولي IFRS 15
-    const cumulativeRecognizedRevenue = (costToCostPOC !== null && revisedContractValue > 0)
+    const pocRevenueEstimate = (costToCostPOC !== null && revisedContractValue > 0)
       ? Math.round(revisedContractValue * (costToCostPOC / 100))
       : 0;
+    // سياسة الإيراد عند الفوترة: الإيراد المعترف به هو ما رحّله الأستاذ العام للمشروع (المستخلصات المرحّلة)،
+    // وتقدير نسبة الإنجاز يبقى للعرض فقط حتى لا تُظهر المصفوفة واللوحة إيراداً غير موجود في الدفاتر.
+    const cumulativeRecognizedRevenue = REVENUE_RECOGNITION_POLICY === 'billing'
+      ? await ledgerProjectRevenue(pId)
+      : pocRevenueEstimate;
 
     // فحص الإيرادات المثبتة دفترياً من جدول القيود السابقة
     const lastRecognition = await get(`
@@ -255,6 +286,7 @@ const ContractingAccountingService = {
       revised_contract_value: revisedContractValue,
       revised_estimated_cost: revisedEstimatedCost,
       cumulative_actual_cost: cumulativeActualCost,
+      records_cost: Math.round(directCostFromRecords * 100) / 100, // operational sum, for comparison only
 
       // نسب الإنجاز المقارنة
       engineering_progress_pct: engineeringProgress,
@@ -274,8 +306,12 @@ const ContractingAccountingService = {
       recognized_revenue: {
         cumulative: cumulativeRecognizedRevenue,
         previously_posted: previouslyPostedRevenue,
-        unposted_period: unpostedPeriodRevenue,
-        basis: `طريقة التكلفة للتكلفة POC (${costToCostPOC}%) من قيمة العقد المنقحة`
+        unposted_period: REVENUE_RECOGNITION_POLICY === 'billing' ? 0 : unpostedPeriodRevenue,
+        policy: REVENUE_RECOGNITION_POLICY,
+        poc_estimate: pocRevenueEstimate,
+        basis: REVENUE_RECOGNITION_POLICY === 'billing'
+          ? 'الإيراد المرحّل في الأستاذ العام من المستخلصات المعتمدة (تقدير نسبة الإنجاز للعرض فقط)'
+          : `طريقة التكلفة للتكلفة POC (${costToCostPOC}%) من قيمة العقد المنقحة`
       },
 
       // 3. المستخلصات المعتمدة (مطالبات رسمية)
@@ -463,6 +499,11 @@ const ContractingAccountingService = {
    * @param {Object} params 
    */
   async recognizeProjectRevenue({ projectId, periodDate, notes, user, req = null }) {
+    // سياسة الشركة (2026-11-22): الإيراد يُثبت عند ترحيل المستخلص المعتمد فقط.
+    // قيد نسبة الإنجاز كان يضيف إيراداً ثانياً لنفس الأعمال؛ يبقى الاحتساب للعرض في مصفوفة المقاولات.
+    if (REVENUE_RECOGNITION_POLICY === 'billing') {
+      throw Object.assign(new Error('سياسة الإيراد المعتمدة هي الإثبات عند ترحيل المستخلص المعتمد؛ لا يُرحّل قيد إيراد بنسبة الإنجاز حتى لا يتكرر الإيراد. نسبة الإنجاز متاحة للعرض في مصفوفة المقاولات.'), { statusCode: 409, code: 'REVENUE_POLICY' });
+    }
     const pId = Number(projectId);
     const date = periodDate || new Date().toISOString().split('T')[0];
 
@@ -502,13 +543,7 @@ const ContractingAccountingService = {
       // 2. توليد قيد اليومية العام لإثبات الإيراد المعترف به
       // الطرف المدين: 1128 - أصول تعاقدية / أعمال منجزة غير مفوترة (Contract Asset / WIP)
       // الطرف الدائن: 4101 - إيرادات عقود المقاولات المعترف بها (Contract Revenue)
-      const jeCountRes = await tx.get('SELECT COUNT(*) as cnt FROM journal_entries');
-      let jeSeq = ((jeCountRes ? jeCountRes.cnt : 0) || 0) + 1;
-      entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      while (await tx.get('SELECT id FROM journal_entries WHERE entry_no = ?', [entryNo])) {
-        jeSeq++;
-        entryNo = `JE-${String(jeSeq).padStart(5, '0')}`;
-      }
+      entryNo = await Numbering.nextJournalNumber(tx, { series: 'JE', date });
 
       const jeDesc = `إثبات إيراد مقاولات دوري مشروع (${metrics.project_name}) - نسبة إنجاز ${metrics.cost_to_cost_poc_pct}% (IFRS 15)`;
       const jeRes = await tx.run(`

@@ -4,6 +4,7 @@
  */
 
 const { get, query, run, transaction } = require('../database/db');
+const Numbering = require('./numberingService');
 const AccountingService = require('./accountingService');
 
 let checkPeriodOpen = async () => ({ isOpen: true });
@@ -248,10 +249,7 @@ const PaymentService = {
 
     // --- (7) توليد رقم المعاملة الفريد ---
     const currentYear = new Date(transaction_date).getFullYear();
-    const countRow = await get('SELECT COUNT(*) as cnt FROM payment_transactions WHERE direction = ?', [direction]);
-    const seq = (countRow?.cnt || 0) + 1;
-    const prefix = direction === 'IN' ? 'RCV' : 'PAY';
-    const txNo = `${prefix}-${currentYear}-${String(seq).padStart(5, '0')}`;
+    const txNo = await Numbering.next(require('../database/db'), direction === 'IN' ? 'RCV' : 'PAY', { table: 'payment_transactions', column: 'transaction_no', date: transaction_date, width: 5 });
 
     // حالة المقاصة والتصفية للأداة
     let clearingStatus = 'cleared';
@@ -598,7 +596,7 @@ const PaymentService = {
         reference_type: txItem.direction === 'IN' ? 'سند قبض خماسي' : 'سند صرف خماسي',
         reference_id: txItem.id,
         status: 'posted'
-      }, lines, req);
+      }, lines, req, tx);
 
       await tx.run(`
         UPDATE payment_transactions
@@ -632,96 +630,19 @@ const PaymentService = {
    * إرجاع الشيك أو رفض التحويل (Bounce Transaction)
    */
   async bounceTransaction(id, reason = '', user = null, req = null) {
-    const txItem = await this.getTransactionById(id);
-    if (txItem.clearing_status === 'bounced' || txItem.status === 'bounced') {
-      throw new Error('المعاملة مرفوضة / مرجعة بالفعل');
-    }
-
-    await transaction(async (tx) => {
-      // إذا كان هناك قيد يومية، ننشئ قيداً عكسياً
-      if (txItem.journal_entry_id) {
-        const origJe = await tx.get('SELECT * FROM journal_entries WHERE id = ?', [txItem.journal_entry_id]);
-        if (origJe) {
-          const origLines = await query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [origJe.id]);
-          const reverseLines = origLines.map(l => ({
-            account_id: l.account_id,
-            cost_center_id: l.cost_center_id,
-            debit: l.credit,
-            credit: l.debit,
-            description: `قيد عكسي لرفض المعاملة ${txItem.transaction_no} - ${reason}`
-          }));
-
-          await AccountingService.createJournalEntry({
-            date: new Date().toISOString().split('T')[0],
-            description: `قيد عكسي لارتجاع شيك/رفض المعاملة [${txItem.transaction_no}] - السبب: ${reason}`,
-            reference_type: 'إلغاء معاملة دفع',
-            reference_id: txItem.id,
-            status: 'posted'
-          }, reverseLines, req);
-        }
-      }
-
-      await tx.run(`
-        UPDATE payment_transactions
-        SET clearing_status = 'bounced', status = 'bounced', notes = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `, [`[مرفوض/مرجع]: ${reason} | ${txItem.notes || ''}`, Number(id)]);
-    });
-
-    return { success: true, message: 'تم تسجيل رفض/ارتجاع المعاملة وإنشاء القيد العكسي بنجاح' };
+    // ReversalService: مرآة القيد الأصلي مرة واحدة، بتاريخ في فترة مفتوحة، مع إعادة أثر المستخلص
+    const result = await require('./ledger/reversalService').reversePaymentTransaction(id, { user, reason, req, bounced: true });
+    return { ...result, message: 'تم تسجيل رفض/ارتجاع المعاملة' + (result.reversing_entry_no ? ` وإنشاء القيد العكسي (${result.reversing_entry_no})` : '') };
   },
+
 
   /**
    * عكس المعاملة بالكامل (Reverse Transaction)
    */
   async reverseTransaction(id, reason = '', user = null, req = null) {
-    const txItem = await this.getTransactionById(id);
-    if (txItem.status === 'reversed') {
-      throw new Error('المعاملة معكوسة بالفعل');
-    }
-
-    await transaction(async (tx) => {
-      if (txItem.journal_entry_id) {
-        const origLines = await query('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [txItem.journal_entry_id]);
-        const revLines = origLines.map(l => ({
-          account_id: l.account_id,
-          cost_center_id: l.cost_center_id,
-          debit: l.credit,
-          credit: l.debit,
-          description: `عكس معاملة ${txItem.transaction_no} - ${reason}`
-        }));
-
-        await AccountingService.createJournalEntry({
-          date: new Date().toISOString().split('T')[0],
-          description: `قيد عكسي للمعاملة [${txItem.transaction_no}] - السبب: ${reason}`,
-          reference_type: 'عكس معاملة خماسية',
-          reference_id: txItem.id,
-          status: 'posted'
-        }, revLines, req);
-      }
-
-      // إذا كانت مرتبطة بمستخلص، نعيد تخصيص الرصيد
-      if (txItem.context_ref_id) {
-        const bill = await tx.get('SELECT * FROM bills WHERE id = ?', [txItem.context_ref_id]);
-        if (bill) {
-          const updatedPaid = Math.max(0, Math.round(((Number(bill.paid_amount || 0)) - txItem.amount) * 100) / 100);
-          const updatedRemaining = Math.round(((Number(bill.net_amount || bill.amount || 0)) - updatedPaid) * 100) / 100;
-          const newStatus = updatedPaid <= 0 ? 'unpaid' : 'partially_paid';
-          await tx.run('UPDATE bills SET paid_amount = ?, remaining_amount = ?, payment_status = ? WHERE id = ?', [
-            updatedPaid, updatedRemaining, newStatus, bill.id
-          ]);
-        }
-      }
-
-      await tx.run(`
-        UPDATE payment_transactions
-        SET status = 'reversed', notes = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `, [`[معكوس]: ${reason} | ${txItem.notes || ''}`, Number(id)]);
-    });
-
-    return { success: true, message: 'تم عكس المعاملة وتحديث الرصيد بنجاح' };
+    return require('./ledger/reversalService').reversePaymentTransaction(id, { user, reason, req });
   },
+
 
   // =========================================================================
   // 3. التقارير والتحليلات (Reports & Analytics)
@@ -1275,7 +1196,11 @@ const PaymentService = {
         payment_id: payment.id
       };
     } else if (payload.event === 'payment.failed' || data.status === 'failed') {
-      await run("UPDATE payments SET status = 'FAILED' WHERE id = ?", [payment.id]);
+      // البوابة تستطيع فقط إفشال معاملة ما زالت معلقة لديها؛ لا يُمس أي سند مرحّل أو معتمد
+      const failed = await run("UPDATE payments SET status = 'FAILED' WHERE id = ? AND status = 'PENDING'", [payment.id]);
+      if (!failed.changes) {
+        return { alreadyProcessed: true, action: 'IGNORED', message: `المعاملة بحالة [${payment.status}] وليست معلقة؛ تم تجاهل الإشعار` };
+      }
       return {
         alreadyProcessed: false,
         action: 'FAILED',
